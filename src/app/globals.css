@@ -211,6 +211,131 @@ p {
   color: var(--ink-soft);
 }
 
+/* dashboard */
+.tiles {
+  display: grid;
+  grid-template-columns: 1fr 2fr 1fr;
+  gap: 14px;
+}
+@media (max-width: 720px) {
+  .tiles {
+    grid-template-columns: 1fr 1fr;
+  }
+  .tiles .tile:nth-child(2) {
+    grid-column: span 2;
+  }
+}
+.tile {
+  padding: 18px 20px;
+}
+.tile-n {
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+.tile-l {
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin-top: 8px;
+}
+.split {
+  display: flex;
+  height: 12px;
+  border-radius: 99px;
+  overflow: hidden;
+  gap: 2px;
+}
+.split span {
+  display: block;
+}
+.split-key {
+  display: flex;
+  gap: 16px;
+  margin-top: 10px;
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.split-key span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.pip {
+  width: 8px;
+  height: 8px;
+  border-radius: 99px;
+  display: inline-block;
+}
+
+.dash-grid {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 20px;
+  margin-top: 22px;
+  align-items: start;
+}
+@media (max-width: 860px) {
+  .dash-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.fix-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+.fix-row:last-child {
+  border-bottom: none;
+}
+.sev {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 99px;
+  white-space: nowrap;
+}
+
+.filter-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+.filter {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 14px;
+  border-radius: 99px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.filter.on {
+  background: var(--ink);
+  color: #fff;
+  border-color: var(--ink);
+}
+.fb-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.fb-reply {
+  margin-top: 14px;
+  padding: 12px 14px;
+  background: var(--canvas);
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+}
+
 :focus-visible {
   outline: 2px solid var(--violet);
   outline-offset: 2px;

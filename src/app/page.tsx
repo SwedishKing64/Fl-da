@@ -1,65 +1,77 @@
-import Image from "next/image";
+import Link from "next/link";
+import TopBar from "./TopBar";
+
+const STEPS = [
+  { n: "1", h: "A customer replies", p: "Your post-purchase email asks how it went. Every reply — a rating and their words — flows into Afterword." },
+  { n: "2", h: "Afterword reads it", p: "Not just a star. It tags the themes (shipping, sizing, quality), scores sentiment, and flags what's urgent." },
+  { n: "3", h: "You act", p: "A ranked “fix this first”, drafted replies for unhappy customers, and one-click testimonials from the happy ones." },
+];
 
 export default function Home() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
+    <>
+      <TopBar />
+      <main className="wrap" style={{ paddingBottom: 90 }}>
+        <section style={{ textAlign: "center", padding: "72px 0 30px" }}>
+          <div className="eyebrow">For small online stores</div>
+          <h1 style={{ fontSize: "clamp(2.1rem, 5.4vw, 3.5rem)", lineHeight: 1.04, margin: "16px auto 0", maxWidth: "15ch" }}>
+            Stop collecting feedback. Start understanding it.
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+          <p style={{ color: "var(--ink-2)", fontSize: "clamp(1rem,1.9vw,1.18rem)", maxWidth: "56ch", margin: "18px auto 0" }}>
+            Every review app hands you a pile of stars. Afterword reads what customers actually
+            <em> say</em> after they buy — themes, urgency, and exactly what to fix first.
           </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+          <div style={{ display: "flex", gap: 12, justifyContent: "center", marginTop: 26, flexWrap: "wrap" }}>
+            <Link href="/app" className="btn primary">
+              See the live dashboard →
+            </Link>
+            <Link href="/#how" className="btn">
+              How it works
+            </Link>
+          </div>
+          <p className="mono" style={{ fontSize: 12.5, color: "var(--ink-soft)", marginTop: 16 }}>
+            Installs on Shopify · reads replies with AI · no pile of stars to sift
+          </p>
+        </section>
+
+        <section className="panel" style={{ maxWidth: 560, margin: "0 auto", padding: 22 }}>
+          <div className="section-label" style={{ marginBottom: 12 }}>
+            The email that goes out
+          </div>
+          <div style={{ border: "1px solid var(--line)", borderRadius: 12, padding: 18, background: "var(--canvas)" }}>
+            <div style={{ fontSize: 13, color: "var(--ink-soft)" }}>Subject: How was your linen wrap dress, Hannah?</div>
+            <p style={{ marginTop: 12, fontSize: 14.5, color: "var(--ink)" }}>
+              Hi Hannah — it&apos;s been a few days since your order arrived. How&apos;s it going?
+            </p>
+            <div style={{ display: "flex", gap: 6, marginTop: 14 }}>
+              {["😖", "😐", "🙂", "😃", "🤩"].map((e) => (
+                <span key={e} style={{ fontSize: 24, border: "1px solid var(--line)", borderRadius: 10, padding: "6px 10px", background: "var(--paper)" }}>
+                  {e}
+                </span>
+              ))}
+            </div>
+            <p style={{ marginTop: 12, fontSize: 12.5, color: "var(--ink-soft)" }}>One tap opens a two-line reply box. That&apos;s the whole ask.</p>
+          </div>
+        </section>
+
+        <section id="how" style={{ padding: "64px 0 0" }}>
+          <div style={{ textAlign: "center", marginBottom: 34 }}>
+            <div className="eyebrow">How it works</div>
+            <h2 style={{ fontSize: "clamp(1.6rem,3.4vw,2.2rem)", marginTop: 10 }}>Collecting is solved. Acting isn&apos;t.</h2>
+          </div>
+          <div className="steps-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
+            {STEPS.map((s) => (
+              <div key={s.n} className="panel" style={{ padding: 22 }}>
+                <div style={{ width: 30, height: 30, borderRadius: 8, background: "var(--violet-soft)", color: "var(--violet)", display: "grid", placeItems: "center", fontWeight: 800 }}>
+                  {s.n}
+                </div>
+                <h3 style={{ fontSize: 17, margin: "12px 0 7px" }}>{s.h}</h3>
+                <p style={{ color: "var(--ink-2)", fontSize: 14 }}>{s.p}</p>
+              </div>
+            ))}
+          </div>
+        </section>
       </main>
-    </div>
+    </>
   );
 }

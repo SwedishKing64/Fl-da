@@ -1,36 +1,38 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Afterword
 
-## Getting Started
+**Understand what your customers actually say — don't just collect stars.**
 
-First, run the development server:
+Every Shopify review app (Judge.me, Loox, Yotpo) is a *collect-and-display* tool. Afterword
+is a *read-and-act* tool: it reads each post-purchase reply, tags the themes, scores sentiment,
+flags what's urgent, ranks **what to fix first**, drafts replies to unhappy customers, and turns
+glowing ones into one-click testimonials.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+See [TEARDOWN.md](TEARDOWN.md) for the competitive analysis this is built against.
+
+## What's here
+
+- **The insight engine** (`src/lib/analyze.ts`, `src/lib/insights.ts`) — pure, deterministic,
+  fully tested. Turns replies into sentiment + themes + severity + drafted response, then
+  aggregates into a score and a ranked "fix first" list. Swap `analyzeFeedback` for an LLM call
+  behind the same signature to go from good to great.
+- **The product UI** — a marketing page (`/`) and the live **dashboard** (`/app`) running on
+  mock feedback so it works with zero setup.
+- **The Shopify app skeleton** — real OAuth + webhook-HMAC + scheduled-send:
+  - `GET /api/auth` → install, `GET /api/auth/callback` → token exchange + webhook registration
+  - `POST /api/webhooks/orders-fulfilled` → schedule a follow-up (HMAC-verified)
+  - `POST /api/cron/dispatch` → send everything that's due
+  - Needs a Shopify Partner app + the env in [.env.example](.env.example) to run live.
+
+## Develop
+
+```sh
+npm run dev          # http://localhost:3000  (/ and /app)
+npm test             # vitest — engine + schedule tests
+npx tsc --noEmit
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Status
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Prototype: the insight engine and dashboard are real and tested on mock data; the Shopify
+integration is a wired skeleton awaiting Partner credentials + a real DB/email provider
+(token storage and sending are in-memory stubs, clearly marked). Deployable to Vercel.

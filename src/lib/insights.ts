@@ -41,8 +41,8 @@ export function analyseAll(items: FeedbackItem[]): AnalysedItem[] {
 
 const COUNT = (items: AnalysedItem[], s: Sentiment) => items.filter((i) => i.analysis.sentiment === s).length;
 
-export function buildInsights(items: FeedbackItem[]): Insights {
-  const analysed = analyseAll(items);
+/** Aggregate items that have ALREADY been analysed (sync deterministic or async LLM). */
+export function insightsFrom(analysed: AnalysedItem[]): Insights {
   const total = analysed.length || 1;
   const promoters = COUNT(analysed, "promoter");
   const passives = COUNT(analysed, "passive");
@@ -68,4 +68,10 @@ export function buildInsights(items: FeedbackItem[]): Insights {
   const testimonials = analysed.filter((i) => i.analysis.testimonialCandidate);
 
   return { total: analysed.length, promoters, passives, detractors, score, topIssues, testimonials };
+}
+
+/** Convenience: analyse (sync, deterministic) then aggregate. Used by tests and any
+ *  caller that doesn't need the LLM path. */
+export function buildInsights(items: FeedbackItem[]): Insights {
+  return insightsFrom(analyseAll(items));
 }

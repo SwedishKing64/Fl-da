@@ -22,9 +22,8 @@ export async function POST(request: NextRequest) {
   }
   const shop = payload.shop_domain;
   if (shop) {
-    deleteShopToken(shop);
-    const removed = purgeShop(shop);
-    // TODO: delete all of this shop's stored data from the DB.
+    await deleteShopToken(shop);
+    const removed = await purgeShop(shop);
     console.log(`[afterword] redacted shop ${shop} (token cleared, ${removed} follow-ups purged)`);
   }
   return new Response("ok", { status: 200 });

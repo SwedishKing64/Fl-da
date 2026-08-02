@@ -1,37 +1,22 @@
 // The scheduled-send layer. When an order is fulfilled we queue a follow-up for N days
-// later; a cron endpoint dispatches whatever's due. Storage here is an in-memory stub —
-// swap for a real DB (Postgres/KV) for production; the shapes stay the same.
+// later; a cron endpoint dispatches whatever's due. Storage is delegated to the
+// persistence layer (in-memory by default, Postgres when DATABASE_URL is set), so the
+// queue survives restarts in production.
 //
 // Sending is stubbed to a console log. Wire `sendEmail` to Resend/Postmark (RESEND_API_KEY)
 // to actually deliver the "how was it?" email.
 
+import { db } from "./db";
+import type { FollowUp, FulfilledOrder } from "./db/types";
+
+export type { FollowUp, FulfilledOrder };
+
 export const FOLLOWUP_DELAY_DAYS = 3;
 
-export interface FollowUp {
-  id: string;
-  shop: string;
-  orderId: string;
-  email: string;
-  product: string;
-  sendAt: number; // epoch ms
-  sent: boolean;
-}
-
-// Stub queue. Replace with a table keyed by (shop, orderId).
-const QUEUE: FollowUp[] = [];
-
-export interface FulfilledOrder {
-  id: string | number;
-  email?: string;
-  line_items?: Array<{ title?: string }>;
-}
-
-export function scheduleFollowUp(shop: string, order: FulfilledOrder, now: number): FollowUp | null {
+export async function scheduleFollowUp(shop: string, order: FulfilledOrder, now: number): Promise<FollowUp | null> {
   if (!order.email) return null;
-  const id = `${shop}:${order.id}`;
-  if (QUEUE.some((f) => f.id === id)) return null; // dedupe
   const followUp: FollowUp = {
-    id,
+    id: `${shop}:${order.id}`, // natural dedupe key
     shop,
     orderId: String(order.id),
     email: order.email,
@@ -39,19 +24,19 @@ export function scheduleFollowUp(shop: string, order: FulfilledOrder, now: numbe
     sendAt: now + FOLLOWUP_DELAY_DAYS * 86_400_000,
     sent: false,
   };
-  QUEUE.push(followUp);
-  return followUp;
+  const inserted = await db.insertFollowUp(followUp);
+  return inserted ? followUp : null; // null when the order was already queued
 }
 
-export function dueFollowUps(now: number): FollowUp[] {
-  return QUEUE.filter((f) => !f.sent && f.sendAt <= now);
+export function dueFollowUps(now: number): Promise<FollowUp[]> {
+  return db.dueFollowUps(now);
 }
 
 export async function dispatchDue(now: number): Promise<number> {
-  const due = dueFollowUps(now);
+  const due = await db.dueFollowUps(now);
   for (const f of due) {
     await sendEmail(f);
-    f.sent = true;
+    await db.markSent(f.id);
   }
   return due.length;
 }
@@ -63,28 +48,16 @@ async function sendEmail(f: FollowUp): Promise<void> {
 }
 
 /** GDPR redaction: drop all queued follow-ups for a shop (shop/redact). */
-export function purgeShop(shop: string): number {
-  return purge((f) => f.shop === shop);
+export function purgeShop(shop: string): Promise<number> {
+  return db.purgeShop(shop);
 }
 
 /** GDPR redaction: drop queued follow-ups for one customer's email (customers/redact). */
-export function purgeEmail(email: string): number {
-  const target = email.trim().toLowerCase();
-  return purge((f) => f.email.trim().toLowerCase() === target);
+export function purgeEmail(email: string): Promise<number> {
+  return db.purgeEmail(email);
 }
 
-function purge(match: (f: FollowUp) => boolean): number {
-  let removed = 0;
-  for (let i = QUEUE.length - 1; i >= 0; i--) {
-    if (match(QUEUE[i])) {
-      QUEUE.splice(i, 1);
-      removed += 1;
-    }
-  }
-  return removed;
-}
-
-/** Test/inspection helper. */
-export function _queue(): FollowUp[] {
-  return QUEUE;
+/** Test/inspection helper: all not-yet-sent follow-ups. */
+export function _queue(): Promise<FollowUp[]> {
+  return db.dueFollowUps(Number.MAX_SAFE_INTEGER);
 }

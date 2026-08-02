@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const token = await exchangeCode(shop, code);
-    saveShopToken(shop, token); // TODO: persist to a DB
+    await saveShopToken(shop, token);
     await registerFulfillmentWebhook(shop, token);
   } catch (err) {
     return Response.json({ error: err instanceof Error ? err.message : "install failed" }, { status: 502 });

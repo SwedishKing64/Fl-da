@@ -22,6 +22,6 @@ export async function POST(request: NextRequest) {
   }
 
   // now is passed explicitly so this stays deterministic/testable.
-  scheduleFollowUp(shop, order, Date.now());
+  await scheduleFollowUp(shop, order, Date.now());
   return new Response("ok", { status: 200 });
 }

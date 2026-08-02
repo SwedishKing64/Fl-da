@@ -1,13 +1,13 @@
-// Access-token storage stub. In-memory only — replace with a DB/KV table
-// (shop → access_token) for production. Serverless instances won't share this.
-const TOKENS = new Map<string, string>();
+// Access-token storage. Delegates to the persistence layer (in-memory by default,
+// Postgres when DATABASE_URL is set) so tokens survive restarts in production.
+import { db } from "./db";
 
-export function saveShopToken(shop: string, token: string): void {
-  TOKENS.set(shop, token);
+export function saveShopToken(shop: string, token: string): Promise<void> {
+  return db.saveShopToken(shop, token);
 }
-export function getShopToken(shop: string): string | undefined {
-  return TOKENS.get(shop);
+export function getShopToken(shop: string): Promise<string | undefined> {
+  return db.getShopToken(shop);
 }
-export function deleteShopToken(shop: string): void {
-  TOKENS.delete(shop);
+export function deleteShopToken(shop: string): Promise<void> {
+  return db.deleteShopToken(shop);
 }

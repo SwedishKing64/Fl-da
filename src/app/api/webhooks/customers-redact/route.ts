@@ -20,8 +20,7 @@ export async function POST(request: NextRequest) {
     return new Response("bad payload", { status: 400 });
   }
   const email = payload.customer?.email;
-  const removed = email ? purgeEmail(email) : 0;
-  // TODO: also delete this customer's stored feedback/analysis from the DB.
+  const removed = email ? await purgeEmail(email) : 0;
   console.log(`[afterword] redacted customer ${email ?? "?"} (${removed} follow-ups purged)`);
   return new Response("ok", { status: 200 });
 }

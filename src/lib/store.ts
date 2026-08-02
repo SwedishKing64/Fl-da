@@ -8,3 +8,6 @@ export function saveShopToken(shop: string, token: string): void {
 export function getShopToken(shop: string): string | undefined {
   return TOKENS.get(shop);
 }
+export function deleteShopToken(shop: string): void {
+  TOKENS.delete(shop);
+}

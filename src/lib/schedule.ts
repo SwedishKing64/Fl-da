@@ -62,6 +62,28 @@ async function sendEmail(f: FollowUp): Promise<void> {
   console.log(`[afterword] would send follow-up to ${f.email} about "${f.product}" (${f.shop})`);
 }
 
+/** GDPR redaction: drop all queued follow-ups for a shop (shop/redact). */
+export function purgeShop(shop: string): number {
+  return purge((f) => f.shop === shop);
+}
+
+/** GDPR redaction: drop queued follow-ups for one customer's email (customers/redact). */
+export function purgeEmail(email: string): number {
+  const target = email.trim().toLowerCase();
+  return purge((f) => f.email.trim().toLowerCase() === target);
+}
+
+function purge(match: (f: FollowUp) => boolean): number {
+  let removed = 0;
+  for (let i = QUEUE.length - 1; i >= 0; i--) {
+    if (match(QUEUE[i])) {
+      QUEUE.splice(i, 1);
+      removed += 1;
+    }
+  }
+  return removed;
+}
+
 /** Test/inspection helper. */
 export function _queue(): FollowUp[] {
   return QUEUE;

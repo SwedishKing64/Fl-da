@@ -21,6 +21,14 @@ See [TEARDOWN.md](TEARDOWN.md) for the competitive analysis this is built agains
   - `GET /api/auth` → install, `GET /api/auth/callback` → token exchange + webhook registration
   - `POST /api/webhooks/orders-fulfilled` → schedule a follow-up (HMAC-verified)
   - `POST /api/cron/dispatch` → send everything that's due
+  - **Mandatory GDPR compliance webhooks** (App Store requires all three; HMAC-verified):
+    - `POST /api/webhooks/customers-data-request`
+    - `POST /api/webhooks/customers-redact`
+    - `POST /api/webhooks/shop-redact`
+    Register these three URLs in the Partner Dashboard → *App setup → Compliance webhooks*
+    (or under `[webhooks]` in `shopify.app.toml`). They already verify the HMAC and, for
+    the redact topics, purge the shop/customer from the current in-memory stores — swap
+    those stubs for real DB deletes in production.
   - Needs a Shopify Partner app + the env in [.env.example](.env.example) to run live.
 
 ## Develop

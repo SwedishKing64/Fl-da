@@ -29,6 +29,6 @@ export async function GET(request: NextRequest) {
     return Response.json({ error: err instanceof Error ? err.message : "install failed" }, { status: 502 });
   }
 
-  // Installed — send them into the app.
-  return Response.redirect(new URL("/app", request.nextUrl.origin), 302);
+  // Installed — hand off to the billing gate (subscribe if not already, else into the app).
+  return Response.redirect(new URL(`/api/billing?shop=${encodeURIComponent(shop)}`, request.nextUrl.origin), 302);
 }

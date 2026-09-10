@@ -31,12 +31,26 @@ function createClient(): PrismaClient {
   });
 }
 
-export const prisma = globalForPrisma.prisma ?? createClient();
+function getClient(): PrismaClient {
+  if (!globalForPrisma.prisma) globalForPrisma.prisma = createClient();
+  return globalForPrisma.prisma;
+}
 
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+/**
+ * Lazily-created client: importing this module never touches the database, so pure modules
+ * (and their tests) can import files that also import `prisma`.
+ */
+export const prisma: PrismaClient = new Proxy({} as PrismaClient, {
+  get(_target, prop) {
+    const client = getClient();
+    const value = Reflect.get(client, prop) as unknown;
+    return typeof value === "function" ? (value as (...args: unknown[]) => unknown).bind(client) : value;
+  },
+});
 
 /** True when running on the throwaway SQLite copy (data resets on restart). */
 export function isEphemeralDb(): boolean {
+  getClient();
   return Boolean(globalForPrisma.ephemeralDb);
 }
 

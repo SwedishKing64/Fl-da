@@ -42,6 +42,7 @@ export async function setupAction(_prev: ActionResult | null, formData: FormData
   try {
     const data = schema.parse({ name: formData.get("name"), email: String(formData.get("email") ?? "").trim().toLowerCase(), password: formData.get("password") });
     const user = await prisma.user.create({ data: { ...data, passwordHash: hashPassword(data.password), role: "ADMIN" } });
+    await seedDefaults();
     await createSession(user.id);
   } catch (err) {
     return fail(err);

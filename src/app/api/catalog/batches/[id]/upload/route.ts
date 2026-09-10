@@ -5,7 +5,7 @@ import { ingestFile } from "@/lib/catalog/pipeline";
 import { logAudit } from "@/lib/catalog/audit";
 
 export const runtime = "nodejs";
-export const maxDuration = 300;
+export const maxDuration = 60;
 
 const MAX_BYTES = 40 * 1024 * 1024;
 

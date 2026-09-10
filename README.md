@@ -86,6 +86,21 @@ Sample supplier files to try are in `samples/`:
 regression test in `src/lib/catalog/samples.test.ts` fails if they drift. Regenerate them
 with `npm run catalog:fixtures` after an intentional change.
 
+## Deploy to Vercel
+
+Vercel has no persistent disk, so the app needs a Postgres database and a Blob store there.
+Both are one click in the Vercel dashboard and their credentials are injected automatically.
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FSwedishKing64%2Fafterword&project-name=ski-product-importer&stores=%5B%7B%22type%22%3A%22integration%22%2C%22integrationSlug%22%3A%22neon%22%2C%22productSlug%22%3A%22neon%22%7D%2C%7B%22type%22%3A%22blob%22%7D%5D&env=ANTHROPIC_API_KEY&envDescription=Optional%3A%20enables%20PDF%2Fscan%2Fphoto%20invoice%20reading%20and%20AI%20product%20copy)
+
+Manual steps if you prefer:
+
+1. vercel.com → **Add New → Project** → import this repository (choose the branch you want to deploy).
+2. In the project: **Storage → Create Database → Neon (Postgres)** and **Storage → Create → Blob**. Connect both to the project; this sets `DATABASE_URL` and `BLOB_READ_WRITE_TOKEN`.
+3. Optionally add `ANTHROPIC_API_KEY` under **Settings → Environment Variables**.
+4. **Deploy** (or redeploy after adding storage). The build (`npm run vercel-build`) switches Prisma to Postgres, syncs the schema and builds the app.
+5. Open `https://<your-project>.vercel.app/catalog` and create the first admin account; default pricing and category rules load automatically.
+
 ## Pricing & profit engine
 
 Everything is in `src/lib/catalog/pricing.ts` (pure, unit tested):

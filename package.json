@@ -12,12 +12,14 @@
     "db:push": "prisma db push",
     "catalog:seed": "tsx prisma/seed.ts",
     "catalog:fixtures": "tsx samples/generate-fixtures.ts",
-    "demo": "tsx scripts/demo.ts"
+    "demo": "tsx scripts/demo.ts",
+    "vercel-build": "node scripts/vercel-build.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
     "@prisma/client": "^6.19.3",
     "@types/papaparse": "^5.5.2",
+    "@vercel/blob": "^2.8.0",
     "exceljs": "^4.4.0",
     "next": "16.2.12",
     "papaparse": "^5.7.0",

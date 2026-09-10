@@ -458,7 +458,7 @@ export async function loadReview(batchId: string): Promise<ReviewData> {
       pricesIncludeGst: settings.pricesIncludeGst,
       minMarginPct: settings.minMarginPct,
       shopifyConfigured: Boolean(settings.shopify.storeDomain && settings.shopify.accessToken),
-      publicBaseUrl: settings.publicBaseUrl || process.env.APP_PUBLIC_URL || "",
+      publicBaseUrl: process.env.BLOB_READ_WRITE_TOKEN ? "blob" : settings.publicBaseUrl || process.env.APP_PUBLIC_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : ""),
     },
     rules: rules.map((r) => ({ id: r.id, name: r.name, mode: r.mode, percent: r.percent, scope: r.scope, matchValue: r.matchValue, roundTo: r.roundTo })),
     metafieldColumns: SKI_METAFIELDS.map(metafieldColumn),

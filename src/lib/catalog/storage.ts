@@ -1,45 +1,87 @@
-// File storage: local disk under STORAGE_DIR (default ./storage). Files are served back by
-// /api/catalog/files/<path>; set `publicBaseUrl` in Settings (or APP_PUBLIC_URL) so uploaded
-// images get public HTTPS URLs for the Shopify CSV. Swap this module for S3 if needed.
+// File storage for uploaded invoices, generated CSVs and images.
+//
+// Two backends, chosen automatically:
+//  - Vercel Blob when BLOB_READ_WRITE_TOKEN is set (required on Vercel, which has no persistent
+//    disk). Stored refs are the blob's public https URL, so images are Shopify-ready as-is.
+//  - Local disk under STORAGE_DIR (default ./storage) otherwise. Stored refs are relative paths
+//    served by /api/catalog/files/<path>; set `publicBaseUrl` in Settings (or APP_PUBLIC_URL)
+//    so uploaded images get public HTTPS URLs for the Shopify CSV.
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 
-export const STORAGE_DIR = path.resolve(process.env.STORAGE_DIR || "./storage");
+export const STORAGE_DIR = path.resolve(process.env.STORAGE_DIR || (process.env.VERCEL ? "/tmp/storage" : "./storage"));
+
+export type StorageKind = "invoices" | "exports" | "images";
+
+export function usingBlob(): boolean {
+  return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+}
 
 function safeName(name: string): string {
   return name.replace(/[^A-Za-z0-9._-]+/g, "_").slice(0, 120) || "file";
 }
 
-/** Persist a buffer under `<kind>/<yyyy-mm>/<uuid>-<name>` and return its relative storage path. */
-export async function saveFile(kind: "invoices" | "exports" | "images", filename: string, data: Buffer): Promise<string> {
+function keyFor(kind: StorageKind, filename: string): string {
   const month = new Date().toISOString().slice(0, 7);
-  const rel = path.posix.join(kind, month, `${randomUUID().slice(0, 8)}-${safeName(filename)}`);
-  const abs = path.join(STORAGE_DIR, rel);
+  return path.posix.join(kind, month, `${randomUUID().slice(0, 8)}-${safeName(filename)}`);
+}
+
+const CONTENT_TYPES: Record<string, string> = {
+  jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp",
+  pdf: "application/pdf", csv: "text/csv; charset=utf-8", xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", txt: "text/plain; charset=utf-8",
+};
+
+export function contentTypeFor(name: string): string {
+  const ext = name.split(".").pop()?.toLowerCase() ?? "";
+  return CONTENT_TYPES[ext] ?? "application/octet-stream";
+}
+
+/** Persist a buffer; returns a storage ref (relative path on disk, or a public URL on Blob). */
+export async function saveFile(kind: StorageKind, filename: string, data: Buffer): Promise<string> {
+  const key = keyFor(kind, filename);
+  if (usingBlob()) {
+    const { put } = await import("@vercel/blob");
+    const blob = await put(`catalog/${key}`, data, { access: "public", contentType: contentTypeFor(filename), addRandomSuffix: false });
+    return blob.url;
+  }
+  const abs = path.join(STORAGE_DIR, key);
   await fs.mkdir(path.dirname(abs), { recursive: true });
   await fs.writeFile(abs, data);
-  return rel;
+  return key;
 }
 
-export async function readFile(rel: string): Promise<Buffer> {
-  return fs.readFile(resolveStoragePath(rel));
+export function isRemoteRef(ref: string): boolean {
+  return /^https?:\/\//i.test(ref);
 }
 
-/** Resolve a stored relative path, refusing anything outside STORAGE_DIR. */
+export async function readFile(ref: string): Promise<Buffer> {
+  if (isRemoteRef(ref)) {
+    const res = await fetch(ref);
+    if (!res.ok) throw new Error(`Could not read stored file (${res.status})`);
+    return Buffer.from(await res.arrayBuffer());
+  }
+  return fs.readFile(resolveStoragePath(ref));
+}
+
+/** Resolve a local relative ref, refusing anything outside STORAGE_DIR. */
 export function resolveStoragePath(rel: string): string {
   const abs = path.resolve(STORAGE_DIR, rel);
   if (!abs.startsWith(STORAGE_DIR + path.sep)) throw new Error("Invalid storage path");
   return abs;
 }
 
-export function filePath(rel: string): string {
-  return `/api/catalog/files/${rel.split("/").map(encodeURIComponent).join("/")}`;
+/** App-relative path (or absolute URL for Blob refs) that serves the file. */
+export function filePath(ref: string): string {
+  if (isRemoteRef(ref)) return ref;
+  return `/api/catalog/files/${ref.split("/").map(encodeURIComponent).join("/")}`;
 }
 
 /** Public URL for a stored file, or null when no public base URL is configured. */
-export function publicFileUrl(rel: string, publicBaseUrl: string): string | null {
-  const base = (publicBaseUrl || process.env.APP_PUBLIC_URL || "").replace(/\/+$/, "");
+export function publicFileUrl(ref: string, publicBaseUrl: string): string | null {
+  if (isRemoteRef(ref)) return ref;
+  const base = (publicBaseUrl || process.env.APP_PUBLIC_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "")).replace(/\/+$/, "");
   if (!base) return null;
-  return `${base}${filePath(rel)}`;
+  return `${base}${filePath(ref)}`;
 }

@@ -8,10 +8,15 @@
 import { execSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 
-const url = process.env.DATABASE_URL || process.env.POSTGRES_PRISMA_URL || process.env.POSTGRES_URL || "";
+// Keep in sync with DATABASE_ENV_KEYS in src/lib/catalog/db.ts.
+const KEYS = ["DATABASE_URL", "POSTGRES_PRISMA_URL", "POSTGRES_URL", "POSTGRES_URL_NON_POOLING", "DATABASE_URL_UNPOOLED", "NEON_DATABASE_URL"];
+const values = KEYS.map((k) => process.env[k]).filter(Boolean);
+const url = values.find((v) => /^postgres(ql)?:/i.test(v)) ?? values[0] ?? "";
 const schemaPath = "prisma/schema.prisma";
 
-if (/^postgres(ql)?:/i.test(url)) {
+console.log(`[vercel-build] environment=${process.env.VERCEL_ENV ?? "?"} branch=${process.env.VERCEL_GIT_COMMIT_REF ?? "?"} database variables present: ${KEYS.filter((k) => process.env[k]).join(", ") || "none"}`);
+
+if (/^(prisma\+)?postgres(ql)?:/i.test(url)) {
   const schema = readFileSync(schemaPath, "utf8").replace('provider = "sqlite"', 'provider = "postgresql"');
   writeFileSync(schemaPath, schema);
   process.env.DATABASE_URL = url;

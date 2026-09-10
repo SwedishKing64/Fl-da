@@ -36,11 +36,17 @@ interface GraphQLResponse<T> {
 }
 
 export async function graphql<T>(cfg: ShopifyConfig, query: string, variables: Record<string, unknown> = {}, attempt = 0): Promise<T> {
-  const res = await fetch(`https://${cfg.storeDomain}/admin/api/${cfg.apiVersion}/graphql.json`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": cfg.accessToken },
-    body: JSON.stringify({ query, variables }),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`https://${cfg.storeDomain}/admin/api/${cfg.apiVersion}/graphql.json`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": cfg.accessToken },
+      body: JSON.stringify({ query, variables }),
+      signal: AbortSignal.timeout(30000),
+    });
+  } catch (err) {
+    throw new ShopifyError(`Could not reach ${cfg.storeDomain} (${err instanceof Error && err.name === "TimeoutError" ? "timed out" : err instanceof Error ? err.message : String(err)}). Check the store domain and network.`);
+  }
   if (res.status === 429 && attempt < 4) {
     await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)));
     return graphql(cfg, query, variables, attempt + 1);

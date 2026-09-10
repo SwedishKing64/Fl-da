@@ -1,4 +1,4 @@
-# Single-container deployment of the Product Importer (+ Afterword) on any host that runs
+# Single-container deployment of Alpsport CSV on any host that runs
 # Docker with a persistent volume (Railway, Fly.io, Render, a VPS). SQLite and uploaded files
 # live under /data so they survive restarts.
 FROM node:22-bookworm-slim AS base

@@ -3,6 +3,7 @@
 import { useActionState, useMemo, useState, useTransition } from "react";
 import { deleteTagRuleAction, saveTagRuleAction, seedDefaultsAction } from "@/app/(catalog)/actions";
 import { Alert, Badge, Button, Field, INPUT } from "@/app/(catalog)/ui";
+import { ActionForm } from "@/app/(catalog)/ActionForm";
 import { applyTagRules, MATCH_FIELDS, type TagRuleLike } from "@/lib/catalog/rules";
 
 interface RuleRow { id: string; name: string; matchField: string; pattern: string; addTags: string; addCollections: string; setProductType: string; setMetafields: Record<string, string>; priority: number; active: boolean }
@@ -64,7 +65,7 @@ export function TagRulesEditor({ rules, isAdmin }: { rules: RuleRow[]; isAdmin: 
       </div>
 
       {isAdmin && (
-        <form action={action} key={editing?.id ?? "new"} className="grid gap-3 rounded-lg border border-[var(--line-soft)] p-3 sm:grid-cols-4">
+        <ActionForm action={action} state={state} key={editing?.id ?? "new"} className="grid gap-3 rounded-lg border border-[var(--line-soft)] p-3 sm:grid-cols-4">
           {editing && <input type="hidden" name="id" value={editing.id} />}
           <Field label="Rule name" className="sm:col-span-2"><input name="name" required defaultValue={editing?.name} className={INPUT} placeholder="e.g. Women's products" /></Field>
           <Field label="Look at"><select name="matchField" defaultValue={editing?.matchField ?? "any"} className={INPUT}>{MATCH_FIELDS.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}</select></Field>
@@ -81,7 +82,7 @@ export function TagRulesEditor({ rules, isAdmin }: { rules: RuleRow[]; isAdmin: 
             {state && (state.ok ? <span className="text-xs text-emerald-700">{state.message}</span> : <span className="text-xs text-red-700">{state.error}</span>)}
           </div>
           {state && !state.ok && <div className="sm:col-span-4"><Alert tone="danger">{state.error}</Alert></div>}
-        </form>
+        </ActionForm>
       )}
     </div>
   );

@@ -3,6 +3,7 @@
 import { useActionState, useState, useTransition } from "react";
 import { createUserAction, deleteUserAction, saveSettingsAction } from "@/app/(catalog)/actions";
 import { Alert, Button, Field, INPUT } from "@/app/(catalog)/ui";
+import { ActionForm } from "@/app/(catalog)/ActionForm";
 
 export function GeneralSettingsForm({ settings, aiConfigured, storage }: { settings: { publicBaseUrl: string; seoTone: string }; aiConfigured: boolean; storage: "blob" | "disk" | "ephemeral" }) {
   const [form, setForm] = useState(settings);
@@ -24,14 +25,14 @@ export function GeneralSettingsForm({ settings, aiConfigured, storage }: { setti
 export function UserForm() {
   const [state, action, pending] = useActionState(createUserAction, null);
   return (
-    <form action={action} className="grid gap-3 sm:grid-cols-2">
+    <ActionForm action={action} state={state} resetOnSuccess className="grid gap-3 sm:grid-cols-2">
       <Field label="Name"><input name="name" required className={INPUT} /></Field>
       <Field label="Email"><input name="email" type="email" required className={INPUT} /></Field>
       <Field label="Password"><input name="password" type="password" minLength={8} required className={INPUT} /></Field>
       <Field label="Role"><select name="role" defaultValue="STAFF" className={INPUT}><option value="STAFF">Staff</option><option value="ADMIN">Admin</option></select></Field>
       {state && <div className="sm:col-span-2">{state.ok ? <Alert tone="success">{state.message}</Alert> : <Alert tone="danger">{state.error}</Alert>}</div>}
       <div><Button type="submit" variant="primary" disabled={pending}>Add account</Button></div>
-    </form>
+    </ActionForm>
   );
 }
 

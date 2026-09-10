@@ -15,7 +15,7 @@ export default async function CatalogLayout({ children }: { children: React.Reac
     <div className="flex min-h-screen bg-[var(--canvas)]">
       <aside className="hidden w-56 shrink-0 flex-col border-r border-[var(--line)] bg-white md:flex">
         <Link href="/" className="border-b border-[var(--line-soft)] px-5 py-4">
-          <div className="text-sm font-semibold tracking-tight">Product Importer</div>
+          <div className="text-sm font-semibold tracking-tight">Alpsport CSV</div>
           <div className="text-[11px] text-[var(--ink-soft)]">Invoices → Shopify CSV</div>
         </Link>
         <NavLinks isAdmin={user.role === "ADMIN"} />
@@ -29,7 +29,7 @@ export default async function CatalogLayout({ children }: { children: React.Reac
       </aside>
       <main className="min-w-0 flex-1 px-4 py-6 md:px-8">
         <div className="mb-4 flex items-center justify-between md:hidden">
-          <Link href="/" className="text-sm font-semibold">Product Importer</Link>
+          <Link href="/" className="text-sm font-semibold">Alpsport CSV</Link>
           <NavLinks isAdmin={user.role === "ADMIN"} compact />
         </div>
         {isEphemeralDb() && (

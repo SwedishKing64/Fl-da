@@ -3,6 +3,7 @@
 import { useActionState, useState, useTransition } from "react";
 import { deleteCategoryRuleAction, deletePricingRuleAction, saveCategoryRuleAction, savePricingRuleAction, saveSettingsAction, seedDefaultsAction } from "@/app/(catalog)/actions";
 import { Alert, Badge, Button, Field, INPUT } from "@/app/(catalog)/ui";
+import { ActionForm } from "@/app/(catalog)/ActionForm";
 import { CATEGORIES, CURRENCIES } from "@/lib/catalog/types";
 
 interface RuleRow { id: string; name: string; scope: string; matchValue: string; mode: string; percent: number; roundTo: string; priority: number; active: boolean }
@@ -31,7 +32,7 @@ export function PricingRulesEditor({ rules, isAdmin }: { rules: RuleRow[]; isAdm
         </tbody>
       </table>
       {isAdmin && (
-        <form action={action} key={editing?.id ?? "new"} className="grid gap-3 rounded-lg border border-[var(--line-soft)] p-3 sm:grid-cols-4">
+        <ActionForm action={action} state={state} key={editing?.id ?? "new"} className="grid gap-3 rounded-lg border border-[var(--line-soft)] p-3 sm:grid-cols-4">
           {editing && <input type="hidden" name="id" value={editing.id} />}
           <Field label="Name" className="sm:col-span-2"><input name="name" required defaultValue={editing?.name} className={INPUT} placeholder="e.g. Skis 40% margin" /></Field>
           <Field label="Scope"><select name="scope" defaultValue={editing?.scope ?? "CATEGORY"} className={INPUT}><option value="DEFAULT">Default</option><option value="CATEGORY">Category</option><option value="BRAND">Brand</option><option value="PRODUCT">Product (SKU/model)</option></select></Field>
@@ -46,7 +47,7 @@ export function PricingRulesEditor({ rules, isAdmin }: { rules: RuleRow[]; isAdm
             {editing && <Button type="button" onClick={() => setEditing(null)}>Cancel</Button>}
             {state && (state.ok ? <span className="text-xs text-emerald-700">{state.message}</span> : <span className="text-xs text-red-700">{state.error}</span>)}
           </div>
-        </form>
+        </ActionForm>
       )}
     </div>
   );
@@ -76,7 +77,7 @@ export function CategoryRulesEditor({ rules, usingDefaults, isAdmin }: { rules: 
         </table>
       </div>
       {isAdmin && (
-        <form action={action} key={editing ? editing.id || editing.pattern : "new"} className="grid gap-3 rounded-lg border border-[var(--line-soft)] p-3 sm:grid-cols-4">
+        <ActionForm action={action} state={state} key={editing ? editing.id || editing.pattern : "new"} className="grid gap-3 rounded-lg border border-[var(--line-soft)] p-3 sm:grid-cols-4">
           {editing?.id && <input type="hidden" name="id" value={editing.id} />}
           <Field label="Category"><select name="category" defaultValue={editing?.category ?? "skis"} className={INPUT}>{CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select></Field>
           <Field label="Pattern (regex)" className="sm:col-span-2"><input name="pattern" required defaultValue={editing?.pattern} className={`${INPUT} font-mono text-xs`} /></Field>
@@ -91,7 +92,7 @@ export function CategoryRulesEditor({ rules, usingDefaults, isAdmin }: { rules: 
             {editing && <Button type="button" onClick={() => setEditing(null)}>Cancel</Button>}
           </div>
           {state && <div className="sm:col-span-4">{state.ok ? <span className="text-xs text-emerald-700">{state.message}</span> : <span className="text-xs text-red-700">{state.error}</span>}</div>}
-        </form>
+        </ActionForm>
       )}
     </div>
   );

@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { createBatchAction } from "@/app/(catalog)/actions";
 import { Alert, Button, Card, Field, INPUT } from "@/app/(catalog)/ui";
+import { ActionForm } from "@/app/(catalog)/ActionForm";
 import { CURRENCIES } from "@/lib/catalog/types";
 
 interface SupplierOpt { id: string; name: string; defaultCurrency: string; defaultGstTreatment: string }
@@ -25,7 +26,7 @@ export function NewBatchForm({ suppliers, fxRates }: { suppliers: SupplierOpt[];
   };
 
   return (
-    <form action={action} className="max-w-2xl space-y-5">
+    <ActionForm action={action} state={state} className="max-w-2xl space-y-5">
       <Card title="Batch">
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Batch name" className="sm:col-span-2"><input name="name" required placeholder="e.g. Atomic pre-book Winter 2026" className={INPUT} /></Field>
@@ -73,6 +74,6 @@ export function NewBatchForm({ suppliers, fxRates }: { suppliers: SupplierOpt[];
       </Card>
       {state && !state.ok && <Alert tone="danger">{state.error}</Alert>}
       <Button type="submit" variant="primary" disabled={pending}>{pending ? "Creating…" : "Create batch & upload files"}</Button>
-    </form>
+    </ActionForm>
   );
 }

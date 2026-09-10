@@ -219,6 +219,11 @@ export function ReviewGrid({ initial, batchId }: { initial: ReviewData; batchId:
   };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
+    // Keys typed into the search box, product-row inputs or the drawer belong to those fields,
+    // not to grid navigation. Only the grid's own cell editor is handled below via `editing`.
+    const target = e.target as HTMLElement;
+    const inFormControl = ["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName) || target.isContentEditable;
+    if (!editing && inFormControl) return;
     if (editing) {
       if (e.key === "Enter") { e.preventDefault(); commitVariant(editing.variantId, VARIANT_COLS[editing.col].key as VariantField, editing.value); setEditing(null); moveFocus(1, 0); }
       else if (e.key === "Tab") { e.preventDefault(); commitVariant(editing.variantId, VARIANT_COLS[editing.col].key as VariantField, editing.value); setEditing(null); moveFocus(0, e.shiftKey ? -1 : 1); }

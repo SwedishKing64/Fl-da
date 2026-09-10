@@ -8,7 +8,7 @@ const body = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Product Importer",
+  title: "Alpsport CSV",
   description: "Turn supplier invoices into ready-to-import Shopify products.",
 };
 

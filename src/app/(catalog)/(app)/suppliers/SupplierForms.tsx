@@ -3,6 +3,7 @@
 import { useActionState, useTransition } from "react";
 import { deleteSupplierAction, deleteTemplateAction, saveSupplierAction } from "@/app/(catalog)/actions";
 import { Alert, Button, Field, INPUT } from "@/app/(catalog)/ui";
+import { ActionForm } from "@/app/(catalog)/ActionForm";
 import { CURRENCIES } from "@/lib/catalog/types";
 
 interface SupplierData { id?: string; name: string; defaultCurrency: string; defaultGstTreatment: string; defaultBrand: string; notes: string }
@@ -10,7 +11,7 @@ interface SupplierData { id?: string; name: string; defaultCurrency: string; def
 export function SupplierForm({ supplier }: { supplier?: SupplierData }) {
   const [state, action, pending] = useActionState(saveSupplierAction, null);
   return (
-    <form action={action} className="space-y-3">
+    <ActionForm action={action} state={state} className="space-y-3">
       {supplier?.id && <input type="hidden" name="id" value={supplier.id} />}
       <Field label="Name"><input name="name" required defaultValue={supplier?.name} className={INPUT} /></Field>
       <div className="grid grid-cols-2 gap-3">
@@ -21,7 +22,7 @@ export function SupplierForm({ supplier }: { supplier?: SupplierData }) {
       <Field label="Notes"><textarea name="notes" rows={2} defaultValue={supplier?.notes} className={INPUT} /></Field>
       {state && (state.ok ? <Alert tone="success">{state.message}</Alert> : <Alert tone="danger">{state.error}</Alert>)}
       <Button type="submit" variant="primary" disabled={pending}>{supplier ? "Save changes" : "Add supplier"}</Button>
-    </form>
+    </ActionForm>
   );
 }
 

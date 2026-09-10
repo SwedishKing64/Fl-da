@@ -41,7 +41,7 @@ export async function setupAction(_prev: ActionResult | null, formData: FormData
   const schema = z.object({ name: z.string().min(1), email: z.string().email(), password: z.string().min(8) });
   try {
     const data = schema.parse({ name: formData.get("name"), email: String(formData.get("email") ?? "").trim().toLowerCase(), password: formData.get("password") });
-    const user = await prisma.user.create({ data: { ...data, passwordHash: hashPassword(data.password), role: "ADMIN" } });
+    const user = await prisma.user.create({ data: { name: data.name, email: data.email, passwordHash: hashPassword(data.password), role: "ADMIN" } });
     await seedDefaults();
     await createSession(user.id);
   } catch (err) {

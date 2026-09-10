@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/catalog/auth";
+import { isEphemeralDb } from "@/lib/catalog/db";
 import { logoutAction } from "@/app/(catalog)/actions";
 import { NavLinks } from "./NavLinks";
 import "../catalog.css";
@@ -29,6 +30,12 @@ export default async function CatalogLayout({ children }: { children: React.Reac
           <Link href="/" className="text-sm font-semibold">Product Importer</Link>
           <NavLinks isAdmin={user.role === "ADMIN"} compact />
         </div>
+        {isEphemeralDb() && (
+          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
+            <strong>No database connected.</strong> This deployment is running on a temporary database that resets whenever the server restarts, so batches and accounts will disappear.
+            {process.env.VERCEL ? " In Vercel: Storage → Create Database → Neon (Postgres), connect it to this project, then redeploy." : " Set DATABASE_URL and restart."}
+          </div>
+        )}
         {children}
       </main>
     </div>

@@ -1,21 +1,26 @@
-// Vercel build: the checked-in Prisma schema targets SQLite for zero-setup local use, but
-// Vercel has no persistent disk, so when DATABASE_URL points at Postgres we switch the
-// datasource provider, regenerate the client, sync the schema, then build.
+// Vercel build. The checked-in Prisma schema targets SQLite for zero-setup local use.
+//
+//  - With a Postgres DATABASE_URL (Storage → Neon in the Vercel project): switch the datasource
+//    provider to postgresql, regenerate the client, sync the schema, build.
+//  - Without one: build against a SQLite template database that the app copies to /tmp at
+//    runtime. The app works but data resets whenever the serverless instance restarts, and it
+//    shows a banner saying so. This keeps a first deploy from failing before storage is added.
 import { execSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 
 const url = process.env.DATABASE_URL || process.env.POSTGRES_PRISMA_URL || process.env.POSTGRES_URL || "";
 const schemaPath = "prisma/schema.prisma";
 
-if (!url) {
-  console.error("\n[vercel-build] DATABASE_URL is not set. Add a Postgres database (Storage → Neon) to the Vercel project first.\n");
-  process.exit(1);
-}
 if (/^postgres(ql)?:/i.test(url)) {
   const schema = readFileSync(schemaPath, "utf8").replace('provider = "sqlite"', 'provider = "postgresql"');
   writeFileSync(schemaPath, schema);
-  console.log("[vercel-build] Prisma provider switched to postgresql");
-  if (!process.env.DATABASE_URL) process.env.DATABASE_URL = url;
+  process.env.DATABASE_URL = url;
+  console.log("[vercel-build] Postgres database detected; Prisma provider switched to postgresql");
+} else if (url) {
+  console.log(`[vercel-build] Using DATABASE_URL as-is (${url.split(":")[0]}:...)`);
+} else {
+  process.env.DATABASE_URL = "file:./template.db"; // relative to prisma/schema.prisma => prisma/template.db
+  console.warn("\n[vercel-build] WARNING: no DATABASE_URL. Building with an ephemeral SQLite database; add Storage → Neon (Postgres) to the Vercel project to keep data.\n");
 }
 
 const run = (cmd) => {

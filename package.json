@@ -11,7 +11,8 @@
     "postinstall": "prisma generate",
     "db:push": "prisma db push",
     "catalog:seed": "tsx prisma/seed.ts",
-    "catalog:fixtures": "tsx samples/generate-fixtures.ts"
+    "catalog:fixtures": "tsx samples/generate-fixtures.ts",
+    "demo": "tsx scripts/demo.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",

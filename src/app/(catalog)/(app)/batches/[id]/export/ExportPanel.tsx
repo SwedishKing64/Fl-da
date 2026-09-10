@@ -67,7 +67,7 @@ export function ExportPanel(props: { batchId: string; status: string; errors: st
               </li>
             ))}
           </ul>
-          {props.files.some((f) => f.partCount > 1) && <p className="mt-2 text-xs text-[var(--ink-soft)]">The batch exceeded Shopify&apos;s 15MB import limit, so it was split. Import the parts in order.</p>}
+          {props.files.length > 1 && <p className="mt-2 text-xs text-[var(--ink-soft)]">One file per brand or product type (change this under Batch settings). Import each in Shopify admin → Products → Import.</p>}
         </Card>
       )}
 

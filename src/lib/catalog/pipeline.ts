@@ -2,10 +2,11 @@
 
 import type { Prisma } from "@prisma/client";
 import { prisma, parseJson } from "./db";
-import { extractFile } from "./extract";
+import { extractFile, type UploadKind } from "./extract";
 import { applyMapping, headerHash, mappingProblems, suggestMapping, suggestOptions, type Mapping, type MappingOptions } from "./mapping";
 import { groupLineItems } from "./grouping";
 import { DEFAULT_CATEGORY_RULES, type CategoryRuleLike } from "./categorize";
+import { applyTagRules, type TagRuleLike } from "./rules";
 import { allocateFreight, exGstCostAud, priceVariant, selectRule, type PricingRuleLike } from "./pricing";
 import { getSettings } from "./settings";
 import { checkImageUrl, findLibraryImages, recordLibraryImages } from "./images";
@@ -15,7 +16,7 @@ export { toCsvProducts };
 import { SKI_METAFIELDS, metafieldColumn, type AppSettings, type CanonicalLineItem, type GstTreatment } from "./types";
 import type { ReviewProduct, ReviewSummary, ReviewVariant } from "./review-types";
 import { blockingErrors, summarise, validateReview, warningList } from "./validate";
-import { readFile, saveFile } from "./storage";
+import { readFile, saveFile, publicFileUrl, filePath } from "./storage";
 import { logAudit } from "./audit";
 import { AI_HEADERS } from "./extract/ai";
 
@@ -28,6 +29,30 @@ export async function loadPricingRules(): Promise<PricingRuleLike[]> {
   return rows.map((r) => ({ ...r, scope: r.scope as PricingRuleLike["scope"], mode: r.mode as PricingRuleLike["mode"] }));
 }
 
+export async function loadTagRules(): Promise<TagRuleLike[]> {
+  return prisma.tagRule.findMany({ orderBy: { priority: "desc" } });
+}
+
+/** Re-run the tag/collection/type/metafield rules over every product in a batch. */
+export async function applyRulesToBatch(batchId: string): Promise<{ products: number; matched: number }> {
+  const rules = await loadTagRules();
+  const products = await prisma.product.findMany({ where: { batchId }, include: { variants: { select: { sku: true } } } });
+  let matched = 0;
+  for (const p of products) {
+    const out = applyTagRules(
+      { title: p.title, vendor: p.vendor, category: p.category, productType: p.productType, skus: p.variants.map((v) => v.sku), tags: splitCsv(p.tags), collections: splitCsv(p.collections), metafields: parseJson<Record<string, string>>(p.metafields, {}) },
+      rules,
+    );
+    if (out.matched.length) matched++;
+    await prisma.product.update({ where: { id: p.id }, data: { tags: out.tags.join(", "), collections: out.collections.join(", "), productType: out.productType, metafields: JSON.stringify(out.metafields) } });
+  }
+  return { products: products.length, matched };
+}
+
+function splitCsv(s: string): string[] {
+  return s.split(",").map((t) => t.trim()).filter(Boolean);
+}
+
 export async function loadCategoryRules(): Promise<CategoryRuleLike[]> {
   const rows = await prisma.categoryRule.findMany({ orderBy: { priority: "desc" } });
   return rows.length > 0 ? rows : DEFAULT_CATEGORY_RULES;
@@ -37,25 +62,54 @@ export async function loadCategoryRules(): Promise<CategoryRuleLike[]> {
 // Ingest & extract
 // ---------------------------------------------------------------------------
 
-export async function ingestFile(batchId: string, file: { filename: string; mimeType: string; buffer: Buffer; kind?: string }) {
+export interface IngestResult {
+  id: string;
+  rows: number;
+  method: string | null;
+  kind: string; // effective kind after AI classification
+  warnings: string[];
+}
+
+const PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
+
+export async function ingestFile(batchId: string, file: { filename: string; mimeType: string; buffer: Buffer; kind?: UploadKind; origin?: string }): Promise<IngestResult> {
+  const requested: UploadKind = file.kind ?? "AUTO";
   const storagePath = await saveFile("invoices", file.filename, file.buffer);
   const record = await prisma.sourceFile.create({
-    data: { batchId, filename: file.filename, mimeType: file.mimeType || "application/octet-stream", sizeBytes: file.buffer.length, storagePath, kind: file.kind ?? "INVOICE" },
+    data: { batchId, filename: file.filename, mimeType: file.mimeType || "application/octet-stream", sizeBytes: file.buffer.length, storagePath, kind: requested },
   });
   try {
-    const { table, meta } = await extractFile(file.buffer, file.filename, file.mimeType);
+    const { table, meta } = await extractFile(file.buffer, file.filename, file.mimeType, requested);
+    const detected = meta?.documentType ?? null;
+    const effective = requested !== "AUTO" ? requested : detected === "SPEC_SHEET" ? "SPEC_SHEET" : detected === "PRODUCT_PHOTO" ? "PRODUCT_PHOTO" : "INVOICE";
+    const warnings = [...table.warnings];
+
+    if (effective === "PRODUCT_PHOTO" && PHOTO_TYPES.has(file.mimeType)) {
+      // A photo of a product: keep it as an image, not as line items.
+      const settings = await getSettings();
+      const ref = await saveFile("images", file.filename, file.buffer);
+      const url = publicFileUrl(ref, settings.publicBaseUrl) ?? `${file.origin ?? ""}${filePath(ref)}`;
+      const seen = table.rows[0];
+      const hint = seen ? [seen.brand, seen.title, seen.modelCode, seen.colour].filter(Boolean).join(" ") : "";
+      await prisma.unassignedImage.create({ data: { batchId, filename: file.filename, url, hint } });
+      await prisma.sourceFile.update({ where: { id: record.id }, data: { extractionStatus: "DONE", extractionMethod: table.method, detectedKind: "PRODUCT_PHOTO", headers: "[]", rawRows: "[]", extractionError: hint ? `Product photo: ${hint}` : "Product photo" } });
+      if (!publicFileUrl(ref, settings.publicBaseUrl)) warnings.push("No public URL is configured (Settings), so Shopify will not be able to fetch this photo until one is set.");
+      return { id: record.id, rows: 0, method: table.method, kind: "PRODUCT_PHOTO", warnings: [hint ? `Recognised: ${hint}.` : "Stored as a product photo.", ...warnings] };
+    }
+
     await prisma.sourceFile.update({
       where: { id: record.id },
       data: {
         extractionStatus: "DONE",
         extractionMethod: table.method,
+        detectedKind: effective,
         headers: JSON.stringify(table.headers),
         rawRows: JSON.stringify(table.rows),
         extractedText: table.text ?? null,
-        extractionError: table.warnings.length ? table.warnings.join(" ") : null,
+        extractionError: warnings.length ? warnings.join(" ") : null,
       },
     });
-    if (meta) {
+    if (meta && effective === "INVOICE") {
       const batch = await prisma.importBatch.findUnique({ where: { id: batchId }, select: { currency: true } });
       const data: Prisma.ImportBatchUpdateInput = {};
       if (meta.currency && batch?.currency === "AUD" && meta.currency !== "AUD") data.currency = meta.currency;
@@ -63,11 +117,11 @@ export async function ingestFile(batchId: string, file: { filename: string; mime
       if (Object.keys(data).length) await prisma.importBatch.update({ where: { id: batchId }, data });
     }
     await prisma.importBatch.update({ where: { id: batchId }, data: { status: "EXTRACTED" } });
-    return { id: record.id, rows: table.rows.length, method: table.method, warnings: table.warnings };
+    return { id: record.id, rows: table.rows.length, method: table.method, kind: effective, warnings };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await prisma.sourceFile.update({ where: { id: record.id }, data: { extractionStatus: "FAILED", extractionError: message } });
-    return { id: record.id, rows: 0, method: null, warnings: [message] };
+    return { id: record.id, rows: 0, method: null, kind: requested, warnings: [message] };
   }
 }
 
@@ -87,6 +141,7 @@ export interface HeaderGroup {
   templateId: string | null;
   templateName: string | null;
   isCanonical: boolean; // AI-extracted rows already use canonical field keys
+  confident: boolean; // safe to apply without showing the mapping screen
 }
 
 export async function mappingState(batchId: string): Promise<HeaderGroup[]> {
@@ -117,6 +172,7 @@ export async function mappingState(batchId: string): Promise<HeaderGroup[]> {
         templateId: template?.id ?? null,
         templateName: template?.name ?? null,
         isCanonical,
+        confident: false,
       };
       groups.set(hash, group);
     }
@@ -125,7 +181,19 @@ export async function mappingState(batchId: string): Promise<HeaderGroup[]> {
     group.rowCount += rows.length;
     if (group.sampleRows.length < 3) group.sampleRows.push(...rows.slice(0, 3 - group.sampleRows.length));
   }
+  for (const g of groups.values()) {
+    const targets = new Set(Object.values(g.suggestion).filter(Boolean));
+    g.confident = Boolean(g.templateId) || g.isCanonical || (targets.has("title") && targets.has("costPrice"));
+  }
   return Array.from(groups.values());
+}
+
+/** Apply the suggested mappings automatically when every file layout is recognised. */
+export async function autoApplyMappings(batchId: string, userId: string | null): Promise<{ applied: boolean; products: number; variants: number }> {
+  const groups = await mappingState(batchId);
+  if (groups.length === 0 || !groups.every((g) => g.confident)) return { applied: false, products: 0, variants: 0 };
+  const result = await applyMappings(batchId, groups.map((g) => ({ hash: g.hash, mapping: g.suggestion, options: g.options, saveTemplate: null })), userId);
+  return { applied: result.problems.length === 0, products: result.products, variants: result.variants };
 }
 
 export interface ApplyMappingInput {
@@ -144,17 +212,36 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
 
   const byHash = new Map(inputs.map((i) => [i.hash, i]));
   const items: Array<{ item: CanonicalLineItem; fileId: string; rowIndex: number; raw: Record<string, string> }> = [];
+  const specItems: CanonicalLineItem[] = [];
   for (const file of batch.files) {
     if (file.extractionStatus !== "DONE") continue;
     const headers = parseJson<string[]>(file.headers, []);
+    if (headers.length === 0) continue;
     const input = byHash.get(headerHash(headers));
     if (!input) continue;
+    const isSpec = (file.detectedKind ?? file.kind) === "SPEC_SHEET";
     const rows = parseJson<Record<string, string>[]>(file.rawRows, []);
     rows.forEach((raw, rowIndex) => {
       const item = applyMapping(raw, input.mapping, input.options);
       if (!item.title && !item.sku && item.costPrice === null) return; // blank/footer row
-      items.push({ item, fileId: file.id, rowIndex, raw });
+      if (isSpec) specItems.push(item);
+      else items.push({ item, fileId: file.id, rowIndex, raw });
     });
+  }
+  // A spec-sheet-only batch still builds products: one variant per listed length/size, no cost yet.
+  if (items.length === 0 && specItems.length > 0) {
+    const specFile = batch.files.find((f) => (f.detectedKind ?? f.kind) === "SPEC_SHEET")!;
+    specItems.forEach((spec, rowIndex) => {
+      const sizes = (spec.length || spec.size).split(/[,/|]+/).map((x) => x.trim()).filter(Boolean);
+      const variants = sizes.length ? sizes : [""];
+      for (const sz of variants) {
+        const v = { ...spec, imageUrls: [...spec.imageUrls], quantity: 0, costPrice: null, sku: "" };
+        if (spec.length) v.length = sz;
+        else v.size = sz;
+        items.push({ item: v, fileId: specFile.id, rowIndex, raw: {} });
+      }
+    });
+    specItems.length = 0;
   }
 
   if (batch.supplierId) {
@@ -167,8 +254,11 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
     }
   }
 
-  const categoryRules = await loadCategoryRules();
-  const grouped = groupLineItems(items.map((i) => i.item), categoryRules);
+  const [categoryRules, tagRules] = await Promise.all([loadCategoryRules(), loadTagRules()]);
+  const grouped = enrichFromSpecs(groupLineItems(items.map((i) => i.item), categoryRules), specItems).map((g) => {
+    const out = applyTagRules({ title: g.title, vendor: g.brand, category: g.category, productType: g.productType, skus: g.variants.map((v) => v.item.sku), tags: g.tags, collections: g.collections, metafields: g.metafields }, tagRules);
+    return { ...g, tags: out.tags, collections: out.collections, productType: out.productType, metafields: out.metafields };
+  });
 
   // Rebuild the batch's products from scratch (mapping is re-runnable until export).
   await prisma.$transaction([
@@ -251,6 +341,7 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
     }
   }
 
+  await attachUnassignedPhotos(batchId);
   await allocateBatchFreight(batchId);
   await repriceBatch(batchId);
   await prisma.importBatch.update({ where: { id: batchId }, data: { status: "REVIEW" } });
@@ -261,6 +352,60 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+const normKey = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+/** Merge spec-sheet rows into matching products: descriptions, specs, tags, images, RRP. */
+export function enrichFromSpecs<T extends { title: string; brand: string; description: string; tags: string[]; imageUrls: string[]; metafields: Record<string, string>; variants: Array<{ item: CanonicalLineItem }> }>(products: T[], specs: CanonicalLineItem[]): T[] {
+  if (specs.length === 0) return products;
+  for (const spec of specs) {
+    const code = normKey(spec.modelCode);
+    const title = normKey(spec.title);
+    const brand = normKey(spec.brand);
+    const target = products.find((p) => {
+      if (brand && normKey(p.brand) && normKey(p.brand) !== brand) return false;
+      const codes = p.variants.map((v) => normKey(v.item.modelCode)).filter(Boolean);
+      if (code && codes.includes(code)) return true;
+      const pt = normKey(p.title);
+      return Boolean(title) && (pt.includes(title) || title.includes(pt.replace(brand, "").trim()));
+    });
+    if (!target) continue;
+    if (spec.description && !target.description) target.description = spec.description;
+    for (const t of spec.tags.split(",").map((x) => x.trim()).filter(Boolean)) if (!target.tags.includes(t)) target.tags.push(t);
+    for (const u of spec.imageUrls) if (!target.imageUrls.includes(u)) target.imageUrls.push(u);
+    const fill: Array<[string, string]> = [["flex", spec.flex], ["ability_level", spec.abilityLevel], ["din_range", spec.dinRange], ["terrain", spec.terrain], ["waist_width", spec.width], ["gender", spec.gender], ["season", spec.season]];
+    for (const [k, v] of fill) if (v && !target.metafields[k]) target.metafields[k] = v;
+    for (const v of target.variants) {
+      if (spec.rrp && !v.item.rrp) v.item.rrp = spec.rrp;
+      if (spec.flex && !v.item.flex) v.item.flex = spec.flex;
+      if (spec.description && !v.item.description) v.item.description = spec.description;
+    }
+  }
+  return products;
+}
+
+/** Attach uploaded product photos to products whose SKU / model code / title appears in the filename or AI hint. */
+export async function attachUnassignedPhotos(batchId: string): Promise<number> {
+  const photos = await prisma.unassignedImage.findMany({ where: { batchId } });
+  if (photos.length === 0) return 0;
+  const products = await prisma.product.findMany({ where: { batchId }, include: { variants: { include: { lineItem: true } }, images: true } });
+  let attached = 0;
+  for (const photo of photos) {
+    const hay = normKey(`${photo.filename.replace(/\.[a-z0-9]+$/i, "")} ${photo.hint}`);
+    const match = products.find((p) => {
+      const codes = p.variants.flatMap((v) => [v.sku, parseJson<{ modelCode?: string } | null>(v.lineItem?.normalized, null)?.modelCode ?? ""]).map(normKey).filter((c) => c.length >= 4);
+      if (codes.some((c) => hay.includes(c))) return true;
+      const title = normKey(p.title.replace(new RegExp(`^${p.vendor}`, "i"), ""));
+      return title.length >= 5 && hay.includes(title);
+    });
+    if (!match) continue;
+    await prisma.productImage.create({ data: { productId: match.id, url: photo.url, position: match.images.length + 1, source: "MANUAL", altText: match.title, validated: /^https:/.test(photo.url) } });
+    match.images.push({ id: "", productId: match.id, variantId: null, url: photo.url, position: match.images.length + 1, altText: "", source: "MANUAL", validated: true, createdAt: new Date() });
+    await prisma.unassignedImage.delete({ where: { id: photo.id } });
+    attached++;
+  }
+  return attached;
 }
 
 // ---------------------------------------------------------------------------
@@ -351,9 +496,11 @@ export interface ReviewData {
     freightTotalAud: number;
     freightMode: string;
     publishOnExport: boolean;
+    splitExportBy: string;
     supplierName: string | null;
     notes: string | null;
   };
+  unassignedImages: Array<{ id: string; filename: string; url: string; hint: string }>;
   products: ReviewProduct[];
   summary: ReviewSummary;
   settings: { gstRate: number; pricesIncludeGst: boolean; minMarginPct: number; shopifyConfigured: boolean; publicBaseUrl: string };
@@ -363,7 +510,7 @@ export interface ReviewData {
 
 export async function loadReview(batchId: string): Promise<ReviewData> {
   const [batch, settings, rules] = await Promise.all([
-    prisma.importBatch.findUniqueOrThrow({ where: { id: batchId }, include: { supplier: true } }),
+    prisma.importBatch.findUniqueOrThrow({ where: { id: batchId }, include: { supplier: true, unassignedImages: { orderBy: { createdAt: "asc" } } } }),
     getSettings(),
     loadPricingRules(),
   ]);
@@ -448,9 +595,11 @@ export async function loadReview(batchId: string): Promise<ReviewData> {
       freightTotalAud: batch.freightTotalAud,
       freightMode: batch.freightMode,
       publishOnExport: batch.publishOnExport,
+      splitExportBy: batch.splitExportBy,
       supplierName: batch.supplier?.name ?? null,
       notes: batch.notes,
     },
+    unassignedImages: batch.unassignedImages.map((i) => ({ id: i.id, filename: i.filename, url: i.url, hint: i.hint })),
     products: view,
     summary,
     settings: {
@@ -506,21 +655,35 @@ export async function exportBatch(batchId: string, userId: string, opts: { overr
   const structural = validateProducts(csvProducts).filter((i) => i.level === "error").map((i) => `${i.handle ?? ""}: ${i.message}`);
   if (structural.length) return { ok: false, errors: structural, warnings, files: [] };
 
-  const parts = generateCsvParts(csvProducts, { metafieldColumns: review.metafieldColumns });
-  for (const part of parts) {
-    const fileIssues = validateCsvFile(part.content).filter((i) => i.level === "error");
-    if (fileIssues.length) return { ok: false, errors: fileIssues.map((i) => i.message), warnings, files: [] };
+  // One CSV per brand / product type (the retailer imports and manages them separately), each
+  // further split only if it would exceed Shopify's size limit.
+  const groups = new Map<string, typeof csvProducts>();
+  for (const p of csvProducts) {
+    const key = review.batch.splitExportBy === "BRAND" ? p.vendor || "unbranded" : review.batch.splitExportBy === "PRODUCT_TYPE" ? p.productType || "untyped" : "";
+    groups.set(key, [...(groups.get(key) ?? []), p]);
+  }
+  const planned: Array<{ group: string; part: ReturnType<typeof generateCsvParts>[number]; partCount: number }> = [];
+  for (const [group, list] of groups) {
+    const parts = generateCsvParts(list, { metafieldColumns: review.metafieldColumns });
+    for (const part of parts) {
+      const fileIssues = validateCsvFile(part.content).filter((i) => i.level === "error");
+      if (fileIssues.length) return { ok: false, errors: fileIssues.map((i) => i.message), warnings, files: [] };
+      planned.push({ group, part, partCount: parts.length });
+    }
   }
 
   await prisma.exportFile.deleteMany({ where: { batchId } });
   const stamp = new Date().toISOString().replace(/[:T]/g, "-").slice(0, 16);
   const base = `${slugForFile(review.batch.name)}-${stamp}`;
   const files: ExportResult["files"] = [];
-  for (const part of parts) {
-    const filename = parts.length > 1 ? `${base}-part${part.index}-of-${parts.length}.csv` : `${base}.csv`;
+  let index = 0;
+  for (const { group, part, partCount } of planned) {
+    index++;
+    const groupSlug = group ? `-${slugForFile(group)}` : "";
+    const filename = partCount > 1 ? `${base}${groupSlug}-part${part.index}-of-${partCount}.csv` : `${base}${groupSlug}.csv`;
     const storagePath = await saveFile("exports", filename, Buffer.from(part.content, "utf8"));
-    const rec = await prisma.exportFile.create({ data: { batchId, filename, storagePath, partIndex: part.index, partCount: parts.length, rowCount: part.rowCount, sizeBytes: part.bytes } });
-    files.push({ id: rec.id, filename, rowCount: part.rowCount, sizeBytes: part.bytes, partIndex: part.index, partCount: parts.length });
+    const rec = await prisma.exportFile.create({ data: { batchId, filename, storagePath, partIndex: index, partCount: planned.length, rowCount: part.rowCount, sizeBytes: part.bytes } });
+    files.push({ id: rec.id, filename, rowCount: part.rowCount, sizeBytes: part.bytes, partIndex: index, partCount: planned.length });
   }
 
   // Grow the image library from what was just exported.

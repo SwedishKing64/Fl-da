@@ -62,6 +62,9 @@ export function NewBatchForm({ suppliers, fxRates }: { suppliers: SupplierOpt[];
               <option value="BY_VALUE">Pro-rata by cost value</option>
             </select>
           </Field>
+          <Field label="Export files" hint="Shopify imports are easier to manage per brand.">
+            <select name="splitExportBy" defaultValue="BRAND" className={INPUT}><option value="BRAND">One CSV per brand</option><option value="PRODUCT_TYPE">One CSV per product type</option><option value="NONE">Single CSV</option></select>
+          </Field>
           <Field label="Publish on export" hint="Off = products import as drafts (recommended for pre-books).">
             <label className="flex items-center gap-2 py-2 text-sm"><input type="checkbox" name="publishOnExport" /> Mark products active</label>
           </Field>

@@ -4,7 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 import Link from "next/link";
 import {
   addImageUrlAction,
+  applyRulesAction,
+  attachPhotoAction,
+  autoAttachPhotosAction,
   bulkUpdateAction,
+  deletePhotoAction,
   deleteProductAction,
   deleteVariantAction,
   dismissWarningAction,
@@ -98,6 +102,7 @@ export function ReviewGrid({ initial, batchId }: { initial: ReviewData; batchId:
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(initial.products.map((p) => p.id)));
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState({ q: "", brand: "", category: "", flags: "", reconcile: "" });
+  const [groupBy, setGroupBy] = useState<"none" | "brand" | "type">("brand");
   const [focus, setFocus] = useState<{ variantId: string; col: number } | null>(null);
   const [editing, setEditing] = useState<{ variantId: string; col: number; value: string } | null>(null);
   const [productEdit, setProductEdit] = useState<{ productId: string; field: ProductField; value: string } | null>(null);
@@ -140,7 +145,9 @@ export function ReviewGrid({ initial, batchId }: { initial: ReviewData; batchId:
     });
   }, [data.products, filter]);
 
-  const visibleVariants = useMemo(() => visible.flatMap((p) => (expanded.has(p.id) ? p.variants.map((v) => ({ v, p })) : [])), [visible, expanded]);
+  const groupKey = useCallback((p: ReviewProduct) => (groupBy === "brand" ? p.vendor || "No brand" : groupBy === "type" ? p.productType || "No type" : ""), [groupBy]);
+  const ordered = useMemo(() => (groupBy === "none" ? visible : [...visible].sort((a, b) => groupKey(a).localeCompare(groupKey(b)) || a.title.localeCompare(b.title))), [visible, groupBy, groupKey]);
+  const visibleVariants = useMemo(() => ordered.flatMap((p) => (expanded.has(p.id) ? p.variants.map((v) => ({ v, p })) : [])), [ordered, expanded]);
 
   // ---- local optimistic pricing -------------------------------------------------------
   const applyLocalVariant = (variantId: string, patch: Partial<ReviewVariant>) => {
@@ -298,9 +305,14 @@ export function ReviewGrid({ initial, batchId }: { initial: ReviewData; batchId:
         <select value={filter.reconcile} onChange={(e) => setFilter({ ...filter, reconcile: e.target.value })} className={`${INPUT_INLINE} w-44`}>
           <option value="">Any Shopify status</option><option value="NEW">New product</option><option value="VARIANT_ADD">Adds variants</option><option value="UPDATE">Updates existing</option><option value="UNKNOWN">Not checked</option>
         </select>
-        <span className="text-xs text-[var(--ink-soft)]">{visible.length} of {data.products.length} products</span>
+        <select value={groupBy} onChange={(e) => setGroupBy(e.target.value as "none" | "brand" | "type")} className={`${INPUT_INLINE} w-44`} title="Group products">
+          <option value="brand">Group by brand</option><option value="type">Group by product type</option><option value="none">No grouping</option>
+        </select>
+        <span className="text-xs text-[var(--ink-soft)]">{visible.length} of {data.products.length} products{data.unassignedImages.length ? ` · ${data.unassignedImages.length} unattached photo${data.unassignedImages.length === 1 ? "" : "s"}` : ""}</span>
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <Button size="sm" onClick={() => setExpanded(expanded.size ? new Set() : new Set(data.products.map((p) => p.id)))}>{expanded.size ? "Collapse all" : "Expand all"}</Button>
+          <Button size="sm" disabled={pending || locked} title="Re-run the tag, collection, type and metafield rules" onClick={() => start(async () => { const r = await applyRulesAction(batchId); setMessage(r.ok ? { tone: "success", text: `Rules applied: ${r.data!.matched} of ${r.data!.products} products matched a rule.` } : { tone: "danger", text: r.error }); await refresh(); })}>Apply rules</Button>
+          {data.unassignedImages.length > 0 && !locked && <Button size="sm" disabled={pending} onClick={() => start(async () => { const r = await autoAttachPhotosAction(batchId); setMessage(r.ok ? { tone: "info", text: `${r.data!.attached} photo${r.data!.attached === 1 ? "" : "s"} matched by name/SKU. Open a product's Details to attach the rest.` } : { tone: "danger", text: r.error }); await refresh(); })}>Match photos</Button>}
           <Button size="sm" disabled={pending} onClick={() => start(async () => { const r = await verifyImagesAction(batchId); setMessage(r.ok ? { tone: r.data!.failed ? "warning" : "success", text: `Checked ${r.data!.checked} image URLs, ${r.data!.failed} unreachable.` } : { tone: "danger", text: r.error }); await refresh(); })}>Check images</Button>
           <Button size="sm" disabled={pending || locked} onClick={() => start(async () => { const r = await enrichSeoAction(batchId, true); setMessage(r.ok ? { tone: "success", text: `SEO written for ${r.data!.updated} products (${r.data!.source === "AI" ? "AI" : r.data!.source === "TEMPLATE" ? "template - set ANTHROPIC_API_KEY for AI copy" : "AI + template"}).` } : { tone: "danger", text: r.error }); await refresh(); })}>Write SEO copy</Button>
           <Button size="sm" disabled={pending || !data.settings.shopifyConfigured} title={data.settings.shopifyConfigured ? "" : "Configure Shopify in Settings first"} onClick={() => start(async () => { const r = await reconcileAction(batchId); setMessage(r.ok ? { tone: "info", text: `Shopify check: ${r.data!.new} new, ${r.data!.variantAdd} add variants, ${r.data!.update} update existing.` } : { tone: "danger", text: r.error }); await refresh(); })}>Check against Shopify</Button>
@@ -344,11 +356,21 @@ export function ReviewGrid({ initial, batchId }: { initial: ReviewData; batchId:
             </tr>
           </thead>
           <tbody>
-            {visible.map((p) => {
+            {ordered.map((p, idx) => {
               const pFlags = [...p.flags, ...p.variants.flatMap((v) => v.flags)];
               const tone = worst(pFlags);
               const open = expanded.has(p.id);
+              const key = groupKey(p);
+              const sectionStart = groupBy !== "none" && (idx === 0 || groupKey(ordered[idx - 1]) !== key);
+              const sectionCount = sectionStart ? ordered.filter((x) => groupKey(x) === key).length : 0;
               return [
+                ...(sectionStart
+                  ? [
+                      <tr key={`section-${key}`} className="section-row">
+                        <td colSpan={VARIANT_COLS.length + 5}><span className="cell"><strong>{key}</strong> <span className="text-[var(--ink-soft)]">· {sectionCount} product{sectionCount === 1 ? "" : "s"} · {ordered.filter((x) => groupKey(x) === key).reduce((n, x) => n + x.variants.length, 0)} variants</span></span></td>
+                      </tr>,
+                    ]
+                  : []),
                 <tr key={p.id} className={cx("product-row", tone && `row-${tone}`, selected.has(p.id) && "selected")}>
                   <td><span className="cell"><input type="checkbox" checked={selected.has(p.id)} onChange={(e) => { const s = new Set(selected); if (e.target.checked) s.add(p.id); else s.delete(p.id); setSelected(s); }} /></span></td>
                   <td><button className="cell" onClick={() => { const s = new Set(expanded); if (open) s.delete(p.id); else s.add(p.id); setExpanded(s); }}>{open ? "▾" : "▸"}</button></td>
@@ -444,7 +466,7 @@ export function ReviewGrid({ initial, batchId }: { initial: ReviewData; batchId:
         <div className="self-center text-[11px] text-[var(--ink-soft)]">{pending ? "Saving…" : "Double-click or Enter to edit · arrows to move · paste a column from Excel"}</div>
       </div>
 
-      {drawerProduct && <ProductDrawer key={drawerProduct.id} product={drawerProduct} locked={locked} publicBaseUrl={data.settings.publicBaseUrl} onClose={() => setDrawer(null)} refresh={refresh} setMessage={setMessage} />}
+      {drawerProduct && <ProductDrawer key={drawerProduct.id} product={drawerProduct} unassigned={data.unassignedImages} locked={locked} publicBaseUrl={data.settings.publicBaseUrl} onClose={() => setDrawer(null)} refresh={refresh} setMessage={setMessage} />}
     </div>
   );
 }
@@ -477,7 +499,7 @@ function ProductCell({ p, field, width, edit, setEdit, commit, locked, strong, m
   );
 }
 
-function ProductDrawer({ product, locked, publicBaseUrl, onClose, refresh, setMessage }: { product: ReviewProduct; locked: boolean; publicBaseUrl: string; onClose: () => void; refresh: () => Promise<void>; setMessage: (m: { tone: "info" | "success" | "warning" | "danger"; text: string } | null) => void }) {
+function ProductDrawer({ product, unassigned, locked, publicBaseUrl, onClose, refresh, setMessage }: { product: ReviewProduct; unassigned: Array<{ id: string; filename: string; url: string; hint: string }>; locked: boolean; publicBaseUrl: string; onClose: () => void; refresh: () => Promise<void>; setMessage: (m: { tone: "info" | "success" | "warning" | "danger"; text: string } | null) => void }) {
   const [tab, setTab] = useState<"images" | "details">("images");
   const [url, setUrl] = useState("");
   const [variantForUrl, setVariantForUrl] = useState("");
@@ -547,6 +569,24 @@ function ProductDrawer({ product, locked, publicBaseUrl, onClose, refresh, setMe
               {product.images.length === 0 && <li className="text-sm text-[var(--ink-soft)]">No images yet.</li>}
             </ul>
             {product.images.length > 0 && <Button size="sm" disabled={pending} onClick={() => start(async () => { const r = await saveImagesToLibraryAction(product.id); setMessage(r.ok ? { tone: "success", text: r.message ?? "Saved" } : { tone: "danger", text: r.error }); })}>Save these to the image library</Button>}
+            {unassigned.length > 0 && !locked && (
+              <div>
+                <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--ink-soft)]">Uploaded photos not attached yet</div>
+                <ul className="space-y-2">
+                  {unassigned.map((ph) => (
+                    <li key={ph.id} className="flex items-center gap-3 rounded-lg border border-dashed border-[var(--line)] p-2">
+                      {/* eslint-disable-next-line @next/next/no-img-element -- uploaded photo */}
+                      <img src={ph.url} alt="" className="h-14 w-14 rounded object-cover" />
+                      <div className="min-w-0 flex-1 text-xs"><div className="truncate">{ph.filename}</div>{ph.hint && <div className="truncate text-[var(--ink-soft)]">AI saw: {ph.hint}</div>}</div>
+                      <div className="flex flex-col gap-1 text-[11px]">
+                        <button className="text-[var(--violet)]" onClick={() => start(async () => { await attachPhotoAction(ph.id, product.id, variantForUrl || null); await refresh(); })}>Attach here</button>
+                        <button className="text-red-600" onClick={() => start(async () => { await deletePhotoAction(ph.id); await refresh(); })}>Discard</button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         ) : (
           <div className="space-y-3 text-sm">

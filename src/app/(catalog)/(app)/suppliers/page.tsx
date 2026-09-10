@@ -6,7 +6,7 @@ export default async function SuppliersPage() {
   const suppliers = await prisma.supplier.findMany({ orderBy: { name: "asc" }, include: { templates: true, _count: { select: { batches: true } } } });
   return (
     <>
-      <PageHeader title="Suppliers & mapping templates" subtitle="A template remembers which supplier column means what, so mapping happens once per file layout." />
+      <PageHeader title="Suppliers" subtitle="Each supplier keeps its currency, GST treatment and default brand, plus a remembered column layout so its spreadsheets are read automatically next time." />
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
           {suppliers.length === 0 && <Empty>No suppliers yet. Add one here or when creating a batch.</Empty>}

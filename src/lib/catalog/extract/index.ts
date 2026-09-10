@@ -1,15 +1,17 @@
 import { extractCsv, extractXlsx } from "./tabular";
 import { extractPdfText } from "./pdf";
 import { extractHeuristic } from "./heuristic";
-import { aiAvailable, aiDocumentMeta, aiExtractionToTable, extractFromImage, extractFromPdf, extractFromText } from "./ai";
+import { aiAvailable, aiDocumentMeta, aiExtractionToTable, extractFromImage, extractFromPdf, extractFromText, type DocumentType } from "./ai";
 import type { ExtractedTable } from "./types";
 
 export type { ExtractedTable } from "./types";
 
 export interface ExtractionOutcome {
   table: ExtractedTable;
-  meta?: { supplier: string; invoiceNumber: string; currency: string; gstTreatment: string };
+  meta?: { documentType: DocumentType; supplier: string; invoiceNumber: string; currency: string; gstTreatment: string };
 }
+
+export type UploadKind = "AUTO" | "INVOICE" | "SPEC_SHEET" | "PRODUCT_PHOTO";
 
 export function detectKind(filename: string, mimeType: string): "csv" | "xlsx" | "pdf" | "image" | "text" | "unknown" {
   const ext = filename.toLowerCase().split(".").pop() ?? "";
@@ -21,49 +23,56 @@ export function detectKind(filename: string, mimeType: string): "csv" | "xlsx" |
   return "unknown";
 }
 
+const NEEDS_AI = "This file type needs ANTHROPIC_API_KEY to be read by AI. Spreadsheets (CSV/XLSX) work without it.";
+
 /**
  * Turn an uploaded file into a table of rows. Tabular files are parsed deterministically;
- * PDFs use their text layer + Claude, scanned PDFs and images go straight to Claude vision;
- * without an API key a conservative pattern-matching fallback keeps the app usable.
+ * everything else is read by Claude, which also decides what the document is (invoice, spec
+ * sheet, product photo…). Without an API key a conservative pattern-matching fallback keeps
+ * text-based invoices usable.
  */
-export async function extractFile(buffer: Buffer, filename: string, mimeType: string): Promise<ExtractionOutcome> {
-  const kind = detectKind(filename, mimeType);
-  switch (kind) {
+export async function extractFile(buffer: Buffer, filename: string, mimeType: string, kind: UploadKind = "AUTO"): Promise<ExtractionOutcome> {
+  const fileType = detectKind(filename, mimeType);
+  const hint = kind === "AUTO" ? undefined : kind;
+  switch (fileType) {
     case "csv":
-      return { table: extractCsv(buffer) };
+      return { table: extractCsv(buffer), meta: tabularMeta(kind) };
     case "xlsx":
-      return { table: await extractXlsx(buffer) };
-    case "text": {
-      const text = buffer.toString("utf8");
-      return fromText(text, "AI_TEXT");
-    }
+      return { table: await extractXlsx(buffer), meta: tabularMeta(kind) };
+    case "text":
+      return fromText(buffer.toString("utf8"), "AI_TEXT", hint);
     case "pdf": {
       const pdf = await extractPdfText(buffer);
-      if (!pdf.looksScanned) return fromText(pdf.text, "PDF_TEXT");
+      if (!pdf.looksScanned && kind !== "PRODUCT_PHOTO") return fromText(pdf.text, "PDF_TEXT", hint);
       if (aiAvailable()) {
-        const result = await extractFromPdf(buffer);
+        const result = await extractFromPdf(buffer, hint);
         return { table: aiExtractionToTable(result, "PDF_AI", pdf.text), meta: aiDocumentMeta(result) };
       }
       const table = extractHeuristic(pdf.text);
-      table.warnings.unshift("This PDF looks scanned and no ANTHROPIC_API_KEY is configured, so OCR was not possible.");
+      table.warnings.unshift("This PDF looks scanned and no ANTHROPIC_API_KEY is configured, so it could not be read.");
       return { table };
     }
     case "image": {
       if (!aiAvailable()) {
-        return { table: { headers: [], rows: [], method: "IMAGE_AI", warnings: ["Image invoices need ANTHROPIC_API_KEY for OCR/extraction."] } };
+        return { table: { headers: [], rows: [], method: "IMAGE_AI", warnings: [NEEDS_AI] }, meta: kind === "PRODUCT_PHOTO" ? { documentType: "PRODUCT_PHOTO", supplier: "", invoiceNumber: "", currency: "", gstTreatment: "UNKNOWN" } : undefined };
       }
-      const result = await extractFromImage(buffer, mimeType);
+      const result = await extractFromImage(buffer, mimeType, hint);
       return { table: aiExtractionToTable(result, "IMAGE_AI"), meta: aiDocumentMeta(result) };
     }
     default:
-      throw new Error(`Unsupported file type: ${filename} (${mimeType})`);
+      throw new Error(`Unsupported file type: ${filename} (${mimeType}). Upload PDF, XLSX, CSV, TXT or an image.`);
   }
 }
 
-async function fromText(text: string, method: "PDF_TEXT" | "AI_TEXT"): Promise<ExtractionOutcome> {
+function tabularMeta(kind: UploadKind): ExtractionOutcome["meta"] {
+  if (kind === "SPEC_SHEET") return { documentType: "SPEC_SHEET", supplier: "", invoiceNumber: "", currency: "", gstTreatment: "UNKNOWN" };
+  return undefined;
+}
+
+async function fromText(text: string, method: "PDF_TEXT" | "AI_TEXT", hint?: string): Promise<ExtractionOutcome> {
   if (aiAvailable()) {
     try {
-      const result = await extractFromText(text);
+      const result = await extractFromText(text, hint);
       return { table: aiExtractionToTable(result, method === "PDF_TEXT" ? "PDF_AI" : "AI_TEXT", text), meta: aiDocumentMeta(result) };
     } catch (err) {
       const table = extractHeuristic(text);
@@ -71,5 +80,7 @@ async function fromText(text: string, method: "PDF_TEXT" | "AI_TEXT"): Promise<E
       return { table };
     }
   }
-  return { table: extractHeuristic(text) };
+  const table = extractHeuristic(text);
+  if (hint === "SPEC_SHEET") table.warnings.unshift("Spec sheets need ANTHROPIC_API_KEY to be read; only invoice-style lines were recognised.");
+  return { table };
 }

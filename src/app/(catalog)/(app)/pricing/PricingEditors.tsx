@@ -21,7 +21,7 @@ export function PricingRulesEditor({ rules, isAdmin }: { rules: RuleRow[]; isAdm
               <td className="py-1.5">{r.name} {!r.active && <Badge>off</Badge>}</td>
               <td className="text-xs">{r.scope === "DEFAULT" ? "Everything else" : `${r.scope.toLowerCase()}: ${r.matchValue}`}</td>
               <td className="text-xs">{r.mode === "MARGIN" ? "Margin" : "Markup"}</td>
-              <td className="text-right">{r.percent}%</td>
+              <td className="pr-3 text-right">{r.percent}%</td>
               <td className="text-xs">{r.roundTo}</td>
               <td className="text-right">{r.priority}</td>
               <td className="text-right">{isAdmin && <><button className="text-xs text-[var(--violet)]" onClick={() => setEditing(r)}>Edit</button> <button className="ml-2 text-xs text-red-600" onClick={() => { if (confirm("Delete rule?")) start(async () => { await deletePricingRuleAction(r.id); }); }}>Delete</button></>}</td>

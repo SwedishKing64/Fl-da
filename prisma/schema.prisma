@@ -91,6 +91,7 @@ model ImportBatch {
   freightTotalAud Float    @default(0) // batch-level freight, allocated per unit
   freightMode     String   @default("PER_UNIT") // PER_UNIT (split evenly by qty) | BY_VALUE (pro-rata by cost)
   publishOnExport Boolean  @default(false) // false => Status=draft in CSV
+  splitExportBy   String   @default("BRAND") // NONE | BRAND | PRODUCT_TYPE — one CSV per group
   notes           String?
   summary         String? // JSON snapshot of last computed batch summary
   createdAt       DateTime @default(now())
@@ -104,6 +105,7 @@ model ImportBatch {
   products  Product[]
   exports   ExportFile[]
   auditLogs AuditLog[]
+  unassignedImages UnassignedImage[]
 
   @@index([createdById])
   @@index([status])
@@ -116,7 +118,8 @@ model SourceFile {
   mimeType         String
   sizeBytes        Int
   storagePath      String
-  kind             String   @default("INVOICE") // INVOICE | SPEC_SHEET | IMAGE
+  kind             String   @default("INVOICE") // INVOICE | SPEC_SHEET | PRODUCT_PHOTO | AUTO (let the AI decide)
+  detectedKind     String? // what the AI decided the document is
   extractionStatus String   @default("PENDING") // PENDING | DONE | FAILED
   extractionMethod String? // CSV | XLSX | PDF_TEXT | PDF_AI | IMAGE_AI | AI_TEXT | HEURISTIC
   extractionError  String?
@@ -283,6 +286,38 @@ model CategoryRule {
   priority      Int      @default(0)
   active        Boolean  @default(true)
   createdAt     DateTime @default(now())
+}
+
+/// Tag / collection / type / metafield rules applied to every product when it is built and
+/// again on export. `matchField` is one of: any | title | brand | category | productType | sku | tags.
+/// `pattern` is a case-insensitive regex (or plain text) tested against that field.
+model TagRule {
+  id             String   @id @default(cuid())
+  name           String
+  matchField     String   @default("any")
+  pattern        String
+  addTags        String   @default("") // comma separated
+  addCollections String   @default("") // comma separated
+  setProductType String   @default("")
+  setMetafields  String   @default("{}") // JSON { [metafieldKey]: value }
+  priority       Int      @default(0)
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+/// Product photos uploaded to a batch that have not been attached to a product yet.
+model UnassignedImage {
+  id        String   @id @default(cuid())
+  batchId   String
+  filename  String
+  url       String
+  hint      String   @default("") // what the AI saw in the photo (brand / model / colour) to help matching
+  createdAt DateTime @default(now())
+
+  batch ImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([batchId])
 }
 
 /// Brand + model code (+ optional colour) -> image URLs, grows automatically on export.

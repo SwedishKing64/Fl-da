@@ -4,11 +4,17 @@ An internal tool for a Sydney ski/snowboard retailer that turns supplier invoice
 confirmations and spec sheets into a ready-to-upload Shopify product CSV (or pushes products
 straight to Shopify via the Admin API).
 
-**Flow:** upload files → extract line items (CSV/XLSX parsed directly; PDFs, scans and photos
-read by Claude) → map supplier columns once per supplier (saved as a template) → products are
-grouped into variants, categorised, priced with a GST-aware profit engine and given images →
-review everything in a spreadsheet-style grid → export a validated Shopify CSV (auto-split at
-15MB) or push to the store → every batch is logged with its profit summary.
+**Flow:** upload files (invoices, spec sheets, catalogue pages, product photos; CSV/XLSX are
+parsed directly, everything else is read and classified by Claude) → columns are matched to
+product fields automatically (a supplier's layout is remembered; the mapping screen only
+appears when something is unrecognised) → products are grouped into variants, categorised,
+tagged by your Rules, priced by your markup rules and given images → review everything in a
+spreadsheet-style grid grouped by brand → export one validated Shopify CSV per brand (or per
+product type) or push to the store → every batch is logged.
+
+**Rules** (`/rules`): tag, collection, product-type and metafield rules with a live tester, plus
+the category/option rules. **Pricing** (`/pricing`): an interactive price calculator, the
+markup/margin rules and GST/FX settings.
 
 ## Run it
 

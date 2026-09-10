@@ -30,7 +30,7 @@ export default async function BatchPage(props: PageProps<"/batches/[id]">) {
       <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <div className="min-w-0 space-y-6">
           <Card title="Supplier files">
-            {locked ? <Empty>This batch has been exported; files are locked for audit.</Empty> : <UploadPanel batchId={id} aiEnabled={settings ? Boolean(process.env.ANTHROPIC_API_KEY) : false} />}
+            {locked ? <Empty>This batch has been exported; files are locked for audit.</Empty> : <UploadPanel batchId={id} aiEnabled={settings ? Boolean(process.env.ANTHROPIC_API_KEY) : false} hasProducts={batch._count.products > 0} />}
             {batch.files.length > 0 && (
               <table className="mt-4 w-full text-sm">
                 <thead className="text-left text-xs text-[var(--ink-soft)]"><tr><th className="py-1">File</th><th>Kind</th><th>Extraction</th><th className="text-right">Rows</th><th /></tr></thead>
@@ -58,7 +58,7 @@ export default async function BatchPage(props: PageProps<"/batches/[id]">) {
         <div className="space-y-6">
           <Card title="Pricing inputs for this batch">
             <BatchSettingsForm
-              batch={{ id: batch.id, supplierId: batch.supplierId, currency: batch.currency, fxRateToAud: batch.fxRateToAud, gstTreatment: batch.gstTreatment, freightTotalAud: batch.freightTotalAud, freightMode: batch.freightMode, publishOnExport: batch.publishOnExport, notes: batch.notes ?? "" }}
+              batch={{ id: batch.id, supplierId: batch.supplierId, currency: batch.currency, fxRateToAud: batch.fxRateToAud, gstTreatment: batch.gstTreatment, freightTotalAud: batch.freightTotalAud, freightMode: batch.freightMode, publishOnExport: batch.publishOnExport, splitExportBy: batch.splitExportBy, notes: batch.notes ?? "" }}
               suppliers={suppliers.map((s) => ({ id: s.id, name: s.name }))}
               disabled={locked}
             />

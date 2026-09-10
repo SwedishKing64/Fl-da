@@ -5,7 +5,7 @@ import { hashPassword } from "../src/lib/catalog/auth";
 
 async function main() {
   const result = await seedDefaults();
-  console.log(`Seeded ${result.pricingRules} pricing rules and ${result.categoryRules} category rules.`);
+  console.log(`Seeded ${result.pricingRules} pricing rules, ${result.categoryRules} category rules and ${result.tagRules} tag rules.`);
   const i = process.argv.indexOf("--admin");
   if (i > -1) {
     const [email, name, password] = process.argv.slice(i + 1);

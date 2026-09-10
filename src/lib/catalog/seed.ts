@@ -2,6 +2,7 @@
 
 import { prisma } from "./db";
 import { DEFAULT_CATEGORY_RULES } from "./categorize";
+import { DEFAULT_TAG_RULES } from "./rules";
 
 export const DEFAULT_PRICING_RULES = [
   { name: "Default 40% margin", scope: "DEFAULT", matchValue: "", mode: "MARGIN", percent: 40, roundTo: "0.99", priority: 0 },
@@ -15,7 +16,7 @@ export const DEFAULT_PRICING_RULES = [
   { name: "Goggles 45% margin", scope: "CATEGORY", matchValue: "goggles", mode: "MARGIN", percent: 45, roundTo: "0.99", priority: 0 },
 ];
 
-export async function seedDefaults(): Promise<{ pricingRules: number; categoryRules: number }> {
+export async function seedDefaults(): Promise<{ pricingRules: number; categoryRules: number; tagRules: number }> {
   let pricingRules = 0;
   for (const r of DEFAULT_PRICING_RULES) {
     const existing = await prisma.pricingRule.findFirst({ where: { name: r.name } });
@@ -30,5 +31,12 @@ export async function seedDefaults(): Promise<{ pricingRules: number; categoryRu
       categoryRules++;
     }
   }
-  return { pricingRules, categoryRules };
+  let tagRules = 0;
+  if ((await prisma.tagRule.count()) === 0) {
+    for (const r of DEFAULT_TAG_RULES) {
+      await prisma.tagRule.create({ data: { ...r, setMetafields: typeof r.setMetafields === "string" ? r.setMetafields : JSON.stringify(r.setMetafields) } });
+      tagRules++;
+    }
+  }
+  return { pricingRules, categoryRules, tagRules };
 }

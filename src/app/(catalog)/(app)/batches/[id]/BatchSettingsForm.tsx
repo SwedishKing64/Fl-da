@@ -6,7 +6,7 @@ import { updateBatchAction } from "@/app/(catalog)/actions";
 import { Alert, Button, Field, INPUT } from "@/app/(catalog)/ui";
 import { CURRENCIES } from "@/lib/catalog/types";
 
-interface BatchForm { id: string; supplierId: string | null; currency: string; fxRateToAud: number; gstTreatment: string; freightTotalAud: number; freightMode: string; publishOnExport: boolean; notes: string }
+interface BatchForm { id: string; supplierId: string | null; currency: string; fxRateToAud: number; gstTreatment: string; freightTotalAud: number; freightMode: string; publishOnExport: boolean; splitExportBy: string; notes: string }
 
 export function BatchSettingsForm({ batch, suppliers, disabled }: { batch: BatchForm; suppliers: Array<{ id: string; name: string }>; disabled: boolean }) {
   const router = useRouter();
@@ -25,6 +25,7 @@ export function BatchSettingsForm({ batch, suppliers, disabled }: { batch: Batch
         freightTotalAud: form.freightTotalAud,
         freightMode: form.freightMode as "PER_UNIT" | "BY_VALUE",
         publishOnExport: form.publishOnExport,
+        splitExportBy: form.splitExportBy as "NONE" | "BRAND" | "PRODUCT_TYPE",
         notes: form.notes,
       });
       setMsg(res.ok ? { ok: true, text: "Saved and repriced." } : { ok: false, text: res.error });
@@ -52,6 +53,11 @@ export function BatchSettingsForm({ batch, suppliers, disabled }: { batch: Batch
         <Field label="Freight total (AUD)"><input type="number" step="0.01" min="0" value={form.freightTotalAud} onChange={(e) => set("freightTotalAud", Number(e.target.value))} disabled={disabled} className={INPUT} /></Field>
         <Field label="Spread"><select value={form.freightMode} onChange={(e) => set("freightMode", e.target.value)} disabled={disabled} className={INPUT}><option value="PER_UNIT">Per unit</option><option value="BY_VALUE">By value</option></select></Field>
       </div>
+      <Field label="Export files">
+        <select value={form.splitExportBy} onChange={(e) => set("splitExportBy", e.target.value)} disabled={disabled} className={INPUT}>
+          <option value="BRAND">One CSV per brand</option><option value="PRODUCT_TYPE">One CSV per product type</option><option value="NONE">Single CSV</option>
+        </select>
+      </Field>
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.publishOnExport} onChange={(e) => set("publishOnExport", e.target.checked)} disabled={disabled} /> Publish products on export (otherwise draft)</label>
       <Field label="Notes"><textarea rows={2} value={form.notes} onChange={(e) => set("notes", e.target.value)} disabled={disabled} className={INPUT} /></Field>
       {msg && <Alert tone={msg.ok ? "success" : "danger"}>{msg.text}</Alert>}

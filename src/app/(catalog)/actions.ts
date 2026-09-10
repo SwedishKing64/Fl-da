@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma, parseJson } from "@/lib/catalog/db";
 import { createSession, destroySession, hashPassword, requireUser, usersExist, verifyPassword } from "@/lib/catalog/auth";
-import { allocateBatchFreight, applyMappings, loadReview, repriceBatch, repriceVariant, verifyBatchImages, exportBatch, type ApplyMappingInput, type ReviewData } from "@/lib/catalog/pipeline";
+import { allocateBatchFreight, applyMappings, applyRulesToBatch, attachUnassignedPhotos, loadReview, repriceBatch, repriceVariant, verifyBatchImages, exportBatch, type ApplyMappingInput, type ReviewData } from "@/lib/catalog/pipeline";
 import { logAudit } from "@/lib/catalog/audit";
 import { getSettings, saveSettings } from "@/lib/catalog/settings";
 import { checkImageUrl, recordLibraryImages } from "@/lib/catalog/images";
@@ -90,6 +90,7 @@ const batchSchema = z.object({
   freightTotalAud: z.coerce.number().min(0).default(0),
   freightMode: z.enum(["PER_UNIT", "BY_VALUE"]).default("PER_UNIT"),
   publishOnExport: z.coerce.boolean().default(false),
+  splitExportBy: z.enum(["NONE", "BRAND", "PRODUCT_TYPE"]).default("BRAND"),
   notes: z.string().optional(),
 });
 
@@ -111,7 +112,7 @@ export async function createBatchAction(_prev: ActionResult | null, formData: Fo
     const settings = await getSettings();
     const fx = data.currency === "AUD" ? 1 : data.fxRateToAud !== 1 ? data.fxRateToAud : settings.fxRates[data.currency] ?? 1;
     const batch = await prisma.importBatch.create({
-      data: { name: data.name, supplierId, createdById: user.id, currency: data.currency, gstTreatment: data.gstTreatment, fxRateToAud: fx, freightTotalAud: data.freightTotalAud, freightMode: data.freightMode, publishOnExport: data.publishOnExport, notes: data.notes || null },
+      data: { name: data.name, supplierId, createdById: user.id, currency: data.currency, gstTreatment: data.gstTreatment, fxRateToAud: fx, freightTotalAud: data.freightTotalAud, freightMode: data.freightMode, publishOnExport: data.publishOnExport, splitExportBy: data.splitExportBy, notes: data.notes || null },
     });
     await logAudit("batch.created", { batchId: batch.id, userId: user.id, details: { name: batch.name } });
     id = batch.id;
@@ -566,7 +567,7 @@ export async function saveCategoryRuleAction(_prev: ActionResult | null, formDat
     const data = { ...rest, option1: rest.option1 || null, option2: rest.option2 || null, option3: rest.option3 || null };
     if (id) await prisma.categoryRule.update({ where: { id }, data });
     else await prisma.categoryRule.create({ data });
-    revalidatePath("/pricing");
+    revalidatePath("/rules");
     return { ok: true, message: "Category rule saved" };
   } catch (err) {
     return fail(err);
@@ -576,7 +577,7 @@ export async function saveCategoryRuleAction(_prev: ActionResult | null, formDat
 export async function deleteCategoryRuleAction(id: string): Promise<ActionResult> {
   await requireUser("ADMIN");
   await prisma.categoryRule.delete({ where: { id } });
-  revalidatePath("/pricing");
+  revalidatePath("/rules");
   return { ok: true };
 }
 
@@ -630,7 +631,93 @@ export async function seedDefaultsAction(): Promise<ActionResult<{ pricingRules:
   try {
     const data = await seedDefaults();
     revalidatePath("/pricing");
+    revalidatePath("/rules");
     return { ok: true, data };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Tag rules
+// ---------------------------------------------------------------------------
+
+export async function saveTagRuleAction(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  await requireUser("ADMIN");
+  const schema = z.object({
+    id: z.string().optional(),
+    name: z.string().min(1),
+    matchField: z.enum(["any", "title", "brand", "category", "productType", "sku", "tags"]),
+    pattern: z.string().min(1),
+    addTags: z.string().optional().default(""),
+    addCollections: z.string().optional().default(""),
+    setProductType: z.string().optional().default(""),
+    setMetafields: z.string().optional().default("{}"),
+    priority: z.coerce.number().int().default(0),
+    active: z.coerce.boolean().default(true),
+  });
+  try {
+    const raw = Object.fromEntries(formData.entries());
+    const d = schema.parse({ ...raw, active: raw.active === "on" || raw.active === "true" });
+    // metafields arrive as "key=value" lines from the form; store JSON
+    const mf: Record<string, string> = {};
+    for (const line of d.setMetafields.split(/\n+/)) {
+      const [k, ...rest] = line.split("=");
+      if (k?.trim() && rest.length) mf[k.trim()] = rest.join("=").trim();
+    }
+    const { id, ...rest } = d;
+    const data = { ...rest, setMetafields: JSON.stringify(mf) };
+    if (id) await prisma.tagRule.update({ where: { id }, data });
+    else await prisma.tagRule.create({ data });
+    revalidatePath("/rules");
+    return { ok: true, message: "Rule saved" };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+export async function deleteTagRuleAction(id: string): Promise<ActionResult> {
+  await requireUser("ADMIN");
+  await prisma.tagRule.delete({ where: { id } });
+  revalidatePath("/rules");
+  return { ok: true };
+}
+
+export async function applyRulesAction(batchId: string): Promise<ActionResult<{ products: number; matched: number }>> {
+  const user = await requireUser();
+  try {
+    const data = await applyRulesToBatch(batchId);
+    await logAudit("batch.rules_applied", { batchId, userId: user.id, details: data });
+    return { ok: true, data };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Unassigned product photos
+// ---------------------------------------------------------------------------
+
+export async function attachPhotoAction(imageId: string, productId: string, variantId: string | null): Promise<ActionResult> {
+  await requireUser();
+  const photo = await prisma.unassignedImage.findUnique({ where: { id: imageId } });
+  if (!photo) return { ok: false, error: "Photo not found" };
+  const count = await prisma.productImage.count({ where: { productId } });
+  await prisma.productImage.create({ data: { productId, variantId, url: photo.url, position: count + 1, source: "MANUAL", validated: /^https:/.test(photo.url) } });
+  await prisma.unassignedImage.delete({ where: { id: imageId } });
+  return { ok: true };
+}
+
+export async function deletePhotoAction(imageId: string): Promise<ActionResult> {
+  await requireUser();
+  await prisma.unassignedImage.delete({ where: { id: imageId } });
+  return { ok: true };
+}
+
+export async function autoAttachPhotosAction(batchId: string): Promise<ActionResult<{ attached: number }>> {
+  await requireUser();
+  try {
+    return { ok: true, data: { attached: await attachUnassignedPhotos(batchId) } };
   } catch (err) {
     return fail(err);
   }

@@ -4,15 +4,24 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Alert, Button, cx } from "@/app/(catalog)/ui";
 
-interface UploadResult { filename: string; rows: number; method: string | null; warnings: string[] }
+interface UploadResult { filename: string; rows: number; method: string | null; kind: string; warnings: string[] }
+interface AutoResult { applied: boolean; products: number; variants: number }
 
-export function UploadPanel({ batchId, aiEnabled }: { batchId: string; aiEnabled: boolean }) {
+const KINDS = [
+  { value: "AUTO", label: "Let the AI decide", hint: "Invoice, spec sheet, catalogue page or product photo: the file is read and classified for you." },
+  { value: "INVOICE", label: "Invoice / order confirmation", hint: "Line items with cost and quantity." },
+  { value: "SPEC_SHEET", label: "Spec sheet / catalogue", hint: "Descriptions, specs, sizes and tags are merged into matching products." },
+  { value: "PRODUCT_PHOTO", label: "Product photos", hint: "Attached to products by name or SKU in the filename, or via the review grid." },
+];
+
+export function UploadPanel({ batchId, aiEnabled, hasProducts }: { batchId: string; aiEnabled: boolean; hasProducts: boolean }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [active, setActive] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [kind, setKind] = useState("INVOICE");
+  const [kind, setKind] = useState("AUTO");
   const [results, setResults] = useState<UploadResult[] | null>(null);
+  const [auto, setAuto] = useState<AutoResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function upload(files: FileList | File[]) {
@@ -20,14 +29,21 @@ export function UploadPanel({ batchId, aiEnabled }: { batchId: string; aiEnabled
     if (list.length === 0) return;
     setBusy(true);
     setError(null);
+    setAuto(null);
     const form = new FormData();
     form.set("kind", kind);
+    form.set("autoMap", hasProducts ? "0" : "1");
     for (const f of list) form.append("files", f);
     try {
       const res = await fetch(`/api/catalog/batches/${batchId}/upload`, { method: "POST", body: form });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error ?? "Upload failed");
+      const body = await res.json().catch(() => ({ error: `Upload failed (HTTP ${res.status})` }));
+      if (!res.ok) throw new Error(body.error ?? `Upload failed (HTTP ${res.status})`);
       setResults(body.results);
+      setAuto(body.auto ?? null);
+      if (body.auto?.applied) {
+        router.push(`/batches/${batchId}/review`);
+        return;
+      }
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -37,33 +53,39 @@ export function UploadPanel({ batchId, aiEnabled }: { batchId: string; aiEnabled
     }
   }
 
+  const chosen = KINDS.find((k) => k.value === kind)!;
+
   return (
     <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <span className="text-[var(--ink-soft)]">These files are:</span>
+        {KINDS.map((k) => (
+          <button key={k.value} type="button" onClick={() => setKind(k.value)} className={cx("rounded-full border px-3 py-1 text-xs", kind === k.value ? "border-[var(--violet)] bg-[var(--violet-soft)] text-[var(--violet)]" : "border-[var(--line)] bg-white")}>{k.label}</button>
+        ))}
+      </div>
       <div
         className={cx("dropzone", active && "active")}
         onDragOver={(e) => { e.preventDefault(); setActive(true); }}
         onDragLeave={() => setActive(false)}
         onDrop={(e) => { e.preventDefault(); setActive(false); void upload(e.dataTransfer.files); }}
       >
-        <div className="text-sm font-medium text-[var(--ink)]">{busy ? "Uploading and extracting…" : "Drop invoices, order confirmations or spec sheets here"}</div>
-        <div className="mt-1 text-xs">PDF, XLSX, CSV, TXT or photos (JPG/PNG). {aiEnabled ? "PDFs and images are read with AI." : "Set ANTHROPIC_API_KEY to read PDFs/images with AI; CSV/XLSX work without it."}</div>
-        <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
-          <select value={kind} onChange={(e) => setKind(e.target.value)} className="rounded-lg border border-[var(--line)] bg-white px-2 py-1 text-xs">
-            <option value="INVOICE">Invoice / order confirmation</option>
-            <option value="SPEC_SHEET">Spec sheet</option>
-          </select>
+        <div className="text-sm font-medium text-[var(--ink)]">{busy ? "Uploading and reading…" : "Drop files here, or choose files"}</div>
+        <div className="mt-1 text-xs">{chosen.hint}</div>
+        <div className="mt-1 text-xs">PDF, XLSX, CSV, TXT, JPG or PNG. {aiEnabled ? "PDFs, scans and photos are read by AI." : "ANTHROPIC_API_KEY is not set: only CSV/XLSX and text-based PDFs can be read."}</div>
+        <div className="mt-3">
           <Button size="sm" onClick={() => inputRef.current?.click()} disabled={busy}>Choose files</Button>
           <input ref={inputRef} type="file" multiple accept=".pdf,.xlsx,.xlsm,.xls,.csv,.txt,image/*" className="hidden" onChange={(e) => e.target.files && upload(e.target.files)} />
         </div>
       </div>
       {error && <Alert tone="danger">{error}</Alert>}
       {results && (
-        <Alert tone={results.every((r) => r.rows > 0) ? "success" : "warning"}>
+        <Alert tone={results.every((r) => r.rows > 0 || r.kind === "PRODUCT_PHOTO") ? "success" : "warning"}>
           <ul className="space-y-1">
-            {results.map((r) => (
-              <li key={r.filename}><strong>{r.filename}</strong>: {r.rows} rows{r.method ? ` via ${r.method.replace("_", " ").toLowerCase()}` : ""}{r.warnings.length ? ` — ${r.warnings.join(" ")}` : ""}</li>
+            {results.map((r, i) => (
+              <li key={`${r.filename}-${i}`}><strong>{r.filename}</strong>: {r.kind === "PRODUCT_PHOTO" ? "product photo" : `${r.rows} rows`}{r.method ? ` via ${r.method.replace("_", " ").toLowerCase()}` : ""}{r.kind && r.kind !== "PRODUCT_PHOTO" && r.kind !== "AUTO" ? ` (${r.kind.replace("_", " ").toLowerCase()})` : ""}{r.warnings.length ? ` — ${r.warnings.join(" ")}` : ""}</li>
             ))}
           </ul>
+          {auto && !auto.applied && results.some((r) => r.rows > 0) && <div className="mt-2 text-xs">Some columns were not recognised automatically. Use <strong>Map columns</strong> to confirm them once; the layout is remembered for this supplier.</div>}
         </Alert>
       )}
     </div>

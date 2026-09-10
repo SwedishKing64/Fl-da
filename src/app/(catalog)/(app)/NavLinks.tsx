@@ -7,8 +7,9 @@ import { cx } from "@/app/(catalog)/ui";
 const LINKS = [
   { href: "/", label: "Dashboard", exact: true },
   { href: "/batches", label: "Import batches" },
-  { href: "/suppliers", label: "Suppliers & mappings" },
-  { href: "/pricing", label: "Pricing & categories" },
+  { href: "/rules", label: "Rules" },
+  { href: "/pricing", label: "Pricing" },
+  { href: "/suppliers", label: "Suppliers" },
   { href: "/images", label: "Image library" },
   { href: "/shopify", label: "Shopify" },
   { href: "/history", label: "History" },

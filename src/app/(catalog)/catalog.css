@@ -25,3 +25,4 @@
 .summary-bar .v { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .dropzone { border: 2px dashed var(--line); border-radius: 12px; padding: 28px; text-align: center; color: var(--ink-soft); transition: background 0.15s, border-color 0.15s; }
 .dropzone.active { border-color: var(--violet); background: var(--violet-soft); color: var(--violet); }
+.review-grid tr.section-row td { background: #efeaff; color: var(--ink); font-size: 12px; border-top: 1px solid var(--line); }

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { prisma, parseJson } from "@/lib/catalog/db";
-import { Badge, Card, Empty, LinkButton, PageHeader, fmtDate, money, statusTone } from "@/app/(catalog)/ui";
+import { Badge, Card, Empty, LinkButton, PageHeader, fmtDate, statusTone } from "@/app/(catalog)/ui";
 import type { ReviewSummary } from "@/lib/catalog/review-types";
 
 export default async function BatchesPage() {
@@ -11,7 +11,7 @@ export default async function BatchesPage() {
       <Card>
         {batches.length === 0 ? <Empty>No batches yet.</Empty> : (
           <table className="w-full text-sm">
-            <thead className="text-left text-xs text-[var(--ink-soft)]"><tr><th className="py-1">Batch</th><th>Supplier</th><th>Status</th><th className="text-right">Files</th><th className="text-right">Products</th><th className="text-right">Units</th><th className="text-right">Retail (inc GST)</th><th className="text-right">Net profit</th><th>Created</th></tr></thead>
+            <thead className="text-left text-xs text-[var(--ink-soft)]"><tr><th className="py-1">Batch</th><th>Supplier</th><th>Status</th><th className="text-right">Files</th><th className="text-right">Products</th><th className="text-right">Units</th><th>Created</th></tr></thead>
             <tbody>
               {batches.map((b) => {
                 const s = parseJson<ReviewSummary | null>(b.summary, null);
@@ -23,8 +23,6 @@ export default async function BatchesPage() {
                     <td className="text-right">{b._count.files}</td>
                     <td className="text-right">{b._count.products}</td>
                     <td className="text-right">{s?.units ?? "–"}</td>
-                    <td className="text-right">{s ? money(s.totalRetailIncGst, 0) : "–"}</td>
-                    <td className="text-right">{s ? money(s.totalNetProfit, 0) : "–"}</td>
                     <td className="text-xs text-[var(--ink-soft)]">{fmtDate(b.createdAt)} · {b.createdBy.name}</td>
                   </tr>
                 );

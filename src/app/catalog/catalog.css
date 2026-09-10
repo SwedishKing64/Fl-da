@@ -1,0 +1,27 @@
+/* Review grid styles */
+.grid-wrap { overflow: auto; max-height: calc(100vh - 290px); border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.review-grid { border-collapse: separate; border-spacing: 0; font-size: 12.5px; min-width: 1500px; }
+.review-grid th { position: sticky; top: 0; z-index: 2; background: #faf9f6; border-bottom: 1px solid var(--line); padding: 6px 8px; text-align: left; font-weight: 600; white-space: nowrap; color: var(--ink-2); }
+.review-grid td { border-bottom: 1px solid var(--line-soft); padding: 0; vertical-align: middle; white-space: nowrap; height: 34px; }
+.review-grid tr.product-row td { background: #f7f6f3; font-weight: 500; }
+.review-grid tr.variant-row td { background: #fff; }
+.review-grid tr.row-error td { box-shadow: inset 3px 0 0 var(--detractor); }
+.review-grid tr.row-warning td { box-shadow: inset 3px 0 0 var(--passive); }
+.review-grid tr.selected td { background: #efeaff; }
+.review-grid .cell { display: block; padding: 6px 8px; min-width: 60px; overflow: hidden; text-overflow: ellipsis; max-width: 260px; }
+.review-grid .cell.editable { cursor: cell; }
+.review-grid .cell.editable:hover { background: rgba(91, 75, 214, 0.06); }
+.review-grid .cell.focused { outline: 2px solid var(--violet); outline-offset: -2px; }
+.review-grid .cell.num { text-align: right; font-variant-numeric: tabular-nums; }
+.review-grid .cell input:not([type="checkbox"]), .review-grid .cell select { width: 100%; height: 100%; border: 0; outline: 2px solid var(--violet); outline-offset: -2px; padding: 5px 7px; font: inherit; background: #fff; }
+.review-grid .cell input[type="checkbox"] { margin: 0; vertical-align: middle; }
+.review-grid td:first-child .cell, .review-grid td:nth-child(2) .cell { min-width: 0; }
+.review-grid .thumb { width: 28px; height: 28px; object-fit: cover; border-radius: 4px; border: 1px solid var(--line); background: #eee; }
+.review-grid .flag { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; }
+.review-grid .flag.error { background: var(--detractor); }
+.review-grid .flag.warning { background: var(--passive); }
+.summary-bar { position: sticky; bottom: 0; z-index: 3; display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; border: 1px solid var(--line); border-radius: 12px; background: #fff; padding: 10px 14px; margin-top: 10px; box-shadow: var(--shadow); }
+.summary-bar .k { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-soft); }
+.summary-bar .v { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.dropzone { border: 2px dashed var(--line); border-radius: 12px; padding: 28px; text-align: center; color: var(--ink-soft); transition: background 0.15s, border-color 0.15s; }
+.dropzone.active { border-color: var(--violet); background: var(--violet-soft); color: var(--violet); }

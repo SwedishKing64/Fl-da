@@ -8,9 +8,8 @@ const body = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Afterword — understand what your customers actually say",
-  description:
-    "Afterword reads every post-purchase reply, tags the themes, flags what's urgent, and tells you what to fix first. Feedback you act on, not a pile of stars.",
+  title: "Product Importer",
+  description: "Turn supplier invoices into ready-to-import Shopify products.",
 };
 
 export default function RootLayout({

@@ -62,9 +62,9 @@ export async function requireUser(role?: Role): Promise<CurrentUser> {
   const user = await getCurrentUser();
   if (!user) {
     const count = await prisma.user.count();
-    redirect(count === 0 ? "/catalog/setup" : "/catalog/login");
+    redirect(count === 0 ? "/setup" : "/login");
   }
-  if (role === "ADMIN" && user.role !== "ADMIN") redirect("/catalog?denied=1");
+  if (role === "ADMIN" && user.role !== "ADMIN") redirect("/?denied=1");
   return user;
 }
 

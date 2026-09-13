@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/catalog/auth";
 import { isEphemeralDb } from "@/lib/catalog/db";
-import { DatabaseGate } from "../DatabaseGate";
+import { databaseGate } from "../DatabaseGate";
 import { logoutAction } from "@/app/(catalog)/actions";
 import { NavLinks } from "./NavLinks";
 import "../catalog.css";
@@ -9,7 +9,8 @@ import "../catalog.css";
 export const dynamic = "force-dynamic";
 
 export default async function CatalogLayout({ children }: { children: React.ReactNode }) {
-  if (process.env.VERCEL && isEphemeralDb()) return <DatabaseGate>{children}</DatabaseGate>;
+  const gate = await databaseGate();
+  if (gate) return gate;
   const user = await requireUser();
   return (
     <div className="flex min-h-screen bg-[var(--canvas)]">

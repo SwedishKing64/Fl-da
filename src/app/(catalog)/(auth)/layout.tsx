@@ -1,8 +1,9 @@
-import { DatabaseGate } from "../DatabaseGate";
+import { databaseGate } from "../DatabaseGate";
 
-export default function AuthLayout({ children }: { children: React.ReactNode }) {
+export default async function AuthLayout({ children }: { children: React.ReactNode }) {
+  const gate = await databaseGate();
+  if (gate) return gate;
   return (
-    <DatabaseGate>
     <main className="flex min-h-screen items-center justify-center bg-[var(--canvas)] px-4">
       <div className="w-full max-w-sm">
         <div className="mb-6 text-center">
@@ -12,6 +13,5 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         {children}
       </div>
     </main>
-    </DatabaseGate>
   );
 }

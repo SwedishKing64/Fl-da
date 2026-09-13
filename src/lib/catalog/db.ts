@@ -13,23 +13,24 @@ const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient; epheme
  * Resolve the database URL. When none is configured (a fresh Vercel project with no Postgres
  * store yet), fall back to a throwaway copy of the SQLite template built by `vercel-build`.
  */
-function resolveDatabaseUrl(): { url: string; ephemeral: boolean } {
+function resolveDatabaseUrl(): { url: string; ephemeral: boolean } | undefined {
   const configured = findDatabaseUrl();
   if (configured) return { url: configured.url, ephemeral: false };
   const template = path.join(process.cwd(), "prisma", "template.db");
-  if (!fs.existsSync(template)) {
-    throw new Error('DATABASE_URL is not set. Use `npm run demo` for local development, or add a Postgres database to the deployment.');
-  }
+  if (!fs.existsSync(template)) return undefined;
   const target = path.join(os.tmpdir(), "importer-ephemeral.db");
   if (!fs.existsSync(target)) fs.copyFileSync(template, target);
   return { url: `file:${target}`, ephemeral: true };
 }
 
 function createClient(): PrismaClient {
-  const { url, ephemeral } = resolveDatabaseUrl();
-  globalForPrisma.ephemeralDb = ephemeral;
+  const resolved = resolveDatabaseUrl();
+  if (!resolved) {
+    throw new Error("No database is configured. Set DATABASE_URL, or run `npm run demo` for local development.");
+  }
+  globalForPrisma.ephemeralDb = resolved.ephemeral;
   return new PrismaClient({
-    datasourceUrl: url,
+    datasourceUrl: resolved.url,
     log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
   });
 }
@@ -51,10 +52,55 @@ export const prisma: PrismaClient = new Proxy({} as PrismaClient, {
   },
 });
 
-/** True when running on the throwaway SQLite copy (data resets on restart). */
+/** True when running on the throwaway SQLite copy (data resets on restart). Never throws. */
 export function isEphemeralDb(): boolean {
-  getClient();
-  return Boolean(globalForPrisma.ephemeralDb);
+  try {
+    getClient();
+    return Boolean(globalForPrisma.ephemeralDb);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * What state the database is actually in. A deployment can fail in several ways that all look
+ * identical from the outside — no connection string, a string pointing somewhere unreachable,
+ * a reachable database whose tables were never created — and an unexplained 500 helps nobody.
+ * This never throws, so a layout can render the reason instead of crashing.
+ */
+export type DatabaseStatus =
+  | { state: "ok"; source: string }
+  | { state: "ephemeral"; source: string }
+  | { state: "missing"; source?: undefined }
+  | { state: "unreachable"; source: string; detail: string }
+  | { state: "no-tables"; source: string; detail: string };
+
+/** Strip any credentials Prisma may have echoed back before showing an error on screen. */
+function scrub(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error);
+  const firstMeaningfulLine = raw
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .find((line) => !line.startsWith("Invalid `") && !line.startsWith("at ")) ?? raw;
+  return firstMeaningfulLine.replace(/\/\/[^@\s/]*@/g, "//***@").slice(0, 240);
+}
+
+export async function databaseStatus(): Promise<DatabaseStatus> {
+  const resolved = resolveDatabaseUrl();
+  if (!resolved) return { state: "missing" };
+  const source = resolved.ephemeral ? "the SQLite template bundled with the build" : findDatabaseUrl()?.key ?? "DATABASE_URL";
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+  } catch (error) {
+    return { state: "unreachable", source, detail: scrub(error) };
+  }
+  try {
+    await prisma.user.count();
+  } catch (error) {
+    return { state: "no-tables", source, detail: scrub(error) };
+  }
+  return { state: resolved.ephemeral ? "ephemeral" : "ok", source };
 }
 
 /** Parse a JSON column, returning `fallback` when the column is empty or malformed. */

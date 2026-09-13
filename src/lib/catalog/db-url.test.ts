@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { databaseEnvNamesPresent, findDatabaseUrl } from "./db-url";
+import { accelerateEnvName, databaseEnvNamesPresent, directDatabaseUrl, findDatabaseUrl } from "./db-url";
 
 const PG = "postgresql://u:p@db.example.com/main?sslmode=require";
 
@@ -13,9 +13,13 @@ describe("database url discovery", () => {
     expect(found).toEqual({ url: PG, key: "POSTGRES_URL" });
   });
 
-  it("falls back to an Accelerate URL when that is all there is", () => {
-    const url = "prisma+postgres://accelerate/x";
-    expect(findDatabaseUrl({ PRISMA_DATABASE_URL: url })).toEqual({ url, key: "PRISMA_DATABASE_URL" });
+  it("never returns an Accelerate URL, because the schema push and client cannot use one", () => {
+    expect(findDatabaseUrl({ PRISMA_DATABASE_URL: "prisma+postgres://accelerate/x" })).toBeUndefined();
+    expect(accelerateEnvName({ PRISMA_DATABASE_URL: "prisma+postgres://accelerate/x" })).toBe("PRISMA_DATABASE_URL");
+  });
+
+  it("reports an Accelerate variable as present so the gate can explain it", () => {
+    expect(databaseEnvNamesPresent({ PRISMA_DATABASE_URL: "prisma+postgres://accelerate/x" })).toEqual(["PRISMA_DATABASE_URL"]);
   });
 
   it("keeps a local file: URL for SQLite development", () => {
@@ -39,5 +43,17 @@ describe("database url discovery", () => {
     const names = databaseEnvNamesPresent({ DATABASE_URL: PG, PGHOST: "db.example.com", SHOPIFY_TOKEN: "abc", EMPTY: "" });
     expect(names).toEqual(["DATABASE_URL", "PGHOST"]);
     expect(names.join(" ")).not.toContain("p@db.example.com");
+  });
+
+  it("unpools a Neon connection string for the schema push", () => {
+    const pooled = "postgresql://u:p@ep-x-123-pooler.ap-southeast-2.aws.neon.tech/main?sslmode=require&pgbouncer=true";
+    expect(directDatabaseUrl({ DATABASE_URL: pooled })).toBe(
+      "postgresql://u:p@ep-x-123.ap-southeast-2.aws.neon.tech/main?sslmode=require",
+    );
+  });
+
+  it("prefers an explicitly unpooled variable for the schema push", () => {
+    const direct = "postgresql://u:p@direct.example.com/main";
+    expect(directDatabaseUrl({ DATABASE_URL: PG, POSTGRES_URL_NON_POOLING: direct })).toBe(direct);
   });
 });

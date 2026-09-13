@@ -4,7 +4,7 @@ import path from "node:path";
 import { PrismaClient } from "@prisma/client";
 import { findDatabaseUrl } from "./db-url";
 
-export { DATABASE_ENV_KEYS, databaseEnvNamesPresent, findDatabaseUrl } from "./db-url";
+export { DATABASE_ENV_KEYS, accelerateEnvName, databaseEnvNamesPresent, directDatabaseUrl, findDatabaseUrl } from "./db-url";
 
 // Single Prisma client per process (Next.js dev hot-reload safe).
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient; ephemeralDb?: boolean };

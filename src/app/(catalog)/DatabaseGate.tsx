@@ -1,4 +1,4 @@
-import { DATABASE_ENV_KEYS, databaseEnvKeysPresent, isEphemeralDb } from "@/lib/catalog/db";
+import { databaseEnvNamesPresent, isEphemeralDb } from "@/lib/catalog/db";
 
 /**
  * On Vercel without a database, every server instance has its own throwaway copy of the
@@ -9,7 +9,7 @@ export function DatabaseGate({ children }: { children: React.ReactNode }) {
   if (!process.env.VERCEL || !isEphemeralDb()) return <>{children}</>;
   const env = process.env.VERCEL_ENV ?? "unknown";
   const branch = process.env.VERCEL_GIT_COMMIT_REF ?? "unknown";
-  const present = databaseEnvKeysPresent();
+  const present = databaseEnvNamesPresent();
   return (
     <main className="flex min-h-screen items-center justify-center bg-[var(--canvas)] px-4">
       <div className="w-full max-w-lg rounded-xl border border-[var(--line)] bg-white p-6 shadow-[var(--shadow)]">
@@ -25,7 +25,12 @@ export function DatabaseGate({ children }: { children: React.ReactNode }) {
         <div className="mt-4 rounded-lg border border-[var(--line-soft)] bg-[var(--canvas)] p-3 text-xs text-[var(--ink-2)]">
           <div className="font-semibold uppercase tracking-wide text-[var(--ink-soft)]">Why you are seeing this</div>
           <div className="mt-1">This deployment is the <strong>{env}</strong> environment, built from branch <code className="rounded bg-white px-1">{branch}</code>.</div>
-          <div className="mt-1">Database variables it can see: <strong>{present.length ? present.join(", ") : "none"}</strong> (looks for {DATABASE_ENV_KEYS.join(", ")}).</div>
+          <div className="mt-1">
+            Database-shaped variables it can see: <strong>{present.length ? present.join(", ") : "none"}</strong>.
+          </div>
+          <div className="mt-1">
+            Any variable whose value is a <code className="rounded bg-white px-1">postgres://</code> URL is used, whatever it is named, so a name missing from that list means the deployment genuinely has no connection string.
+          </div>
           {env === "preview" && (
             <div className="mt-2">If you already created a database, it is probably connected to <strong>Production</strong> only. In Storage → your database → <strong>Connect Project</strong>, tick <strong>Preview</strong> as well (or change the project&apos;s Production Branch to <code className="rounded bg-white px-1">{branch}</code> and open the production URL), then redeploy.</div>
           )}

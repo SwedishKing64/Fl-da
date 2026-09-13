@@ -2,6 +2,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { PrismaClient } from "@prisma/client";
+import { findDatabaseUrl } from "./db-url";
+
+export { DATABASE_ENV_KEYS, databaseEnvNamesPresent, findDatabaseUrl } from "./db-url";
 
 // Single Prisma client per process (Next.js dev hot-reload safe).
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient; ephemeralDb?: boolean };
@@ -10,33 +13,9 @@ const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient; epheme
  * Resolve the database URL. When none is configured (a fresh Vercel project with no Postgres
  * store yet), fall back to a throwaway copy of the SQLite template built by `vercel-build`.
  */
-/**
- * Environment variables that Vercel Storage integrations (Neon, Prisma Postgres, Supabase) and
- * hand-written configs use for the connection string. Keep in sync with scripts/vercel-build.mjs.
- */
-export const DATABASE_ENV_KEYS = [
-  "DATABASE_URL",
-  "POSTGRES_PRISMA_URL",
-  "POSTGRES_URL",
-  "POSTGRES_URL_NON_POOLING",
-  "DATABASE_URL_UNPOOLED",
-  "NEON_DATABASE_URL",
-] as const;
-
-/** Names of the database variables that are set in this process (values are never exposed). */
-export function databaseEnvKeysPresent(): string[] {
-  return DATABASE_ENV_KEYS.filter((key) => Boolean(process.env[key]));
-}
-
-/** The configured connection string, preferring a plain postgres:// URL over a prisma+postgres:// one. */
-export function configuredDatabaseUrl(): string | undefined {
-  const values = DATABASE_ENV_KEYS.map((key) => process.env[key]).filter((v): v is string => Boolean(v));
-  return values.find((v) => /^postgres(ql)?:/i.test(v)) ?? values[0];
-}
-
 function resolveDatabaseUrl(): { url: string; ephemeral: boolean } {
-  const configured = configuredDatabaseUrl();
-  if (configured) return { url: configured, ephemeral: false };
+  const configured = findDatabaseUrl();
+  if (configured) return { url: configured.url, ephemeral: false };
   const template = path.join(process.cwd(), "prisma", "template.db");
   if (!fs.existsSync(template)) {
     throw new Error('DATABASE_URL is not set. Use `npm run demo` for local development, or add a Postgres database to the deployment.');

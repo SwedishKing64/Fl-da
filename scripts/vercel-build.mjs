@@ -64,32 +64,53 @@ if (accelerateName && !found) {
   console.warn(`\n[vercel-build] WARNING: ${accelerateName} holds a Prisma Accelerate URL (prisma+postgres://). This app talks to Postgres directly, so that URL cannot be used. Add a store that exposes a plain postgres:// connection string, or set DATABASE_URL to your database's direct URL.\n`);
 }
 
-if (PG.test(url)) {
-  const schema = readFileSync(schemaPath, "utf8").replace('provider = "sqlite"', 'provider = "postgresql"');
-  writeFileSync(schemaPath, schema);
-  process.env.DATABASE_URL = url;
-  console.log("[vercel-build] Postgres database detected; Prisma provider switched to postgresql");
-} else if (url) {
-  console.log(`[vercel-build] Using DATABASE_URL as-is (${url.split(":")[0]}:...)`);
-} else {
-  process.env.DATABASE_URL = "file:./template.db"; // relative to prisma/schema.prisma => prisma/template.db
-  console.warn("\n[vercel-build] WARNING: no DATABASE_URL. Building with an ephemeral SQLite database; add Storage → Neon (Postgres) to the Vercel project to keep data.\n");
-}
-
 const run = (cmd, env = process.env) => {
   console.log(`[vercel-build] ${cmd}`);
   execSync(cmd, { stdio: "inherit", env });
 };
 
-run("npx prisma generate");
+const originalSchema = readFileSync(schemaPath, "utf8");
 
-// Sync the schema over a direct connection. A failure here must not take the whole deployment
-// down: the tables are usually already in place from an earlier build, and a deployed app that
-// can explain itself beats no deployment at all.
+/** Point Prisma at the database and create the tables. Everything here is best effort. */
+function prepareDatabase() {
+  if (PG.test(url)) {
+    writeFileSync(schemaPath, originalSchema.replace('provider = "sqlite"', 'provider = "postgresql"'));
+    process.env.DATABASE_URL = url;
+    console.log("[vercel-build] Postgres database detected; Prisma provider switched to postgresql");
+  } else if (url) {
+    console.log(`[vercel-build] Using DATABASE_URL as-is (${url.split(":")[0]}:...)`);
+  } else {
+    process.env.DATABASE_URL = "file:./template.db"; // relative to prisma/schema.prisma => prisma/template.db
+    console.warn("\n[vercel-build] WARNING: no DATABASE_URL. Building with an ephemeral SQLite database; add Storage → Neon (Postgres) to the Vercel project to keep data.\n");
+  }
+
+  run("npx prisma generate");
+
+  // Sync the schema over a direct connection. A failure here must not take the deployment down:
+  // the tables are often already in place, and a deployed app that can explain itself beats no
+  // deployment at all.
+  try {
+    run("npx prisma db push --skip-generate", { ...process.env, DATABASE_URL: directUrl(process.env.DATABASE_URL) });
+  } catch {
+    console.warn("\n[vercel-build] WARNING: could not sync the schema (prisma db push failed). Continuing with the build — the app will say so on screen. Check that the connection string allows a direct connection.\n");
+  }
+}
+
+// Nothing about the database may fail the deployment. If preparing it throws for any reason —
+// an unusable connection string, a provider swap Prisma rejects — fall all the way back to the
+// bundled SQLite template, which always works, and let the app explain itself on screen.
 try {
-  run("npx prisma db push --skip-generate", { ...process.env, DATABASE_URL: directUrl(process.env.DATABASE_URL) });
-} catch {
-  console.warn("\n[vercel-build] WARNING: could not sync the schema (prisma db push failed). Continuing with the build — if the tables are not already in place the app will say so. Check that the connection string allows a direct connection.\n");
+  prepareDatabase();
+} catch (error) {
+  console.warn(`\n[vercel-build] WARNING: database preparation failed (${error?.message ?? error}). Falling back to the bundled SQLite template so the deployment still succeeds.\n`);
+  writeFileSync(schemaPath, originalSchema);
+  process.env.DATABASE_URL = "file:./template.db";
+  run("npx prisma generate");
+  try {
+    run("npx prisma db push --skip-generate");
+  } catch {
+    console.warn("[vercel-build] WARNING: could not create the fallback template database either.");
+  }
 }
 
 run("npx next build");

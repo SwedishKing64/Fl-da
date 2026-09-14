@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyBinding } from "./bindings";
+import { classifyBinding, classifySnowboardBinding } from "./bindings";
 
 const kind = (...parts: string[]) => classifyBinding(...parts).kind;
 
@@ -45,5 +45,26 @@ describe("telling a touring binding from an alpine one", () => {
   it("explains itself so the reasoning can be checked, not just the answer", () => {
     expect(classifyBinding("Dynafit Speed Radical").why).toMatch(/dynafit|speed radical/);
     expect(classifyBinding("Marker Griffon 13").why).toMatch(/griffon/);
+  });
+});
+
+describe("which boots a snowboard binding takes", () => {
+  it("files a Step On binding as Step On", () => {
+    for (const name of ["Women's Step On® Escapade Re:Flex Snowboard Bindings", "Men's Step On® Genesis EST® Snowboard Bindings", "Men's Step On® Cartel X EST® Snowboard Bindings"]) {
+      expect(classifySnowboardBinding(name).tag, name).toBe("step-on-bindings");
+    }
+  });
+
+  /** Re:Flex and EST are how the binding mounts to the board, not how the boot gets in. */
+  it("files everything else as traditional, mounting system regardless", () => {
+    for (const name of ["Men's Cartel Re:Flex Snowboard Bindings 2026", "Kids' Smalls Re:Flex Snowboard Bindings", "Women's Lexa Re:Flex Snowboard Bindings 2026"]) {
+      expect(classifySnowboardBinding(name).tag, name).toBe("traditional-bindings");
+    }
+  });
+
+  it("agrees with the boot side, so a boot and binding always meet", () => {
+    // The two questions are the same question asked from opposite ends.
+    expect(classifySnowboardBinding("Step On Genesis").tag).toBe("step-on-bindings");
+    expect(classifySnowboardBinding("Cartel Re:Flex").tag).toBe("traditional-bindings");
   });
 });

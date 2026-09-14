@@ -13,6 +13,26 @@
 
 export type BindingKind = "Alpine Bindings" | "Touring Bindings";
 
+/**
+ * Snowboard bindings split a different way. Nothing about walking uphill comes into it: a Step On
+ * binding takes only Step On boots, and everything else — Re:Flex, EST, channel, disc — takes an
+ * ordinary boot, so it is traditional. This is the same question the boots answer from the other
+ * side, and the two have to agree or a customer ends up with a boot and binding that do not meet.
+ */
+export type SnowboardBindingTag = "step-on-bindings" | "traditional-bindings";
+
+const STEP_ON = /\bstep[\s-]?on\b/i;
+
+export function classifySnowboardBinding(...parts: Array<string | undefined>): {
+  tag: SnowboardBindingTag;
+  why: string;
+} {
+  const text = parts.filter(Boolean).join(" ");
+  return STEP_ON.test(text)
+    ? { tag: "step-on-bindings", why: "says Step On" }
+    : { tag: "traditional-bindings", why: "not a Step On binding, so it takes an ordinary boot" };
+}
+
 export interface BindingVerdict {
   kind?: BindingKind;
   /** What in the text decided it, so a person can check the reasoning rather than the outcome. */

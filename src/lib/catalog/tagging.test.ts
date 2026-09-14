@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BOARD_DISCIPLINES, DEFAULT_TAGGING, EVERGREEN_SEASON, SKI_DISCIPLINES, bindingType, bootTags, disciplinesFor, needsBindingKind, TAG_SPELLING, generalTags, isHardgood, isManualTag, isNotOurs, isShopifyGenerated, needsSectionChoice, normaliseGenders, seasonFor, slugTag, withoutGenerated } from "./tagging";
+import { BOARD_DISCIPLINES, DEFAULT_TAGGING, EVERGREEN_SEASON, SKI_DISCIPLINES, bindingType, bootTags, disciplinesFor, snowboardBindingTags, needsBindingKind, TAG_SPELLING, generalTags, isHardgood, isManualTag, isNotOurs, isShopifyGenerated, needsSectionChoice, normaliseGenders, seasonFor, slugTag, withoutGenerated } from "./tagging";
 
 describe("the six general tags", () => {
   it("writes them in the shop's order: type, section, season, house, vendor, gender", () => {
@@ -258,10 +258,11 @@ describe("ski bindings", () => {
     expect(generalTags({ type: "Touring Bindings", vendor: "ATK", genders: [] })).toContain("touring-bindings");
   });
 
-  it("leaves snowboard bindings alone, since they do not split that way", () => {
+  it("does not ask a snowboard binding whether it tours", () => {
+    // Snowboard bindings split too, but by which boots they take, not by walking uphill.
     expect(needsBindingKind("Snowboard Bindings")).toBe(false);
     expect(generalTags({ type: "Snowboard Bindings", vendor: "Burton", genders: ["womens"], describedAs: "Burton Lexa Re:Flex" }))
-      .toEqual(["snowboard-bindings", "snowboard", "2027", "123abc-js", "burton", "womens"]);
+      .toEqual(["snowboard-bindings", "snowboard", "2027", "123abc-js", "burton", "womens", "traditional-bindings"]);
   });
 });
 
@@ -296,5 +297,22 @@ describe("boots", () => {
   it("adds nothing when there is no name to read, rather than guessing", () => {
     expect(bootTags("Snowboard Boots")).toEqual([]);
     expect(bootTags("Ski Boots", "   ")).toEqual([]);
+  });
+});
+
+describe("snowboard bindings", () => {
+  it("tags which boots the binding takes", () => {
+    expect(generalTags({ type: "Snowboard Bindings", vendor: "Burton", genders: ["mens"], describedAs: "Men's Step On® Genesis EST® Snowboard Bindings 2026" }))
+      .toContain("step-on-bindings");
+    expect(generalTags({ type: "Snowboard Bindings", vendor: "Burton", genders: ["womens"], describedAs: "Women's Lexa Re:Flex Snowboard Bindings 2026" }))
+      .toContain("traditional-bindings");
+  });
+
+  it("adds nothing without a name to read", () => {
+    expect(snowboardBindingTags("Snowboard Bindings")).toEqual([]);
+  });
+
+  it("leaves ski bindings out of it", () => {
+    expect(snowboardBindingTags("Alpine Bindings", "Marker Griffon 13")).toEqual([]);
   });
 });

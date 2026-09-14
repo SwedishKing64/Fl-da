@@ -11,7 +11,7 @@
  */
 
 import { ALPSPORT_TAXONOMY, PRODUCT_TYPES, TYPE_SECTIONS, resolveType } from "./taxonomy";
-import { classifyBinding, type BindingKind } from "./bindings";
+import { classifyBinding, classifySnowboardBinding, type BindingKind } from "./bindings";
 import { classifySkiBoot, classifySnowboardBoot } from "./boots";
 
 export type Gender = "mens" | "womens" | "kids";
@@ -92,6 +92,17 @@ export function bootTags(type: string, describedAs?: string): string[] {
   if (/snowboard/i.test(resolved)) return classifySnowboardBoot(text).tags;
   if ((TYPE_SECTIONS[resolved] ?? []).includes("Ski") || /\bski\b/i.test(resolved)) return classifySkiBoot(text).tags;
   return [];
+}
+
+/**
+ * Which boots a snowboard binding will take. The mirror of the boot tag, and it has to agree with
+ * it: a Step On binding and a traditional boot do not meet.
+ */
+export function snowboardBindingTags(type: string, describedAs?: string): string[] {
+  const resolved = resolveType(type) ?? type.trim();
+  if (!/snowboard\s+bindings?\b/i.test(resolved)) return [];
+  if (!describedAs?.trim()) return [];
+  return [classifySnowboardBinding(describedAs).tag];
 }
 
 /** The package tag for a board or ski sold with a binding on it. */
@@ -245,6 +256,7 @@ export function generalTags(input: TagInput, settings: TaggingSettings = DEFAULT
   if (input.withBindings) push(TAG_SPELLING[packageTagFor(type)] ?? slugTag(packageTagFor(type)));
 
   for (const tag of bootTags(type, input.describedAs)) push(tag);
+  for (const tag of snowboardBindingTags(type, input.describedAs)) push(tag);
 
   const allowed = disciplinesFor(type);
   for (const discipline of input.disciplines ?? []) {

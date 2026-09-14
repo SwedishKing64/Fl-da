@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BACKCOUNTRY_SHELF_TAGS, isBackcountryShelf, BACKCOUNTRY_BINDING_TAG, BACKCOUNTRY_BOOT_TAG, BOARD_DISCIPLINES, crossShelfTags, DEFAULT_TAGGING, EVERGREEN_SEASON, SKI_DISCIPLINES, BAG_TAGS, MANUAL_SEASON, TOURING_SKI_TAG, bagTags, clothingContextTags, isSkinAccessory, bindingType, bootTags, disciplinesFor, snowboardBindingTags, needsBindingKind, TAG_SPELLING, generalTags, isHardgood, isManualTag, isNotOurs, isNotLearnable, isRuleGenerated, isShopifyGenerated, needsSectionChoice, normaliseGenders, seasonFor, slugTag, withoutGenerated } from "./tagging";
+import { BACKCOUNTRY_SHELF_TAGS, isBackcountryShelf, isSkin, skinType, BACKCOUNTRY_BINDING_TAG, BACKCOUNTRY_BOOT_TAG, BOARD_DISCIPLINES, crossShelfTags, DEFAULT_TAGGING, EVERGREEN_SEASON, SKI_DISCIPLINES, BAG_TAGS, MANUAL_SEASON, TOURING_SKI_TAG, bagTags, clothingContextTags, isSkinAccessory, bindingType, bootTags, disciplinesFor, snowboardBindingTags, needsBindingKind, TAG_SPELLING, generalTags, isHardgood, isManualTag, isNotOurs, isNotLearnable, isRuleGenerated, isShopifyGenerated, needsSectionChoice, normaliseGenders, seasonFor, slugTag, withoutGenerated } from "./tagging";
 import { ALPSPORT_TAXONOMY } from "./taxonomy";
 
 describe("the six general tags", () => {
@@ -505,6 +505,70 @@ describe("reaching a backcountry shelf takes the section too", () => {
       .not.toContain("backcountry");
     expect(generalTags({ type: "Ski Boots", vendor: "Atomic", genders: ["mens"], describedAs: "Atomic Hawx Ultra 100" }))
       .not.toContain("backcountry");
+  });
+});
+
+describe("the bag shelves are the snow ones", () => {
+  /** The word "bags" in a Type is not what puts a product beside the board bags — the menu is. */
+  it("keeps sleeping bags and duffels off them", () => {
+    for (const type of ["Down Sleeping Bags", "Synthetic Sleeping Bags", "Sleeping Bag Accessories", "Duffels", "Travel Packs"]) {
+      expect(bagTags(type), type).toEqual([]);
+      const tags = generalTags({ type, vendor: "Sea to Summit", genders: [] });
+      for (const bag of BAG_TAGS) expect(tags, `${type} -> ${bag}`).not.toContain(bag);
+    }
+  });
+
+  it("still catches every snow bag", () => {
+    for (const type of ["Snowboard Bags", "Ski & Boot Bags"]) expect(bagTags(type), type).toEqual([...BAG_TAGS]);
+    expect(bagTags("Snowboard Accessories", "Burton Wheelie Gig board bag")).toEqual([...BAG_TAGS]);
+    expect(bagTags("Ski Accessories", "Thule roof ski bag")).toEqual([...BAG_TAGS]);
+  });
+
+  it("reads the product when the Type is not one the shop uses", () => {
+    expect(bagTags("", "Dakine Boot Locker boot bag")).toEqual([...BAG_TAGS]);
+    expect(bagTags("Stuff Sack", "Sea to Summit compression sack")).toEqual([]);
+  });
+});
+
+describe("a skin is read, not trusted to its invoice type", () => {
+  /** Suppliers file skins under whatever accessories line they have; the shelf is the same one. */
+  it("files a skin sold as a general ski accessory", () => {
+    const tags = generalTags({ type: "Ski Accessories", vendor: "Pomoca", genders: [], describedAs: "Pomoca Climb Pro 2.0 climbing skin" });
+    expect(tags).toContain("skin");
+    expect(tags).toContain("skins");
+    expect(tags).toContain("climbing-skins");
+    expect(tags).toContain("backcountry");
+    expect(tags).not.toContain("ski-accessories"); // it is a skin, so that is its Type
+    expect(skinType({ type: "Ski Accessories", describedAs: "Pomoca Climb Pro 2.0 climbing skin" })).toBe("Skins");
+  });
+
+  it("lands a skin identically however it was filed", () => {
+    const shelves = ["skin", "skins", "climbing-skins", "backcountry"];
+    for (const type of ["Skins", "Climbing Skins", "Ski Accessories", "Alpine Touring Accessories", "Other Back-Country Gear"]) {
+      const tags = generalTags({ type, vendor: "Pomoca", genders: [], describedAs: "Pomoca Climb Pro 2.0 climbing skin" });
+      for (const shelf of shelves) expect(tags, `${type} -> ${shelf}`).toContain(shelf);
+    }
+  });
+
+  it("leaves a Type that already names something specific alone", () => {
+    // A ski described as skin-compatible is a ski.
+    const tags = generalTags({ type: "Skis", vendor: "Atomic", genders: ["mens"], describedAs: "Atomic Backland 107, skin compatible tip" });
+    expect(tags).toContain("skis");
+    expect(tags).not.toContain("skins");
+    expect(skinType({ type: "Skis", describedAs: "Atomic Backland 107, skin compatible tip" })).toBeUndefined();
+  });
+
+  it("keeps gear for skins on its own shelves", () => {
+    expect(isSkin("G3 skin cutter", "Ski Accessories")).toBe(false);
+    expect(isSkin("Black Diamond skin glue", "Ski Accessories")).toBe(false);
+    const tags = generalTags({ type: "Ski Accessories", vendor: "G3", genders: [], describedAs: "G3 skin cutter" });
+    expect(tags).toContain("alpine-touring-accessories");
+    expect(tags).not.toContain("skins");
+  });
+
+  it("needs the word, not a hunch", () => {
+    expect(isSkin("Pomoca Free Pro 2.0", "Ski Accessories")).toBe(false);
+    expect(isSkin(undefined, "Ski Accessories")).toBe(false);
   });
 });
 

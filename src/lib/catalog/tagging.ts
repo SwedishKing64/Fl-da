@@ -10,7 +10,7 @@
  * vendor in lower case; the fourteen products with no gender tag are exactly the unisex ones.
  */
 
-import { ALPSPORT_TAXONOMY, PRODUCT_TYPES, TYPE_SECTIONS, clothingContextsFor, resolveType } from "./taxonomy";
+import { ALPSPORT_TAXONOMY, PRODUCT_TYPES, TYPE_SECTIONS, clothingContextsFor, isValidType, resolveType } from "./taxonomy";
 import { classifyBinding, classifySnowboardBinding, type BindingKind } from "./bindings";
 import { classifySkiBoot, classifySnowboardBoot } from "./boots";
 import { accessoryKind } from "./accessories";
@@ -146,6 +146,48 @@ export function isSkinAccessory(describedAs?: string): boolean {
 }
 
 /**
+ * The general accessories lines a supplier writes when it has not decided what something is.
+ *
+ * A Type this broad is a filing cabinet rather than a claim, so a product inside one can be read
+ * and filed properly. A Type that names something specific is believed instead.
+ */
+const GENERIC_ACCESSORY_TYPES = new Set<string>([
+  "Ski Accessories",
+  "Other Ski Accessories",
+  "Alpine Touring Accessories",
+  "Cross-Country Accessories",
+  "Backcountry Gear",
+  "Other Back-Country Gear",
+]);
+
+const SKIN = /\bskins?\b/i;
+
+/**
+ * A skin itself, rather than the gear that maintains one.
+ *
+ * Suppliers file skins wherever they like — a Pomoca line arrives as "Ski Accessories" as often as
+ * "Skins" — and a skin filed that way reached no shelf at all. So the product is read rather than
+ * trusted to its invoice Type. Gear *for* skins is a different shelf and is tested first, so a skin
+ * cutter never comes back as a skin, and a Type that already names something specific is left alone
+ * rather than overruled by the word appearing in a description.
+ */
+export function isSkin(describedAs?: string, type?: string): boolean {
+  if (!describedAs?.trim() || isSkinAccessory(describedAs)) return false;
+  if (!SKIN.test(describedAs)) return false;
+  const resolved = resolveType(type ?? "") ?? (type ?? "").trim();
+  if (!resolved) return true;
+  if (resolved === "Skins" || resolved === "Climbing Skins") return true;
+  return GENERIC_ACCESSORY_TYPES.has(resolved) || !isValidType(resolved);
+}
+
+/** The Type a skin should really have been given, when the invoice filed it somewhere general. */
+export function skinType(input: Pick<TagInput, "type" | "describedAs">): "Skins" | undefined {
+  const resolved = resolveType(input.type) ?? input.type.trim();
+  if (resolved === "Skins" || resolved === "Climbing Skins") return undefined; // already right
+  return isSkin(input.describedAs, input.type) ? "Skins" : undefined;
+}
+
+/**
  * The tags that put a product on a second shelf beyond the one its Type names.
  *
  * A touring boot arrives by either route — as a "Touring Boots" type, or as a generic "Ski Boots"
@@ -163,7 +205,9 @@ export function crossShelfTags(type: string, alreadyTagged: string[] = []): stri
   if (resolved === "Touring Boots" || alreadyTagged.includes("touring-boots")) {
     out.push(SKI_BOOT_SHELF_TAG, BACKCOUNTRY_BOOT_TAG);
   }
-  if (resolved === "Skins" || resolved === "Climbing Skins") out.push(...SKIN_TAGS);
+  // The two menu links — Skins under Alpine Touring, Climbing Skins under Backcountry Gear — open
+  // the same page, so a skin carries every name that page is reached by whichever way it was filed.
+  if (resolved === "Skins" || resolved === "Climbing Skins") out.push(...SKIN_TAGS, "climbing-skins");
   // The touring and cross-country shelf is one page for both, so a cross-country ski belongs on
   // it as surely as a touring ski does.
   if (resolved === "Cross-Country Skis") out.push(TOURING_SKI_TAG);
@@ -177,6 +221,8 @@ export function crossShelfTags(type: string, alreadyTagged: string[] = []): stri
   return out;
 }
 
+const SNOW_BAG = /\b(ski|snowboard|board|boot)\b/i;
+
 export const BAG_TAGS = ["snow-bags", "snowboard-bags", "ski-and-boot-bags", "ski-and-snowboard-bags"] as const;
 
 export function bagTags(type: string, describedAs?: string): string[] {
@@ -186,6 +232,15 @@ export function bagTags(type: string, describedAs?: string): string[] {
   const looksLikeBag = /\bbags?\b/i.test(resolved) || (!!describedAs?.trim() && accessoryKind(describedAs) === "bags");
 
   if (!looksLikeBag) return [];
+
+  // These are the snow shelves. A sleeping bag is a bag and a duffel holds a week of clothes, but
+  // neither belongs beside the board bags — the word in the Type is not what puts it there, the
+  // menu the product sits in is. An unrecognised Type has no menu, so the product is read instead.
+  const sections = TYPE_SECTIONS[resolved] ?? [];
+  const snow = sections.some((s) => s === "Ski" || s === "Snowboard");
+  if (!snow && sections.length > 0) return [];
+  if (!snow && !SNOW_BAG.test(`${resolved} ${describedAs ?? ""}`)) return [];
+
   return [...BAG_TAGS];
 }
 
@@ -412,7 +467,7 @@ export function generalTags(input: TagInput, settings: TaggingSettings = DEFAULT
     if (tag && !tags.some((t) => t.toLowerCase() === tag.toLowerCase())) tags.push(tag);
   };
 
-  const type = bindingType(input) ?? resolveType(input.type) ?? input.type.trim();
+  const type = bindingType(input) ?? skinType(input) ?? resolveType(input.type) ?? input.type.trim();
   if (type) push(TAG_SPELLING[type] ?? slugTag(type));
 
   // A Type can sit under two menus — Goggles under both Ski and Snowboard — so an explicit

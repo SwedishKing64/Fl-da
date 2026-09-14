@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { BACKCOUNTRY_BINDING_TAG, BACKCOUNTRY_BOOT_TAG, BOARD_DISCIPLINES, crossShelfTags, DEFAULT_TAGGING, EVERGREEN_SEASON, SKI_DISCIPLINES, BAG_TAGS, MANUAL_SEASON, TOURING_SKI_TAG, bagTags, clothingContextTags, isSkinAccessory, bindingType, bootTags, disciplinesFor, snowboardBindingTags, needsBindingKind, TAG_SPELLING, generalTags, isHardgood, isManualTag, isNotOurs, isNotLearnable, isRuleGenerated, isShopifyGenerated, needsSectionChoice, normaliseGenders, seasonFor, slugTag, withoutGenerated } from "./tagging";
+import { BACKCOUNTRY_SHELF_TAGS, isBackcountryShelf, BACKCOUNTRY_BINDING_TAG, BACKCOUNTRY_BOOT_TAG, BOARD_DISCIPLINES, crossShelfTags, DEFAULT_TAGGING, EVERGREEN_SEASON, SKI_DISCIPLINES, BAG_TAGS, MANUAL_SEASON, TOURING_SKI_TAG, bagTags, clothingContextTags, isSkinAccessory, bindingType, bootTags, disciplinesFor, snowboardBindingTags, needsBindingKind, TAG_SPELLING, generalTags, isHardgood, isManualTag, isNotOurs, isNotLearnable, isRuleGenerated, isShopifyGenerated, needsSectionChoice, normaliseGenders, seasonFor, slugTag, withoutGenerated } from "./tagging";
+import { ALPSPORT_TAXONOMY } from "./taxonomy";
 
 describe("the six general tags", () => {
   it("writes them in the shop's order: type, section, season, house, vendor, gender", () => {
@@ -504,6 +505,45 @@ describe("reaching a backcountry shelf takes the section too", () => {
       .not.toContain("backcountry");
     expect(generalTags({ type: "Ski Boots", vendor: "Atomic", genders: ["mens"], describedAs: "Atomic Hawx Ultra 100" }))
       .not.toContain("backcountry");
+  });
+});
+
+describe("every backcountry shelf carries its section", () => {
+  /**
+   * The section does not come from the menu someone filed the product under — it comes from the
+   * shelf the product lands on. A skin filed under Ski is still on a Backcountry page, and without
+   * the section tag that page never shows it.
+   */
+  it("covers every shelf in the Backcountry menu", () => {
+    const backcountry = ALPSPORT_TAXONOMY.find((s) => s.top === "Backcountry")!;
+    for (const group of backcountry.groups) {
+      for (const leaf of group.leaves) {
+        const tags = generalTags({ type: leaf, vendor: "Test", genders: [] });
+        expect(tags, leaf).toContain("backcountry");
+      }
+    }
+  });
+
+  it("keeps the section when a touring product is filed under Ski", () => {
+    for (const type of ["Skins", "Climbing Skins", "Alpine Touring Accessories", "Alpine Touring Skis"]) {
+      const tags = generalTags({ type, vendor: "Pomoca", genders: [], section: "Ski" });
+      expect(tags, type).toContain("ski");
+      expect(tags, type).toContain("backcountry");
+    }
+  });
+
+  it("reads the whole menu, not just the alpine-touring prefix", () => {
+    expect(crossShelfTags("Skins")).toContain("backcountry");
+    expect(isBackcountryShelf("skins")).toBe(true);
+    expect(isBackcountryShelf("avalanche-equipment")).toBe(true);
+    expect(isBackcountryShelf("back-country-gear")).toBe(true);
+    expect(BACKCOUNTRY_SHELF_TAGS.has("backcountry-gear")).toBe(false); // the live spelling is hyphenated
+  });
+
+  it("leaves the resort shelves out of it", () => {
+    for (const tag of ["alpine-bindings", "ski-boots", "snow-jackets", "goggles", "snowboard-bags"]) {
+      expect(isBackcountryShelf(tag), tag).toBe(false);
+    }
   });
 });
 

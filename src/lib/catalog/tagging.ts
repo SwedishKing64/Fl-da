@@ -170,8 +170,10 @@ export function crossShelfTags(type: string, alreadyTagged: string[] = []): stri
   // A touring ski reaches backcountry whether it was typed as one or arrived as an ordinary ski
   // whose discipline says it tours.
   if (resolved === "Touring Skis" || alreadyTagged.includes("touring-skis")) out.push(BACKCOUNTRY_SKI_TAG);
-  // Anything that reached a backcountry shelf needs the section to go with it.
-  if (out.some((t) => t.startsWith("alpine-touring-"))) out.push(BACKCOUNTRY_SECTION_TAG);
+  // Anything that reached a backcountry shelf needs the section to go with it. Skins are a
+  // backcountry shelf as surely as the touring bindings are, so this reads the whole menu rather
+  // than the alpine-touring prefix.
+  if (out.some(isBackcountryShelf)) out.push(BACKCOUNTRY_SECTION_TAG);
   return out;
 }
 
@@ -449,10 +451,12 @@ export function generalTags(input: TagInput, settings: TaggingSettings = DEFAULT
   for (const tag of crossShelfTags(type, [...boots, ...disciplineTags])) push(tag);
 
   // Skin gear sits in three places at once, wherever the invoice happened to file it.
-  if (isSkinAccessory(input.describedAs)) {
-    for (const tag of SKIN_ACCESSORY_TAGS) push(tag);
-    push(BACKCOUNTRY_SECTION_TAG);
-  }
+  if (isSkinAccessory(input.describedAs)) for (const tag of SKIN_ACCESSORY_TAGS) push(tag);
+
+  // A backcountry shelf always carries the backcountry section, however the product reached the
+  // shelf: from its own Type, from a cross-shelf rule, or as skin gear. Filing a touring product
+  // under the Ski menu adds a section, it does not move it out of Backcountry.
+  if (tags.some(isBackcountryShelf)) push(BACKCOUNTRY_SECTION_TAG);
 
   return tags;
 }
@@ -477,3 +481,23 @@ export function needsSectionChoice(type: string): boolean {
 }
 
 export const KNOWN_TYPES = PRODUCT_TYPES;
+
+/**
+ * Every shelf that lives under the Backcountry menu, by the tag that reaches it.
+ *
+ * A shelf tag on its own names a page inside a section the product is not in, so it never appears
+ * there. These are the tags that oblige a product to carry the section as well — whichever menu
+ * the product was filed under, and whichever route it took to the shelf.
+ */
+export const BACKCOUNTRY_SHELF_TAGS: ReadonlySet<string> = new Set<string>([
+  ...(ALPSPORT_TAXONOMY.find((s) => s.top === "Backcountry")?.groups.flatMap((g) => [
+    TAG_SPELLING[g.heading] ?? slugTag(g.heading),
+    ...g.leaves.map((leaf) => TAG_SPELLING[leaf] ?? slugTag(leaf)),
+  ]) ?? []),
+  ...SKIN_TAGS,
+  TOURING_SKI_TAG,
+]);
+
+export function isBackcountryShelf(tag: string): boolean {
+  return BACKCOUNTRY_SHELF_TAGS.has(slugTag(tag));
+}

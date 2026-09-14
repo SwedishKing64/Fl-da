@@ -157,6 +157,25 @@ export const TYPE_PARENTS: Record<string, string[]> = (() => {
   return Object.fromEntries(Object.entries(out).map(([k, v]) => [k, [...v]]));
 })();
 
+/**
+ * The two clothing headings that say what a garment is *for* rather than who wears it. A snow
+ * jacket sits under Snow Clothing, a hiking sock under Outdoor Clothing, and the catalogue tags
+ * the heading alongside the garment — Burton's snow jackets all carry snow-clothing.
+ *
+ * The menu settles this for all but one garment: Midlayers appears under both.
+ */
+export const CLOTHING_CONTEXTS = ["Snow Clothing", "Outdoor Clothing"] as const;
+
+/** The context headings a garment sits under. Empty for one the menu does not place. */
+export function clothingContextsFor(type: string): string[] {
+  const resolved = resolveType(type) ?? type.trim();
+  const clothing = ALPSPORT_TAXONOMY.find((s) => s.top === "Clothing");
+  if (!clothing) return [];
+  return clothing.groups
+    .filter((g) => (CLOTHING_CONTEXTS as readonly string[]).includes(g.heading) && g.leaves.includes(resolved))
+    .map((g) => g.heading);
+}
+
 /** heading → its sub-links, kept whole so the UI can show what sits under a group. */
 export const TYPE_LEAVES: Record<string, string[]> = Object.fromEntries(
   ALPSPORT_TAXONOMY.flatMap((s) => s.groups.map((g) => [g.heading, g.leaves] as const)),

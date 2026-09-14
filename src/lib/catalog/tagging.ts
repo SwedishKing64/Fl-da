@@ -10,7 +10,7 @@
  * vendor in lower case; the fourteen products with no gender tag are exactly the unisex ones.
  */
 
-import { ALPSPORT_TAXONOMY, PRODUCT_TYPES, TYPE_SECTIONS, resolveType } from "./taxonomy";
+import { ALPSPORT_TAXONOMY, PRODUCT_TYPES, TYPE_SECTIONS, clothingContextsFor, resolveType } from "./taxonomy";
 import { classifyBinding, classifySnowboardBinding, type BindingKind } from "./bindings";
 import { classifySkiBoot, classifySnowboardBoot } from "./boots";
 import { accessoryKind } from "./accessories";
@@ -185,6 +185,22 @@ export function snowboardBindingTags(type: string, describedAs?: string): string
   return [classifySnowboardBinding(describedAs).tag];
 }
 
+/**
+ * Whether a garment is snow kit or outdoor kit, tagged alongside the garment itself.
+ *
+ * The menu settles it for every garment but one: a snow jacket only ever appears under Snow
+ * Clothing, a hiking sock only under Outdoor Clothing. Midlayers appears under both, so that one
+ * needs telling — and defaults to snow, which is what this shop mostly sells and what its own
+ * midlayers are tagged.
+ */
+export function clothingContextTags(type: string, told?: string): string[] {
+  const contexts = clothingContextsFor(type);
+  if (contexts.length === 0) return [];
+  if (contexts.length === 1) return [slugTag(contexts[0])];
+  const wanted = contexts.find((c) => slugTag(c) === slugTag(told ?? ""));
+  return [slugTag(wanted ?? "Snow Clothing")];
+}
+
 /** The package tag for a board or ski sold with a binding on it. */
 function packageTagFor(type: string): string {
   const resolved = resolveType(type) ?? type.trim();
@@ -219,6 +235,8 @@ export interface TagInput {
   genders: Gender[];
   /** Which menu this product is being filed under, when its Type sits in more than one. */
   section?: string;
+  /** "Snow Clothing" or "Outdoor Clothing", for the one garment the menu places under both. */
+  clothingContext?: string;
   /** Overrides the season entirely, for old stock or a pre-season buy out of step. */
   year?: number;
 }
@@ -394,6 +412,8 @@ export function generalTags(input: TagInput, settings: TaggingSettings = DEFAULT
   for (const gender of normaliseGenders(input.genders)) push(gender);
 
   if (input.withBindings) push(TAG_SPELLING[packageTagFor(type)] ?? slugTag(packageTagFor(type)));
+
+  for (const tag of clothingContextTags(type, input.clothingContext)) push(tag);
 
   const boots = bootTags(type, input.describedAs);
   for (const tag of bagTags(type, input.describedAs)) push(tag);

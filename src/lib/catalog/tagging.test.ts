@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BACKCOUNTRY_BINDING_TAG, BACKCOUNTRY_BOOT_TAG, BOARD_DISCIPLINES, crossShelfTags, DEFAULT_TAGGING, EVERGREEN_SEASON, SKI_DISCIPLINES, BAG_TAGS, MANUAL_SEASON, TOURING_SKI_TAG, bagTags, bindingType, bootTags, disciplinesFor, snowboardBindingTags, needsBindingKind, TAG_SPELLING, generalTags, isHardgood, isManualTag, isNotOurs, isNotLearnable, isRuleGenerated, isShopifyGenerated, needsSectionChoice, normaliseGenders, seasonFor, slugTag, withoutGenerated } from "./tagging";
+import { BACKCOUNTRY_BINDING_TAG, BACKCOUNTRY_BOOT_TAG, BOARD_DISCIPLINES, crossShelfTags, DEFAULT_TAGGING, EVERGREEN_SEASON, SKI_DISCIPLINES, BAG_TAGS, MANUAL_SEASON, TOURING_SKI_TAG, bagTags, clothingContextTags, bindingType, bootTags, disciplinesFor, snowboardBindingTags, needsBindingKind, TAG_SPELLING, generalTags, isHardgood, isManualTag, isNotOurs, isNotLearnable, isRuleGenerated, isShopifyGenerated, needsSectionChoice, normaliseGenders, seasonFor, slugTag, withoutGenerated } from "./tagging";
 
 describe("the six general tags", () => {
   it("writes them in the shop's order: type, section, season, house, vendor, gender", () => {
@@ -84,6 +84,7 @@ describe("clothing", () => {
       "123abc-js",
       "burton",
       "womens",
+      "snow-clothing",
     ]);
   });
 
@@ -611,5 +612,35 @@ describe("tags the rules work out for themselves", () => {
     // Still written by the rule, on the products it genuinely belongs to.
     expect(generalTags({ type: "Cross-Country Skis", vendor: "Fischer", genders: [] }))
       .toContain("touring-and-cross-country-ski");
+  });
+});
+
+describe("whether a garment is snow kit or outdoor kit", () => {
+  /** The Ortovox Ortler: a snow jacket carries snow-clothing beside snow-jackets. */
+  it("tags the context heading alongside the garment", () => {
+    const tags = generalTags({ type: "Snow Jackets", vendor: "Ortovox", genders: ["mens"], section: "Clothing" });
+    expect(tags).toContain("snow-jackets");
+    expect(tags).toContain("snow-clothing");
+  });
+
+  it("reads it off the menu, which places all but one garment", () => {
+    expect(clothingContextTags("Snow Pants")).toEqual(["snow-clothing"]);
+    expect(clothingContextTags("Baselayers")).toEqual(["snow-clothing"]);
+    expect(clothingContextTags("Headwear")).toEqual(["snow-clothing"]);
+    expect(clothingContextTags("Down Jackets")).toEqual(["outdoor-clothing"]);
+    expect(clothingContextTags("Rainwear")).toEqual(["outdoor-clothing"]);
+    expect(clothingContextTags("Hiking Socks")).toEqual(["outdoor-clothing"]);
+  });
+
+  it("takes telling for the one garment the menu places under both", () => {
+    expect(clothingContextTags("Midlayers")).toEqual(["snow-clothing"]); // the shop's default
+    expect(clothingContextTags("Midlayers", "Outdoor Clothing")).toEqual(["outdoor-clothing"]);
+  });
+
+  it("adds nothing for a garment the menu gives no context, or for anything else", () => {
+    expect(clothingContextTags("Socks")).toEqual([]);
+    expect(clothingContextTags("Gloves")).toEqual([]);
+    expect(clothingContextTags("Snowboards")).toEqual([]);
+    expect(clothingContextTags("Ski Boots")).toEqual([]);
   });
 });

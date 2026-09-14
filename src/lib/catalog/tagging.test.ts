@@ -91,7 +91,9 @@ describe("clothing", () => {
     expect(generalTags({ type: "Snow Pants", vendor: "Burton", genders: ["mens"], section: "Clothing" })).toContain("snow-pants");
     expect(generalTags({ type: "Down Jackets", vendor: "Burton", genders: ["womens"], section: "Clothing" })).toContain("down-jackets");
     expect(generalTags({ type: "Rainwear", vendor: "Burton", genders: ["mens"], section: "Clothing" })).toContain("rainwear");
-    expect(TAG_SPELLING).toEqual({});
+    // No garment needs a pinned spelling; the map holds only the one heading whose live tag
+    // differs from its menu name.
+    expect(Object.keys(TAG_SPELLING)).toEqual(["Backcountry Gear"]);
   });
 
   it("tags a kids item kids, with no gender beside it", () => {

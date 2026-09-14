@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BACKCOUNTRY_BINDING_TAG, BACKCOUNTRY_BOOT_TAG, BOARD_DISCIPLINES, crossShelfTags, DEFAULT_TAGGING, EVERGREEN_SEASON, SKI_DISCIPLINES, BAG_TAGS, MANUAL_SEASON, TOURING_SKI_TAG, bagTags, bindingType, bootTags, disciplinesFor, snowboardBindingTags, needsBindingKind, TAG_SPELLING, generalTags, isHardgood, isManualTag, isNotOurs, isShopifyGenerated, needsSectionChoice, normaliseGenders, seasonFor, slugTag, withoutGenerated } from "./tagging";
+import { BACKCOUNTRY_BINDING_TAG, BACKCOUNTRY_BOOT_TAG, BOARD_DISCIPLINES, crossShelfTags, DEFAULT_TAGGING, EVERGREEN_SEASON, SKI_DISCIPLINES, BAG_TAGS, MANUAL_SEASON, TOURING_SKI_TAG, bagTags, bindingType, bootTags, disciplinesFor, snowboardBindingTags, needsBindingKind, TAG_SPELLING, generalTags, isHardgood, isManualTag, isNotOurs, isNotLearnable, isRuleGenerated, isShopifyGenerated, needsSectionChoice, normaliseGenders, seasonFor, slugTag, withoutGenerated } from "./tagging";
 
 describe("the six general tags", () => {
   it("writes them in the shop's order: type, section, season, house, vendor, gender", () => {
@@ -154,7 +154,9 @@ describe("tags a person applies by hand", () => {
   it("treats Shopify's and the shop's own hand-applied tags as equally off limits", () => {
     expect(isNotOurs("size-medium")).toBe(true);
     expect(isNotOurs("clearance")).toBe(true);
+    // A garment tag is the importer's to write, even though a template must not learn it.
     expect(isNotOurs("snow-jackets")).toBe(false);
+    expect(isNotLearnable("snow-jackets")).toBe(true);
   });
 
   it("never writes one itself", () => {
@@ -581,5 +583,33 @@ describe("backcountry gear", () => {
     expect(tags).not.toContain("backcountry-gear");
     expect(tags).toContain("backcountry");
     expect(tags).toContain("backcountry-access");
+  });
+});
+
+describe("tags the rules work out for themselves", () => {
+  it("recognises every family the rules produce", () => {
+    for (const tag of ["snowboard-boots", "ski", "backcountry", "2026", "mens", "123abc-js", "123abc-zb",
+      "step-on-boots", "alpine-touring-bindings", "snow-bags", "ski-packages", "boa-ski-boots", "skins"]) {
+      expect(isRuleGenerated(tag), tag).toBe(true);
+    }
+  });
+
+  it("leaves alone what the rules do not produce", () => {
+    for (const tag of ["shovels", "snow-clothing", "bonus10", "some-brand-thing"]) {
+      expect(isRuleGenerated(tag), tag).toBe(false);
+    }
+  });
+
+  /**
+   * The reason this matters: an avalanche export carried "touring and cross-country ski" on
+   * sixteen of seventeen products, which is drift rather than a rule. Learning it would have put
+   * it on every future probe and shovel.
+   */
+  it("keeps drift out of what a template learns", () => {
+    expect(isNotLearnable("touring and cross-country ski")).toBe(true);
+    expect(isNotLearnable("touring-and-cross-country-ski")).toBe(true);
+    // Still written by the rule, on the products it genuinely belongs to.
+    expect(generalTags({ type: "Cross-Country Skis", vendor: "Fischer", genders: [] }))
+      .toContain("touring-and-cross-country-ski");
   });
 });

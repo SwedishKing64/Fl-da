@@ -31,8 +31,8 @@ describe("learning a template from a Shopify export", () => {
   });
 
   it("keeps the tags on most products and drops the occasional one", () => {
-    // Written in the house spelling, not whatever capitalisation the export happened to use.
-    expect(analysis.commonTags).toEqual(expect.arrayContaining(["skis", "atomic", "2026"]));
+    // The rules work out skis, atomic and 2026 for themselves, so only what they cannot is learned.
+    expect(analysis.commonTags).toEqual(["all-mountain"]);
     expect(analysis.commonTags).not.toContain("freeride");
     expect(analysis.tagCounts.find((t) => t.tag === "freeride")?.count).toBe(1);
     expect(analysis.tagCounts.find((t) => t.tag === "all-mountain")?.count).toBe(2);
@@ -173,8 +173,10 @@ describe("splitting a whole-catalogue export", () => {
   it("learns each range separately rather than blending them", () => {
     const skis = groups.find((g) => g.productType === "Skis")!.analysis;
     const boots = groups.find((g) => g.productType === "Ski Boots")!.analysis;
-    expect(skis.commonTags).toEqual(expect.arrayContaining(["skis", "atomic"]));
-    expect(skis.commonTags).not.toContain("boots");
+    // The rules produce every tag the skis carry, so there is nothing left to learn from them.
+    expect(skis.commonTags).toEqual([]);
+    // The boots carry one the rules do not produce, and that is exactly what a template is for.
+    expect(boots.commonTags).toEqual(["boots"]);
     expect(skis.optionNames).toEqual(["Length"]);
     expect(boots.optionNames).toEqual(["Size"]);
     expect(boots.collections).toEqual(["Ski Boots"]);
@@ -215,9 +217,9 @@ describe("the guidance a person writes", () => {
 describe("learned tags are written in the house spelling", () => {
   const OLD = [
     `Handle,Title,Vendor,Type,Tags,Variant SKU`,
-    `a,Wax One,Swix,Ski Accessories,"ski tuning, ski, Swix",S1`,
-    `b,Wax Two,Swix,Ski Accessories,"ski tuning, ski, Swix",S2`,
-    `c,Wax Three,Swix,Ski Accessories,"ski tuning, ski, Swix",S3`,
+    `a,Wax One,Swix,Ski Accessories,"Race Room Service, ski, Swix",S1`,
+    `b,Wax Two,Swix,Ski Accessories,"Race Room Service, ski, Swix",S2`,
+    `c,Wax Three,Swix,Ski Accessories,"Race Room Service, ski, Swix",S3`,
   ].join("\n");
 
   /**
@@ -227,13 +229,13 @@ describe("learned tags are written in the house spelling", () => {
    */
   it("hyphenates a spaced tag it read from an old export", () => {
     const { groups } = analyseShopifyCsvGroups(OLD);
-    expect(groups[0].analysis.commonTags).toContain("ski-tuning");
-    expect(groups[0].analysis.commonTags).not.toContain("ski tuning");
+    expect(groups[0].analysis.commonTags).toContain("race-room-service");
+    expect(groups[0].analysis.commonTags).not.toContain("Race Room Service");
   });
 
-  it("leaves an already-correct tag alone", () => {
+  it("drops the vendor and the section, which the rules produce anyway", () => {
     const { groups } = analyseShopifyCsvGroups(OLD);
-    expect(groups[0].analysis.commonTags).toContain("swix");
-    expect(groups[0].analysis.commonTags).toContain("ski");
+    expect(groups[0].analysis.commonTags).not.toContain("swix");
+    expect(groups[0].analysis.commonTags).not.toContain("ski");
   });
 });

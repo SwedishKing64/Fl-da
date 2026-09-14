@@ -10,7 +10,7 @@
  */
 
 import { parseCsv } from "./csv";
-import { isNotOurs, slugTag } from "./tagging";
+import { isNotLearnable, slugTag } from "./tagging";
 
 export interface TemplateAnalysis {
   productCount: number;
@@ -178,7 +178,7 @@ function readProducts(text: string): { products: ProductRecord[]; warnings: stri
       // to contain. Older products spell these with spaces — "ski tuning", "freestyle and
       // all-mountain boards" — and a learned template repeating that would put a second, almost
       // identical tag on every new product beside the hyphenated one the importer writes.
-      tags: [...new Set(splitList(cell(iTags)).map(slugTag))].filter((tag) => tag && !isNotOurs(tag)),
+      tags: [...new Set(splitList(cell(iTags)).map(slugTag))].filter((tag) => tag && !isNotLearnable(tag)),
       collections: [...new Set(splitList(cell(iCollection)))],
       optionNames: optionNameCols.map(cell).filter((n) => n && norm(n) !== "title"),
       metafields,
@@ -230,6 +230,11 @@ function analyseProducts(products: ProductRecord[], warnings: string[]): Templat
     const winner = dominantValue(values, productCount, DOMINANT_VALUE);
     if (winner) metafields[key] = winner;
   }
+
+  // The vendor tag is worked out from the product's own Vendor field, so learning it is circular:
+  // it would be applied to exactly the products that already produce it.
+  const vendorTag = norm(dominantValue(vendors, productCount)).replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  for (const [tag] of tagCounts) if (norm(tag).replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") === vendorTag) tagCounts.delete(tag);
 
   const commonTags = [...tagCounts.entries()]
     .filter(([, count]) => count / productCount >= DOMINANT)

@@ -306,11 +306,63 @@ export function isManualTag(tag: string): boolean {
 }
 
 /**
- * Everything the importer must neither write nor learn: Shopify's own derived tags, and the ones
- * staff apply by hand. Tags already on a product are left alone — a person put them there.
+ * Tags the rules work out for themselves from a product's own fields.
+ *
+ * These must never be learned from an export. The rule already applies each one to the products it
+ * belongs on; learning it takes one product's answer and stamps it on every product of the brand.
+ * An avalanche export carrying "touring and cross-country ski" on sixteen of seventeen products —
+ * drift, not a rule — would otherwise teach the importer to put it on every probe and shovel.
+ */
+export function isRuleGenerated(tag: string): boolean {
+  const value = slugTag(tag);
+  if (!value) return false;
+  if (/^(19|20)\d{2}$/.test(value)) return true; // a season
+  if (["mens", "womens", "kids"].includes(value)) return true;
+  // The house marker by shape, since the suffix varies with whoever built the product.
+  if (/^123abc-/.test(value)) return true;
+  if (["ski", "snowboard", "clothing", "backcountry", "outdoor"].includes(value)) return true;
+  if (RULE_TAGS.has(value)) return true;
+  return PRODUCT_TYPES.some((t) => slugTag(TAG_SPELLING[t] ?? t) === value);
+}
+
+/** The tags the rules add beyond a product's Type: shelves, packages, closures and disciplines. */
+const RULE_TAGS = new Set<string>([
+  ...BAG_TAGS,
+  ...SKIN_TAGS,
+  TOURING_SKI_TAG,
+  BACKCOUNTRY_BINDING_TAG,
+  BACKCOUNTRY_BOOT_TAG,
+  BACKCOUNTRY_SKI_TAG,
+  SKI_BINDING_SHELF_TAG,
+  SKI_BOOT_SHELF_TAG,
+  "ski-packages",
+  "snowboard-packages",
+  "step-on-boots",
+  "traditional-boots",
+  "step-on-bindings",
+  "traditional-bindings",
+  "alpine-boots",
+  "race-boots",
+  "touring-boots",
+  "buckle-ski-boots",
+  "boa-ski-boots",
+]);
+
+/**
+ * Tags the importer must never write: Shopify derives its own, and staff apply theirs by hand.
+ * Tags already on a product are left alone — a person put them there.
  */
 export function isNotOurs(tag: string): boolean {
   return isShopifyGenerated(tag) || isManualTag(tag);
+}
+
+/**
+ * Tags a template must never learn. Everything the importer will not write, plus everything the
+ * rules already work out per product — learning one of those takes a single product's answer and
+ * stamps it on every product of the brand.
+ */
+export function isNotLearnable(tag: string): boolean {
+  return isNotOurs(tag) || isRuleGenerated(tag);
 }
 
 export const slugTag = (value: string): string =>

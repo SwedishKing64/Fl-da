@@ -111,6 +111,7 @@ export const TOURING_SKI_TAG = "touring-and-cross-country-ski";
  * puts it on the Backcountry shelf as well.
  */
 export const BACKCOUNTRY_BINDING_TAG = "alpine-touring-bindings";
+export const SKI_BINDING_SHELF_TAG = "ski-bindings";
 
 /**
  * The same for boots. A touring boot belongs in both sections of the site, so it carries the ski
@@ -135,7 +136,7 @@ export const SKIN_TAGS = ["skin", "skins"] as const;
 export function crossShelfTags(type: string, alreadyTagged: string[] = []): string[] {
   const resolved = resolveType(type) ?? type.trim();
   const out: string[] = [];
-  if (resolved === "Touring Bindings") out.push(BACKCOUNTRY_BINDING_TAG);
+  if (resolved === "Touring Bindings") out.push(SKI_BINDING_SHELF_TAG, BACKCOUNTRY_BINDING_TAG);
   if (resolved === "Touring Boots" || alreadyTagged.includes("touring-boots")) {
     out.push(SKI_BOOT_SHELF_TAG, BACKCOUNTRY_BOOT_TAG);
   }

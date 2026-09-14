@@ -406,6 +406,13 @@ describe("touring bindings reach the backcountry shelf", () => {
     expect(tags).toContain(BACKCOUNTRY_BINDING_TAG);
   });
 
+  /** Both shelves, the same way a touring boot keeps the ski boot shelf. */
+  it("keeps the ski binding shelf as well as the backcountry one", () => {
+    expect(generalTags({ type: "Touring Bindings", vendor: "Dynafit", genders: [] })).toContain("ski-bindings");
+    expect(generalTags({ type: "Ski Binding", vendor: "ATK", genders: [], describedAs: "ATK Raider 12 tech binding" }))
+      .toContain("ski-bindings");
+  });
+
   it("leaves an alpine binding on the ski side only", () => {
     const tags = generalTags({ type: "Ski Binding", vendor: "Marker", genders: [], describedAs: "Marker Griffon 13 ID" });
     expect(tags).toContain("alpine-bindings");

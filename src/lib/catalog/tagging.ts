@@ -123,6 +123,9 @@ export const BACKCOUNTRY_SECTION_TAG = "backcountry";
 export const BACKCOUNTRY_BOOT_TAG = "alpine-touring-boots";
 export const SKI_BOOT_SHELF_TAG = "ski-boots";
 
+/** And for the skis themselves, when one arrives as an ordinary ski that happens to tour. */
+export const BACKCOUNTRY_SKI_TAG = "alpine-touring-skis";
+
 /**
  * Skins appear twice in the menu — as Skins under Alpine Touring and as Climbing Skins under
  * Backcountry Gear — and carry both the singular and the plural, so either spelling finds them.
@@ -151,6 +154,9 @@ export function crossShelfTags(type: string, alreadyTagged: string[] = []): stri
   // The touring and cross-country shelf is one page for both, so a cross-country ski belongs on
   // it as surely as a touring ski does.
   if (resolved === "Cross-Country Skis") out.push(TOURING_SKI_TAG);
+  // A touring ski reaches backcountry whether it was typed as one or arrived as an ordinary ski
+  // whose discipline says it tours.
+  if (resolved === "Touring Skis" || alreadyTagged.includes("touring-skis")) out.push(BACKCOUNTRY_SKI_TAG);
   // Anything that reached a backcountry shelf needs the section to go with it.
   if (out.some((t) => t.startsWith("alpine-touring-"))) out.push(BACKCOUNTRY_SECTION_TAG);
   return out;
@@ -336,17 +342,22 @@ export function generalTags(input: TagInput, settings: TaggingSettings = DEFAULT
   const boots = bootTags(type, input.describedAs);
   for (const tag of bagTags(type, input.describedAs)) push(tag);
   for (const tag of boots) push(tag);
-  for (const tag of crossShelfTags(type, boots)) push(tag);
   for (const tag of snowboardBindingTags(type, input.describedAs)) push(tag);
 
   const allowed = disciplinesFor(type);
+  const disciplineTags: string[] = [];
   for (const discipline of input.disciplines ?? []) {
     const match = allowed.find((a) => slugTag(a) === slugTag(discipline));
     if (!match) continue;
-    push(TAG_SPELLING[match] ?? slugTag(match));
+    const tag = TAG_SPELLING[match] ?? slugTag(match);
+    disciplineTags.push(tag);
+    push(tag);
     // Touring skis also sit on the cross-country shelf, which is one page for both.
     if (match === "Touring Skis") push(TOURING_SKI_TAG);
   }
+
+  // Last, because what puts a product on a second shelf depends on everything decided above.
+  for (const tag of crossShelfTags(type, [...boots, ...disciplineTags])) push(tag);
 
   return tags;
 }

@@ -471,8 +471,9 @@ describe("climbing skins", () => {
     expect(generalTags({ type: "Climbing Skins", vendor: "Black Diamond", genders: [] })).toContain("climbing-skins");
   });
 
-  it("does not put them on anything else", () => {
-    expect(crossShelfTags("Touring Skis")).toEqual([]);
+  it("does not put the skin tags on anything else", () => {
+    // Touring skis reach backcountry, but not by being skins.
+    expect(crossShelfTags("Touring Skis")).not.toContain("skin");
     expect(crossShelfTags("Snow Jackets")).toEqual([]);
   });
 });
@@ -517,5 +518,55 @@ describe("the touring and cross-country shelf holds both", () => {
     expect(generalTags({ type: "Skis", vendor: "Volkl", genders: ["mens"], disciplines: ["Carving Skis"] }))
       .not.toContain(TOURING_SKI_TAG);
     expect(crossShelfTags("Cross-Country Boots")).toEqual([]);
+  });
+});
+
+describe("touring skis reach the backcountry shelf", () => {
+  it("tags a ski typed as an alpine touring ski", () => {
+    const tags = generalTags({ type: "Alpine Touring Skis", vendor: "Dynafit", genders: ["mens"] });
+    expect(tags).toContain("alpine-touring-skis");
+    expect(tags).toContain("backcountry");
+  });
+
+  /** The gap: a touring ski that arrives as an ordinary ski whose discipline says it tours. */
+  it("tags one arriving as an ordinary ski with a touring discipline", () => {
+    const tags = generalTags({ type: "Skis", vendor: "Volkl", genders: ["mens"], disciplines: ["Touring Skis"] });
+    expect(tags).toContain("skis");                          // still a ski
+    expect(tags).toContain("ski");                           // still in the Ski menu
+    expect(tags).toContain("touring-skis");
+    expect(tags).toContain(TOURING_SKI_TAG);                 // the cross-country shelf
+    expect(tags).toContain("alpine-touring-skis");           // and the backcountry one
+    expect(tags).toContain("backcountry");
+  });
+
+  it("leaves a carving ski out of backcountry", () => {
+    const tags = generalTags({ type: "Skis", vendor: "Volkl", genders: ["mens"], disciplines: ["Carving Skis"] });
+    expect(tags).not.toContain("alpine-touring-skis");
+    expect(tags).not.toContain("backcountry");
+  });
+
+  it("keeps alpine touring accessories on their own shelf", () => {
+    expect(generalTags({ type: "Alpine Touring Accessories", vendor: "Dynafit", genders: [] }))
+      .toContain("alpine-touring-accessories");
+  });
+});
+
+describe("backcountry gear and avalanche gear", () => {
+  /** Every shelf under these two headings is a Type, so its tag falls out of the Type rule. */
+  it("tags each shelf and puts it in the backcountry section", () => {
+    const shelves: Array<[string, string]> = [
+      ["Avalanche Equipment", "avalanche-equipment"],
+      ["Climbing Skins", "climbing-skins"],
+      ["Snow Packs", "snow-packs"],
+      ["Ice Tools", "ice-tools"],
+      ["Other Back-Country Gear", "other-back-country-gear"],
+      ["Snow Shovels and Ice Tools", "snow-shovels-and-ice-tools"],
+      ["Beacons and Probes", "beacons-and-probes"],
+    ];
+    for (const [type, tag] of shelves) {
+      const tags = generalTags({ type, vendor: "Black Diamond", genders: [] });
+      expect(tags, type).toContain(tag);
+      expect(tags, type).toContain("backcountry");
+    }
   });
 });

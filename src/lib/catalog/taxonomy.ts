@@ -111,6 +111,13 @@ export function isAccessoryHeading(heading: string): boolean {
 }
 
 /**
+ * Clothing headings that group by who wears it rather than what the garment is for. A jacket sits
+ * under Mens Clothing and under Snow Clothing; only the second says anything about the product, and
+ * only the second is ever written — all seventy of the shop's snow garments are typed Snow Clothing.
+ */
+const AUDIENCE_HEADINGS = new Set(["Mens Clothing", "Womens Clothing", "Kids Clothing"]);
+
+/**
  * Every valid value for the Shopify `Type` column.
  *
  * A group whose sub-links only split by audience contributes its heading ("Snowboard Boots"), and
@@ -121,9 +128,11 @@ export const PRODUCT_TYPES: string[] = (() => {
   const out: string[] = [];
   for (const section of ALPSPORT_TAXONOMY) {
     for (const group of section.groups) {
-      const kinds = group.leaves.filter((l) => !isAudienceLeaf(l));
-      if (kinds.length < group.leaves.length || isAccessoryHeading(group.heading)) out.push(group.heading);
-      for (const leaf of kinds) if (!out.includes(leaf)) out.push(leaf);
+      // Every heading is a Type: all 673 typed products in the shop's exports carry one. The
+      // sub-links stay resolvable too, since an invoice names them freely — they are mapped up to
+      // the heading they sit under rather than written to the column.
+      if (!AUDIENCE_HEADINGS.has(group.heading) && !out.includes(group.heading)) out.push(group.heading);
+      for (const leaf of group.leaves.filter((l) => !isAudienceLeaf(l))) if (!out.includes(leaf)) out.push(leaf);
     }
   }
   return out;
@@ -135,9 +144,8 @@ export const TYPE_SECTIONS: Record<string, string[]> = (() => {
   const add = (type: string, top: string) => { (out[type] ??= new Set()).add(top); };
   for (const section of ALPSPORT_TAXONOMY) {
     for (const group of section.groups) {
-      const kinds = group.leaves.filter((l) => !isAudienceLeaf(l));
-      if (kinds.length < group.leaves.length || isAccessoryHeading(group.heading)) add(group.heading, section.top);
-      for (const leaf of kinds) add(leaf, section.top);
+      if (!AUDIENCE_HEADINGS.has(group.heading)) add(group.heading, section.top);
+      for (const leaf of group.leaves.filter((l) => !isAudienceLeaf(l))) add(leaf, section.top);
     }
   }
   return Object.fromEntries(Object.entries(out).map(([k, v]) => [k, [...v]]));
@@ -182,13 +190,6 @@ export const TYPE_LEAVES: Record<string, string[]> = Object.fromEntries(
 );
 
 /**
- * Clothing headings that group by who wears it rather than what the garment is for. A jacket sits
- * under Mens Clothing and under Snow Clothing; only the second says anything about the product, and
- * only the second is ever written — all seventy of the shop's snow garments are typed Snow Clothing.
- */
-const AUDIENCE_HEADINGS = new Set(["Mens Clothing", "Womens Clothing", "Kids Clothing"]);
-
-/**
  * The heading a product is filed under — which is what the Shopify `Type` column holds.
  *
  * Every one of the 673 typed products in the shop's exports carries a heading there and not one
@@ -205,7 +206,12 @@ export function headingsFor(type: string): string[] {
   return (TYPE_PARENTS[resolved] ?? []).filter((h) => !AUDIENCE_HEADINGS.has(h));
 }
 
-const norm = (value: string) => value.trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+/**
+ * The menu draws an ampersand and the catalogue spells it out, so the two have to meet: without
+ * this, the shop's own Type values — "Packs and Bags", "Climbing and Abseiling" — fail to resolve
+ * back to the menu headings they came from, and a product re-read from an export loses its place.
+ */
+const norm = (value: string) => value.trim().toLowerCase().replace(/&/g, " and ").replace(/[^a-z0-9]+/g, " ").trim();
 
 /**
  * Spellings that appear in the existing catalogue but not in the menu. The site hyphenates

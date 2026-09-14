@@ -27,7 +27,8 @@ describe("the alpsport menu as a Type vocabulary", () => {
   it("takes the sub-link where it names a different kind of product", () => {
     expect(PRODUCT_TYPES).toContain("Synthetic Sleeping Bags");
     expect(PRODUCT_TYPES).toContain("Down Sleeping Bags");
-    expect(PRODUCT_TYPES).not.toContain("Sleeping Bags"); // no audience split, so the heading is not a Type
+    // Both are in the vocabulary: an invoice names the sub-link, the Type column holds the heading.
+    expect(PRODUCT_TYPES).toContain("Sleeping Bags");
   });
 
   it("says which menu a type is tagged into", () => {
@@ -75,9 +76,12 @@ describe("accessories keep their heading as the Type", () => {
     expect(PRODUCT_TYPES).toContain("Other Snowboard Accessories");
   });
 
-  it("does not turn every heading into a Type", () => {
-    expect(PRODUCT_TYPES).not.toContain("Sleeping Bags");
-    expect(PRODUCT_TYPES).not.toContain("Mens Clothing");
+  it("keeps the headings that group by audience out of the vocabulary", () => {
+    // A garment is typed Snow Clothing or Outdoor Clothing — what it is for — never Mens Clothing.
+    for (const heading of ["Mens Clothing", "Womens Clothing", "Kids Clothing"]) {
+      expect(PRODUCT_TYPES, heading).not.toContain(heading);
+    }
+    expect(PRODUCT_TYPES).toContain("Snow Clothing");
   });
 });
 

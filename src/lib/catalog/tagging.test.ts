@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BACKCOUNTRY_SHELF_TAGS, isBackcountryShelf, isSkin, skinType, sectionsFor, productTypeFor, headingTags, spellHeading, BACKCOUNTRY_BINDING_TAG, BACKCOUNTRY_BOOT_TAG, BOARD_DISCIPLINES, crossShelfTags, DEFAULT_TAGGING, EVERGREEN_SEASON, SKI_DISCIPLINES, BAG_TAGS, MANUAL_SEASON, TOURING_SKI_TAG, bagTags, clothingContextTags, isSkinAccessory, bindingType, bootTags, disciplinesFor, snowboardBindingTags, needsBindingKind, TAG_SPELLING, generalTags, isHardgood, isManualTag, isNotOurs, isNotLearnable, isRuleGenerated, isShopifyGenerated, needsSectionChoice, normaliseGenders, seasonFor, slugTag, withoutGenerated } from "./tagging";
-import { ALPSPORT_TAXONOMY } from "./taxonomy";
+import { ALPSPORT_TAXONOMY, resolveType } from "./taxonomy";
 
 describe("the six general tags", () => {
   it("writes them in the shop's order: type, section, season, house, vendor, gender", () => {
@@ -81,7 +81,7 @@ describe("the six general tags", () => {
 describe("clothing", () => {
   it("tags a womens snow jacket with gender and garment", () => {
     expect(generalTags({ type: "Snow Jackets", vendor: "Burton", genders: ["womens"], section: "Clothing" })).toEqual([
-      "snow-jackets",
+      "snow jackets",
       "snow-clothing",
       "clothing",
       "2026",
@@ -92,12 +92,14 @@ describe("clothing", () => {
   });
 
   it("hyphenates every garment name", () => {
-    expect(generalTags({ type: "Snow Pants", vendor: "Burton", genders: ["mens"], section: "Clothing" })).toContain("snow-pants");
+    expect(generalTags({ type: "Snow Pants", vendor: "Burton", genders: ["mens"], section: "Clothing" })).toContain("snow pants");
     expect(generalTags({ type: "Down Jackets", vendor: "Burton", genders: ["womens"], section: "Clothing" })).toContain("down-jackets");
     expect(generalTags({ type: "Rainwear", vendor: "Burton", genders: ["mens"], section: "Clothing" })).toContain("rainwear");
-    // No garment needs a pinned spelling; the map holds only the one heading whose live tag
-    // differs from its menu name.
-    expect(Object.keys(TAG_SPELLING)).toEqual(["Backcountry Gear"]);
+    // The spellings are not a rule to be derived but a record of what the catalogue contains, so
+    // the map holds one entry per shelf the shop spells differently from its menu name.
+    expect(TAG_SPELLING["Snow Jackets"]).toBe("snow jackets");
+    expect(TAG_SPELLING["Backcountry Gear"]).toBe("back-country-gear");
+    expect(TAG_SPELLING["Trekking Poles"]).toBeUndefined(); // hyphenated live, so the slug is right
   });
 
   it("tags a kids item kids, with no gender beside it", () => {
@@ -121,7 +123,7 @@ describe("tags Shopify maintains for itself", () => {
   });
 
   it("leaves the shop's own tags alone", () => {
-    for (const tag of ["snow-jackets", "burton", "2026", "123abc-js", "mens", "clearance", "snow-sale"]) {
+    for (const tag of ["snow jackets", "burton", "2026", "123abc-js", "mens", "clearance", "snow-sale"]) {
       expect(isShopifyGenerated(tag), tag).toBe(false);
     }
   });
@@ -132,8 +134,8 @@ describe("tags Shopify maintains for itself", () => {
   });
 
   it("strips them from a list in one go", () => {
-    expect(withoutGenerated(["snow-jackets", "size-medium", "burton", "500-600", "colour-true-black"]))
-      .toEqual(["snow-jackets", "burton"]);
+    expect(withoutGenerated(["snow jackets", "size-medium", "burton", "500-600", "colour-true-black"]))
+      .toEqual(["snow jackets", "burton"]);
   });
 
   it("never writes one itself", () => {
@@ -150,7 +152,7 @@ describe("tags a person applies by hand", () => {
   });
 
   it("does not mistake a product tag for a promotion", () => {
-    for (const tag of ["snow-jackets", "snowboards", "burton", "mens", "2026", "snow-socks"]) {
+    for (const tag of ["snow jackets", "snowboards", "burton", "mens", "2026", "snow-socks"]) {
       expect(isManualTag(tag), tag).toBe(false);
     }
   });
@@ -159,8 +161,8 @@ describe("tags a person applies by hand", () => {
     expect(isNotOurs("size-medium")).toBe(true);
     expect(isNotOurs("clearance")).toBe(true);
     // A garment tag is the importer's to write, even though a template must not learn it.
-    expect(isNotOurs("snow-jackets")).toBe(false);
-    expect(isNotLearnable("snow-jackets")).toBe(true);
+    expect(isNotOurs("snow jackets")).toBe(false);
+    expect(isNotLearnable("snow jackets")).toBe(true);
   });
 
   it("never writes one itself", () => {
@@ -198,12 +200,12 @@ describe("products that do not change from year to year", () => {
 describe("skis and snowboards", () => {
   it("tags a board sold with a binding as a package", () => {
     const tags = generalTags({ type: "Snowboards", vendor: "Burton", genders: ["mens"], withBindings: true });
-    expect(tags).toContain("snowboard-packages");
+    expect(tags).toContain("snowboard packages");
   });
 
   it("uses the ski package tag for a ski", () => {
-    expect(generalTags({ type: "Skis", vendor: "Atomic", genders: ["mens"], withBindings: true })).toContain("ski-packages");
-    expect(generalTags({ type: "Skis", vendor: "Atomic", genders: ["mens"] })).not.toContain("ski-packages");
+    expect(generalTags({ type: "Skis", vendor: "Atomic", genders: ["mens"], withBindings: true })).toContain("ski packages");
+    expect(generalTags({ type: "Skis", vendor: "Atomic", genders: ["mens"] })).not.toContain("ski packages");
   });
 
   it("carries every discipline a board is, not just one", () => {
@@ -212,8 +214,8 @@ describe("skis and snowboards", () => {
       type: "Snowboards", vendor: "Burton", genders: ["mens"],
       disciplines: ["Freeride & Powder Boards", "Freestyle & All-Mountain Boards"],
     });
-    expect(tags).toContain("freeride-and-powder-boards");
-    expect(tags).toContain("freestyle-and-all-mountain-boards");
+    expect(tags).toContain("freeride and powder boards");
+    expect(tags).toContain("freestyle and all-mountain boards");
   });
 
   it("offers the seven ski disciplines and the three board ones", () => {
@@ -225,8 +227,8 @@ describe("skis and snowboards", () => {
 
   it("will not put a board discipline on a ski", () => {
     const tags = generalTags({ type: "Skis", vendor: "Atomic", genders: ["mens"], disciplines: ["Park Boards", "Carving Skis"] });
-    expect(tags).toContain("carving-skis");
-    expect(tags).not.toContain("park-boards");
+    expect(tags).toContain("carving skis");
+    expect(tags).not.toContain("park boards");
   });
 
   it("offers no disciplines to something that is neither", () => {
@@ -241,7 +243,7 @@ describe("skis and snowboards", () => {
       type: "Snowboards", vendor: "Burton", genders: ["mens"],
       withBindings: true, disciplines: ["Park Boards"],
     })).toEqual([
-      "snowboards", "snowboard", "2027", "123abc-js", "burton", "mens", "snowboard-packages", "park-boards",
+      "snowboards", "snowboard", "2027", "123abc-js", "burton", "mens", "snowboard packages", "park boards",
     ]);
   });
 });
@@ -356,7 +358,7 @@ describe("bags", () => {
 describe("what the three new brand exports corrected", () => {
   it("carries the cross-country tag on every touring ski", () => {
     const tags = generalTags({ type: "Skis", vendor: "Volkl", genders: ["mens"], disciplines: ["Touring Skis"] });
-    expect(tags).toContain("touring-skis");
+    expect(tags).toContain("touring skis");
     expect(tags).toContain(TOURING_SKI_TAG);
     // Not on a ski that is not a touring ski.
     expect(generalTags({ type: "Skis", vendor: "Volkl", genders: ["mens"], disciplines: ["Carving Skis"] }))
@@ -388,16 +390,16 @@ describe("a ski sold as a package is still a ski", () => {
     });
     expect(tags).toContain("skis");          // it is a ski
     expect(tags).toContain("ski");           // it lives in the Ski menu
-    expect(tags).toContain("ski-packages");  // and it comes with a binding
-    expect(tags).toContain("frontside-and-all-mountain-skis");
-    expect(tags).toContain("freeride-and-powder-skis");
+    expect(tags).toContain("ski packages");  // and it comes with a binding
+    expect(tags).toContain("frontside and all-mountain skis");
+    expect(tags).toContain("freeride and powder skis");
   });
 
   it("does the same for a board package", () => {
     const tags = generalTags({ type: "Snowboards", vendor: "Burton", genders: ["mens"], withBindings: true, disciplines: ["Park Boards"] });
     expect(tags).toContain("snowboards");
     expect(tags).toContain("snowboard");
-    expect(tags).toContain("snowboard-packages");
+    expect(tags).toContain("snowboard packages");
   });
 });
 
@@ -476,7 +478,7 @@ describe("climbing skins", () => {
   });
 
   it("keeps its own type tag alongside them", () => {
-    expect(generalTags({ type: "Climbing Skins", vendor: "Black Diamond", genders: [] })).toContain("climbing-skins");
+    expect(generalTags({ type: "Climbing Skins", vendor: "Black Diamond", genders: [] })).toContain("climbing skins");
   });
 
   it("does not put the skin tags on anything else", () => {
@@ -510,6 +512,46 @@ describe("reaching a backcountry shelf takes the section too", () => {
   });
 });
 
+describe("a tag is an exact string", () => {
+  /**
+   * The catalogue is the authority on spelling, not a rule: a heading is hyphenated and a sub-link
+   * is usually spaced, but trekking-poles, torches-and-lighting, avalanche-equipment, ski-gloves and
+   * the bag family are sub-links that are hyphenated anyway.
+   */
+  it("writes each shelf the way the shop writes it", () => {
+    const written = (type: string) => generalTags({ type, vendor: "Vendor", genders: [] });
+    expect(written("Snow Jackets")).toContain("snow jackets");
+    expect(written("Down Sleeping Bags")).toContain("down sleeping bags");
+    expect(written("Hiking Boots")).toContain("hiking boots");
+    expect(written("Trekking Poles")).toContain("trekking-poles");       // hyphenated live
+    expect(written("Torches & Lighting")).toContain("torches-and-lighting");
+    expect(written("Avalanche Equipment")).toContain("avalanche-equipment");
+  });
+
+  it("keeps the heading hyphenated beneath a spaced sub-link", () => {
+    const tags = generalTags({ type: "Ascenders & Descenders", vendor: "Petzl", genders: [] });
+    expect(tags).toContain("ascenders and descenders");
+    expect(tags).toContain("climbing-and-abseiling");
+  });
+
+  it("reads a shelf back whichever way it is spelled", () => {
+    // Either spelling of a shelf is recognised, so an export written the other way still resolves.
+    expect(resolveType("freeride and powder skis")).toBe("Freeride & Powder Skis");
+    expect(resolveType("Packs and Bags")).toBe("Packs & Bags");
+    expect(resolveType("Climbing and Abseiling")).toBe("Climbing & Abseiling");
+    expect(isRuleGenerated("snow jackets")).toBe(true);
+    expect(isRuleGenerated("snow-jackets")).toBe(true);
+  });
+
+  it("matches a discipline against what was already worked out, not its spelling", () => {
+    // The touring discipline is written "touring skis"; the cross-shelf rule still finds it.
+    const tags = generalTags({ type: "Skis", vendor: "Volkl", genders: ["mens"], disciplines: ["Touring Skis"] });
+    expect(tags).toContain("touring skis");
+    expect(tags).toContain("alpine-touring-skis");
+    expect(tags).toContain("backcountry");
+  });
+});
+
 describe("the Type column holds the heading, never the sub-link", () => {
   /** True of all 673 typed products in the shop's exports: not one is typed with a sub-link. */
   it("resolves a sub-link up to the heading it sits under", () => {
@@ -540,12 +582,12 @@ describe("the Type column holds the heading, never the sub-link", () => {
 
   it("carries the heading as a tag alongside the sub-link", () => {
     const tent = generalTags({ type: "2 Person Tents", vendor: "Nemo", genders: [] });
-    expect(tent).toContain("2-person-tents");
+    expect(tent).toContain("2 person tents");
     expect(tent).toContain("tents");
     expect(tent).toContain("outdoor");
 
     const bag = generalTags({ type: "Down Sleeping Bags", vendor: "One Planet", genders: ["mens", "womens"] });
-    expect(bag).toContain("down-sleeping-bags");
+    expect(bag).toContain("down sleeping bags");
     expect(bag).toContain("sleeping-bags");
   });
 });
@@ -598,7 +640,7 @@ describe("a promotion is never a convention", () => {
   });
 
   it("does not mistake a real shelf for one", () => {
-    for (const tag of ["ski-poles", "tent-accessories", "down-sleeping-bags", "sleeping-bags", "climbing-shoes"]) {
+    for (const tag of ["ski poles", "tent-accessories", "down sleeping bags", "sleeping-bags", "climbing-shoes"]) {
       expect(isManualTag(tag), tag).toBe(false);
     }
   });
@@ -632,14 +674,14 @@ describe("a skin is read, not trusted to its invoice type", () => {
     const tags = generalTags({ type: "Ski Accessories", vendor: "Pomoca", genders: [], describedAs: "Pomoca Climb Pro 2.0 climbing skin" });
     expect(tags).toContain("skin");
     expect(tags).toContain("skins");
-    expect(tags).toContain("climbing-skins");
+    expect(tags).toContain("climbing skins");
     expect(tags).toContain("backcountry");
     expect(tags).not.toContain("ski-accessories"); // it is a skin, so that is its Type
     expect(skinType({ type: "Ski Accessories", describedAs: "Pomoca Climb Pro 2.0 climbing skin" })).toBe("Skins");
   });
 
   it("lands a skin identically however it was filed", () => {
-    const shelves = ["skin", "skins", "climbing-skins", "backcountry"];
+    const shelves = ["skin", "skins", "climbing skins", "backcountry"];
     for (const type of ["Skins", "Climbing Skins", "Ski Accessories", "Alpine Touring Accessories", "Other Back-Country Gear"]) {
       const tags = generalTags({ type, vendor: "Pomoca", genders: [], describedAs: "Pomoca Climb Pro 2.0 climbing skin" });
       for (const shelf of shelves) expect(tags, `${type} -> ${shelf}`).toContain(shelf);
@@ -658,7 +700,7 @@ describe("a skin is read, not trusted to its invoice type", () => {
     expect(isSkin("G3 skin cutter", "Ski Accessories")).toBe(false);
     expect(isSkin("Black Diamond skin glue", "Ski Accessories")).toBe(false);
     const tags = generalTags({ type: "Ski Accessories", vendor: "G3", genders: [], describedAs: "G3 skin cutter" });
-    expect(tags).toContain("alpine-touring-accessories");
+    expect(tags).toContain("alpine touring accessories");
     expect(tags).not.toContain("skins");
   });
 
@@ -697,11 +739,14 @@ describe("every backcountry shelf carries its section", () => {
     expect(isBackcountryShelf("skins")).toBe(true);
     expect(isBackcountryShelf("avalanche-equipment")).toBe(true);
     expect(isBackcountryShelf("back-country-gear")).toBe(true);
-    expect(BACKCOUNTRY_SHELF_TAGS.has("backcountry-gear")).toBe(false); // the live spelling is hyphenated
+    // The set is keyed by slug, so either spelling of a shelf finds it.
+    expect(BACKCOUNTRY_SHELF_TAGS.has("back-country-gear")).toBe(true);
+    expect(isBackcountryShelf("climbing skins")).toBe(true);
+    expect(isBackcountryShelf("climbing-skins")).toBe(true);
   });
 
   it("leaves the resort shelves out of it", () => {
-    for (const tag of ["alpine-bindings", "ski-boots", "snow-jackets", "goggles", "snowboard-bags"]) {
+    for (const tag of ["alpine-bindings", "ski-boots", "snow jackets", "goggles", "snowboard-bags"]) {
       expect(isBackcountryShelf(tag), tag).toBe(false);
     }
   });
@@ -738,7 +783,7 @@ describe("touring skis reach the backcountry shelf", () => {
     const tags = generalTags({ type: "Skis", vendor: "Volkl", genders: ["mens"], disciplines: ["Touring Skis"] });
     expect(tags).toContain("skis");                          // still a ski
     expect(tags).toContain("ski");                           // still in the Ski menu
-    expect(tags).toContain("touring-skis");
+    expect(tags).toContain("touring skis");
     expect(tags).toContain(TOURING_SKI_TAG);                 // the cross-country shelf
     expect(tags).toContain("alpine-touring-skis");           // and the backcountry one
     expect(tags).toContain("backcountry");
@@ -752,7 +797,7 @@ describe("touring skis reach the backcountry shelf", () => {
 
   it("keeps alpine touring accessories on their own shelf", () => {
     expect(generalTags({ type: "Alpine Touring Accessories", vendor: "Dynafit", genders: [] }))
-      .toContain("alpine-touring-accessories");
+      .toContain("alpine touring accessories");
   });
 });
 
@@ -761,12 +806,12 @@ describe("backcountry gear and avalanche gear", () => {
   it("tags each shelf and puts it in the backcountry section", () => {
     const shelves: Array<[string, string]> = [
       ["Avalanche Equipment", "avalanche-equipment"],
-      ["Climbing Skins", "climbing-skins"],
-      ["Snow Packs", "snow-packs"],
-      ["Ice Tools", "ice-tools"],
-      ["Other Back-Country Gear", "other-back-country-gear"],
+      ["Climbing Skins", "climbing skins"],
+      ["Snow Packs", "snow packs"],
+      ["Ice Tools", "ice tools"],
+      ["Other Back-Country Gear", "other back-country gear"],
       ["Snow Shovels and Ice Tools", "snow-shovels-and-ice-tools"],
-      ["Beacons and Probes", "beacons-and-probes"],
+      ["Beacons and Probes", "beacons and probes"],
     ];
     for (const [type, tag] of shelves) {
       const tags = generalTags({ type, vendor: "Black Diamond", genders: [] });
@@ -790,13 +835,13 @@ describe("backcountry gear", () => {
 describe("tags the rules work out for themselves", () => {
   it("recognises every family the rules produce", () => {
     for (const tag of ["snowboard-boots", "ski", "backcountry", "2026", "mens", "123abc-js", "123abc-zb",
-      "step-on-boots", "alpine-touring-bindings", "snow-bags", "ski-packages", "boa-ski-boots", "skins"]) {
+      "step-on-boots", "alpine-touring-bindings", "snow-bags", "ski packages", "boa-ski-boots", "skins"]) {
       expect(isRuleGenerated(tag), tag).toBe(true);
     }
   });
 
   it("leaves alone what the rules do not produce", () => {
-    for (const tag of ["shovels", "snow-clothing", "bonus10", "some-brand-thing"]) {
+    for (const tag of ["shovels", "bonus10", "some-brand-thing"]) {
       expect(isRuleGenerated(tag), tag).toBe(false);
     }
   });
@@ -811,7 +856,7 @@ describe("tags the rules work out for themselves", () => {
     expect(isNotLearnable("touring-and-cross-country-ski")).toBe(true);
     // Still written by the rule, on the products it genuinely belongs to.
     expect(generalTags({ type: "Cross-Country Skis", vendor: "Fischer", genders: [] }))
-      .toContain("touring-and-cross-country-ski");
+      .toContain(TOURING_SKI_TAG);
   });
 });
 
@@ -819,7 +864,7 @@ describe("whether a garment is snow kit or outdoor kit", () => {
   /** The Ortovox Ortler: a snow jacket carries snow-clothing beside snow-jackets. */
   it("tags the context heading alongside the garment", () => {
     const tags = generalTags({ type: "Snow Jackets", vendor: "Ortovox", genders: ["mens"], section: "Clothing" });
-    expect(tags).toContain("snow-jackets");
+    expect(tags).toContain("snow jackets");
     expect(tags).toContain("snow-clothing");
   });
 
@@ -852,8 +897,8 @@ describe("gear for skins", () => {
     for (const type of ["Alpine Touring Accessories", "Ski Accessories"]) {
       const tags = generalTags({ type, vendor: "G3", genders: [], describedAs: "G3 Skin Trim Tool cutter" });
       expect(tags, type).toContain("back-country-gear");
-      expect(tags, type).toContain("climbing-skins");
-      expect(tags, type).toContain("alpine-touring-accessories");
+      expect(tags, type).toContain("climbing skins");
+      expect(tags, type).toContain("alpine touring accessories");
       expect(tags, type).toContain("backcountry");
     }
   });
@@ -869,7 +914,7 @@ describe("gear for skins", () => {
     const skin = generalTags({ type: "Climbing Skins", vendor: "Pomoca", genders: [], describedAs: "Pomoca Climb Pro S-Glide" });
     expect(skin).toContain("skin");
     expect(skin).toContain("skins");
-    expect(skin).not.toContain("alpine-touring-accessories");
+    expect(skin).not.toContain("alpine touring accessories");
   });
 
   it("leaves other accessories alone", () => {

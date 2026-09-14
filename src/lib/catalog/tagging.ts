@@ -14,6 +14,7 @@ import { ALPSPORT_TAXONOMY, PRODUCT_TYPES, TYPE_SECTIONS, clothingContextsFor, h
 import { classifyBinding, classifySnowboardBinding, type BindingKind } from "./bindings";
 import { classifySkiBoot, classifySnowboardBoot } from "./boots";
 import { accessoryKind } from "./accessories";
+import { LIVE_TAG_SPELLING } from "./tag-spelling";
 
 export type Gender = "mens" | "womens" | "kids";
 
@@ -103,7 +104,7 @@ export function bootTags(type: string, describedAs?: string): string[] {
  * customer started from. All three of the shop's board bags do exactly this.
  */
 /** Touring skis share a page with cross-country, so every touring ski carries this as well. */
-export const TOURING_SKI_TAG = "touring-and-cross-country-ski";
+export const TOURING_SKI_TAG = "touring and cross-country ski";
 
 /**
  * A touring binding belongs in two places: on the Ski menu beside the alpine bindings, and under
@@ -137,7 +138,7 @@ export const SKIN_TAGS = ["skin", "skins"] as const;
  * The shop files these in three places at once: with the backcountry gear, on the climbing skins
  * page beside what they are for, and with the touring accessories.
  */
-export const SKIN_ACCESSORY_TAGS = ["back-country-gear", "climbing-skins", "alpine-touring-accessories"] as const;
+export const SKIN_ACCESSORY_TAGS = ["back-country-gear", "climbing skins", "alpine touring accessories"] as const;
 
 const SKIN_ACCESSORY = /\bskin\b.*\b(cutter|trim|tool|glue|wax|bag|saver|sheet)|\b(cutter|trim|tool|glue|wax|bag|saver|sheet)\b.*\bskin\b/i;
 
@@ -200,20 +201,23 @@ export function skinType(input: Pick<TagInput, "type" | "describedAs">): "Skins"
  */
 export function crossShelfTags(type: string, alreadyTagged: string[] = []): string[] {
   const resolved = resolveType(type) ?? type.trim();
+  // The catalogue spells some shelves with spaces and some with hyphens, so what was already
+  // worked out is matched on its slug rather than on the exact string it was written as.
+  const already = alreadyTagged.map(slugTag);
   const out: string[] = [];
   if (resolved === "Touring Bindings") out.push(SKI_BINDING_SHELF_TAG, BACKCOUNTRY_BINDING_TAG);
-  if (resolved === "Touring Boots" || alreadyTagged.includes("touring-boots")) {
+  if (resolved === "Touring Boots" || already.includes("touring-boots")) {
     out.push(SKI_BOOT_SHELF_TAG, BACKCOUNTRY_BOOT_TAG);
   }
   // The two menu links — Skins under Alpine Touring, Climbing Skins under Backcountry Gear — open
   // the same page, so a skin carries every name that page is reached by whichever way it was filed.
-  if (resolved === "Skins" || resolved === "Climbing Skins") out.push(...SKIN_TAGS, "climbing-skins");
+  if (resolved === "Skins" || resolved === "Climbing Skins") out.push(...SKIN_TAGS, "climbing skins");
   // The touring and cross-country shelf is one page for both, so a cross-country ski belongs on
   // it as surely as a touring ski does.
   if (resolved === "Cross-Country Skis") out.push(TOURING_SKI_TAG);
   // A touring ski reaches backcountry whether it was typed as one or arrived as an ordinary ski
   // whose discipline says it tours.
-  if (resolved === "Touring Skis" || alreadyTagged.includes("touring-skis")) out.push(BACKCOUNTRY_SKI_TAG);
+  if (resolved === "Touring Skis" || already.includes("touring-skis")) out.push(BACKCOUNTRY_SKI_TAG);
   // Anything that reached a backcountry shelf needs the section to go with it. Skins are a
   // backcountry shelf as surely as the touring bindings are, so this reads the whole menu rather
   // than the alpine-touring prefix.
@@ -266,9 +270,10 @@ export function snowboardBindingTags(type: string, describedAs?: string): string
 export function clothingContextTags(type: string, told?: string): string[] {
   const contexts = clothingContextsFor(type);
   if (contexts.length === 0) return [];
-  if (contexts.length === 1) return [slugTag(contexts[0])];
+  if (contexts.length === 1) return [TAG_SPELLING[contexts[0]] ?? slugTag(contexts[0])];
   const wanted = contexts.find((c) => slugTag(c) === slugTag(told ?? ""));
-  return [slugTag(wanted ?? "Snow Clothing")];
+  const context = wanted ?? "Snow Clothing";
+  return [TAG_SPELLING[context] ?? slugTag(context)];
 }
 
 /** The package tag for a board or ski sold with a binding on it. */
@@ -337,15 +342,11 @@ export function seasonFor(type: string, settings: TaggingSettings = DEFAULT_TAGG
 }
 
 /**
- * Tags whose live spelling is not the slug of their name. Empty by design: the shop has settled on
- * hyphens everywhere, so "Snow Jackets" is written snow-jackets. Kept as the one place to pin an
- * exception if some page ever turns out to filter on a different string.
+ * Tags whose live spelling is not the slug of their name — the shop's own, read out of its exports.
+ * See `tag-spelling.ts`: a heading is hyphenated and a sub-link is usually spaced, with enough
+ * exceptions that the catalogue is the authority rather than a rule.
  */
-export const TAG_SPELLING: Record<string, string> = {
-  // The menu heading reads "Backcountry Gear" but every product filed under it is tagged
-  // back-country-gear, and a tag is an exact string.
-  "Backcountry Gear": "back-country-gear",
-};
+export const TAG_SPELLING: Record<string, string> = { ...LIVE_TAG_SPELLING };
 
 /**
  * Tags Shopify writes by itself — price bands, sizes, lengths and colours are all derived from the
@@ -441,7 +442,7 @@ const RULE_TAGS = new Set<string>([
   "touring-boots",
   "buckle-ski-boots",
   "boa-ski-boots",
-]);
+].map(slugTag));
 
 /**
  * Tags the importer must never write: Shopify derives its own, and staff apply theirs by hand.
@@ -460,8 +461,13 @@ export function isNotLearnable(tag: string): boolean {
   return isNotOurs(tag) || isRuleGenerated(tag);
 }
 
-export const slugTag = (value: string): string =>
-  value.trim().toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+/**
+ * A declaration rather than a const, so the module's own tag tables can be built with it whatever
+ * order they appear in — several are, and a const would leave them reading it before it exists.
+ */
+export function slugTag(value: string): string {
+  return value.trim().toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
 
 /**
  * The general tags, in the shop's order: type, section, season, house marker, vendor, then gender.
@@ -625,7 +631,7 @@ export const BACKCOUNTRY_SHELF_TAGS: ReadonlySet<string> = new Set<string>([
   ]) ?? []),
   ...SKIN_TAGS,
   TOURING_SKI_TAG,
-]);
+].map(slugTag));
 
 export function isBackcountryShelf(tag: string): boolean {
   return BACKCOUNTRY_SHELF_TAGS.has(slugTag(tag));

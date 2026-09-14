@@ -113,6 +113,9 @@ export const TOURING_SKI_TAG = "touring-and-cross-country-ski";
 export const BACKCOUNTRY_BINDING_TAG = "alpine-touring-bindings";
 export const SKI_BINDING_SHELF_TAG = "ski-bindings";
 
+/** The section a backcountry shelf sits in. Without it the shelf tag names a page nobody reaches. */
+export const BACKCOUNTRY_SECTION_TAG = "backcountry";
+
 /**
  * The same for boots. A touring boot belongs in both sections of the site, so it carries the ski
  * boot shelf as well as the backcountry one — someone browsing ski boots should still find it.
@@ -132,6 +135,10 @@ export const SKIN_TAGS = ["skin", "skins"] as const;
  * A touring boot arrives by either route — as a "Touring Boots" type, or as a generic "Ski Boots"
  * line the classifier reads as touring — so the boot tags already worked out are passed in rather
  * than the reading being done twice.
+ *
+ * Reaching a second shelf takes two tags, not one: the shelf itself, and the section it sits in.
+ * A touring binding tagged only alpine-touring-bindings names a shelf inside a section it is not
+ * in, so it never appears there. Its Type puts it in Ski; this puts it in Backcountry as well.
  */
 export function crossShelfTags(type: string, alreadyTagged: string[] = []): string[] {
   const resolved = resolveType(type) ?? type.trim();
@@ -141,6 +148,11 @@ export function crossShelfTags(type: string, alreadyTagged: string[] = []): stri
     out.push(SKI_BOOT_SHELF_TAG, BACKCOUNTRY_BOOT_TAG);
   }
   if (resolved === "Skins" || resolved === "Climbing Skins") out.push(...SKIN_TAGS);
+  // The touring and cross-country shelf is one page for both, so a cross-country ski belongs on
+  // it as surely as a touring ski does.
+  if (resolved === "Cross-Country Skis") out.push(TOURING_SKI_TAG);
+  // Anything that reached a backcountry shelf needs the section to go with it.
+  if (out.some((t) => t.startsWith("alpine-touring-"))) out.push(BACKCOUNTRY_SECTION_TAG);
   return out;
 }
 

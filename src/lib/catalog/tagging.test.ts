@@ -476,3 +476,46 @@ describe("climbing skins", () => {
     expect(crossShelfTags("Snow Jackets")).toEqual([]);
   });
 });
+
+describe("reaching a backcountry shelf takes the section too", () => {
+  /** A shelf tag alone names a page inside a section the product is not in, so nobody reaches it. */
+  it("puts a touring binding in both sections", () => {
+    const tags = generalTags({ type: "Ski Binding", vendor: "ATK", genders: [], describedAs: "ATK Raider 12 tech binding" });
+    expect(tags).toContain("ski");
+    expect(tags).toContain("backcountry");
+    expect(tags).toContain("alpine-touring-bindings");
+  });
+
+  it("does the same for a touring boot", () => {
+    const tags = generalTags({ type: "Ski Boots", vendor: "Scarpa", genders: ["mens"], describedAs: "Scarpa Maestrale RS touring boot" });
+    expect(tags).toContain("ski");
+    expect(tags).toContain("backcountry");
+    expect(tags).toContain("alpine-touring-boots");
+  });
+
+  it("leaves a resort binding and boot in the ski section alone", () => {
+    expect(generalTags({ type: "Ski Binding", vendor: "Marker", genders: [], describedAs: "Marker Griffon 13 ID" }))
+      .not.toContain("backcountry");
+    expect(generalTags({ type: "Ski Boots", vendor: "Atomic", genders: ["mens"], describedAs: "Atomic Hawx Ultra 100" }))
+      .not.toContain("backcountry");
+  });
+});
+
+describe("the touring and cross-country shelf holds both", () => {
+  it("puts a cross-country ski on it", () => {
+    const tags = generalTags({ type: "Cross-Country Skis", vendor: "Fischer", genders: ["mens"] });
+    expect(tags).toContain("cross-country-skis");
+    expect(tags).toContain(TOURING_SKI_TAG);
+  });
+
+  it("and a touring ski, which was already there", () => {
+    expect(generalTags({ type: "Skis", vendor: "Volkl", genders: ["mens"], disciplines: ["Touring Skis"] }))
+      .toContain(TOURING_SKI_TAG);
+  });
+
+  it("but not an ordinary ski", () => {
+    expect(generalTags({ type: "Skis", vendor: "Volkl", genders: ["mens"], disciplines: ["Carving Skis"] }))
+      .not.toContain(TOURING_SKI_TAG);
+    expect(crossShelfTags("Cross-Country Boots")).toEqual([]);
+  });
+});

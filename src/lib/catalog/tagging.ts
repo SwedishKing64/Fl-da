@@ -112,8 +112,12 @@ export const TOURING_SKI_TAG = "touring-and-cross-country-ski";
  */
 export const BACKCOUNTRY_BINDING_TAG = "alpine-touring-bindings";
 
-/** The same for boots: a touring boot sits under Ski Boots and under Backcountry both. */
+/**
+ * The same for boots. A touring boot belongs in both sections of the site, so it carries the ski
+ * boot shelf as well as the backcountry one — someone browsing ski boots should still find it.
+ */
 export const BACKCOUNTRY_BOOT_TAG = "alpine-touring-boots";
+export const SKI_BOOT_SHELF_TAG = "ski-boots";
 
 /**
  * Skins appear twice in the menu — as Skins under Alpine Touring and as Climbing Skins under
@@ -132,7 +136,9 @@ export function crossShelfTags(type: string, alreadyTagged: string[] = []): stri
   const resolved = resolveType(type) ?? type.trim();
   const out: string[] = [];
   if (resolved === "Touring Bindings") out.push(BACKCOUNTRY_BINDING_TAG);
-  if (resolved === "Touring Boots" || alreadyTagged.includes("touring-boots")) out.push(BACKCOUNTRY_BOOT_TAG);
+  if (resolved === "Touring Boots" || alreadyTagged.includes("touring-boots")) {
+    out.push(SKI_BOOT_SHELF_TAG, BACKCOUNTRY_BOOT_TAG);
+  }
   if (resolved === "Skins" || resolved === "Climbing Skins") out.push(...SKIN_TAGS);
   return out;
 }

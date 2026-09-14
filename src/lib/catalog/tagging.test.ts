@@ -425,6 +425,14 @@ describe("touring boots reach the backcountry shelf", () => {
     expect(tags).toContain(BACKCOUNTRY_BOOT_TAG);
   });
 
+  /** A touring boot belongs in both sections, so browsing ski boots must still find it. */
+  it("keeps the ski boot shelf as well as the backcountry one", () => {
+    expect(generalTags({ type: "Touring Boots", vendor: "Scarpa", genders: ["mens"], describedAs: "Scarpa Maestrale RS" }))
+      .toContain("ski-boots");
+    expect(generalTags({ type: "Ski Boots", vendor: "Atomic", genders: ["mens"], describedAs: "Atomic Hawx Ultra XTD 130" }))
+      .toContain("ski-boots");
+  });
+
   it("tags one the classifier read as touring from a generic ski boot line", () => {
     const tags = generalTags({ type: "Ski Boots", vendor: "Atomic", genders: ["mens"], describedAs: "Atomic Hawx Ultra XTD 130 BOA" });
     expect(tags).toContain("touring-boots");

@@ -102,13 +102,17 @@ export function bootTags(type: string, describedAs?: string): string[] {
  * same rack, so the catalogue files each bag on all of them rather than guessing which page the
  * customer started from. All three of the shop's board bags do exactly this.
  */
-export const BAG_TAGS = ["snow-bags", "snowboard-bags", "ski-and-boot-bags"] as const;
+/** Touring skis share a page with cross-country, so every touring ski carries this as well. */
+export const TOURING_SKI_TAG = "touring-and-cross-country-ski";
+
+export const BAG_TAGS = ["snow-bags", "snowboard-bags", "ski-and-boot-bags", "ski-and-snowboard-bags"] as const;
 
 export function bagTags(type: string, describedAs?: string): string[] {
   const resolved = resolveType(type) ?? type.trim();
   // Only accessories hold bags; a "Snowboard Bags" type is already one, a named bag inside a
   // general accessories line has to be read from the name.
   const looksLikeBag = /\bbags?\b/i.test(resolved) || (!!describedAs?.trim() && accessoryKind(describedAs) === "bags");
+
   if (!looksLikeBag) return [];
   return [...BAG_TAGS];
 }
@@ -163,15 +167,16 @@ export interface TagInput {
 }
 
 /**
- * Hardgoods run a season ahead of the rest of the shop: next winter's boards, skis, boots and
- * bindings are bought and tagged while this winter's clothing is still current.
+ * Boards and skis run a season ahead of the rest of the shop: next winter's are bought and tagged
+ * while this winter's clothing is still current. Boots and bindings do not — the shop's own
+ * catalogue has fourteen bindings and eight boots on the current season and none on the next,
+ * against ten boards on the next.
  *
- * What decides it is the noun being sold, not whether the word "ski" appears anywhere — "Ski
- * Poles" and "Snowboard Bags" are accessories that happen to be named after the sport. And the
- * rule is confined to the Ski and Snowboard menus, so Outdoor's hiking and apres boots stay on
- * the current season.
+ * What decides it is the noun being sold, not whether the word "ski" appears anywhere: "Ski Poles"
+ * and "Snowboard Bags" are accessories named after the sport. And the rule is confined to the Ski
+ * and Snowboard menus, so Outdoor's hiking and apres boots stay on the current season.
  */
-const HARDGOOD_NOUNS = new Set(["snowboards", "skis", "boards", "boots", "bindings", "packages"]);
+const HARDGOOD_NOUNS = new Set(["snowboards", "skis", "boards", "packages"]);
 
 export function isHardgood(type: string): boolean {
   const resolved = resolveType(type) ?? type.trim();
@@ -228,7 +233,10 @@ export function withoutGenerated(tags: string[]): string[] {
  * "clearance" and "snow sale", and learning those would have every new full-price product born on
  * markdown. Campaign codes are matched by shape — bonus10 today, bonus15 next month.
  */
-const MANUAL_TAGS = new Set(["snow-sale", "snow-clearance", "clearance", "sale", "scan", EVERGREEN_SEASON]);
+/** A second sentinel the shop writes by hand alongside the evergreen one. */
+export const MANUAL_SEASON = "2998";
+
+const MANUAL_TAGS = new Set(["snow-sale", "snow-clearance", "clearance", "sale", "scan", EVERGREEN_SEASON, MANUAL_SEASON]);
 const MANUAL_PATTERNS: RegExp[] = [/^bonus\d+$/i];
 
 export function isManualTag(tag: string): boolean {
@@ -281,7 +289,10 @@ export function generalTags(input: TagInput, settings: TaggingSettings = DEFAULT
   const allowed = disciplinesFor(type);
   for (const discipline of input.disciplines ?? []) {
     const match = allowed.find((a) => slugTag(a) === slugTag(discipline));
-    if (match) push(TAG_SPELLING[match] ?? slugTag(match));
+    if (!match) continue;
+    push(TAG_SPELLING[match] ?? slugTag(match));
+    // Touring skis also sit on the cross-country shelf, which is one page for both.
+    if (match === "Touring Skis") push(TOURING_SKI_TAG);
   }
 
   return tags;

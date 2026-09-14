@@ -37,7 +37,9 @@ const SIGNALS: Array<{ kind: AccessoryKind; test: RegExp }> = [
   { kind: "body-protection", test: /\bimpact\b|\bwrist ?guard|\bknee ?pad|\bbody ?armou?r|\bback ?protect|\bcrash ?pad|\bpadded short/i },
   { kind: "gloves", test: /\bgloves?\b|\bmitten?s?\b|\bmitts?\b/i },
   { kind: "bags", test: /\bbags?\b|\bsleeve\b|\bsack\b|\bwheelie\b|\bluggage\b/i },
-  { kind: "tuning", test: /\btuning\b|\bwax\b|\bscraper\b|\bedge tool\b|\bfile\b|\bsharpen|\bdetun/i },
+  // Tuning is a whole bench of gear, not just wax: brushes, corks, riller bars, fibertex pads,
+  // edge tools and the rest. Reading only the word "wax" left most of a tuning brand in Other.
+  { kind: "tuning", test: /\btuning\b|\bwax(es|ing)?\b|\bscraper\b|\bedge tool\b|\bfiles?\b|\bsharpen|\bdetun|\bbrush\b|\bcork\b|\briller\b|\bfibertex\b|\bglide\b|\bkick\b|\bklister\b|\bbase ?prep|\bpolish\b|\bdiamond stone\b|\bgummi\b|\bstructure\b|\bhorsehair\b|\bnylon\b|\bbevel/i },
   { kind: "poles", test: /\bpoles?\b/i },
 ];
 
@@ -53,11 +55,20 @@ const LEAF: Record<AccessoryKind, Partial<Record<Sport, string>>> = {
   other: { Ski: "Other Ski Accessories", Snowboard: "Other Snowboard Accessories" },
 };
 
-/** What kind of accessory this is, read from its name and description. */
+/**
+ * What kind of accessory this is. Pass the vendor as well as the name: a tuning brand's catalogue
+ * is full of names that say nothing on their own — T162B, F4-60 — and the brand is the only clue.
+ */
+/** Brands that make nothing but tuning gear, so anything of theirs unmatched is tuning. */
+const TUNING_BRANDS = /\bswix\b|\btoko\b|\bholmenkol\b|\bdakine tuning\b|\bdemon tuning\b/i;
+
 export function accessoryKind(...parts: Array<string | undefined>): AccessoryKind {
   const text = parts.filter(Boolean).join(" ");
   // Body protection is tested before gloves on purpose: a wrist guard is protection, not a glove.
   for (const { kind, test } of SIGNALS) if (test.test(text)) return kind;
+  // A tuning brand's catalogue is tuning gear under names that say nothing — T157B, F4-60. The
+  // named shelves above still win, so their poles stay poles.
+  if (TUNING_BRANDS.test(text)) return "tuning";
   return "other";
 }
 

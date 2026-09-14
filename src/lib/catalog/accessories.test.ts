@@ -74,3 +74,23 @@ describe("putting it on the right shelf", () => {
     expect(sportsFor("other", "Snowboard")).toEqual(["Snowboard"]);
   });
 });
+
+describe("a tuning brand's catalogue", () => {
+  it("reads the whole tuning bench, not just wax", () => {
+    for (const name of ["F4-60 Glidewax with Cork", "T157B Rectangular Horsehair Brush", "T0992 Soft Gummy Stone", "TA200E Diamond 100mm Coarse", "Riller Bar 1mm", "Fibertex Pad"]) {
+      expect(accessoryKind("Swix", name), name).toBe("tuning");
+    }
+  });
+
+  it("uses the brand when the product name says nothing at all", () => {
+    // T162B means nothing on its own; the brand is the only clue.
+    expect(accessoryKind("Swix", "T162B")).toBe("tuning");
+    expect(accessoryKind("", "T162B")).toBe("other");
+  });
+
+  it("still lets a named shelf win over the brand", () => {
+    // Swix makes poles too, and those are poles.
+    expect(accessoryKind("Swix", "ET 304 Touring Performance Pole")).toBe("poles");
+    expect(accessoryKind("Swix", "Nordic Roller Aluminium Poles")).toBe("poles");
+  });
+});

@@ -1,22 +1,27 @@
 import { describe, expect, it } from "vitest";
-import { BOARD_DISCIPLINES, DEFAULT_TAGGING, EVERGREEN_SEASON, SKI_DISCIPLINES, BAG_TAGS, bagTags, bindingType, bootTags, disciplinesFor, snowboardBindingTags, needsBindingKind, TAG_SPELLING, generalTags, isHardgood, isManualTag, isNotOurs, isShopifyGenerated, needsSectionChoice, normaliseGenders, seasonFor, slugTag, withoutGenerated } from "./tagging";
+import { BOARD_DISCIPLINES, DEFAULT_TAGGING, EVERGREEN_SEASON, SKI_DISCIPLINES, BAG_TAGS, MANUAL_SEASON, TOURING_SKI_TAG, bagTags, bindingType, bootTags, disciplinesFor, snowboardBindingTags, needsBindingKind, TAG_SPELLING, generalTags, isHardgood, isManualTag, isNotOurs, isShopifyGenerated, needsSectionChoice, normaliseGenders, seasonFor, slugTag, withoutGenerated } from "./tagging";
 
 describe("the six general tags", () => {
   it("writes them in the shop's order: type, section, season, house, vendor, gender", () => {
     expect(generalTags({ type: "Snowboard Boots", vendor: "Burton", genders: ["mens"] })).toEqual([
       "snowboard-boots",
       "snowboard",
-      "2027",
+      "2026",
       "123abc-js",
       "burton",
       "mens",
     ]);
   });
 
-  it("runs hardgoods a season ahead of everything else", () => {
+  it("runs boards and skis a season ahead, and nothing else", () => {
     expect(seasonFor("Snowboards")).toBe(2027);
-    expect(seasonFor("Snowboard Bindings")).toBe(2027);
-    expect(seasonFor("Ski Boots")).toBe(2027);
+    expect(seasonFor("Skis")).toBe(2027);
+    expect(seasonFor("Ski Packages")).toBe(2027);
+    // Boots and bindings stay on the current season: the shop has fourteen bindings and eight
+    // boots on 2026 and none on 2027, against ten boards on 2027.
+    expect(seasonFor("Snowboard Bindings")).toBe(2026);
+    expect(seasonFor("Snowboard Boots")).toBe(2026);
+    expect(seasonFor("Ski Boots")).toBe(2026);
     expect(seasonFor("Snow Jackets")).toBe(2026);
     expect(seasonFor("Ski Poles")).toBe(2026);
   });
@@ -262,14 +267,14 @@ describe("ski bindings", () => {
     // Snowboard bindings split too, but by which boots they take, not by walking uphill.
     expect(needsBindingKind("Snowboard Bindings")).toBe(false);
     expect(generalTags({ type: "Snowboard Bindings", vendor: "Burton", genders: ["womens"], describedAs: "Burton Lexa Re:Flex" }))
-      .toEqual(["snowboard-bindings", "snowboard", "2027", "123abc-js", "burton", "womens", "traditional-bindings"]);
+      .toEqual(["snowboard-bindings", "snowboard", "2026", "123abc-js", "burton", "womens", "traditional-bindings"]);
   });
 });
 
 describe("boots", () => {
   it("tags a Step On snowboard boot", () => {
     expect(generalTags({ type: "Snowboard Boots", vendor: "Burton", genders: ["mens"], describedAs: "Men's Ruler Step On® Snowboard Boots 2025" }))
-      .toEqual(["snowboard-boots", "snowboard", "2027", "123abc-js", "burton", "mens", "step-on-boots"]);
+      .toEqual(["snowboard-boots", "snowboard", "2026", "123abc-js", "burton", "mens", "step-on-boots"]);
   });
 
   it("tags a BOA snowboard boot traditional, not BOA", () => {
@@ -326,7 +331,7 @@ describe("bags", () => {
   });
 
   it("does the same for a ski bag, since it is the same rack", () => {
-    expect(bagTags("Ski & Boot Bags", "Atomic Double Ski Bag")).toEqual(["snow-bags", "snowboard-bags", "ski-and-boot-bags"]);
+    expect(bagTags("Ski & Boot Bags", "Atomic Double Ski Bag")).toEqual([...BAG_TAGS]);
   });
 
   it("spots a bag named inside a general accessories line", () => {
@@ -337,5 +342,27 @@ describe("bags", () => {
     expect(bagTags("Snowboard Boots", "Men's Ruler Step On Boots")).toEqual([]);
     expect(bagTags("Snow Jackets", "A jacket")).toEqual([]);
     expect(bagTags("Snowboard Accessories", "Aluminium Stud Stomp Pad")).toEqual([]);
+  });
+});
+
+describe("what the three new brand exports corrected", () => {
+  it("carries the cross-country tag on every touring ski", () => {
+    const tags = generalTags({ type: "Skis", vendor: "Volkl", genders: ["mens"], disciplines: ["Touring Skis"] });
+    expect(tags).toContain("touring-skis");
+    expect(tags).toContain(TOURING_SKI_TAG);
+    // Not on a ski that is not a touring ski.
+    expect(generalTags({ type: "Skis", vendor: "Volkl", genders: ["mens"], disciplines: ["Carving Skis"] }))
+      .not.toContain(TOURING_SKI_TAG);
+  });
+
+  it("puts all four bag tags on a bag", () => {
+    expect(bagTags("Ski & Boot Bags", "Double Ski Bag")).toEqual([
+      "snow-bags", "snowboard-bags", "ski-and-boot-bags", "ski-and-snowboard-bags",
+    ]);
+  });
+
+  it("treats the second sentinel as hand-applied, like the first", () => {
+    expect(isNotOurs(MANUAL_SEASON)).toBe(true);
+    expect(isManualTag("2998")).toBe(true);
   });
 });

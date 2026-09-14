@@ -95,6 +95,30 @@ export function withoutGenerated(tags: string[]): string[] {
   return tags.filter((tag) => !isShopifyGenerated(tag));
 }
 
+/**
+ * Tags a person puts on by hand: promotions, sale events, and stocktake markers.
+ *
+ * These are decisions about one product at one moment, not conventions, so the importer never
+ * writes them and the template learner never reads them. An export taken during a sale is full of
+ * "clearance" and "snow sale", and learning those would have every new full-price product born on
+ * markdown. Campaign codes are matched by shape — bonus10 today, bonus15 next month.
+ */
+const MANUAL_TAGS = new Set(["snow-sale", "snow-clearance", "clearance", "sale", "scan"]);
+const MANUAL_PATTERNS: RegExp[] = [/^bonus\d+$/i];
+
+export function isManualTag(tag: string): boolean {
+  const value = slugTag(tag);
+  return MANUAL_TAGS.has(value) || MANUAL_PATTERNS.some((p) => p.test(value));
+}
+
+/**
+ * Everything the importer must neither write nor learn: Shopify's own derived tags, and the ones
+ * staff apply by hand. Tags already on a product are left alone — a person put them there.
+ */
+export function isNotOurs(tag: string): boolean {
+  return isShopifyGenerated(tag) || isManualTag(tag);
+}
+
 export const slugTag = (value: string): string =>
   value.trim().toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 

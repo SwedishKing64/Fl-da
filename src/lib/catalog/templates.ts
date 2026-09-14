@@ -10,7 +10,7 @@
  */
 
 import { parseCsv } from "./csv";
-import { isShopifyGenerated } from "./tagging";
+import { isNotOurs } from "./tagging";
 
 export interface TemplateAnalysis {
   productCount: number;
@@ -170,9 +170,10 @@ function readProducts(text: string): { products: ProductRecord[]; warnings: stri
     products.push({
       vendor: cell(iVendor),
       productType: cell(iType),
-      // Shopify maintains size, colour and price-band tags itself. Learning them as house
-      // conventions would stamp one brand's colours onto every future product.
-      tags: [...new Set(splitList(cell(iTags)))].filter((tag) => !isShopifyGenerated(tag)),
+      // Two kinds of tag are never conventions. Shopify derives size, colour and price bands
+      // itself, and staff apply sale and stocktake tags by hand. Learning either would be wrong:
+      // one brand's colours stamped on everything, or every new product born on clearance.
+      tags: [...new Set(splitList(cell(iTags)))].filter((tag) => !isNotOurs(tag)),
       collections: [...new Set(splitList(cell(iCollection)))],
       optionNames: optionNameCols.map(cell).filter((n) => n && norm(n) !== "title"),
       metafields,

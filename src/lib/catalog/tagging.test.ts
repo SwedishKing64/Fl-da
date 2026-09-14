@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_TAGGING, TAG_SPELLING, generalTags, isHardgood, isShopifyGenerated, needsSectionChoice, normaliseGenders, seasonFor, slugTag, withoutGenerated } from "./tagging";
+import { DEFAULT_TAGGING, TAG_SPELLING, generalTags, isHardgood, isManualTag, isNotOurs, isShopifyGenerated, needsSectionChoice, normaliseGenders, seasonFor, slugTag, withoutGenerated } from "./tagging";
 
 describe("the six general tags", () => {
   it("writes them in the shop's order: type, section, season, house, vendor, gender", () => {
@@ -128,5 +128,30 @@ describe("tags Shopify maintains for itself", () => {
   it("never writes one itself", () => {
     const tags = generalTags({ type: "Snow Jackets", vendor: "Burton", genders: ["womens"], section: "Clothing" });
     expect(tags.filter(isShopifyGenerated)).toEqual([]);
+  });
+});
+
+describe("tags a person applies by hand", () => {
+  it("knows the sale and stocktake tags", () => {
+    for (const tag of ["snow sale", "snow-sale", "clearance", "snow clearance", "bonus10", "bonus15", "scan"]) {
+      expect(isManualTag(tag), tag).toBe(true);
+    }
+  });
+
+  it("does not mistake a product tag for a promotion", () => {
+    for (const tag of ["snow-jackets", "snowboards", "burton", "mens", "2026", "snow-socks"]) {
+      expect(isManualTag(tag), tag).toBe(false);
+    }
+  });
+
+  it("treats Shopify's and the shop's own hand-applied tags as equally off limits", () => {
+    expect(isNotOurs("size-medium")).toBe(true);
+    expect(isNotOurs("clearance")).toBe(true);
+    expect(isNotOurs("snow-jackets")).toBe(false);
+  });
+
+  it("never writes one itself", () => {
+    const tags = generalTags({ type: "Snow Jackets", vendor: "Burton", genders: ["mens"], section: "Clothing" });
+    expect(tags.filter(isNotOurs)).toEqual([]);
   });
 });

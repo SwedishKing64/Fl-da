@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_TAGGING, TAG_SPELLING, generalTags, isHardgood, needsSectionChoice, normaliseGenders, seasonFor, slugTag } from "./tagging";
+import { DEFAULT_TAGGING, TAG_SPELLING, generalTags, isHardgood, isShopifyGenerated, needsSectionChoice, normaliseGenders, seasonFor, slugTag, withoutGenerated } from "./tagging";
 
 describe("the six general tags", () => {
   it("writes them in the shop's order: type, section, season, house, vendor, gender", () => {
@@ -73,7 +73,7 @@ describe("the six general tags", () => {
 describe("clothing", () => {
   it("tags a womens snow jacket with gender and garment", () => {
     expect(generalTags({ type: "Snow Jackets", vendor: "Burton", genders: ["womens"], section: "Clothing" })).toEqual([
-      "snow jackets",
+      "snow-jackets",
       "clothing",
       "2026",
       "123abc-js",
@@ -82,13 +82,11 @@ describe("clothing", () => {
     ]);
   });
 
-  it("writes the garment names the way the live catalogue spells them", () => {
-    // Hyphenating these would stop the product appearing on the page that filters for it.
-    expect(TAG_SPELLING["Snow Jackets"]).toBe("snow jackets");
-    expect(generalTags({ type: "Snow Pants", vendor: "Burton", genders: ["mens"], section: "Clothing" })).toContain("snow pants");
-    // Single-word garments were never ambiguous.
+  it("hyphenates every garment name", () => {
+    expect(generalTags({ type: "Snow Pants", vendor: "Burton", genders: ["mens"], section: "Clothing" })).toContain("snow-pants");
+    expect(generalTags({ type: "Down Jackets", vendor: "Burton", genders: ["womens"], section: "Clothing" })).toContain("down-jackets");
     expect(generalTags({ type: "Rainwear", vendor: "Burton", genders: ["mens"], section: "Clothing" })).toContain("rainwear");
-    expect(generalTags({ type: "Midlayers", vendor: "Burton", genders: ["womens"], section: "Clothing" })).toContain("midlayers");
+    expect(TAG_SPELLING).toEqual({});
   });
 
   it("tags a kids item kids, with no gender beside it", () => {
@@ -101,5 +99,34 @@ describe("clothing", () => {
   it("drops mens and womens the moment a product is a kids one", () => {
     expect(normaliseGenders(["mens", "kids"])).toEqual(["kids"]);
     expect(normaliseGenders(["mens", "womens"])).toEqual(["mens", "womens"]);
+  });
+});
+
+describe("tags Shopify maintains for itself", () => {
+  it("recognises price bands, sizes and colours", () => {
+    for (const tag of ["500-600", "100-200", "under-50", "size-medium", "size-9", "colour-true-black", "color-black"]) {
+      expect(isShopifyGenerated(tag), tag).toBe(true);
+    }
+  });
+
+  it("leaves the shop's own tags alone", () => {
+    for (const tag of ["snow-jackets", "burton", "2026", "123abc-js", "mens", "clearance", "snow-sale"]) {
+      expect(isShopifyGenerated(tag), tag).toBe(false);
+    }
+  });
+
+  it("does not mistake a year or a model number for a price band", () => {
+    expect(isShopifyGenerated("2026")).toBe(false);
+    expect(isShopifyGenerated("step-on-boots")).toBe(false);
+  });
+
+  it("strips them from a list in one go", () => {
+    expect(withoutGenerated(["snow-jackets", "size-medium", "burton", "500-600", "colour-true-black"]))
+      .toEqual(["snow-jackets", "burton"]);
+  });
+
+  it("never writes one itself", () => {
+    const tags = generalTags({ type: "Snow Jackets", vendor: "Burton", genders: ["womens"], section: "Clothing" });
+    expect(tags.filter(isShopifyGenerated)).toEqual([]);
   });
 });

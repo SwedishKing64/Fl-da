@@ -63,16 +63,37 @@ export function seasonFor(type: string, settings: TaggingSettings = DEFAULT_TAGG
 }
 
 /**
- * Tags whose live spelling is not the slug of their name. The catalogue hyphenates most tags
- * ("ski-accessories", "colour-true-black") but writes the garment names with spaces
- * ("snow jackets", "snow pants"), and a tag is an exact string: hyphenate one of these and the
- * product stops appearing on the page that filters for it.
+ * Tags whose live spelling is not the slug of their name. Empty by design: the shop has settled on
+ * hyphens everywhere, so "Snow Jackets" is written snow-jackets. Kept as the one place to pin an
+ * exception if some page ever turns out to filter on a different string.
  */
-export const TAG_SPELLING: Record<string, string> = {
-  "Snow Jackets": "snow jackets",
-  "Snow Pants": "snow pants",
-  "Down Jackets": "down jackets",
-};
+export const TAG_SPELLING: Record<string, string> = {};
+
+/**
+ * Tags Shopify writes by itself — price bands, sizes and colours are derived from the variants
+ * once a product is in the store.
+ *
+ * These matter twice over. The importer must not write them, or it would fight Shopify over the
+ * same tag. And the template learner must not *read* them either: a brand export is full of
+ * colour-true-black and size-medium, and without this a template would learn those as house
+ * conventions and stamp one brand's colours onto every new product.
+ */
+const SHOPIFY_GENERATED: RegExp[] = [
+  /^\d+-\d+$/, // price band, e.g. 500-600
+  /^under-\d+$/, // e.g. under-50
+  /^size-/i,
+  /^colou?r-/i,
+];
+
+export function isShopifyGenerated(tag: string): boolean {
+  const value = tag.trim();
+  return SHOPIFY_GENERATED.some((pattern) => pattern.test(value));
+}
+
+/** Drop anything Shopify maintains for itself. */
+export function withoutGenerated(tags: string[]): string[] {
+  return tags.filter((tag) => !isShopifyGenerated(tag));
+}
 
 export const slugTag = (value: string): string =>
   value.trim().toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");

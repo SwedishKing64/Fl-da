@@ -10,6 +10,7 @@
  */
 
 import { parseCsv } from "./csv";
+import { isShopifyGenerated } from "./tagging";
 
 export interface TemplateAnalysis {
   productCount: number;
@@ -169,7 +170,9 @@ function readProducts(text: string): { products: ProductRecord[]; warnings: stri
     products.push({
       vendor: cell(iVendor),
       productType: cell(iType),
-      tags: [...new Set(splitList(cell(iTags)))],
+      // Shopify maintains size, colour and price-band tags itself. Learning them as house
+      // conventions would stamp one brand's colours onto every future product.
+      tags: [...new Set(splitList(cell(iTags)))].filter((tag) => !isShopifyGenerated(tag)),
       collections: [...new Set(splitList(cell(iCollection)))],
       optionNames: optionNameCols.map(cell).filter((n) => n && norm(n) !== "title"),
       metafields,

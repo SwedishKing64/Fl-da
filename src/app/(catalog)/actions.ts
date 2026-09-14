@@ -1,4 +1,5 @@
 "use server";
+import { analyseShopifyCsv, type TemplateAnalysis } from "@/lib/catalog/templates";
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
@@ -721,4 +722,76 @@ export async function autoAttachPhotosAction(batchId: string): Promise<ActionRes
   } catch (err) {
     return fail(err);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Product templates: conventions learned from a Shopify export.
+// ---------------------------------------------------------------------------
+
+/** Read an uploaded export without saving anything, so the result can be reviewed first. */
+export async function analyseTemplateCsvAction(formData: FormData): Promise<ActionResult<{ analysis: TemplateAnalysis; fileName: string }>> {
+  await requireUser();
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) return { ok: false, error: "Choose a CSV file to read." };
+  if (file.size > 8 * 1024 * 1024) return { ok: false, error: "That file is over 8MB. Export a single brand at a time." };
+  try {
+    const analysis = analyseShopifyCsv(await file.text());
+    if (analysis.productCount === 0) return { ok: false, error: analysis.warnings[0] ?? "No products could be read from that file." };
+    return { ok: true, data: { analysis, fileName: file.name } };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+export async function saveTemplateAction(_prev: unknown, formData: FormData): Promise<ActionResult<{ id: string }>> {
+  const user = await requireUser();
+  if (user.role !== "ADMIN") return { ok: false, error: "Only an admin can save templates." };
+  const id = String(formData.get("id") ?? "").trim();
+  const name = String(formData.get("name") ?? "").trim();
+  const matchValue = String(formData.get("matchValue") ?? "").trim();
+  if (!name) return { ok: false, error: "Give the template a name." };
+  if (!matchValue) return { ok: false, error: "Say which brand, product type or category this applies to." };
+  const data = {
+    name,
+    scope: String(formData.get("scope") ?? "BRAND"),
+    matchValue,
+    matchProductType: String(formData.get("matchProductType") ?? "").trim(),
+    sourceFileName: String(formData.get("sourceFileName") ?? ""),
+    productCount: Number(formData.get("productCount") ?? 0) || 0,
+    setProductType: String(formData.get("setProductType") ?? "").trim(),
+    addTags: String(formData.get("addTags") ?? "").trim(),
+    addCollections: String(formData.get("addCollections") ?? "").trim(),
+    optionNames: String(formData.get("optionNames") ?? "").trim(),
+    setMetafields: String(formData.get("setMetafields") ?? "{}"),
+    analysis: String(formData.get("analysis") ?? "{}"),
+    priority: Number(formData.get("priority") ?? 0) || 0,
+    active: formData.get("active") === "on",
+  };
+  try {
+    const saved = id
+      ? await prisma.productTemplate.update({ where: { id }, data })
+      : await prisma.productTemplate.create({ data });
+    await logAudit(id ? "template.updated" : "template.created", { userId: user.id, details: { name, scope: data.scope, matchValue, productCount: data.productCount } });
+    revalidatePath("/templates");
+    return { ok: true, data: { id: saved.id }, message: `Saved “${name}”.` };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+export async function deleteProductTemplateAction(id: string): Promise<ActionResult> {
+  const user = await requireUser();
+  if (user.role !== "ADMIN") return { ok: false, error: "Only an admin can delete templates." };
+  await prisma.productTemplate.delete({ where: { id } });
+  await logAudit("template.deleted", { userId: user.id, details: { id } });
+  revalidatePath("/templates");
+  return { ok: true };
+}
+
+export async function toggleProductTemplateAction(id: string, active: boolean): Promise<ActionResult> {
+  const user = await requireUser();
+  if (user.role !== "ADMIN") return { ok: false, error: "Only an admin can change templates." };
+  await prisma.productTemplate.update({ where: { id }, data: { active } });
+  revalidatePath("/templates");
+  return { ok: true };
 }

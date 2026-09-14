@@ -306,6 +306,30 @@ model TagRule {
   updatedAt      DateTime @updatedAt
 }
 
+/// Conventions learned from a Shopify export of products already built for a brand or type.
+/// New imports pick these up so they are tagged and structured the same way.
+model ProductTemplate {
+  id             String   @id @default(cuid())
+  name           String
+  scope          String   @default("BRAND") // BRAND | PRODUCT_TYPE | CATEGORY
+  matchValue     String   @default("")
+  /// Optional extra constraint: a brand template learned from a skis-only export should not
+  /// tag that brand's beanies as skis.
+  matchProductType String @default("")
+  sourceFileName String   @default("")
+  productCount   Int      @default(0)
+  setProductType String   @default("")
+  addTags        String   @default("") // comma separated
+  addCollections String   @default("") // comma separated
+  optionNames    String   @default("") // comma separated, e.g. "Length, Colour"
+  setMetafields  String   @default("{}") // JSON { [metafieldKey]: value }
+  analysis       String   @default("{}") // JSON TemplateAnalysis, kept so the UI can show what was read
+  priority       Int      @default(0)
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
 /// Product photos uploaded to a batch that have not been attached to a product yet.
 model UnassignedImage {
   id        String   @id @default(cuid())

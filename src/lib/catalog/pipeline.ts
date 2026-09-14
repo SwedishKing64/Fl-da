@@ -7,6 +7,7 @@ import { applyMapping, headerHash, mappingProblems, suggestMapping, suggestOptio
 import { groupLineItems } from "./grouping";
 import { DEFAULT_CATEGORY_RULES, type CategoryRuleLike } from "./categorize";
 import { applyTagRules, type TagRuleLike } from "./rules";
+import { applyTemplates, type ProductTemplateLike } from "./templates";
 import { allocateFreight, exGstCostAud, priceVariant, selectRule, type PricingRuleLike } from "./pricing";
 import { getSettings } from "./settings";
 import { checkImageUrl, findLibraryImages, recordLibraryImages } from "./images";
@@ -33,20 +34,66 @@ export async function loadTagRules(): Promise<TagRuleLike[]> {
   return prisma.tagRule.findMany({ orderBy: { priority: "desc" } });
 }
 
+/** Templates learned from uploaded Shopify exports, shaped for the pure applier. */
+export async function loadProductTemplates(): Promise<ProductTemplateLike[]> {
+  const rows = await prisma.productTemplate.findMany({ where: { active: true }, orderBy: { priority: "asc" } });
+  return rows.map((t) => ({
+    id: t.id,
+    name: t.name,
+    scope: t.scope as ProductTemplateLike["scope"],
+    matchValue: t.matchValue,
+    matchProductType: t.matchProductType,
+    productType: t.setProductType,
+    tags: splitCsv(t.addTags),
+    collections: splitCsv(t.addCollections),
+    optionNames: splitCsv(t.optionNames),
+    metafields: parseJson<Record<string, string>>(t.setMetafields, {}),
+    priority: t.priority,
+    active: t.active,
+  }));
+}
+
 /** Re-run the tag/collection/type/metafield rules over every product in a batch. */
-export async function applyRulesToBatch(batchId: string): Promise<{ products: number; matched: number }> {
-  const rules = await loadTagRules();
+export async function applyRulesToBatch(batchId: string): Promise<{ products: number; matched: number; templated: number }> {
+  const [rules, templates] = await Promise.all([loadTagRules(), loadProductTemplates()]);
   const products = await prisma.product.findMany({ where: { batchId }, include: { variants: { select: { sku: true } } } });
   let matched = 0;
+  let templated = 0;
   for (const p of products) {
+    // Templates lay down the house conventions first; hand-written rules run after so an
+    // explicit rule always beats a learned default.
+    const viaTemplate = applyTemplates(
+      {
+        vendor: p.vendor,
+        productType: p.productType,
+        category: p.category,
+        tags: splitCsv(p.tags),
+        collections: splitCsv(p.collections),
+        metafields: parseJson<Record<string, string>>(p.metafields, {}),
+        optionNames: [p.option1Name, p.option2Name, p.option3Name].filter((n): n is string => Boolean(n)),
+      },
+      templates,
+    );
+    if (viaTemplate.applied.length) templated++;
     const out = applyTagRules(
-      { title: p.title, vendor: p.vendor, category: p.category, productType: p.productType, skus: p.variants.map((v) => v.sku), tags: splitCsv(p.tags), collections: splitCsv(p.collections), metafields: parseJson<Record<string, string>>(p.metafields, {}) },
+      { title: p.title, vendor: p.vendor, category: p.category, productType: viaTemplate.productType, skus: p.variants.map((v) => v.sku), tags: viaTemplate.tags, collections: viaTemplate.collections, metafields: viaTemplate.metafields },
       rules,
     );
     if (out.matched.length) matched++;
-    await prisma.product.update({ where: { id: p.id }, data: { tags: out.tags.join(", "), collections: out.collections.join(", "), productType: out.productType, metafields: JSON.stringify(out.metafields) } });
+    await prisma.product.update({
+      where: { id: p.id },
+      data: {
+        tags: out.tags.join(", "),
+        collections: out.collections.join(", "),
+        productType: out.productType,
+        metafields: JSON.stringify(out.metafields),
+        option1Name: viaTemplate.optionNames[0] ?? p.option1Name,
+        option2Name: viaTemplate.optionNames[1] ?? p.option2Name,
+        option3Name: viaTemplate.optionNames[2] ?? p.option3Name,
+      },
+    });
   }
-  return { products: products.length, matched };
+  return { products: products.length, matched, templated };
 }
 
 function splitCsv(s: string): string[] {
@@ -254,10 +301,24 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
     }
   }
 
-  const [categoryRules, tagRules] = await Promise.all([loadCategoryRules(), loadTagRules()]);
+  const [categoryRules, tagRules, templates] = await Promise.all([loadCategoryRules(), loadTagRules(), loadProductTemplates()]);
   const grouped = enrichFromSpecs(groupLineItems(items.map((i) => i.item), categoryRules), specItems).map((g) => {
-    const out = applyTagRules({ title: g.title, vendor: g.brand, category: g.category, productType: g.productType, skus: g.variants.map((v) => v.item.sku), tags: g.tags, collections: g.collections, metafields: g.metafields }, tagRules);
-    return { ...g, tags: out.tags, collections: out.collections, productType: out.productType, metafields: out.metafields };
+    // Learned conventions first, then hand-written rules, which can always override them.
+    const viaTemplate = applyTemplates(
+      { vendor: g.brand, productType: g.productType, category: g.category, tags: g.tags, collections: g.collections, metafields: g.metafields, optionNames: [g.option1Name, g.option2Name, g.option3Name].filter((n): n is string => Boolean(n)) },
+      templates,
+    );
+    const out = applyTagRules({ title: g.title, vendor: g.brand, category: g.category, productType: viaTemplate.productType, skus: g.variants.map((v) => v.item.sku), tags: viaTemplate.tags, collections: viaTemplate.collections, metafields: viaTemplate.metafields }, tagRules);
+    return {
+      ...g,
+      tags: out.tags,
+      collections: out.collections,
+      productType: out.productType,
+      metafields: out.metafields,
+      option1Name: viaTemplate.optionNames[0] ?? g.option1Name,
+      option2Name: viaTemplate.optionNames[1] ?? g.option2Name,
+      option3Name: viaTemplate.optionNames[2] ?? g.option3Name,
+    };
   });
 
   // Rebuild the batch's products from scratch (mapping is re-runnable until export).

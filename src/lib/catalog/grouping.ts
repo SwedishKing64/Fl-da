@@ -2,6 +2,7 @@
 
 import { buildHandle } from "./handle";
 import { chooseOptions, collectionsFor, detectCategory, enrichFromTitle, metafieldsFor, OPTION_LABELS, tagsFor, type CategoryRuleLike } from "./categorize";
+import { normaliseOptionName, optionNamesFor } from "./options";
 import type { CanonicalLineItem } from "./types";
 
 export interface GroupedVariant {
@@ -69,10 +70,21 @@ function commonPrefix(values: string[]): string {
   return prefix;
 }
 
-/** Fallback SKU when the supplier only gives a model code: "<model>-<option values>". */
-function derivedSku(modelCode: string, values: Array<string | null>): string {
-  const parts = values.filter((v): v is string => Boolean(v)).map((v) => v.replace(/[^A-Za-z0-9.]+/g, "").toUpperCase());
-  return [modelCode.trim().toUpperCase(), ...parts].filter(Boolean).join("-");
+/**
+ * Fallback SKU when the supplier only gives a model code: "<model>-<attributes>".
+ *
+ * Built from the item in a fixed order rather than from the order the options happen to be shown
+ * in. A SKU is how a re-import recognises a variant it has seen before, so it must not move when
+ * someone decides a jacket reads better as colour-then-size.
+ */
+const SKU_ATTRIBUTES: Array<keyof CanonicalLineItem> = ["length", "size", "width", "colour"];
+
+function derivedSku(item: CanonicalLineItem): string {
+  const parts = SKU_ATTRIBUTES
+    .map((key) => String(item[key] ?? "").trim())
+    .filter(Boolean)
+    .map((v) => v.replace(/[^A-Za-z0-9.]+/g, "").toUpperCase());
+  return [item.modelCode.trim().toUpperCase(), ...parts].filter(Boolean).join("-");
 }
 
 export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRuleLike[]): GroupedProduct[] {
@@ -101,8 +113,12 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
     const baseTitle = entries.map((e) => e.item.title.trim()).find(Boolean) ?? first.modelCode ?? "Untitled";
     const title = brand && !baseTitle.toLowerCase().startsWith(brand.toLowerCase()) ? `${brand} ${baseTitle}` : baseTitle;
     const items = entries.map((e) => e.item);
-    const optionKeys = chooseOptions(group.rule, items);
-    const names = optionKeys.map((k) => OPTION_LABELS[k] ?? titleCase(String(k)));
+    const productType = group.rule?.productType ?? (first.productType || "");
+    // What varies decides which options exist; the shop's own habit decides the order they are
+    // read in. A jacket is colour then size on forty-one of forty-three products, a ski is length
+    // first, and a sleeping bag is size, loft, then which side the zip is on.
+    const optionKeys = orderByConvention(productType, chooseOptions(group.rule, items));
+    const names = optionKeys.map((k) => normaliseOptionName(OPTION_LABELS[k] ?? titleCase(String(k))));
     const seenCombos = new Set<string>();
     const variants: GroupedVariant[] = [];
     for (const e of entries) {
@@ -119,7 +135,7 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
         }
       }
       seenCombos.add(skuKey);
-      if (!e.item.sku && e.item.modelCode) e.item.sku = derivedSku(e.item.modelCode, values);
+      if (!e.item.sku && e.item.modelCode) e.item.sku = derivedSku(e.item);
       variants.push({ item: e.item, sourceIndex: e.index, option1Value: values[0] ?? null, option2Value: values[1] ?? null, option3Value: values[2] ?? null });
     }
     const description = items.map((i) => i.description.trim()).find(Boolean) ?? "";
@@ -129,7 +145,7 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
       title,
       brand,
       category: group.rule?.category ?? (first.category || "other"),
-      productType: group.rule?.productType ?? (first.productType || ""),
+      productType,
       tags: tagsFor(group.rule, items, brand),
       collections: collectionsFor(group.rule, items),
       description,
@@ -142,4 +158,19 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
     });
   }
   return products;
+}
+
+/**
+ * The same option keys, in the order the shop reads them for this kind of product. Anything the
+ * convention has no opinion about keeps the order it arrived in.
+ */
+function orderByConvention(productType: string, keys: Array<keyof CanonicalLineItem>): Array<keyof CanonicalLineItem> {
+  if (keys.length < 2) return keys;
+  const label = (k: keyof CanonicalLineItem) => normaliseOptionName(OPTION_LABELS[k] ?? titleCase(String(k)));
+  const wanted = optionNamesFor(productType, keys.map(label));
+  return [...keys].sort((a, b) => {
+    const ia = wanted.indexOf(label(a));
+    const ib = wanted.indexOf(label(b));
+    return (ia === -1 ? wanted.length : ia) - (ib === -1 ? wanted.length : ib);
+  });
 }

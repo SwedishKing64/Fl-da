@@ -7,6 +7,7 @@
 //  - straight quotes, comma delimiter, UTF-8, prices as plain decimals
 //  - files are split so no part exceeds the size limit and a Handle never spans two parts
 
+import { NO_VARIANT_OPTION, normaliseOptionName, normaliseOptionValue } from "./options";
 import { formatPrice } from "./money";
 import { isValidHandle } from "./handle";
 
@@ -162,19 +163,21 @@ export function buildRows(products: CsvProduct[], options: GenerateOptions = {})
       // Option names on every variant row (Shopify accepts them on the first row only, but
       // repeating them keeps re-imports and manual edits robust); values on every row.
       if (hasOptions) {
-        row["Option1 Name"] = product.option1Name ?? "";
-        row["Option1 Value"] = variant.option1Value ?? "";
+        // Last gate on spelling: the shop is Australian and writes Colour, and asks for the Zip
+        // Side however an invoice spelled it.
+        row["Option1 Name"] = normaliseOptionName(product.option1Name ?? "");
+        row["Option1 Value"] = normaliseOptionValue(variant.option1Value ?? "");
         if (product.option2Name) {
-          row["Option2 Name"] = product.option2Name;
-          row["Option2 Value"] = variant.option2Value ?? "";
+          row["Option2 Name"] = normaliseOptionName(product.option2Name);
+          row["Option2 Value"] = normaliseOptionValue(variant.option2Value ?? "");
         }
         if (product.option3Name) {
-          row["Option3 Name"] = product.option3Name;
-          row["Option3 Value"] = variant.option3Value ?? "";
+          row["Option3 Name"] = normaliseOptionName(product.option3Name);
+          row["Option3 Value"] = normaliseOptionValue(variant.option3Value ?? "");
         }
       } else {
-        row["Option1 Name"] = "Title";
-        row["Option1 Value"] = "Default Title";
+        row["Option1 Name"] = NO_VARIANT_OPTION.name;
+        row["Option1 Value"] = NO_VARIANT_OPTION.value;
       }
       row["Variant SKU"] = variant.sku ?? "";
       row["Variant Grams"] = String(Math.max(0, Math.round(variant.grams ?? 0)));

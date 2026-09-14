@@ -54,8 +54,10 @@ describe("sample invoices → expected Shopify CSV", () => {
     expect(mantra.variants[0].costPrice).toBe(550); // 1100 line total / 2 pieces
     expect(mantra.variants[0].landedCostAud).toBeGreaterThan(550 * 1.52); // FX plus freight share
     const griffon = products.find((p) => p.handle === "marker-griffon-13-id-bindings")!;
-    expect(griffon.option1Name).toBe("Size");
-    expect(griffon.variants.map((v) => v.option1Value)).toEqual(["100", "110"]);
+    // Colour leads on a binding, as it does on all twenty in the catalogue.
+    expect(griffon.option1Name).toBe("Colour");
+    expect(griffon.option2Name).toBe("Size");
+    expect(griffon.variants.map((v) => v.option2Value)).toEqual(["100", "110"]);
   });
 
   it("burton: GST-inclusive text invoice backs GST out of cost before markup", () => {

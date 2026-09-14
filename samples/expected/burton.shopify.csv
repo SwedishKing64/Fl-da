@@ -2,5 +2,5 @@ Handle,Title,Body (HTML),Vendor,Type,Tags,Published,Option1 Name,Option1 Value,O
 burton-custom-snowboard,Burton Custom Snowboard,,Burton,Snowboards,"snowboards, Burton",FALSE,Length,154,,,,,BUR-CUST-154,0,shopify,2,deny,manual,779.99,,TRUE,TRUE,,,,,FALSE,,,,g,425.00,Snowboards,draft,"154, 158, 162",,,,,,,,
 burton-custom-snowboard,,,,,,,Length,158,,,,,BUR-CUST-158,0,shopify,3,deny,manual,779.99,,TRUE,TRUE,,,,,,,,,g,425.00,,,,,,,,,,,
 burton-custom-snowboard,,,,,,,Length,162,,,,,BUR-CUST-162,0,shopify,1,deny,manual,779.99,,TRUE,TRUE,,,,,,,,,g,425.00,,,,,,,,,,,
-burton-cartel-bindings,Burton Cartel Bindings,,Burton,Ski Bindings,"bindings, Burton",FALSE,Size,M,Colour,Black,,,BUR-CART-M,0,shopify,3,deny,manual,394.99,,TRUE,TRUE,,,,,FALSE,,,,g,215.00,Bindings,draft,,,,,,,,,
-burton-cartel-bindings,,,,,,,Size,L,Colour,Black,,,BUR-CART-L,0,shopify,2,deny,manual,394.99,,TRUE,TRUE,,,,,,,,,g,215.00,,,,,,,,,,,
+burton-cartel-bindings,Burton Cartel Bindings,,Burton,Ski Bindings,"bindings, Burton",FALSE,Colour,Black,Size,M,,,BUR-CART-M,0,shopify,3,deny,manual,394.99,,TRUE,TRUE,,,,,FALSE,,,,g,215.00,Bindings,draft,,,,,,,,,
+burton-cartel-bindings,,,,,,,Colour,Black,Size,L,,,BUR-CART-L,0,shopify,2,deny,manual,394.99,,TRUE,TRUE,,,,,,,,,g,215.00,,,,,,,,,,,

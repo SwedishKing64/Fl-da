@@ -10,7 +10,7 @@
  * vendor in lower case; the fourteen products with no gender tag are exactly the unisex ones.
  */
 
-import { PRODUCT_TYPES, TYPE_SECTIONS, resolveType } from "./taxonomy";
+import { ALPSPORT_TAXONOMY, PRODUCT_TYPES, TYPE_SECTIONS, resolveType } from "./taxonomy";
 
 export type Gender = "mens" | "womens" | "kids";
 
@@ -35,9 +35,45 @@ export const DEFAULT_TAGGING: TaggingSettings = {
   currentYear: 2026,
 };
 
+/** The ski disciplines a product can be filed under. A ski may be several at once. */
+export const SKI_DISCIPLINES: string[] =
+  ALPSPORT_TAXONOMY.find((s) => s.top === "Ski")?.groups.find((g) => g.heading === "Ski Categories")?.leaves ?? [];
+
+/** The snowboard equivalents. */
+export const BOARD_DISCIPLINES: string[] =
+  ALPSPORT_TAXONOMY.find((s) => s.top === "Snowboard")?.groups.find((g) => g.heading === "Snowboard Categories")?.leaves ?? [];
+
+/** Which disciplines are open to a product, given what it is. Empty for anything but a ski or board. */
+export function disciplinesFor(type: string): string[] {
+  const resolved = resolveType(type) ?? type.trim();
+  const sections = TYPE_SECTIONS[resolved] ?? [];
+  if (/\bskis?\b/i.test(resolved) || sections.includes("Ski")) {
+    if (/snowboard/i.test(resolved)) return BOARD_DISCIPLINES;
+    return SKI_DISCIPLINES;
+  }
+  if (sections.includes("Snowboard")) return BOARD_DISCIPLINES;
+  return [];
+}
+
+/** The package tag for a board or ski sold with a binding on it. */
+function packageTagFor(type: string): string {
+  const resolved = resolveType(type) ?? type.trim();
+  return /snowboard|board/i.test(resolved) ? "Snowboard Packages" : "Ski Packages";
+}
+
 export interface TagInput {
   type: string;
   vendor: string;
+  /**
+   * Sold with a binding fitted, which makes it a package rather than a bare board or ski.
+   */
+  withBindings?: boolean;
+  /**
+   * What the ski or board is for. A product can be more than one — the catalogue has boards that
+   * are both freeride and freestyle — and anything not open to this product's sport is dropped
+   * rather than written, since a tag naming a page that does not exist is worse than no tag.
+   */
+  disciplines?: string[];
   /**
    * A product that does not change from year to year — a stomp pad, a scraper, replacement
    * hardware. It carries the evergreen marker in place of a season, never as well as one.
@@ -159,6 +195,14 @@ export function generalTags(input: TagInput, settings: TaggingSettings = DEFAULT
   push(settings.houseTag);
   push(slugTag(input.vendor));
   for (const gender of normaliseGenders(input.genders)) push(gender);
+
+  if (input.withBindings) push(TAG_SPELLING[packageTagFor(type)] ?? slugTag(packageTagFor(type)));
+
+  const allowed = disciplinesFor(type);
+  for (const discipline of input.disciplines ?? []) {
+    const match = allowed.find((a) => slugTag(a) === slugTag(discipline));
+    if (match) push(TAG_SPELLING[match] ?? slugTag(match));
+  }
 
   return tags;
 }

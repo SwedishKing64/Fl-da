@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_TAGGING, EVERGREEN_SEASON, TAG_SPELLING, generalTags, isHardgood, isManualTag, isNotOurs, isShopifyGenerated, needsSectionChoice, normaliseGenders, seasonFor, slugTag, withoutGenerated } from "./tagging";
+import { BOARD_DISCIPLINES, DEFAULT_TAGGING, EVERGREEN_SEASON, SKI_DISCIPLINES, disciplinesFor, TAG_SPELLING, generalTags, isHardgood, isManualTag, isNotOurs, isShopifyGenerated, needsSectionChoice, normaliseGenders, seasonFor, slugTag, withoutGenerated } from "./tagging";
 
 describe("the six general tags", () => {
   it("writes them in the shop's order: type, section, season, house, vendor, gender", () => {
@@ -179,5 +179,56 @@ describe("products that do not change from year to year", () => {
 
   it("still seasons a normal product", () => {
     expect(generalTags({ type: "Snowboard Accessories", vendor: "Burton", genders: [], section: "Snowboard" })).toContain("2026");
+  });
+});
+
+describe("skis and snowboards", () => {
+  it("tags a board sold with a binding as a package", () => {
+    const tags = generalTags({ type: "Snowboards", vendor: "Burton", genders: ["mens"], withBindings: true });
+    expect(tags).toContain("snowboard-packages");
+  });
+
+  it("uses the ski package tag for a ski", () => {
+    expect(generalTags({ type: "Skis", vendor: "Atomic", genders: ["mens"], withBindings: true })).toContain("ski-packages");
+    expect(generalTags({ type: "Skis", vendor: "Atomic", genders: ["mens"] })).not.toContain("ski-packages");
+  });
+
+  it("carries every discipline a board is, not just one", () => {
+    // The shop's own Family Tree Alekesam is both.
+    const tags = generalTags({
+      type: "Snowboards", vendor: "Burton", genders: ["mens"],
+      disciplines: ["Freeride & Powder Boards", "Freestyle & All-Mountain Boards"],
+    });
+    expect(tags).toContain("freeride-and-powder-boards");
+    expect(tags).toContain("freestyle-and-all-mountain-boards");
+  });
+
+  it("offers the seven ski disciplines and the three board ones", () => {
+    expect(SKI_DISCIPLINES).toHaveLength(7);
+    expect(SKI_DISCIPLINES).toContain("Mogul Skis");
+    expect(SKI_DISCIPLINES).toContain("Frontside & All-Mountain Skis");
+    expect(BOARD_DISCIPLINES).toEqual(["Freestyle & All-Mountain Boards", "Freeride & Powder Boards", "Park Boards"]);
+  });
+
+  it("will not put a board discipline on a ski", () => {
+    const tags = generalTags({ type: "Skis", vendor: "Atomic", genders: ["mens"], disciplines: ["Park Boards", "Carving Skis"] });
+    expect(tags).toContain("carving-skis");
+    expect(tags).not.toContain("park-boards");
+  });
+
+  it("offers no disciplines to something that is neither", () => {
+    expect(disciplinesFor("Snow Jackets")).toEqual([]);
+    expect(disciplinesFor("Sleeping Bags")).toEqual([]);
+    expect(disciplinesFor("Snowboards")).toEqual(BOARD_DISCIPLINES);
+    expect(disciplinesFor("Skis")).toEqual(SKI_DISCIPLINES);
+  });
+
+  it("puts the whole lot together in order", () => {
+    expect(generalTags({
+      type: "Snowboards", vendor: "Burton", genders: ["mens"],
+      withBindings: true, disciplines: ["Park Boards"],
+    })).toEqual([
+      "snowboards", "snowboard", "2027", "123abc-js", "burton", "mens", "snowboard-packages", "park-boards",
+    ]);
   });
 });

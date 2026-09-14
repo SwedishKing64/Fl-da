@@ -79,8 +79,8 @@ export function runOffline(
       freightPerUnitAud: 0,
       pricingRuleId: null,
       pricingRuleName: null,
-      retailOverride: null,
-      compareAtPrice: v.item.rrp,
+      retailOverride: v.item.rrp,
+      compareAtPrice: null,
       landedCostAud: 0, retailPrice: 0, exGstRevenue: 0, gstComponent: 0, profitPerUnit: 0, marginPct: 0, markupPct: 0,
       reconcileStatus: "UNKNOWN",
       shopifyVariantId: null,
@@ -95,7 +95,7 @@ export function runOffline(
   for (const { p, v } of allVariants) {
     v.freightPerUnitAud = freight[v.id] ?? 0;
     const rule = selectRule(pricingRules, { category: p.category, brand: p.vendor, sku: v.sku, modelCode: "" });
-    const r = priceVariant({ costPrice: v.costPrice, gstTreatment: v.gstTreatment as GstTreatment, fxRateToAud: v.fxRateToAud, freightPerUnitAud: v.freightPerUnitAud, quantity: v.quantity, rule, retailOverride: null }, settings);
+    const r = priceVariant({ costPrice: v.costPrice, gstTreatment: v.gstTreatment as GstTreatment, fxRateToAud: v.fxRateToAud, freightPerUnitAud: v.freightPerUnitAud, quantity: v.quantity, rule, retailOverride: v.retailOverride }, settings);
     Object.assign(v, { landedCostAud: r.landedCostAud, retailPrice: r.retailPrice, exGstRevenue: r.exGstRevenue, gstComponent: r.gstComponent, profitPerUnit: r.profitPerUnit, marginPct: r.marginPct, markupPct: r.markupPct, pricingRuleName: r.ruleName });
   }
 

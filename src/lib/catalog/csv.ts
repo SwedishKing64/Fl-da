@@ -8,6 +8,7 @@
 //  - files are split so no part exceeds the size limit and a Handle never spans two parts
 
 import { NO_VARIANT_OPTION, normaliseOptionName, normaliseOptionValue } from "./options";
+import { defaultGrams } from "./variant-rules";
 import { formatPrice } from "./money";
 import { isValidHandle } from "./handle";
 
@@ -180,7 +181,11 @@ export function buildRows(products: CsvProduct[], options: GenerateOptions = {})
         row["Option1 Value"] = NO_VARIANT_OPTION.value;
       }
       row["Variant SKU"] = variant.sku ?? "";
-      row["Variant Grams"] = String(Math.max(0, Math.round(variant.grams ?? 0)));
+      // The shop records a shipping band rather than a measured weight, so a ski is 2 kg and a
+      // board 1 kg whatever the invoice says. A weight that came from the supplier is kept.
+      // Zero is what an invoice that carries no weight leaves behind, so it means "unset" here.
+      const grams = variant.grams || defaultGrams(product.productType ?? "", product.title);
+      row["Variant Grams"] = String(Math.max(0, Math.round(grams)));
       row["Variant Inventory Tracker"] = "shopify";
       row["Variant Inventory Qty"] = String(Math.max(0, Math.round(variant.quantity ?? 0)));
       row["Variant Inventory Policy"] = variant.inventoryPolicy ?? "deny";
@@ -191,7 +196,8 @@ export function buildRows(products: CsvProduct[], options: GenerateOptions = {})
       row["Variant Requires Shipping"] = bool(variant.requiresShipping, true);
       row["Variant Taxable"] = bool(variant.taxable, true);
       row["Variant Barcode"] = variant.barcode ?? "";
-      row["Variant Weight Unit"] = "g";
+      // Grams is always grams; this is the unit the shop reads them in, on all 2,394 rows.
+      row["Variant Weight Unit"] = "kg";
       row["Cost per item"] = variant.costPerItem != null ? formatPrice(variant.costPerItem) : "";
       row["Variant Image"] = variant.imageUrl ?? "";
       // Image N rides on variant row N (first image on first row), overflow becomes extra rows.

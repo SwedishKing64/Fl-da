@@ -10,6 +10,7 @@ import {
   optionNamesFor,
   optionPlanFor,
 } from "./options";
+import { defaultGrams, mountingFee, packageCost, packagePrice } from "./variant-rules";
 
 describe("what a product is sold by", () => {
   it("sells a ski by length, and a ski package by what is on it and who mounts it", () => {
@@ -102,5 +103,44 @@ describe("spelling", () => {
   it("leaves everything else alone", () => {
     expect(normaliseOptionName("Loft")).toBe("Loft");
     expect(normaliseOptionValue("800+")).toBe("800+");
+  });
+});
+
+describe("the variant columns the shop fixes", () => {
+  it("weighs a ski at 2 kg and a board at 1 kg, whatever they really weigh", () => {
+    expect(defaultGrams("Skis")).toBe(2000);
+    expect(defaultGrams("Snowboards")).toBe(1000);
+  });
+
+  it("gives a bag a weight only once it has wheels", () => {
+    expect(defaultGrams("Ski Accessories", "Double + Wheelie Ski Bag 185cm")).toBe(1000);
+    expect(defaultGrams("Snowboard Accessories", "Wheelie Gig Snowboard Bag")).toBe(1000);
+    expect(defaultGrams("Ski Accessories", "Ski & Boot Bag")).toBe(0);
+  });
+
+  it("leaves everything else at nothing", () => {
+    for (const type of ["Snow Clothing", "Sleeping Bags", "Footwear", "Packs and Bags"]) {
+      expect(defaultGrams(type, "Something"), type).toBe(0);
+    }
+  });
+});
+
+describe("what a ski sold with bindings costs and sells for", () => {
+  it("adds the two recommended retails, and does not discount the pair", () => {
+    expect(packagePrice({ rrp: 999, bindingRrp: 449 })).toBe(1448);
+    expect(packagePrice({ rrp: 999 })).toBe(999);
+  });
+
+  /** A flat ski is mounted with bindings from elsewhere, which is the full job; a package is $39. */
+  it("charges $55 to mount a flat ski and $39 to mount a package", () => {
+    expect(mountingFee()).toBe(55);
+    expect(mountingFee({ withBindings: true })).toBe(39);
+    expect(packagePrice({ rrp: 999 }, { mounted: true })).toBe(999 + 55);
+    expect(packagePrice({ rrp: 999, bindingRrp: 449 }, { mounted: true })).toBe(1448 + 39);
+  });
+
+  it("costs what the invoice says, plus the binding when one is on it", () => {
+    expect(packageCost(450)).toBe(450);
+    expect(packageCost(450, 210)).toBe(660);
   });
 });

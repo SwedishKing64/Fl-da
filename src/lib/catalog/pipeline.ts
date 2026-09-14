@@ -369,7 +369,10 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
           costCurrency: batch.currency,
           gstTreatment: batch.gstTreatment,
           fxRateToAud: batch.fxRateToAud,
-          compareAtPrice: v.item.rrp ?? null,
+          // The recommended retail is what the product sells for, so it sets the price rather than
+          // sitting beside it as a strikethrough. Without one the markup rules price it.
+          retailOverride: v.item.rrp ?? null,
+          compareAtPrice: null,
         },
       });
       await prisma.extractedLineItem.create({

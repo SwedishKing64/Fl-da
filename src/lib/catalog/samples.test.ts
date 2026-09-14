@@ -32,18 +32,20 @@ describe("sample invoices → expected Shopify CSV", () => {
     });
   }
 
-  it("atomic: GST-exclusive AUD invoice → 40% margin skis, 38% boots, keystone beanie", () => {
+  it("atomic: the recommended retail is the price, and the profit follows from it", () => {
     const { products, summary } = fixtures.results.atomic;
     const skis = products.find((p) => p.handle === "atomic-bent-90-skis")!;
     expect(skis.option1Name).toBe("Length");
     expect(skis.variants.map((v) => v.option1Value)).toEqual(["166", "172", "178"]);
-    expect(skis.variants[0].retailPrice).toBe(825.99); // 450 / 0.6 = 750 ex GST => 825.00 inc => .99 ending
-    expect(skis.variants[0].profitPerUnit).toBe(300.9); // 750.90 ex-GST revenue − 450
-    expect(skis.variants[0].compareAtPrice).toBe(999);
+    // The supplier's recommended retail sets the shelf price; the markup rules are what price a
+    // line that arrives without one.
+    expect(skis.variants[0].retailPrice).toBe(999);
+    expect(skis.variants[0].compareAtPrice).toBeNull(); // nothing to strike through at full price
+    expect(skis.variants[0].profitPerUnit).toBe(458.18); // 908.18 ex-GST revenue − 450 landed
     const beanie = products.find((p) => p.handle === "atomic-alps-beanie")!;
-    expect(beanie.variants[0].retailPrice).toBe(20.99); // 9.50 × 2 = 19 ex GST => 20.90 => 20.99
-    expect(summary.totalNetProfit).toBe(3006.66);
-    expect(summary.totalGst).toBe(755.11);
+    expect(beanie.variants[0].retailPrice).toBe(29.95);
+    expect(summary.totalNetProfit).toBe(4863.66);
+    expect(summary.totalGst).toBe(940.74);
   });
 
   it("volkl: USD invoice with line totals, no GST, freight by value", () => {

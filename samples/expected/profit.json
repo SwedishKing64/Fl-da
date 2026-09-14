@@ -4,12 +4,12 @@
       "units": 23,
       "variants": 7,
       "products": 3,
-      "totalRetailIncGst": 8305.77,
-      "totalGst": 755.11,
-      "totalExGstRevenue": 7550.66,
+      "totalRetailIncGst": 10348.4,
+      "totalGst": 940.74,
+      "totalExGstRevenue": 9407.66,
       "totalLandedCost": 4544,
-      "totalNetProfit": 3006.66,
-      "averageMarginPct": 39.8,
+      "totalNetProfit": 4863.66,
+      "averageMarginPct": 51.7,
       "lowMarginVariants": 0,
       "errors": 0,
       "warnings": 1
@@ -18,65 +18,65 @@
       {
         "sku": "AA0029-166-BLUEBLACK",
         "landedCostAud": 450,
-        "retailPrice": 825.99,
-        "exGstRevenue": 750.9,
-        "gstComponent": 75.09,
-        "profitPerUnit": 300.9,
-        "marginPct": 40.1
+        "retailPrice": 999,
+        "exGstRevenue": 908.18,
+        "gstComponent": 90.82,
+        "profitPerUnit": 458.18,
+        "marginPct": 50.5
       },
       {
         "sku": "AA0029-172-BLUEBLACK",
         "landedCostAud": 450,
-        "retailPrice": 825.99,
-        "exGstRevenue": 750.9,
-        "gstComponent": 75.09,
-        "profitPerUnit": 300.9,
-        "marginPct": 40.1
+        "retailPrice": 999,
+        "exGstRevenue": 908.18,
+        "gstComponent": 90.82,
+        "profitPerUnit": 458.18,
+        "marginPct": 50.5
       },
       {
         "sku": "AA0029-178-BLUEBLACK",
         "landedCostAud": 450,
-        "retailPrice": 825.99,
-        "exGstRevenue": 750.9,
-        "gstComponent": 75.09,
-        "profitPerUnit": 300.9,
-        "marginPct": 40.1
+        "retailPrice": 999,
+        "exGstRevenue": 908.18,
+        "gstComponent": 90.82,
+        "profitPerUnit": 458.18,
+        "marginPct": 50.5
       },
       {
         "sku": "AE5031-26.5-BLACKORANGE",
         "landedCostAud": 320,
-        "retailPrice": 567.99,
-        "exGstRevenue": 516.35,
-        "gstComponent": 51.64,
-        "profitPerUnit": 196.35,
-        "marginPct": 38
+        "retailPrice": 749,
+        "exGstRevenue": 680.91,
+        "gstComponent": 68.09,
+        "profitPerUnit": 360.91,
+        "marginPct": 53
       },
       {
         "sku": "AE5031-27.5-BLACKORANGE",
         "landedCostAud": 320,
-        "retailPrice": 567.99,
-        "exGstRevenue": 516.35,
-        "gstComponent": 51.64,
-        "profitPerUnit": 196.35,
-        "marginPct": 38
+        "retailPrice": 749,
+        "exGstRevenue": 680.91,
+        "gstComponent": 68.09,
+        "profitPerUnit": 360.91,
+        "marginPct": 53
       },
       {
         "sku": "AE5031-28.5-BLACKORANGE",
         "landedCostAud": 320,
-        "retailPrice": 567.99,
-        "exGstRevenue": 516.35,
-        "gstComponent": 51.64,
-        "profitPerUnit": 196.35,
-        "marginPct": 38
+        "retailPrice": 749,
+        "exGstRevenue": 680.91,
+        "gstComponent": 68.09,
+        "profitPerUnit": 360.91,
+        "marginPct": 53
       },
       {
         "sku": "AX9000-CHARCOAL",
         "landedCostAud": 9.5,
-        "retailPrice": 20.99,
-        "exGstRevenue": 19.08,
-        "gstComponent": 1.91,
-        "profitPerUnit": 9.58,
-        "marginPct": 50.2
+        "retailPrice": 29.95,
+        "exGstRevenue": 27.23,
+        "gstComponent": 2.72,
+        "profitPerUnit": 17.73,
+        "marginPct": 65.1
       }
     ],
     "errors": [],

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BOARD_DISCIPLINES, DEFAULT_TAGGING, EVERGREEN_SEASON, SKI_DISCIPLINES, bindingType, bootTags, disciplinesFor, snowboardBindingTags, needsBindingKind, TAG_SPELLING, generalTags, isHardgood, isManualTag, isNotOurs, isShopifyGenerated, needsSectionChoice, normaliseGenders, seasonFor, slugTag, withoutGenerated } from "./tagging";
+import { BOARD_DISCIPLINES, DEFAULT_TAGGING, EVERGREEN_SEASON, SKI_DISCIPLINES, BAG_TAGS, bagTags, bindingType, bootTags, disciplinesFor, snowboardBindingTags, needsBindingKind, TAG_SPELLING, generalTags, isHardgood, isManualTag, isNotOurs, isShopifyGenerated, needsSectionChoice, normaliseGenders, seasonFor, slugTag, withoutGenerated } from "./tagging";
 
 describe("the six general tags", () => {
   it("writes them in the shop's order: type, section, season, house, vendor, gender", () => {
@@ -314,5 +314,28 @@ describe("snowboard bindings", () => {
 
   it("leaves ski bindings out of it", () => {
     expect(snowboardBindingTags("Alpine Bindings", "Marker Griffon 13")).toEqual([]);
+  });
+});
+
+describe("bags", () => {
+  it("puts all three bag tags on a board bag, the way the shop does", () => {
+    const tags = generalTags({ type: "Snowboard Bags", vendor: "Burton", genders: [], describedAs: "Gig Snowboard Bag 2026" });
+    expect(tags).toContain("snow-bags");
+    expect(tags).toContain("snowboard-bags");
+    expect(tags).toContain("ski-and-boot-bags");
+  });
+
+  it("does the same for a ski bag, since it is the same rack", () => {
+    expect(bagTags("Ski & Boot Bags", "Atomic Double Ski Bag")).toEqual(["snow-bags", "snowboard-bags", "ski-and-boot-bags"]);
+  });
+
+  it("spots a bag named inside a general accessories line", () => {
+    expect(bagTags("Snowboard Accessories", "Space Sack Snowboard Bag 2026")).toEqual([...BAG_TAGS]);
+  });
+
+  it("leaves everything that is not a bag alone", () => {
+    expect(bagTags("Snowboard Boots", "Men's Ruler Step On Boots")).toEqual([]);
+    expect(bagTags("Snow Jackets", "A jacket")).toEqual([]);
+    expect(bagTags("Snowboard Accessories", "Aluminium Stud Stomp Pad")).toEqual([]);
   });
 });

@@ -56,3 +56,27 @@ describe("the alpsport menu as a Type vocabulary", () => {
     expect(isValidType("Mens Boots")).toBe(false); // an audience, not a kind
   });
 });
+
+describe("accessories keep their heading as the Type", () => {
+  it("accepts the accessories headings as Types", () => {
+    expect(PRODUCT_TYPES).toContain("Ski Accessories");
+    expect(PRODUCT_TYPES).toContain("Snowboard Accessories");
+    expect(PRODUCT_TYPES).toContain("Outdoor Accessories");
+  });
+
+  it("still knows which menu each sits under, so the section tag is written", () => {
+    expect(TYPE_SECTIONS["Snowboard Accessories"]).toEqual(["Snowboard"]);
+    expect(TYPE_SECTIONS["Ski Accessories"]).toEqual(["Ski"]);
+  });
+
+  it("keeps the shelves as Types too, since they are tagged by name", () => {
+    expect(PRODUCT_TYPES).toContain("Ski Gloves");
+    expect(PRODUCT_TYPES).toContain("Body Protection");
+    expect(PRODUCT_TYPES).toContain("Other Snowboard Accessories");
+  });
+
+  it("does not turn every heading into a Type", () => {
+    expect(PRODUCT_TYPES).not.toContain("Sleeping Bags");
+    expect(PRODUCT_TYPES).not.toContain("Mens Clothing");
+  });
+});

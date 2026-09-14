@@ -96,17 +96,27 @@ export function isAudienceLeaf(leaf: string): boolean {
 }
 
 /**
+ * Accessories keep their heading as the Type. Everywhere else the Type is the most specific thing
+ * a product is, but a glove is filed as "Ski Accessories" with ski-gloves riding along as a tag,
+ * which is what the shop's catalogue does for every accessory it sells.
+ */
+export function isAccessoryHeading(heading: string): boolean {
+  return /\bAccessories$/i.test(heading.trim());
+}
+
+/**
  * Every valid value for the Shopify `Type` column.
  *
- * A group whose sub-links only split by audience contributes its heading ("Snowboard Boots").
- * Every sub-link that names a kind of product contributes itself ("Synthetic Sleeping Bags").
+ * A group whose sub-links only split by audience contributes its heading ("Snowboard Boots"), and
+ * so does an accessories heading. Every sub-link that names a kind of product contributes itself
+ * ("Synthetic Sleeping Bags").
  */
 export const PRODUCT_TYPES: string[] = (() => {
   const out: string[] = [];
   for (const section of ALPSPORT_TAXONOMY) {
     for (const group of section.groups) {
       const kinds = group.leaves.filter((l) => !isAudienceLeaf(l));
-      if (kinds.length < group.leaves.length) out.push(group.heading);
+      if (kinds.length < group.leaves.length || isAccessoryHeading(group.heading)) out.push(group.heading);
       for (const leaf of kinds) if (!out.includes(leaf)) out.push(leaf);
     }
   }
@@ -120,7 +130,7 @@ export const TYPE_SECTIONS: Record<string, string[]> = (() => {
   for (const section of ALPSPORT_TAXONOMY) {
     for (const group of section.groups) {
       const kinds = group.leaves.filter((l) => !isAudienceLeaf(l));
-      if (kinds.length < group.leaves.length) add(group.heading, section.top);
+      if (kinds.length < group.leaves.length || isAccessoryHeading(group.heading)) add(group.heading, section.top);
       for (const leaf of kinds) add(leaf, section.top);
     }
   }

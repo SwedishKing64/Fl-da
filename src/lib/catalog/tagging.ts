@@ -13,6 +13,7 @@
 import { ALPSPORT_TAXONOMY, PRODUCT_TYPES, TYPE_SECTIONS, resolveType } from "./taxonomy";
 import { classifyBinding, classifySnowboardBinding, type BindingKind } from "./bindings";
 import { classifySkiBoot, classifySnowboardBoot } from "./boots";
+import { accessoryKind } from "./accessories";
 
 export type Gender = "mens" | "womens" | "kids";
 
@@ -92,6 +93,24 @@ export function bootTags(type: string, describedAs?: string): string[] {
   if (/snowboard/i.test(resolved)) return classifySnowboardBoot(text).tags;
   if ((TYPE_SECTIONS[resolved] ?? []).includes("Ski") || /\bski\b/i.test(resolved)) return classifySkiBoot(text).tags;
   return [];
+}
+
+/**
+ * Every bag carries all three bag tags, whichever sport it was bought for.
+ *
+ * Someone shopping for a board bag and someone shopping for a boot bag are looking through the
+ * same rack, so the catalogue files each bag on all of them rather than guessing which page the
+ * customer started from. All three of the shop's board bags do exactly this.
+ */
+export const BAG_TAGS = ["snow-bags", "snowboard-bags", "ski-and-boot-bags"] as const;
+
+export function bagTags(type: string, describedAs?: string): string[] {
+  const resolved = resolveType(type) ?? type.trim();
+  // Only accessories hold bags; a "Snowboard Bags" type is already one, a named bag inside a
+  // general accessories line has to be read from the name.
+  const looksLikeBag = /\bbags?\b/i.test(resolved) || (!!describedAs?.trim() && accessoryKind(describedAs) === "bags");
+  if (!looksLikeBag) return [];
+  return [...BAG_TAGS];
 }
 
 /**
@@ -255,6 +274,7 @@ export function generalTags(input: TagInput, settings: TaggingSettings = DEFAULT
 
   if (input.withBindings) push(TAG_SPELLING[packageTagFor(type)] ?? slugTag(packageTagFor(type)));
 
+  for (const tag of bagTags(type, input.describedAs)) push(tag);
   for (const tag of bootTags(type, input.describedAs)) push(tag);
   for (const tag of snowboardBindingTags(type, input.describedAs)) push(tag);
 

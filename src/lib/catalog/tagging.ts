@@ -11,6 +11,7 @@
  */
 
 import { ALPSPORT_TAXONOMY, PRODUCT_TYPES, TYPE_SECTIONS, resolveType } from "./taxonomy";
+import { classifyBinding, type BindingKind } from "./bindings";
 
 export type Gender = "mens" | "womens" | "kids";
 
@@ -55,6 +56,27 @@ export function disciplinesFor(type: string): string[] {
   return [];
 }
 
+/**
+ * True for the generic "Ski Bindings" a supplier invoice writes, which is not a Type on its own:
+ * the site files a ski binding as either alpine or touring, so the kind has to be decided before
+ * the product can be filed at all. Snowboard bindings are not split this way.
+ */
+export function needsBindingKind(type: string): boolean {
+  const value = type.trim();
+  if (resolveType(value)) return false; // already specific
+  return /\bski\b/i.test(value) && /bindings?\b/i.test(value);
+}
+
+/**
+ * A ski binding arrives from a supplier as just "Ski Binding". Which of the two it really is comes
+ * from an explicit answer where there is one, and otherwise from what the product says about
+ * itself. Undefined means nobody has decided yet, which is a question for a person.
+ */
+export function bindingType(input: Pick<TagInput, "type" | "bindingKind" | "describedAs">): BindingKind | undefined {
+  if (!needsBindingKind(input.type)) return undefined;
+  return input.bindingKind ?? classifyBinding(input.describedAs, input.type).kind;
+}
+
 /** The package tag for a board or ski sold with a binding on it. */
 function packageTagFor(type: string): string {
   const resolved = resolveType(type) ?? type.trim();
@@ -68,6 +90,12 @@ export interface TagInput {
    * Sold with a binding fitted, which makes it a package rather than a bare board or ski.
    */
   withBindings?: boolean;
+  /**
+   * Which kind of ski binding this is. Left off, it is read from the title and description.
+   */
+  bindingKind?: BindingKind;
+  /** Title and description, so a ski binding can be classified when bindingKind is not given. */
+  describedAs?: string;
   /**
    * What the ski or board is for. A product can be more than one — the catalogue has boards that
    * are both freeride and freestyle — and anything not open to this product's sport is dropped
@@ -183,7 +211,7 @@ export function generalTags(input: TagInput, settings: TaggingSettings = DEFAULT
     if (tag && !tags.some((t) => t.toLowerCase() === tag.toLowerCase())) tags.push(tag);
   };
 
-  const type = resolveType(input.type) ?? input.type.trim();
+  const type = bindingType(input) ?? resolveType(input.type) ?? input.type.trim();
   if (type) push(TAG_SPELLING[type] ?? slugTag(type));
 
   // A Type can sit under two menus — Goggles under both Ski and Snowboard — so an explicit

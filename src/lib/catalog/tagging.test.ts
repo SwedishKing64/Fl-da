@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BOARD_DISCIPLINES, DEFAULT_TAGGING, EVERGREEN_SEASON, SKI_DISCIPLINES, disciplinesFor, TAG_SPELLING, generalTags, isHardgood, isManualTag, isNotOurs, isShopifyGenerated, needsSectionChoice, normaliseGenders, seasonFor, slugTag, withoutGenerated } from "./tagging";
+import { BOARD_DISCIPLINES, DEFAULT_TAGGING, EVERGREEN_SEASON, SKI_DISCIPLINES, bindingType, disciplinesFor, needsBindingKind, TAG_SPELLING, generalTags, isHardgood, isManualTag, isNotOurs, isShopifyGenerated, needsSectionChoice, normaliseGenders, seasonFor, slugTag, withoutGenerated } from "./tagging";
 
 describe("the six general tags", () => {
   it("writes them in the shop's order: type, section, season, house, vendor, gender", () => {
@@ -230,5 +230,37 @@ describe("skis and snowboards", () => {
     })).toEqual([
       "snowboards", "snowboard", "2027", "123abc-js", "burton", "mens", "snowboard-packages", "park-boards",
     ]);
+  });
+});
+
+describe("ski bindings", () => {
+  it("turns a supplier's generic ski binding into the right one of the two", () => {
+    expect(generalTags({ type: "Ski Binding", vendor: "Marker", genders: [], describedAs: "Marker Griffon 13 ID" }))
+      .toContain("alpine-bindings");
+    expect(generalTags({ type: "Ski Binding", vendor: "Dynafit", genders: [], describedAs: "Dynafit Speed Radical" }))
+      .toContain("touring-bindings");
+  });
+
+  it("takes an explicit answer over reading the text", () => {
+    const tags = generalTags({ type: "Ski Binding", vendor: "Salomon", genders: [], describedAs: "Salomon Shift MNC 13", bindingKind: "Alpine Bindings" });
+    expect(tags).toContain("alpine-bindings");
+    expect(tags).not.toContain("touring-bindings");
+  });
+
+  it("leaves it undecided rather than guessing when the text does not say", () => {
+    expect(bindingType({ type: "Ski Binding", describedAs: "Binding 12" })).toBeUndefined();
+  });
+
+  it("does not re-decide a type that is already specific", () => {
+    expect(needsBindingKind("Alpine Bindings")).toBe(false);
+    expect(needsBindingKind("Touring Bindings")).toBe(false);
+    expect(needsBindingKind("Ski Binding")).toBe(true);
+    expect(generalTags({ type: "Touring Bindings", vendor: "ATK", genders: [] })).toContain("touring-bindings");
+  });
+
+  it("leaves snowboard bindings alone, since they do not split that way", () => {
+    expect(needsBindingKind("Snowboard Bindings")).toBe(false);
+    expect(generalTags({ type: "Snowboard Bindings", vendor: "Burton", genders: ["womens"], describedAs: "Burton Lexa Re:Flex" }))
+      .toEqual(["snowboard-bindings", "snowboard", "2027", "123abc-js", "burton", "womens"]);
   });
 });

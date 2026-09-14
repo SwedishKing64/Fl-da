@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BACKCOUNTRY_BINDING_TAG, BOARD_DISCIPLINES, crossShelfTags, DEFAULT_TAGGING, EVERGREEN_SEASON, SKI_DISCIPLINES, BAG_TAGS, MANUAL_SEASON, TOURING_SKI_TAG, bagTags, bindingType, bootTags, disciplinesFor, snowboardBindingTags, needsBindingKind, TAG_SPELLING, generalTags, isHardgood, isManualTag, isNotOurs, isShopifyGenerated, needsSectionChoice, normaliseGenders, seasonFor, slugTag, withoutGenerated } from "./tagging";
+import { BACKCOUNTRY_BINDING_TAG, BACKCOUNTRY_BOOT_TAG, BOARD_DISCIPLINES, crossShelfTags, DEFAULT_TAGGING, EVERGREEN_SEASON, SKI_DISCIPLINES, BAG_TAGS, MANUAL_SEASON, TOURING_SKI_TAG, bagTags, bindingType, bootTags, disciplinesFor, snowboardBindingTags, needsBindingKind, TAG_SPELLING, generalTags, isHardgood, isManualTag, isNotOurs, isShopifyGenerated, needsSectionChoice, normaliseGenders, seasonFor, slugTag, withoutGenerated } from "./tagging";
 
 describe("the six general tags", () => {
   it("writes them in the shop's order: type, section, season, house, vendor, gender", () => {
@@ -415,5 +415,30 @@ describe("touring bindings reach the backcountry shelf", () => {
   it("does not put a snowboard binding there", () => {
     expect(crossShelfTags("Snowboard Bindings")).toEqual([]);
     expect(crossShelfTags("Alpine Bindings")).toEqual([]);
+  });
+});
+
+describe("touring boots reach the backcountry shelf", () => {
+  it("tags a boot typed as touring", () => {
+    const tags = generalTags({ type: "Touring Boots", vendor: "Scarpa", genders: ["mens"], describedAs: "Scarpa Maestrale RS" });
+    expect(tags).toContain("touring-boots");
+    expect(tags).toContain(BACKCOUNTRY_BOOT_TAG);
+  });
+
+  it("tags one the classifier read as touring from a generic ski boot line", () => {
+    const tags = generalTags({ type: "Ski Boots", vendor: "Atomic", genders: ["mens"], describedAs: "Atomic Hawx Ultra XTD 130 BOA" });
+    expect(tags).toContain("touring-boots");
+    expect(tags).toContain("boa-ski-boots");
+    expect(tags).toContain(BACKCOUNTRY_BOOT_TAG);
+  });
+
+  it("leaves a resort boot on the ski side alone", () => {
+    const tags = generalTags({ type: "Ski Boots", vendor: "Atomic", genders: ["mens"], describedAs: "Atomic Hawx Ultra 100" });
+    expect(tags).toContain("alpine-boots");
+    expect(tags).not.toContain(BACKCOUNTRY_BOOT_TAG);
+  });
+
+  it("does not send a snowboard boot there", () => {
+    expect(crossShelfTags("Snowboard Boots", ["traditional-boots"])).toEqual([]);
   });
 });

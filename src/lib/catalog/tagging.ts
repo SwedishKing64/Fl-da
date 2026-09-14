@@ -112,11 +112,22 @@ export const TOURING_SKI_TAG = "touring-and-cross-country-ski";
  */
 export const BACKCOUNTRY_BINDING_TAG = "alpine-touring-bindings";
 
-/** The tags that put a product on a second shelf beyond the one its Type names. */
-export function crossShelfTags(type: string): string[] {
+/** The same for boots: a touring boot sits under Ski Boots and under Backcountry both. */
+export const BACKCOUNTRY_BOOT_TAG = "alpine-touring-boots";
+
+/**
+ * The tags that put a product on a second shelf beyond the one its Type names.
+ *
+ * A touring boot arrives by either route — as a "Touring Boots" type, or as a generic "Ski Boots"
+ * line the classifier reads as touring — so the boot tags already worked out are passed in rather
+ * than the reading being done twice.
+ */
+export function crossShelfTags(type: string, alreadyTagged: string[] = []): string[] {
   const resolved = resolveType(type) ?? type.trim();
-  if (resolved === "Touring Bindings") return [BACKCOUNTRY_BINDING_TAG];
-  return [];
+  const out: string[] = [];
+  if (resolved === "Touring Bindings") out.push(BACKCOUNTRY_BINDING_TAG);
+  if (resolved === "Touring Boots" || alreadyTagged.includes("touring-boots")) out.push(BACKCOUNTRY_BOOT_TAG);
+  return out;
 }
 
 export const BAG_TAGS = ["snow-bags", "snowboard-bags", "ski-and-boot-bags", "ski-and-snowboard-bags"] as const;
@@ -296,9 +307,10 @@ export function generalTags(input: TagInput, settings: TaggingSettings = DEFAULT
 
   if (input.withBindings) push(TAG_SPELLING[packageTagFor(type)] ?? slugTag(packageTagFor(type)));
 
-  for (const tag of crossShelfTags(type)) push(tag);
+  const boots = bootTags(type, input.describedAs);
   for (const tag of bagTags(type, input.describedAs)) push(tag);
-  for (const tag of bootTags(type, input.describedAs)) push(tag);
+  for (const tag of boots) push(tag);
+  for (const tag of crossShelfTags(type, boots)) push(tag);
   for (const tag of snowboardBindingTags(type, input.describedAs)) push(tag);
 
   const allowed = disciplinesFor(type);

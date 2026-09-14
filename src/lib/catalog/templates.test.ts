@@ -31,10 +31,11 @@ describe("learning a template from a Shopify export", () => {
   });
 
   it("keeps the tags on most products and drops the occasional one", () => {
-    expect(analysis.commonTags).toEqual(expect.arrayContaining(["Skis", "Atomic", "2026"]));
-    expect(analysis.commonTags).not.toContain("Freeride");
-    expect(analysis.tagCounts.find((t) => t.tag === "Freeride")?.count).toBe(1);
-    expect(analysis.tagCounts.find((t) => t.tag === "All-Mountain")?.count).toBe(2);
+    // Written in the house spelling, not whatever capitalisation the export happened to use.
+    expect(analysis.commonTags).toEqual(expect.arrayContaining(["skis", "atomic", "2026"]));
+    expect(analysis.commonTags).not.toContain("freeride");
+    expect(analysis.tagCounts.find((t) => t.tag === "freeride")?.count).toBe(1);
+    expect(analysis.tagCounts.find((t) => t.tag === "all-mountain")?.count).toBe(2);
   });
 
   it("learns the collection and what the options are called", () => {
@@ -172,8 +173,8 @@ describe("splitting a whole-catalogue export", () => {
   it("learns each range separately rather than blending them", () => {
     const skis = groups.find((g) => g.productType === "Skis")!.analysis;
     const boots = groups.find((g) => g.productType === "Ski Boots")!.analysis;
-    expect(skis.commonTags).toEqual(expect.arrayContaining(["Skis", "Atomic"]));
-    expect(skis.commonTags).not.toContain("Boots");
+    expect(skis.commonTags).toEqual(expect.arrayContaining(["skis", "atomic"]));
+    expect(skis.commonTags).not.toContain("boots");
     expect(skis.optionNames).toEqual(["Length"]);
     expect(boots.optionNames).toEqual(["Size"]);
     expect(boots.collections).toEqual(["Ski Boots"]);
@@ -208,5 +209,31 @@ describe("the guidance a person writes", () => {
 
   it("is empty when nobody has written anything", () => {
     expect(templateGuidance(target, [brandTemplate])).toBe("");
+  });
+});
+
+describe("learned tags are written in the house spelling", () => {
+  const OLD = [
+    `Handle,Title,Vendor,Type,Tags,Variant SKU`,
+    `a,Wax One,Swix,Ski Accessories,"ski tuning, ski, Swix",S1`,
+    `b,Wax Two,Swix,Ski Accessories,"ski tuning, ski, Swix",S2`,
+    `c,Wax Three,Swix,Ski Accessories,"ski tuning, ski, Swix",S3`,
+  ].join("\n");
+
+  /**
+   * The catalogue's older products spell these with spaces. Learning that verbatim would put a
+   * second, almost identical tag on every new product beside the hyphenated one the importer
+   * writes, and only one of the two would match the page.
+   */
+  it("hyphenates a spaced tag it read from an old export", () => {
+    const { groups } = analyseShopifyCsvGroups(OLD);
+    expect(groups[0].analysis.commonTags).toContain("ski-tuning");
+    expect(groups[0].analysis.commonTags).not.toContain("ski tuning");
+  });
+
+  it("leaves an already-correct tag alone", () => {
+    const { groups } = analyseShopifyCsvGroups(OLD);
+    expect(groups[0].analysis.commonTags).toContain("swix");
+    expect(groups[0].analysis.commonTags).toContain("ski");
   });
 });

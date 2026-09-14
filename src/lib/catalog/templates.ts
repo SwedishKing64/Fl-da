@@ -10,7 +10,7 @@
  */
 
 import { parseCsv } from "./csv";
-import { isNotOurs } from "./tagging";
+import { isNotOurs, slugTag } from "./tagging";
 
 export interface TemplateAnalysis {
   productCount: number;
@@ -173,7 +173,12 @@ function readProducts(text: string): { products: ProductRecord[]; warnings: stri
       // Two kinds of tag are never conventions. Shopify derives size, colour and price bands
       // itself, and staff apply sale and stocktake tags by hand. Learning either would be wrong:
       // one brand's colours stamped on everything, or every new product born on clearance.
-      tags: [...new Set(splitList(cell(iTags)))].filter((tag) => !isNotOurs(tag)),
+      //
+      // What survives is written in the house spelling rather than whatever the export happened
+      // to contain. Older products spell these with spaces — "ski tuning", "freestyle and
+      // all-mountain boards" — and a learned template repeating that would put a second, almost
+      // identical tag on every new product beside the hyphenated one the importer writes.
+      tags: [...new Set(splitList(cell(iTags)).map(slugTag))].filter((tag) => tag && !isNotOurs(tag)),
       collections: [...new Set(splitList(cell(iCollection)))],
       optionNames: optionNameCols.map(cell).filter((n) => n && norm(n) !== "title"),
       metafields,

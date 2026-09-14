@@ -53,3 +53,25 @@ describe("ski boots", () => {
     expect(classifySkiBoot("Atomic Hawx Ultra 100").why).toMatch(/resort boot.*buckles/);
   });
 });
+
+describe("hybrid boots", () => {
+  /** A Cochise skis the resort and tours, and is sold as both. */
+  it("carries the alpine and the touring tag together", () => {
+    for (const name of ["Tecnica Cochise 130 DYN", "Dalbello Lupo AX 120", "Salomon Shift Pro 130", "Lange XT3 Tour 130"]) {
+      const tags = classifySkiBoot(name).tags;
+      expect(tags, name).toContain("alpine-boots");
+      expect(tags, name).toContain("touring-boots");
+    }
+  });
+
+  it("says so, rather than reaching alpine by elimination", () => {
+    const verdict = classifySkiBoot("Tecnica Cochise 130");
+    expect(verdict.confident).toBe(true);
+    expect(verdict.why).toMatch(/hybrid/);
+  });
+
+  it("leaves a pure resort or pure touring boot on one shelf", () => {
+    expect(classifySkiBoot("Atomic Hawx Magna 130 BOA").tags).not.toContain("touring-boots");
+    expect(classifySkiBoot("Scarpa Maestrale RS").tags).not.toContain("alpine-boots");
+  });
+});

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BACKCOUNTRY_BINDING_TAG, BACKCOUNTRY_BOOT_TAG, BOARD_DISCIPLINES, crossShelfTags, DEFAULT_TAGGING, EVERGREEN_SEASON, SKI_DISCIPLINES, BAG_TAGS, MANUAL_SEASON, TOURING_SKI_TAG, bagTags, clothingContextTags, bindingType, bootTags, disciplinesFor, snowboardBindingTags, needsBindingKind, TAG_SPELLING, generalTags, isHardgood, isManualTag, isNotOurs, isNotLearnable, isRuleGenerated, isShopifyGenerated, needsSectionChoice, normaliseGenders, seasonFor, slugTag, withoutGenerated } from "./tagging";
+import { BACKCOUNTRY_BINDING_TAG, BACKCOUNTRY_BOOT_TAG, BOARD_DISCIPLINES, crossShelfTags, DEFAULT_TAGGING, EVERGREEN_SEASON, SKI_DISCIPLINES, BAG_TAGS, MANUAL_SEASON, TOURING_SKI_TAG, bagTags, clothingContextTags, isSkinAccessory, bindingType, bootTags, disciplinesFor, snowboardBindingTags, needsBindingKind, TAG_SPELLING, generalTags, isHardgood, isManualTag, isNotOurs, isNotLearnable, isRuleGenerated, isShopifyGenerated, needsSectionChoice, normaliseGenders, seasonFor, slugTag, withoutGenerated } from "./tagging";
 
 describe("the six general tags", () => {
   it("writes them in the shop's order: type, section, season, house, vendor, gender", () => {
@@ -642,5 +642,38 @@ describe("whether a garment is snow kit or outdoor kit", () => {
     expect(clothingContextTags("Gloves")).toEqual([]);
     expect(clothingContextTags("Snowboards")).toEqual([]);
     expect(clothingContextTags("Ski Boots")).toEqual([]);
+  });
+});
+
+describe("gear for skins", () => {
+  /** A skin cutter is not a skin: it is filed with the backcountry gear, on the skins page, and
+   *  with the touring accessories, all three. */
+  it("files it on all three shelves, whatever the invoice called it", () => {
+    for (const type of ["Alpine Touring Accessories", "Ski Accessories"]) {
+      const tags = generalTags({ type, vendor: "G3", genders: [], describedAs: "G3 Skin Trim Tool cutter" });
+      expect(tags, type).toContain("back-country-gear");
+      expect(tags, type).toContain("climbing-skins");
+      expect(tags, type).toContain("alpine-touring-accessories");
+      expect(tags, type).toContain("backcountry");
+    }
+  });
+
+  it("recognises the rest of the skin bench", () => {
+    for (const name of ["Pomoca Skin Glue", "Skin Wax", "Black Diamond Skin Bag", "G3 Skin Saver Sheets"]) {
+      expect(isSkinAccessory(name), name).toBe(true);
+    }
+  });
+
+  it("does not mistake a skin itself for gear about skins", () => {
+    expect(isSkinAccessory("Pomoca Climb Pro S-Glide")).toBe(false);
+    const skin = generalTags({ type: "Climbing Skins", vendor: "Pomoca", genders: [], describedAs: "Pomoca Climb Pro S-Glide" });
+    expect(skin).toContain("skin");
+    expect(skin).toContain("skins");
+    expect(skin).not.toContain("alpine-touring-accessories");
+  });
+
+  it("leaves other accessories alone", () => {
+    expect(isSkinAccessory("Ski Poles")).toBe(false);
+    expect(isSkinAccessory(undefined)).toBe(false);
   });
 });

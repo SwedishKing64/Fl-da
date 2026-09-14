@@ -46,9 +46,20 @@ export function classifySnowboardBoot(...parts: Array<string | undefined>): Boot
 
 const SKI_SIGNALS: Array<{ tag: SkiBootTag; test: RegExp; label: string }> = [
   { tag: "race-boots", test: /\brace\b|\bworld ?cup\b|\bredster\b|\bdobermann\b|\bfischer rc4\b/i, label: "race" },
-  { tag: "touring-boots", test: /\btouring\b|\btour\b|\bat boot\b|\bwalk mode\b|\btech fitting\b|\bpin insert\b|\bhike\b|\bbackland\b|\bzero ?g\b|\bhawx ultra xtd\b|\bxtd\b/i, label: "touring" },
+  { tag: "touring-boots", test: /\btouring\b|\btour\b|\bat boot\b|\bwalk mode\b|\btech fitting\b|\bpin insert\b|\bhike\b|\bbackland\b|\bzero ?g\b|\bhawx ultra xtd\b|\bxtd\b|\bmaestrale\b|\bf1\b|\btlt\b|\bhoji\b/i, label: "touring" },
   { tag: "boa-ski-boots", test: /\bboa\b/i, label: "BOA closure" },
 ];
+
+/**
+ * Boots that ski the resort and tour, and are sold as both. They carry the alpine and the touring
+ * tag together rather than being forced onto one shelf — a Cochise belongs on both, and a customer
+ * shopping either page should find it.
+ */
+const HYBRID_BOOTS = /\bcochise\b|\blupo\b|\bmtn lab\b|\bmtn explore\b|\bshift pro\b|\bxt3\b|\bmindbender\b|\bkore\b|\bstrider\b|\bunlimited\b|\branger\b|\b4-?quattro\b|\balltrack\b|\bcosmos\b|\btranslator\b/i;
+
+export function isHybridBoot(text: string): boolean {
+  return HYBRID_BOOTS.test(text);
+}
 
 /**
  * Ski boots carry what they are for and how they close, and can carry several at once —
@@ -66,11 +77,19 @@ export function classifySkiBoot(...parts: Array<string | undefined>): BootVerdic
     }
   }
 
+  // A hybrid is both, and is sold as both.
+  const hybrid = isHybridBoot(text);
+  if (hybrid && !tags.includes("touring-boots")) {
+    tags.push("touring-boots");
+    why.push("a hybrid that tours");
+  }
+
   // Alpine is the default discipline: a boot that is not for racing or touring is a resort boot.
+  // A hybrid gets it too, on top of touring, because it genuinely skis the resort.
   const hasDiscipline = tags.some((t) => t === "race-boots" || t === "touring-boots");
-  if (!hasDiscipline) {
+  if (!hasDiscipline || hybrid) {
     tags.unshift("alpine-boots");
-    why.unshift("neither race nor touring, so a resort boot");
+    why.unshift(hybrid ? "a hybrid, so a resort boot as well" : "neither race nor touring, so a resort boot");
   }
 
   // Closure is a two-way choice, so anything not BOA closes with buckles.
@@ -79,5 +98,5 @@ export function classifySkiBoot(...parts: Array<string | undefined>): BootVerdic
     why.push("no BOA, so buckles");
   }
 
-  return { tags, why: why.join("; "), confident: hasDiscipline || /\balpine\b|\bresort\b|\ball.?mountain\b/i.test(text) };
+  return { tags, why: why.join("; "), confident: hasDiscipline || hybrid || /\balpine\b|\bresort\b|\ball.?mountain\b/i.test(text) };
 }

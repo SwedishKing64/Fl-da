@@ -133,6 +133,19 @@ export const BACKCOUNTRY_SKI_TAG = "alpine-touring-skis";
 export const SKIN_TAGS = ["skin", "skins"] as const;
 
 /**
+ * Gear for skins rather than skins themselves — trim tools, cutters, glue, skin wax, skin bags.
+ * The shop files these in three places at once: with the backcountry gear, on the climbing skins
+ * page beside what they are for, and with the touring accessories.
+ */
+export const SKIN_ACCESSORY_TAGS = ["back-country-gear", "climbing-skins", "alpine-touring-accessories"] as const;
+
+const SKIN_ACCESSORY = /\bskin\b.*\b(cutter|trim|tool|glue|wax|bag|saver|sheet)|\b(cutter|trim|tool|glue|wax|bag|saver|sheet)\b.*\bskin\b/i;
+
+export function isSkinAccessory(describedAs?: string): boolean {
+  return !!describedAs?.trim() && SKIN_ACCESSORY.test(describedAs);
+}
+
+/**
  * The tags that put a product on a second shelf beyond the one its Type names.
  *
  * A touring boot arrives by either route — as a "Touring Boots" type, or as a generic "Ski Boots"
@@ -434,6 +447,12 @@ export function generalTags(input: TagInput, settings: TaggingSettings = DEFAULT
 
   // Last, because what puts a product on a second shelf depends on everything decided above.
   for (const tag of crossShelfTags(type, [...boots, ...disciplineTags])) push(tag);
+
+  // Skin gear sits in three places at once, wherever the invoice happened to file it.
+  if (isSkinAccessory(input.describedAs)) {
+    for (const tag of SKIN_ACCESSORY_TAGS) push(tag);
+    push(BACKCOUNTRY_SECTION_TAG);
+  }
 
   return tags;
 }

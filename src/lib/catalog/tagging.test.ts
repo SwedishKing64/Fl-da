@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BOARD_DISCIPLINES, DEFAULT_TAGGING, EVERGREEN_SEASON, SKI_DISCIPLINES, bindingType, disciplinesFor, needsBindingKind, TAG_SPELLING, generalTags, isHardgood, isManualTag, isNotOurs, isShopifyGenerated, needsSectionChoice, normaliseGenders, seasonFor, slugTag, withoutGenerated } from "./tagging";
+import { BOARD_DISCIPLINES, DEFAULT_TAGGING, EVERGREEN_SEASON, SKI_DISCIPLINES, bindingType, bootTags, disciplinesFor, needsBindingKind, TAG_SPELLING, generalTags, isHardgood, isManualTag, isNotOurs, isShopifyGenerated, needsSectionChoice, normaliseGenders, seasonFor, slugTag, withoutGenerated } from "./tagging";
 
 describe("the six general tags", () => {
   it("writes them in the shop's order: type, section, season, house, vendor, gender", () => {
@@ -262,5 +262,39 @@ describe("ski bindings", () => {
     expect(needsBindingKind("Snowboard Bindings")).toBe(false);
     expect(generalTags({ type: "Snowboard Bindings", vendor: "Burton", genders: ["womens"], describedAs: "Burton Lexa Re:Flex" }))
       .toEqual(["snowboard-bindings", "snowboard", "2027", "123abc-js", "burton", "womens"]);
+  });
+});
+
+describe("boots", () => {
+  it("tags a Step On snowboard boot", () => {
+    expect(generalTags({ type: "Snowboard Boots", vendor: "Burton", genders: ["mens"], describedAs: "Men's Ruler Step On® Snowboard Boots 2025" }))
+      .toEqual(["snowboard-boots", "snowboard", "2027", "123abc-js", "burton", "mens", "step-on-boots"]);
+  });
+
+  it("tags a BOA snowboard boot traditional, not BOA", () => {
+    const tags = generalTags({ type: "Snowboard Boots", vendor: "Burton", genders: ["mens"], describedAs: "Men's Ruler BOA® Snowboard Boots 2025" });
+    expect(tags).toContain("traditional-boots");
+    expect(tags).not.toContain("boa-ski-boots");
+    expect(tags).not.toContain("step-on-boots");
+  });
+
+  it("carries a ski boot's discipline and closure together", () => {
+    const tags = generalTags({ type: "Ski Boots", vendor: "Atomic", genders: ["mens"], describedAs: "Atomic Hawx Ultra XTD 130 BOA" });
+    expect(tags).toContain("touring-boots");
+    expect(tags).toContain("boa-ski-boots");
+  });
+
+  it("treats a plain resort ski boot as alpine with buckles", () => {
+    expect(bootTags("Ski Boots", "Atomic Hawx Ultra 100")).toEqual(["alpine-boots", "buckle-ski-boots"]);
+  });
+
+  it("leaves non-boots alone", () => {
+    expect(bootTags("Snowboards", "Custom 2027")).toEqual([]);
+    expect(bootTags("Snow Jackets", "A jacket")).toEqual([]);
+  });
+
+  it("adds nothing when there is no name to read, rather than guessing", () => {
+    expect(bootTags("Snowboard Boots")).toEqual([]);
+    expect(bootTags("Ski Boots", "   ")).toEqual([]);
   });
 });

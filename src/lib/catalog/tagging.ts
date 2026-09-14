@@ -12,6 +12,7 @@
 
 import { ALPSPORT_TAXONOMY, PRODUCT_TYPES, TYPE_SECTIONS, resolveType } from "./taxonomy";
 import { classifyBinding, type BindingKind } from "./bindings";
+import { classifySkiBoot, classifySnowboardBoot } from "./boots";
 
 export type Gender = "mens" | "womens" | "kids";
 
@@ -75,6 +76,22 @@ export function needsBindingKind(type: string): boolean {
 export function bindingType(input: Pick<TagInput, "type" | "bindingKind" | "describedAs">): BindingKind | undefined {
   if (!needsBindingKind(input.type)) return undefined;
   return input.bindingKind ?? classifyBinding(input.describedAs, input.type).kind;
+}
+
+/**
+ * What a boot is for and how it closes. Snowboard boots split by which bindings they take;
+ * ski boots carry their discipline and their closure together.
+ */
+export function bootTags(type: string, describedAs?: string): string[] {
+  const resolved = resolveType(type) ?? type.trim();
+  if (!/boots?\b/i.test(resolved)) return [];
+  // With no name or description there is nothing to read, and "most boots are traditional" is a
+  // guess rather than a reading. Leave it for a person instead.
+  if (!describedAs?.trim()) return [];
+  const text = [describedAs, resolved].filter(Boolean).join(" ");
+  if (/snowboard/i.test(resolved)) return classifySnowboardBoot(text).tags;
+  if ((TYPE_SECTIONS[resolved] ?? []).includes("Ski") || /\bski\b/i.test(resolved)) return classifySkiBoot(text).tags;
+  return [];
 }
 
 /** The package tag for a board or ski sold with a binding on it. */
@@ -226,6 +243,8 @@ export function generalTags(input: TagInput, settings: TaggingSettings = DEFAULT
   for (const gender of normaliseGenders(input.genders)) push(gender);
 
   if (input.withBindings) push(TAG_SPELLING[packageTagFor(type)] ?? slugTag(packageTagFor(type)));
+
+  for (const tag of bootTags(type, input.describedAs)) push(tag);
 
   const allowed = disciplinesFor(type);
   for (const discipline of input.disciplines ?? []) {

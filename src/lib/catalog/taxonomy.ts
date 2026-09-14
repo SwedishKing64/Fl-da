@@ -1,14 +1,18 @@
 /**
  * The alpsport.com.au navigation, which is what decides where a product lives on the site.
  *
- * Two levels matter. The **heading** (the bold column title in a drop-down, e.g. "Snowboard Boots")
- * is what goes in the Shopify `Type` column. The **leaf** beneath it ("Mens Boots", "Womens Boots")
- * is reached by combining that Type with tags, which is how the live catalogue is built: every
- * Snowboard Boots product carries a `mens`, `womens` or `kids` tag, and many also carry a
- * slug-style tag naming the leaf outright.
+ * The Shopify `Type` column holds the most specific thing the product *is*: "Snowboard Boots",
+ * "Synthetic Sleeping Bags". The drop-down menu it sits under — Clothing, Ski, Snowboard,
+ * Backcountry, Outdoor — is a tag, not a Type.
  *
- * Transcribed from the live menus. Treat this file as the vocabulary: a Type that is not a heading
- * here is a Type that has nowhere to live on the website.
+ * That leaves one distinction to draw, and the menu draws it for us. A sub-link that splits a
+ * range by **who it is for** ("Mens Boots", "Womens Boots", "Kids Boots") is not a different kind
+ * of product, so the Type stays the heading above it and the audience becomes a tag. A sub-link
+ * that splits by **what the product is** ("Down Sleeping Bags" vs "Synthetic Sleeping Bags") is a
+ * different kind of product, so the sub-link itself is the Type.
+ *
+ * Transcribed from the live menus. Treat this file as the vocabulary: a Type that is not in it is
+ * a Type that has nowhere to live on the website.
  */
 
 export interface TaxonomyGroup {
@@ -84,15 +88,60 @@ export const ALPSPORT_TAXONOMY: TaxonomySection[] = [
 /** Top-level menu entries that hold no product types — they are merchandising, not categories. */
 export const NON_TYPE_MENUS = ["Brands", "Clearance", "Rentals", "Gift Cards"] as const;
 
-/** Every valid value for the Shopify `Type` column, in menu order. */
-export const PRODUCT_TYPES: string[] = ALPSPORT_TAXONOMY.flatMap((s) => s.groups.map((g) => g.heading));
+/** A sub-link that names an audience rather than a kind of product. These become tags, not Types. */
+const AUDIENCE_LEAF = /^(mens|womens|women's|mens'|kids|kids'|youth|unisex)\b/i;
 
-/** heading → the top-level menu it sits under. */
-export const TYPE_SECTION: Record<string, string> = Object.fromEntries(
-  ALPSPORT_TAXONOMY.flatMap((s) => s.groups.map((g) => [g.heading, s.top] as const)),
-);
+export function isAudienceLeaf(leaf: string): boolean {
+  return AUDIENCE_LEAF.test(leaf.trim());
+}
 
-/** heading → its leaves. */
+/**
+ * Every valid value for the Shopify `Type` column.
+ *
+ * A group whose sub-links only split by audience contributes its heading ("Snowboard Boots").
+ * Every sub-link that names a kind of product contributes itself ("Synthetic Sleeping Bags").
+ */
+export const PRODUCT_TYPES: string[] = (() => {
+  const out: string[] = [];
+  for (const section of ALPSPORT_TAXONOMY) {
+    for (const group of section.groups) {
+      const kinds = group.leaves.filter((l) => !isAudienceLeaf(l));
+      if (kinds.length < group.leaves.length) out.push(group.heading);
+      for (const leaf of kinds) if (!out.includes(leaf)) out.push(leaf);
+    }
+  }
+  return out;
+})();
+
+/** Type → the top-level menus it can appear under. This is what gets written as a tag. */
+export const TYPE_SECTIONS: Record<string, string[]> = (() => {
+  const out: Record<string, Set<string>> = {};
+  const add = (type: string, top: string) => { (out[type] ??= new Set()).add(top); };
+  for (const section of ALPSPORT_TAXONOMY) {
+    for (const group of section.groups) {
+      const kinds = group.leaves.filter((l) => !isAudienceLeaf(l));
+      if (kinds.length < group.leaves.length) add(group.heading, section.top);
+      for (const leaf of kinds) add(leaf, section.top);
+    }
+  }
+  return Object.fromEntries(Object.entries(out).map(([k, v]) => [k, [...v]]));
+})();
+
+/** Type → the group headings it sits beneath, for showing a person where a match landed. */
+export const TYPE_PARENTS: Record<string, string[]> = (() => {
+  const out: Record<string, Set<string>> = {};
+  for (const section of ALPSPORT_TAXONOMY) {
+    for (const group of section.groups) {
+      for (const leaf of group.leaves) {
+        if (isAudienceLeaf(leaf)) continue;
+        (out[leaf] ??= new Set()).add(group.heading);
+      }
+    }
+  }
+  return Object.fromEntries(Object.entries(out).map(([k, v]) => [k, [...v]]));
+})();
+
+/** heading → its sub-links, kept whole so the UI can show what sits under a group. */
 export const TYPE_LEAVES: Record<string, string[]> = Object.fromEntries(
   ALPSPORT_TAXONOMY.flatMap((s) => s.groups.map((g) => [g.heading, g.leaves] as const)),
 );
@@ -108,8 +157,6 @@ const ALIASES: Record<string, string> = {
   "backcountry gear": "Backcountry Gear",
   "snowboard boot": "Snowboard Boots",
   "ski boot": "Ski Boots",
-  "snowboard": "Snowboards",
-  "ski": "Skis",
 };
 
 /** Resolve a written type to the exact menu heading, or undefined when it is not in the menu. */
@@ -121,7 +168,7 @@ export function resolveType(value: string): string | undefined {
   return ALIASES[want];
 }
 
-/** True when this is a heading a product can legitimately be filed under. */
+/** True when this names a place a product can legitimately be filed. */
 export function isValidType(value: string): boolean {
   return resolveType(value) !== undefined;
 }

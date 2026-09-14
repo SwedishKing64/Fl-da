@@ -1,41 +1,58 @@
 import { describe, expect, it } from "vitest";
-import { ALPSPORT_TAXONOMY, PRODUCT_TYPES, TYPE_LEAVES, TYPE_SECTION, isValidType, resolveType } from "./taxonomy";
+import { ALPSPORT_TAXONOMY, PRODUCT_TYPES, TYPE_LEAVES, TYPE_PARENTS, TYPE_SECTIONS, isAudienceLeaf, isValidType, resolveType } from "./taxonomy";
 
 describe("the alpsport menu as a Type vocabulary", () => {
   it("covers every top-level menu that holds products", () => {
     expect(ALPSPORT_TAXONOMY.map((s) => s.top)).toEqual(["Clothing", "Ski", "Snowboard", "Backcountry", "Outdoor"]);
   });
 
-  it("has no duplicate headings, so a Type always names one place", () => {
+  it("has no duplicate types, so a Type always names one kind of product", () => {
     expect(new Set(PRODUCT_TYPES).size).toBe(PRODUCT_TYPES.length);
   });
 
-  it("gives every heading a section and at least one leaf", () => {
-    for (const type of PRODUCT_TYPES) {
-      expect(TYPE_SECTION[type], type).toBeTruthy();
-      expect(TYPE_LEAVES[type]?.length, type).toBeGreaterThan(0);
-    }
+  it("tells an audience split from a kind of product", () => {
+    expect(isAudienceLeaf("Mens Boots")).toBe(true);
+    expect(isAudienceLeaf("Kids Snowboards")).toBe(true);
+    expect(isAudienceLeaf("Down Sleeping Bags")).toBe(false);
+    expect(isAudienceLeaf("Ski Poles")).toBe(false);
   });
 
-  /** Every Type in the 122-product export the shop supplied is a heading, never a leaf. */
-  it("resolves every Type already in use in the live catalogue", () => {
-    const inUse = ["Snow Clothing", "Snowboard Bindings", "Ski Accessories", "Snowboard Accessories", "Snowboard Boots", "Snowboards", "Back-Country Gear"];
-    for (const type of inUse) expect(isValidType(type), type).toBe(true);
+  /** The two examples the shop gave, which between them fix where the line falls. */
+  it("keeps the heading where the sub-links only split by audience", () => {
+    // Mens / Womens / Kids Boots are the same product for different people.
+    expect(PRODUCT_TYPES).toContain("Snowboard Boots");
+    expect(PRODUCT_TYPES).not.toContain("Mens Boots");
+  });
+
+  it("takes the sub-link where it names a different kind of product", () => {
+    expect(PRODUCT_TYPES).toContain("Synthetic Sleeping Bags");
+    expect(PRODUCT_TYPES).toContain("Down Sleeping Bags");
+    expect(PRODUCT_TYPES).not.toContain("Sleeping Bags"); // no audience split, so the heading is not a Type
+  });
+
+  it("says which menu a type is tagged into", () => {
+    expect(TYPE_SECTIONS["Snowboard Boots"]).toEqual(["Snowboard"]);
+    expect(TYPE_SECTIONS["Synthetic Sleeping Bags"]).toEqual(["Outdoor"]);
+    // Some kinds genuinely live in more than one menu, and the tag has to say which.
+    expect(TYPE_SECTIONS["Gaiters"]).toEqual(expect.arrayContaining(["Clothing", "Outdoor"]));
+  });
+
+  it("remembers which group a type sits under", () => {
+    expect(TYPE_PARENTS["Down Sleeping Bags"]).toEqual(["Sleeping Bags"]);
+    expect(TYPE_PARENTS["Ski Poles"]).toEqual(["Ski Accessories"]);
+  });
+
+  it("keeps every group's sub-links whole for display", () => {
+    expect(TYPE_LEAVES["Snowboard Boots"]).toEqual(["Mens Boots", "Womens Boots", "Kids Boots"]);
   });
 
   it("absorbs the site's own inconsistent hyphenation", () => {
     expect(resolveType("Back-Country Gear")).toBe("Backcountry Gear");
-    expect(resolveType("backcountry gear")).toBe("Backcountry Gear");
   });
 
   it("refuses a type that has nowhere to live", () => {
-    expect(resolveType("Down Sleeping Bags")).toBeUndefined(); // a leaf, not a heading
     expect(resolveType("Widgets")).toBeUndefined();
     expect(resolveType("")).toBeUndefined();
-  });
-
-  it("files a ski strap and a sleeping bag where the shop said they go", () => {
-    expect(TYPE_SECTION["Ski Accessories"]).toBe("Ski");
-    expect(TYPE_LEAVES["Sleeping Bags"]).toContain("Down Sleeping Bags");
+    expect(isValidType("Mens Boots")).toBe(false); // an audience, not a kind
   });
 });

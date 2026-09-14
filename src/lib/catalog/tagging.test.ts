@@ -366,3 +366,29 @@ describe("what the three new brand exports corrected", () => {
     expect(isManualTag("2998")).toBe(true);
   });
 });
+
+describe("a ski sold as a package is still a ski", () => {
+  /**
+   * The shop's Blaze 94 W is one of four packages in the live catalogue missing its skis tag —
+   * a package is not a separate kind of product, it is a ski with a binding already on it.
+   */
+  it("carries the type, the section and the package tag together", () => {
+    const tags = generalTags({
+      type: "Skis", vendor: "Volkl", genders: ["womens"], withBindings: true,
+      disciplines: ["Frontside & All-Mountain Skis", "Freeride & Powder Skis"],
+      describedAs: "Blaze 94 W 2027 inc White Marker Squire Binding Package",
+    });
+    expect(tags).toContain("skis");          // it is a ski
+    expect(tags).toContain("ski");           // it lives in the Ski menu
+    expect(tags).toContain("ski-packages");  // and it comes with a binding
+    expect(tags).toContain("frontside-and-all-mountain-skis");
+    expect(tags).toContain("freeride-and-powder-skis");
+  });
+
+  it("does the same for a board package", () => {
+    const tags = generalTags({ type: "Snowboards", vendor: "Burton", genders: ["mens"], withBindings: true, disciplines: ["Park Boards"] });
+    expect(tags).toContain("snowboards");
+    expect(tags).toContain("snowboard");
+    expect(tags).toContain("snowboard-packages");
+  });
+});

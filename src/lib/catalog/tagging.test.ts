@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_TAGGING, TAG_SPELLING, generalTags, isHardgood, isManualTag, isNotOurs, isShopifyGenerated, needsSectionChoice, normaliseGenders, seasonFor, slugTag, withoutGenerated } from "./tagging";
+import { DEFAULT_TAGGING, EVERGREEN_SEASON, TAG_SPELLING, generalTags, isHardgood, isManualTag, isNotOurs, isShopifyGenerated, needsSectionChoice, normaliseGenders, seasonFor, slugTag, withoutGenerated } from "./tagging";
 
 describe("the six general tags", () => {
   it("writes them in the shop's order: type, section, season, house, vendor, gender", () => {
@@ -153,5 +153,31 @@ describe("tags a person applies by hand", () => {
   it("never writes one itself", () => {
     const tags = generalTags({ type: "Snow Jackets", vendor: "Burton", genders: ["mens"], section: "Clothing" });
     expect(tags.filter(isNotOurs)).toEqual([]);
+  });
+});
+
+describe("products that do not change from year to year", () => {
+  it("carries the evergreen marker instead of a season, never as well", () => {
+    const tags = generalTags({ type: "Snowboard Accessories", vendor: "Burton", genders: [], evergreen: true, section: "Snowboard" });
+    expect(tags).toContain(EVERGREEN_SEASON);
+    expect(tags).not.toContain("2026");
+    expect(tags).not.toContain("2027");
+    expect(tags.filter((t) => /^\d{4}$/.test(t))).toEqual([EVERGREEN_SEASON]);
+  });
+
+  it("applies to any kind of product, not just accessories", () => {
+    // Three pairs of boots in the shop's own catalogue are evergreen.
+    const tags = generalTags({ type: "Snowboard Boots", vendor: "Burton", genders: ["womens"], evergreen: true });
+    expect(tags).toContain(EVERGREEN_SEASON);
+    expect(tags).not.toContain("2027");
+  });
+
+  it("is a judgement, so it is never learned as a brand convention", () => {
+    expect(isManualTag(EVERGREEN_SEASON)).toBe(true);
+    expect(isNotOurs(EVERGREEN_SEASON)).toBe(true);
+  });
+
+  it("still seasons a normal product", () => {
+    expect(generalTags({ type: "Snowboard Accessories", vendor: "Burton", genders: [], section: "Snowboard" })).toContain("2026");
   });
 });

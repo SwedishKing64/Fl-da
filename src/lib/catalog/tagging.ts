@@ -14,6 +14,14 @@ import { PRODUCT_TYPES, TYPE_SECTIONS, resolveType } from "./taxonomy";
 
 export type Gender = "mens" | "womens" | "kids";
 
+/**
+ * The season tag for something that does not change from year to year. It stands in place of a
+ * real season — in the shop's catalogue no product carries both — and whether an item qualifies is
+ * a judgement someone makes per product, not a rule about its category: eleven of eighteen
+ * snowboard accessories are evergreen, but so are three pairs of boots.
+ */
+export const EVERGREEN_SEASON = "2999";
+
 export interface TaggingSettings {
   /** The shop's own marker, on every product it builds. */
   houseTag: string;
@@ -30,6 +38,11 @@ export const DEFAULT_TAGGING: TaggingSettings = {
 export interface TagInput {
   type: string;
   vendor: string;
+  /**
+   * A product that does not change from year to year — a stomp pad, a scraper, replacement
+   * hardware. It carries the evergreen marker in place of a season, never as well as one.
+   */
+  evergreen?: boolean;
   /** Empty for a unisex product — glide wax and stomp pads carry no gender. */
   genders: Gender[];
   /** Which menu this product is being filed under, when its Type sits in more than one. */
@@ -103,7 +116,7 @@ export function withoutGenerated(tags: string[]): string[] {
  * "clearance" and "snow sale", and learning those would have every new full-price product born on
  * markdown. Campaign codes are matched by shape — bonus10 today, bonus15 next month.
  */
-const MANUAL_TAGS = new Set(["snow-sale", "snow-clearance", "clearance", "sale", "scan"]);
+const MANUAL_TAGS = new Set(["snow-sale", "snow-clearance", "clearance", "sale", "scan", EVERGREEN_SEASON]);
 const MANUAL_PATTERNS: RegExp[] = [/^bonus\d+$/i];
 
 export function isManualTag(tag: string): boolean {
@@ -142,7 +155,7 @@ export function generalTags(input: TagInput, settings: TaggingSettings = DEFAULT
   const section = input.section?.trim() || (sections.length === 1 ? sections[0] : "");
   if (section) push(slugTag(section));
 
-  push(String(input.year ?? seasonFor(type, settings)));
+  push(input.evergreen ? EVERGREEN_SEASON : String(input.year ?? seasonFor(type, settings)));
   push(settings.houseTag);
   push(slugTag(input.vendor));
   for (const gender of normaliseGenders(input.genders)) push(gender);

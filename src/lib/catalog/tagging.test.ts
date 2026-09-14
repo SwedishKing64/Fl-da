@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BACKCOUNTRY_SHELF_TAGS, isBackcountryShelf, isSkin, skinType, BACKCOUNTRY_BINDING_TAG, BACKCOUNTRY_BOOT_TAG, BOARD_DISCIPLINES, crossShelfTags, DEFAULT_TAGGING, EVERGREEN_SEASON, SKI_DISCIPLINES, BAG_TAGS, MANUAL_SEASON, TOURING_SKI_TAG, bagTags, clothingContextTags, isSkinAccessory, bindingType, bootTags, disciplinesFor, snowboardBindingTags, needsBindingKind, TAG_SPELLING, generalTags, isHardgood, isManualTag, isNotOurs, isNotLearnable, isRuleGenerated, isShopifyGenerated, needsSectionChoice, normaliseGenders, seasonFor, slugTag, withoutGenerated } from "./tagging";
+import { BACKCOUNTRY_SHELF_TAGS, isBackcountryShelf, isSkin, skinType, sectionsFor, BACKCOUNTRY_BINDING_TAG, BACKCOUNTRY_BOOT_TAG, BOARD_DISCIPLINES, crossShelfTags, DEFAULT_TAGGING, EVERGREEN_SEASON, SKI_DISCIPLINES, BAG_TAGS, MANUAL_SEASON, TOURING_SKI_TAG, bagTags, clothingContextTags, isSkinAccessory, bindingType, bootTags, disciplinesFor, snowboardBindingTags, needsBindingKind, TAG_SPELLING, generalTags, isHardgood, isManualTag, isNotOurs, isNotLearnable, isRuleGenerated, isShopifyGenerated, needsSectionChoice, normaliseGenders, seasonFor, slugTag, withoutGenerated } from "./tagging";
 import { ALPSPORT_TAXONOMY } from "./taxonomy";
 
 describe("the six general tags", () => {
@@ -48,7 +48,9 @@ describe("the six general tags", () => {
 
   it("asks for a section only where a type really sits in two menus", () => {
     expect(needsSectionChoice("Goggles")).toBe(true); // Ski and Snowboard
-    expect(needsSectionChoice("Gaiters")).toBe(true); // Clothing and Outdoor
+    // Gaiters appears under Clothing and Outdoor but is one product on both shelves, so there is
+    // nothing to ask: it takes both.
+    expect(needsSectionChoice("Gaiters")).toBe(false);
     expect(needsSectionChoice("Snowboard Boots")).toBe(false);
     // Given the choice, it is honoured rather than guessed.
     expect(generalTags({ type: "Goggles", vendor: "Burton", genders: [], section: "Snowboard" })[1]).toBe("snowboard");
@@ -505,6 +507,60 @@ describe("reaching a backcountry shelf takes the section too", () => {
       .not.toContain("backcountry");
     expect(generalTags({ type: "Ski Boots", vendor: "Atomic", genders: ["mens"], describedAs: "Atomic Hawx Ultra 100" }))
       .not.toContain("backcountry");
+  });
+});
+
+describe("outdoor kit", () => {
+  /** A tent is the same product next winter, so it carries the evergreen marker, not a year. */
+  it("is evergreen rather than seasonal", () => {
+    for (const type of ["2 Person Tents", "Down Sleeping Bags", "Stoves", "Hiking Boots", "Trekking Poles", "Daypacks"]) {
+      const tags = generalTags({ type, vendor: "Nemo", genders: [] });
+      expect(tags, type).toContain(EVERGREEN_SEASON);
+      expect(tags, type).not.toContain("2026");
+    }
+  });
+
+  it("leaves the snow seasons alone", () => {
+    expect(generalTags({ type: "Snow Jackets", vendor: "Burton", genders: ["mens"] })).toContain("2026");
+    // The audience split keeps the heading as the Type, so a men's board is typed Snowboards.
+    expect(generalTags({ type: "Snowboards", vendor: "Burton", genders: ["mens"] })).toContain("2027");
+  });
+
+  it("puts a gaiter on both shelves", () => {
+    const tags = generalTags({ type: "Gaiters", vendor: "Sea to Summit", genders: [] });
+    expect(tags).toContain("gaiters");
+    expect(tags).toContain("clothing");
+    expect(tags).toContain("outdoor");
+    expect(sectionsFor("Gaiters")).toEqual(["Clothing", "Outdoor"]);
+  });
+
+  it("takes a gender only where the product has one", () => {
+    // A One Planet bag comes in both fits and carries both; a Nemo Riff is cut for one.
+    expect(generalTags({ type: "Down Sleeping Bags", vendor: "One Planet", genders: ["mens", "womens"] }))
+      .toEqual(expect.arrayContaining(["mens", "womens"]));
+    expect(generalTags({ type: "Down Sleeping Bags", vendor: "Nemo", genders: ["womens"] })).not.toContain("mens");
+    const unisex = generalTags({ type: "2 Person Tents", vendor: "Nemo", genders: [] });
+    for (const g of ["mens", "womens", "kids"]) expect(unisex, g).not.toContain(g);
+  });
+});
+
+describe("a promotion is never a convention", () => {
+  /**
+   * "tent sale" sits on all twenty-seven tents in the Nemo export. Learned as a house convention it
+   * would have every tent the importer builds afterwards born on markdown.
+   */
+  it("reads promotions by shape, since they are named after what is on promotion", () => {
+    for (const tag of ["tent sale", "easter sale", "outdoor clearance", "tent promo", "snow sale", "clearance", "superseded"]) {
+      expect(isManualTag(tag), tag).toBe(true);
+      expect(isNotOurs(tag), tag).toBe(true);
+      expect(isNotLearnable(tag), tag).toBe(true);
+    }
+  });
+
+  it("does not mistake a real shelf for one", () => {
+    for (const tag of ["ski-poles", "tent-accessories", "down-sleeping-bags", "sleeping-bags", "climbing-shoes"]) {
+      expect(isManualTag(tag), tag).toBe(false);
+    }
   });
 });
 

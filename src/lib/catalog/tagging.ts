@@ -386,7 +386,14 @@ export function withoutGenerated(tags: string[]): string[] {
 export const MANUAL_SEASON = "2998";
 
 const MANUAL_TAGS = new Set(["snow-sale", "snow-clearance", "clearance", "sale", "scan", EVERGREEN_SEASON, MANUAL_SEASON]);
-const MANUAL_PATTERNS: RegExp[] = [/^bonus\d+$/i];
+/**
+ * Promotions are named after whatever is on promotion, so they cannot be listed — tent sale, easter
+ * sale, outdoor clearance, tent promo are all one shop's markdown this month. Matched by shape
+ * instead, because the cost of missing one is high: "tent sale" sits on all twenty-seven tents in
+ * the Nemo export, so a template would learn it as a house convention and every tent the importer
+ * built after that would be born on sale. Superseded is the same kind of marker for old stock.
+ */
+const MANUAL_PATTERNS: RegExp[] = [/^bonus\d+$/i, /(^|-)(sale|promo|clearance)$/i, /^superseded$/i];
 
 export function isManualTag(tag: string): boolean {
   const value = slugTag(tag);
@@ -470,13 +477,14 @@ export function generalTags(input: TagInput, settings: TaggingSettings = DEFAULT
   const type = bindingType(input) ?? skinType(input) ?? resolveType(input.type) ?? input.type.trim();
   if (type) push(TAG_SPELLING[type] ?? slugTag(type));
 
-  // A Type can sit under two menus — Goggles under both Ski and Snowboard — so an explicit
-  // section wins, and a Type that belongs to exactly one menu needs no help.
-  const sections = TYPE_SECTIONS[type] ?? [];
-  const section = input.section?.trim() || (sections.length === 1 ? sections[0] : "");
-  if (section) push(slugTag(section));
+  const chosen = sectionsFor(type, input.section);
+  for (const value of chosen) push(slugTag(value));
 
-  push(input.evergreen ? EVERGREEN_SEASON : String(input.year ?? seasonFor(type, settings)));
+  // Outdoor does not run on a season: a tent or a stove is the same product next winter, so it
+  // carries the evergreen marker rather than a year. Verified against the shop's own instruction
+  // rather than its export, where the Nemo and One Planet products carry the year they were added.
+  const evergreen = input.evergreen || chosen.includes("Outdoor");
+  push(evergreen ? EVERGREEN_SEASON : String(input.year ?? seasonFor(type, settings)));
   push(settings.houseTag);
   push(slugTag(input.vendor));
   for (const gender of normaliseGenders(input.genders)) push(gender);
@@ -525,6 +533,29 @@ export function normaliseGenders(genders: Gender[]): Gender[] {
   return unique.includes("kids") ? ["kids"] : unique;
 }
 
+/**
+ * Types that belong under two menus at once rather than one of them.
+ *
+ * Most Types that appear twice are one product sold to two sports — a pair of goggles is bought
+ * either by a skier or by a boarder, and which menu it is filed under is a decision. A gaiter is
+ * not: the same gaiter is outdoor kit and clothing, and it sits on both.
+ */
+const BOTH_SECTIONS = new Set<string>(["Gaiters"]);
+
+/**
+ * Which menus to tag a product with. A Type in exactly one menu needs no help, a Type in two is a
+ * question answered by the invoice or by a person — unless it is one of the few that belong in
+ * both, which take both.
+ */
+export function sectionsFor(type: string, told?: string): string[] {
+  const resolved = resolveType(type) ?? type.trim();
+  const sections = TYPE_SECTIONS[resolved] ?? [];
+  if (BOTH_SECTIONS.has(resolved)) return sections;
+  const chosen = told?.trim();
+  if (chosen) return sections.find((s) => slugTag(s) === slugTag(chosen)) ? [chosen] : [chosen];
+  return sections.length === 1 ? sections : [];
+}
+
 /** Which menus a Type could be filed under, for asking a person when it is genuinely ambiguous. */
 export function candidateSections(type: string): string[] {
   return TYPE_SECTIONS[resolveType(type) ?? type] ?? [];
@@ -532,6 +563,8 @@ export function candidateSections(type: string): string[] {
 
 /** True when a Type sits in more than one menu, so the section tag cannot be inferred. */
 export function needsSectionChoice(type: string): boolean {
+  const resolved = resolveType(type) ?? type.trim();
+  if (BOTH_SECTIONS.has(resolved)) return false; // it goes in both, so there is nothing to choose
   return candidateSections(type).length > 1;
 }
 

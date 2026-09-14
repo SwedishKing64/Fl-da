@@ -6,6 +6,7 @@ import { z } from "zod";
 import { prisma, parseJson } from "./db";
 import { getSettings } from "./settings";
 import { aiAvailable, EXTRACTION_MODEL } from "./extract/ai";
+import { templateGuidance, type ProductTemplateLike } from "./templates";
 
 const SeoSchema = z.object({
   seoTitle: z.string().describe("Max 60 characters"),
@@ -27,6 +28,11 @@ export interface SeoInput {
   description: string;
   metafields: Record<string, string>;
   options: string[];
+  /**
+   * What the shop has written down about products like this one — house rules plus the notes on any
+   * matching template. The CSV can show which fields were filled in; only this can say why.
+   */
+  guidance?: string;
 }
 
 export function templateSeo(input: SeoInput, shopName = "Sydney Ski Shop"): z.infer<typeof SeoSchema> {
@@ -51,7 +57,14 @@ export async function generateSeo(input: SeoInput): Promise<{ result: z.infer<ty
     const response = await getClient().messages.parse({
       model: EXTRACTION_MODEL,
       max_tokens: 4000,
-      system: `You write product copy for an Australian ski and snowboard retailer's Shopify store. Tone: ${settings.seoTone}. Australian English. Use only facts given; never invent specs. seoTitle max 60 characters, seoDescription 120-155 characters.`,
+      system: [
+        `You write product copy for an Australian ski and snowboard retailer's Shopify store. Tone: ${settings.seoTone}. Australian English. Use only facts given; never invent specs. seoTitle max 60 characters, seoDescription 120-155 characters.`,
+        // The shop's own written conventions outrank the generic instructions above, but never
+        // licence inventing a spec that is not in the input.
+        input.guidance?.trim()
+          ? `The shop has written down how products like this are built. Follow it exactly where it applies, except that it never permits inventing a specification you were not given:\n\n${input.guidance.trim()}`
+          : "",
+      ].filter(Boolean).join("\n\n"),
       output_config: { format: zodOutputFormat(SeoSchema), effort: "low" },
       messages: [{ role: "user", content: JSON.stringify(input) }],
     });
@@ -65,11 +78,19 @@ export async function generateSeo(input: SeoInput): Promise<{ result: z.infer<ty
 /** Fill SEO title/description (and body when empty) for every product in a batch that lacks them. */
 export async function enrichBatchSeo(batchId: string, opts: { onlyMissing: boolean }): Promise<{ updated: number; source: "AI" | "TEMPLATE" | "MIXED" }> {
   const products = await prisma.product.findMany({ where: { batchId } });
+  const settings = await getSettings();
+  const templates = await loadTemplatesForCopy();
   let updated = 0;
   const sources = new Set<string>();
   for (const p of products) {
     if (opts.onlyMissing && p.seoTitle && p.seoDescription && p.bodyHtml) continue;
     const { result, source } = await generateSeo({
+      guidance: templateGuidance(
+        { vendor: p.vendor, productType: p.productType, category: p.category },
+        templates,
+        settings.houseRules,
+        titleExamplesFor({ vendor: p.vendor, productType: p.productType, category: p.category }, templates),
+      ),
       title: p.title,
       vendor: p.vendor,
       productType: p.productType,
@@ -90,4 +111,40 @@ export async function enrichBatchSeo(batchId: string, opts: { onlyMissing: boole
     updated++;
   }
   return { updated, source: sources.size > 1 ? "MIXED" : ((sources.values().next().value as "AI" | "TEMPLATE" | undefined) ?? "TEMPLATE") };
+}
+
+/**
+ * Templates, shaped for copywriting. Kept here rather than imported from the pipeline so this module
+ * does not pull in the whole import machinery just to read a few rows.
+ */
+async function loadTemplatesForCopy(): Promise<ProductTemplateLike[]> {
+  const rows = await prisma.productTemplate.findMany({ where: { active: true }, orderBy: { priority: "asc" } });
+  return rows.map((t) => ({
+    id: t.id,
+    name: t.name,
+    scope: t.scope as ProductTemplateLike["scope"],
+    matchValue: t.matchValue,
+    matchProductType: t.matchProductType,
+    notes: t.notes,
+    productType: t.setProductType,
+    tags: [],
+    collections: [],
+    optionNames: [],
+    metafields: {},
+    priority: t.priority,
+    active: t.active,
+    analysis: parseJson<{ titleExamples?: string[] }>(t.analysis, {}),
+  })) as ProductTemplateLike[];
+}
+
+/** Real titles from the export a matching template was learned from, so new copy reads like the old. */
+function titleExamplesFor(
+  target: { vendor: string; productType: string; category: string },
+  templates: ProductTemplateLike[],
+): string[] {
+  const withAnalysis = templates as Array<ProductTemplateLike & { analysis?: { titleExamples?: string[] } }>;
+  const matched = withAnalysis.filter(
+    (t) => t.active && (t.matchValue.toLowerCase() === target.vendor.toLowerCase() || t.matchValue.toLowerCase() === target.productType.toLowerCase()),
+  );
+  return matched.flatMap((t) => t.analysis?.titleExamples ?? []).slice(0, 3);
 }

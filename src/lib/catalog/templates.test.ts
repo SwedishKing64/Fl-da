@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { analyseShopifyCsv, applyTemplates, describeTemplate, matchingTemplates, type ProductTemplateLike } from "./templates";
+import {
+  analyseShopifyCsv,
+  analyseShopifyCsvGroups,
+  applyTemplates,
+  describeTemplate,
+  matchingTemplates,
+  templateGuidance,
+  type ProductTemplateLike,
+} from "./templates";
 
 /** A Shopify export shaped the way a real one is: product fields only on a handle's first row. */
 const EXPORT = [
@@ -126,5 +134,79 @@ describe("applying templates", () => {
 
   it("summarises what a template does", () => {
     expect(describeTemplate(brandTemplate)).toBe("type Skis, 2 tags, 1 collection, 1 metafield, options Length / Colour");
+  });
+});
+
+/** A whole-catalogue export: two brands, three ranges, and one range too small to learn from. */
+const CATALOGUE = [
+  `Handle,Title,Vendor,Type,Tags,Option1 Name,Option1 Value,Variant SKU,Collection`,
+  // Atomic skis — four products, a real convention
+  `a1,Atomic Bent 90,Atomic,Skis,"Skis, Atomic",Length,166,A1,Skis`,
+  `a2,Atomic Bent 100,Atomic,Skis,"Skis, Atomic",Length,172,A2,Skis`,
+  `a3,Atomic Maverick 88,Atomic,Skis,"Skis, Atomic",Length,169,A3,Skis`,
+  `a4,Atomic Redster Q9,Atomic,Skis,"Skis, Atomic",Length,165,A4,Skis`,
+  // Atomic boots — three products, just enough
+  `a5,Atomic Hawx 90,Atomic,Ski Boots,"Boots, Atomic",Size,26.5,A5,Ski Boots`,
+  `a6,Atomic Hawx 100,Atomic,Ski Boots,"Boots, Atomic",Size,27.5,A6,Ski Boots`,
+  `a7,Atomic Hawx 110,Atomic,Ski Boots,"Boots, Atomic",Size,28.5,A7,Ski Boots`,
+  // Burton boards — three products
+  `b1,Burton Custom,Burton,Snowboards,"Snowboards, Burton",Length,156,B1,Snowboards`,
+  `b2,Burton Process,Burton,Snowboards,"Snowboards, Burton",Length,158,B2,Snowboards`,
+  `b3,Burton Deep Thinker,Burton,Snowboards,"Snowboards, Burton",Length,157,B3,Snowboards`,
+  // A lone beanie — one product is not a convention
+  `a8,Atomic Alps Beanie,Atomic,Accessories,"Accessories, Atomic",Size,One,A8,Accessories`,
+].join("\n");
+
+describe("splitting a whole-catalogue export", () => {
+  const { groups, warnings } = analyseShopifyCsvGroups(CATALOGUE);
+
+  it("proposes one template per brand and product type, biggest range first", () => {
+    expect(groups.map((g) => `${g.vendor}/${g.productType}`)).toEqual([
+      "Atomic/Skis",
+      "Atomic/Ski Boots",
+      "Burton/Snowboards",
+    ]);
+    expect(groups[0].analysis.productCount).toBe(4);
+  });
+
+  it("learns each range separately rather than blending them", () => {
+    const skis = groups.find((g) => g.productType === "Skis")!.analysis;
+    const boots = groups.find((g) => g.productType === "Ski Boots")!.analysis;
+    expect(skis.commonTags).toEqual(expect.arrayContaining(["Skis", "Atomic"]));
+    expect(skis.commonTags).not.toContain("Boots");
+    expect(skis.optionNames).toEqual(["Length"]);
+    expect(boots.optionNames).toEqual(["Size"]);
+    expect(boots.collections).toEqual(["Ski Boots"]);
+  });
+
+  it("drops a range too small to tell a convention from a coincidence, and says so", () => {
+    expect(groups.some((g) => g.productType === "Accessories")).toBe(false);
+    expect(warnings.join(" ")).toMatch(/1 product sat in groups of fewer than 3/);
+  });
+
+  it("still reports a file that is not an export at all", () => {
+    expect(analyseShopifyCsvGroups("Name,Price\nThing,10").warnings[0]).toMatch(/Handle/);
+    expect(analyseShopifyCsvGroups("").groups).toEqual([]);
+  });
+});
+
+describe("the guidance a person writes", () => {
+  const noted: ProductTemplateLike = { ...brandTemplate, matchProductType: "Skis", notes: "Lead the title with the model year." };
+  const target = { vendor: "Atomic", productType: "Skis", category: "skis" };
+
+  it("carries house rules, matching notes and the house title style", () => {
+    const text = templateGuidance(target, [noted], "Australian spelling.", ["Atomic Bent 90 Skis"]);
+    expect(text).toContain("Australian spelling.");
+    expect(text).toContain("Lead the title with the model year.");
+    expect(text).toContain("Atomic Bent 90 Skis");
+  });
+
+  it("leaves out notes from a template this product does not match", () => {
+    const beanie = { vendor: "Atomic", productType: "Accessories", category: "accessories" };
+    expect(templateGuidance(beanie, [noted])).not.toContain("model year");
+  });
+
+  it("is empty when nobody has written anything", () => {
+    expect(templateGuidance(target, [brandTemplate])).toBe("");
   });
 });

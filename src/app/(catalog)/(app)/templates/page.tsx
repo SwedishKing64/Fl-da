@@ -1,5 +1,6 @@
 import { prisma, parseJson } from "@/lib/catalog/db";
 import { requireUser } from "@/lib/catalog/auth";
+import { getSettings } from "@/lib/catalog/settings";
 import { Card, PageHeader } from "@/app/(catalog)/ui";
 import { describeTemplate, type ProductTemplateLike } from "@/lib/catalog/templates";
 import { TemplatesEditor, type TemplateRow } from "./TemplatesEditor";
@@ -8,6 +9,7 @@ const list = (value: string) => value.split(",").map((v) => v.trim()).filter(Boo
 
 export default async function TemplatesPage() {
   const user = await requireUser();
+  const settings = await getSettings();
   const rows = await prisma.productTemplate.findMany({ orderBy: [{ scope: "asc" }, { priority: "asc" }, { name: "asc" }] });
 
   const templates: TemplateRow[] = rows.map((t) => {
@@ -18,6 +20,7 @@ export default async function TemplatesPage() {
       scope: t.scope as ProductTemplateLike["scope"],
       matchValue: t.matchValue,
       matchProductType: t.matchProductType,
+      notes: t.notes,
       productType: t.setProductType,
       tags: list(t.addTags),
       collections: list(t.addCollections),
@@ -32,6 +35,7 @@ export default async function TemplatesPage() {
       scope: t.scope,
       matchValue: t.matchValue,
       matchProductType: t.matchProductType,
+      notes: t.notes,
       sourceFileName: t.sourceFileName,
       productCount: t.productCount,
       setProductType: t.setProductType,
@@ -49,10 +53,10 @@ export default async function TemplatesPage() {
     <>
       <PageHeader
         title="Templates"
-        subtitle="Teach the importer by example. Upload a Shopify export for a brand or product type and new imports follow the same conventions."
+        subtitle="Teach the importer by example. Upload the products you have already built, then write down the nuances an export cannot show."
       />
-      <Card title="Product templates">
-        <TemplatesEditor templates={templates} isAdmin={user.role === "ADMIN"} />
+      <Card title="Teaching it your conventions">
+        <TemplatesEditor templates={templates} houseRules={settings.houseRules} isAdmin={user.role === "ADMIN"} />
       </Card>
       <p className="mt-4 max-w-3xl text-sm text-[var(--ink-soft)]">
         Templates run before the Rules page, so a rule you wrote by hand always beats a learned convention. Nothing is

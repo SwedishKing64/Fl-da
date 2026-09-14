@@ -184,6 +184,7 @@ export interface AppSettings {
   locations: ShopifyLocation[];
   publicBaseUrl: string; // where uploaded images are served for the CSV, e.g. https://tools.example.com
   seoTone: string; // tone instructions for AI-written descriptions
+  houseRules: string; // free text: how this shop builds products, fed to the AI on every product
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -197,6 +198,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   publicBaseUrl: "",
   seoTone:
     "Friendly, knowledgeable Sydney ski shop. Plain English, no hype, mention who the product suits and key specs.",
+  houseRules: "",
 };
 
 // ---------------------------------------------------------------------------

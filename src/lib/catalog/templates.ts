@@ -47,6 +47,12 @@ export interface ProductTemplateLike {
   matchValue: string;
   /** Narrows any scope to one product type. Empty means "every product that scope matches". */
   matchProductType?: string;
+  /**
+   * What a person wrote down about this brand or type that the export could not show: which fields
+   * matter, what the supplier calls things, how a title should read. Fed to the AI when it writes
+   * copy for a matching product.
+   */
+  notes?: string;
   productType: string;
   tags: string[];
   collections: string[];
@@ -74,6 +80,8 @@ const DOMINANT = 0.6;
  * thirds of a catalogue would quietly mislabel the rest.
  */
 const DOMINANT_VALUE = 0.9;
+/** Fewer products than this in a brand/type group and there is nothing reliable to learn from them. */
+export const MIN_GROUP = 3;
 
 const norm = (value: string) => value.trim().toLowerCase();
 const splitList = (value: string) =>
@@ -99,22 +107,35 @@ function bump(counts: Map<string, number>, key: string) {
   counts.set(key, (counts.get(key) ?? 0) + 1);
 }
 
+/** One product as read out of an export: a handle's first row, which carries the product-level fields. */
+interface ProductRecord {
+  vendor: string;
+  productType: string;
+  tags: string[];
+  collections: string[];
+  optionNames: string[];
+  metafields: Record<string, string>;
+  title: string;
+  seoTitle: string;
+  seoDescription: string;
+  body: string;
+}
+
 /**
- * Read a Shopify product export and describe the conventions in it. Rows are grouped by Handle
- * because Shopify puts product-level fields only on a handle's first row.
+ * Pull the product-level rows out of a Shopify export. Rows are grouped by Handle because Shopify
+ * puts product-level fields only on a handle's first row; later rows are extra variants and images.
  */
-export function analyseShopifyCsv(text: string): TemplateAnalysis {
+function readProducts(text: string): { products: ProductRecord[]; warnings: string[]; fatal?: string } {
   const rows = parseCsv(text);
   const warnings: string[] = [];
-  if (rows.length < 2) {
-    return emptyAnalysis(["The file has no data rows."]);
-  }
+  if (rows.length < 2) return { products: [], warnings, fatal: "The file has no data rows." };
+
   const headers = rows[0].map((h) => h.trim());
   const index = (name: string) => headers.findIndex((h) => norm(h) === norm(name));
 
   const iHandle = index("Handle");
   if (iHandle < 0) {
-    return emptyAnalysis(["No Handle column, so this does not look like a Shopify product export."]);
+    return { products: [], warnings, fatal: "No Handle column, so this does not look like a Shopify product export." };
   }
   const iTitle = index("Title");
   const iVendor = index("Vendor");
@@ -132,6 +153,40 @@ export function analyseShopifyCsv(text: string): TemplateAnalysis {
   if (iTags < 0) warnings.push("No Tags column, so no tag conventions were learned.");
   if (iType < 0) warnings.push("No Type column, so no product type was learned.");
 
+  const products: ProductRecord[] = [];
+  const seen = new Set<string>();
+  for (const row of rows.slice(1)) {
+    const handle = (row[iHandle] ?? "").trim();
+    if (!handle || seen.has(handle)) continue;
+    seen.add(handle);
+
+    const cell = (i: number) => (i >= 0 ? (row[i] ?? "").trim() : "");
+    const metafields: Record<string, string> = {};
+    for (const { i, key } of metafieldCols) {
+      const value = cell(i);
+      if (value) metafields[key] = value;
+    }
+    products.push({
+      vendor: cell(iVendor),
+      productType: cell(iType),
+      tags: [...new Set(splitList(cell(iTags)))],
+      collections: [...new Set(splitList(cell(iCollection)))],
+      optionNames: optionNameCols.map(cell).filter((n) => n && norm(n) !== "title"),
+      metafields,
+      title: cell(iTitle),
+      seoTitle: cell(iSeoTitle),
+      seoDescription: cell(iSeoDesc),
+      body: cell(iBody),
+    });
+  }
+  return { products, warnings };
+}
+
+/** Describe the conventions shared by a set of products. */
+function analyseProducts(products: ProductRecord[], warnings: string[]): TemplateAnalysis {
+  const productCount = products.length;
+  if (productCount === 0) return emptyAnalysis(["No products found — every row was missing a Handle."]);
+
   const vendors = new Map<string, number>();
   const types = new Map<string, number>();
   const tagCounts = new Map<string, number>();
@@ -144,42 +199,22 @@ export function analyseShopifyCsv(text: string): TemplateAnalysis {
   let seoDescriptionExample = "";
   let bodyExample = "";
 
-  const seen = new Set<string>();
-  for (const row of rows.slice(1)) {
-    const handle = (row[iHandle] ?? "").trim();
-    // Only a handle's first row carries the product-level fields; later rows are extra
-    // variants and images.
-    if (!handle || seen.has(handle)) continue;
-    seen.add(handle);
-
-    const cell = (i: number) => (i >= 0 ? (row[i] ?? "").trim() : "");
-
-    bump(vendors, cell(iVendor));
-    bump(types, cell(iType));
-
-    for (const tag of new Set(splitList(cell(iTags)))) bump(tagCounts, tag);
-    for (const collection of new Set(splitList(cell(iCollection)))) bump(collectionCounts, collection);
-
-    const names = optionNameCols.map(cell).filter((n) => n && norm(n) !== "title");
-    if (names.length) bump(optionCombos, names.join(", "));
-
-    for (const { i, key } of metafieldCols) {
-      const value = cell(i);
-      if (!value) continue;
+  for (const p of products) {
+    bump(vendors, p.vendor);
+    bump(types, p.productType);
+    for (const tag of p.tags) bump(tagCounts, tag);
+    for (const collection of p.collections) bump(collectionCounts, collection);
+    if (p.optionNames.length) bump(optionCombos, p.optionNames.join(", "));
+    for (const [key, value] of Object.entries(p.metafields)) {
       metafieldKeys.add(key);
       if (!metafieldValues.has(key)) metafieldValues.set(key, new Map());
       bump(metafieldValues.get(key)!, value);
     }
-
-    const title = cell(iTitle);
-    if (title && titleExamples.length < 3) titleExamples.push(title);
-    if (!seoTitleExample) seoTitleExample = cell(iSeoTitle);
-    if (!seoDescriptionExample) seoDescriptionExample = cell(iSeoDesc);
-    if (!bodyExample) bodyExample = cell(iBody);
+    if (p.title && titleExamples.length < 3) titleExamples.push(p.title);
+    if (!seoTitleExample) seoTitleExample = p.seoTitle;
+    if (!seoDescriptionExample) seoDescriptionExample = p.seoDescription;
+    if (!bodyExample) bodyExample = p.body;
   }
-
-  const productCount = seen.size;
-  if (productCount === 0) return emptyAnalysis(["No products found — every row was missing a Handle."]);
 
   const metafields: Record<string, string> = {};
   for (const [key, values] of metafieldValues) {
@@ -211,6 +246,61 @@ export function analyseShopifyCsv(text: string): TemplateAnalysis {
     bodyExample: bodyExample.slice(0, 400),
     warnings,
   };
+}
+
+/** Read a Shopify product export and describe the conventions in it. */
+export function analyseShopifyCsv(text: string): TemplateAnalysis {
+  const { products, warnings, fatal } = readProducts(text);
+  if (fatal) return emptyAnalysis([fatal]);
+  return analyseProducts(products, warnings);
+}
+
+/** One brand/type worth of products found inside an export, ready to become a template. */
+export interface TemplateGroup {
+  vendor: string;
+  productType: string;
+  analysis: TemplateAnalysis;
+}
+
+/**
+ * A real export library is not one file per brand. A single file often carries the whole catalogue,
+ * so split it by vendor and product type and describe each group separately — one Atomic-skis
+ * template and one Atomic-beanies template beats a single muddled Atomic one.
+ *
+ * Groups smaller than `minProducts` are dropped: two products are not a convention, they are a
+ * coincidence, and a template built from them would apply a one-off tag to everything.
+ */
+export function analyseShopifyCsvGroups(text: string, minProducts = MIN_GROUP): { groups: TemplateGroup[]; warnings: string[] } {
+  const { products, warnings, fatal } = readProducts(text);
+  if (fatal) return { groups: [], warnings: [fatal] };
+
+  const buckets = new Map<string, ProductRecord[]>();
+  for (const p of products) {
+    const key = `${norm(p.vendor)}\u0000${norm(p.productType)}`;
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key)!.push(p);
+  }
+
+  const groups: TemplateGroup[] = [];
+  let skipped = 0;
+  for (const bucket of buckets.values()) {
+    if (bucket.length < minProducts) {
+      skipped += bucket.length;
+      continue;
+    }
+    const analysis = analyseProducts(bucket, []);
+    groups.push({ vendor: analysis.vendor, productType: analysis.productType, analysis });
+  }
+  groups.sort((a, b) => b.analysis.productCount - a.analysis.productCount || a.vendor.localeCompare(b.vendor) || a.productType.localeCompare(b.productType));
+
+  const all = [...warnings];
+  if (skipped > 0) {
+    all.push(
+      `${skipped} product${skipped === 1 ? "" : "s"} sat in groups of fewer than ${minProducts}, too few to tell a convention from a one-off, so no template was proposed for them.`,
+    );
+  }
+  if (groups.length === 0 && products.length > 0 && skipped === 0) all.push("No groups could be formed from this file.");
+  return { groups, warnings: all };
 }
 
 function emptyAnalysis(warnings: string[]): TemplateAnalysis {
@@ -298,4 +388,36 @@ export function describeTemplate(template: ProductTemplateLike): string {
   if (metafieldCount) parts.push(`${metafieldCount} metafield${metafieldCount === 1 ? "" : "s"}`);
   if (template.optionNames.length) parts.push(`options ${template.optionNames.join(" / ")}`);
   return parts.length ? parts.join(", ") : "nothing yet";
+}
+
+/**
+ * The written guidance that applies to one product: the shop's standing house rules, plus the
+ * notes on every template it matches, plus the title style learned from real products.
+ *
+ * This is what turns a template from a tagger into something that can be explained to. A CSV shows
+ * what fields were filled in; it cannot say "always lead the title with the model year" or "the
+ * supplier's 'flex' number is the stiffness metafield". That has to be written down.
+ */
+export function templateGuidance(
+  target: TemplateTarget,
+  templates: ProductTemplateLike[],
+  houseRules = "",
+  titleExamples: string[] = [],
+): string {
+  const matched = matchingTemplates(target, templates);
+  const lines: string[] = [];
+
+  if (houseRules.trim()) lines.push(`House rules for every product:\n${houseRules.trim()}`);
+
+  for (const template of matched) {
+    const note = (template.notes ?? "").trim();
+    if (note) lines.push(`Notes for ${template.name}:\n${note}`);
+  }
+
+  const examples = titleExamples.filter(Boolean).slice(0, 3);
+  if (examples.length) {
+    lines.push(`Existing titles in this range read like: ${examples.join(" · ")}. Match that shape.`);
+  }
+
+  return lines.join("\n\n");
 }

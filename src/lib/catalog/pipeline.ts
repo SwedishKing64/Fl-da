@@ -43,6 +43,7 @@ export async function loadProductTemplates(): Promise<ProductTemplateLike[]> {
     scope: t.scope as ProductTemplateLike["scope"],
     matchValue: t.matchValue,
     matchProductType: t.matchProductType,
+    notes: t.notes,
     productType: t.setProductType,
     tags: splitCsv(t.addTags),
     collections: splitCsv(t.addCollections),

@@ -1,5 +1,5 @@
 "use server";
-import { analyseShopifyCsv, type TemplateAnalysis } from "@/lib/catalog/templates";
+import { analyseShopifyCsv, analyseShopifyCsvGroups, type TemplateAnalysis } from "@/lib/catalog/templates";
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
@@ -759,6 +759,7 @@ export async function saveTemplateAction(_prev: unknown, formData: FormData): Pr
     sourceFileName: String(formData.get("sourceFileName") ?? ""),
     productCount: Number(formData.get("productCount") ?? 0) || 0,
     setProductType: String(formData.get("setProductType") ?? "").trim(),
+    notes: String(formData.get("notes") ?? "").trim(),
     addTags: String(formData.get("addTags") ?? "").trim(),
     addCollections: String(formData.get("addCollections") ?? "").trim(),
     optionNames: String(formData.get("optionNames") ?? "").trim(),
@@ -774,6 +775,179 @@ export async function saveTemplateAction(_prev: unknown, formData: FormData): Pr
     await logAudit(id ? "template.updated" : "template.created", { userId: user.id, details: { name, scope: data.scope, matchValue, productCount: data.productCount } });
     revalidatePath("/templates");
     return { ok: true, data: { id: saved.id }, message: `Saved “${name}”.` };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/** A template the analyser is proposing, before anyone has agreed to save it. */
+export interface TemplateProposal {
+  key: string;
+  fileName: string;
+  name: string;
+  scope: "BRAND" | "PRODUCT_TYPE";
+  matchValue: string;
+  matchProductType: string;
+  productCount: number;
+  setProductType: string;
+  addTags: string;
+  addCollections: string;
+  optionNames: string;
+  setMetafields: Record<string, string>;
+  titleExamples: string[];
+  analysis: string;
+}
+
+const MAX_TEMPLATE_FILES = 60;
+const MAX_TEMPLATE_BYTES = 8 * 1024 * 1024;
+
+/**
+ * Read a whole export library at once. Each file may hold several brands, so every file is split by
+ * brand and product type and each group proposed separately. Nothing is written: the proposals come
+ * back for review, because a template that silently taught itself the wrong convention is worse
+ * than no template at all.
+ */
+export async function analyseTemplateCsvsAction(
+  formData: FormData,
+): Promise<ActionResult<{ proposals: TemplateProposal[]; warnings: string[]; filesRead: number }>> {
+  await requireUser();
+  const files = formData.getAll("files").filter((f): f is File => f instanceof File && f.size > 0);
+  if (files.length === 0) return { ok: false, error: "Choose one or more CSV files to read." };
+  if (files.length > MAX_TEMPLATE_FILES) {
+    return { ok: false, error: `That is ${files.length} files. Upload up to ${MAX_TEMPLATE_FILES} at a time.` };
+  }
+
+  const proposals: TemplateProposal[] = [];
+  const warnings: string[] = [];
+  let filesRead = 0;
+
+  for (const file of files) {
+    if (file.size > MAX_TEMPLATE_BYTES) {
+      warnings.push(`${file.name} is over 8MB and was skipped. Export it in smaller pieces.`);
+      continue;
+    }
+    let text: string;
+    try {
+      text = await file.text();
+    } catch {
+      warnings.push(`${file.name} could not be read.`);
+      continue;
+    }
+    const { groups, warnings: fileWarnings } = analyseShopifyCsvGroups(text);
+    for (const w of fileWarnings) warnings.push(`${file.name}: ${w}`);
+    if (groups.length === 0) continue;
+    filesRead++;
+
+    for (const group of groups) {
+      const a = group.analysis;
+      const vendor = a.vendor.trim();
+      const type = a.productType.trim();
+      if (!vendor && !type) continue;
+      proposals.push({
+        key: `${file.name}::${vendor}::${type}`,
+        fileName: file.name,
+        name: [vendor, type].filter(Boolean).join(" ") || file.name.replace(/\.csv$/i, ""),
+        scope: vendor ? "BRAND" : "PRODUCT_TYPE",
+        matchValue: vendor || type,
+        // A group is by definition one product type, so always narrow a brand template to it.
+        matchProductType: vendor && type ? type : "",
+        productCount: a.productCount,
+        setProductType: type,
+        addTags: a.commonTags.join(", "),
+        addCollections: a.collections.join(", "),
+        optionNames: a.optionNames.join(", "),
+        setMetafields: a.metafields,
+        titleExamples: a.titleExamples,
+        analysis: JSON.stringify(a),
+      });
+    }
+  }
+
+  if (proposals.length === 0) {
+    return { ok: false, error: warnings[0] ?? "No products could be read from those files." };
+  }
+  // Merge duplicates across files: the same brand and type exported twice is one template, built
+  // from whichever export had more products to learn from.
+  const byMatch = new Map<string, TemplateProposal>();
+  for (const p of proposals) {
+    const key = `${p.scope}::${p.matchValue.toLowerCase()}::${p.matchProductType.toLowerCase()}`;
+    const existing = byMatch.get(key);
+    if (!existing || p.productCount > existing.productCount) byMatch.set(key, p);
+  }
+  const merged = [...byMatch.values()].sort((a, b) => b.productCount - a.productCount || a.name.localeCompare(b.name));
+  if (merged.length < proposals.length) {
+    warnings.push(`${proposals.length - merged.length} duplicate brand/type group${proposals.length - merged.length === 1 ? " was" : "s were"} merged.`);
+  }
+  return { ok: true, data: { proposals: merged, warnings, filesRead } };
+}
+
+/** Save the proposals a person ticked, replacing any existing template that matches the same thing. */
+export async function saveTemplatesBulkAction(
+  proposals: Array<TemplateProposal & { notes?: string }>,
+): Promise<ActionResult<{ created: number; replaced: number }>> {
+  const user = await requireUser();
+  if (user.role !== "ADMIN") return { ok: false, error: "Only an admin can save templates." };
+  if (proposals.length === 0) return { ok: false, error: "Nothing was selected." };
+
+  let created = 0;
+  let replaced = 0;
+  try {
+    for (const p of proposals) {
+      const data = {
+        name: p.name.trim() || p.matchValue,
+        scope: p.scope,
+        matchValue: p.matchValue.trim(),
+        matchProductType: p.matchProductType.trim(),
+        notes: (p.notes ?? "").trim(),
+        sourceFileName: p.fileName,
+        productCount: p.productCount,
+        setProductType: p.setProductType.trim(),
+        addTags: p.addTags.trim(),
+        addCollections: p.addCollections.trim(),
+        optionNames: p.optionNames.trim(),
+        setMetafields: JSON.stringify(p.setMetafields ?? {}),
+        analysis: p.analysis || "{}",
+        priority: 0,
+        active: true,
+      };
+      if (!data.matchValue) continue;
+      // Re-uploading an export should update the template it came from, not stack a second one.
+      const existing = await prisma.productTemplate.findFirst({
+        where: { scope: data.scope, matchValue: data.matchValue, matchProductType: data.matchProductType },
+      });
+      if (existing) {
+        // A note written by hand survives a re-import that carries none.
+        await prisma.productTemplate.update({
+          where: { id: existing.id },
+          data: { ...data, notes: data.notes || existing.notes },
+        });
+        replaced++;
+      } else {
+        await prisma.productTemplate.create({ data });
+        created++;
+      }
+    }
+    await logAudit("template.bulk_saved", { userId: user.id, details: { created, replaced } });
+    revalidatePath("/templates");
+    return {
+      ok: true,
+      data: { created, replaced },
+      message: `Saved ${created + replaced} template${created + replaced === 1 ? "" : "s"}${replaced ? ` (${replaced} updated in place)` : ""}.`,
+    };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/** The free-text house rules that go to the AI for every product, whatever brand it is. */
+export async function saveHouseRulesAction(_prev: unknown, formData: FormData): Promise<ActionResult> {
+  const user = await requireUser();
+  if (user.role !== "ADMIN") return { ok: false, error: "Only an admin can change the house rules." };
+  try {
+    await saveSettings({ houseRules: String(formData.get("houseRules") ?? "").trim() });
+    await logAudit("settings.house_rules", { userId: user.id, details: {} });
+    revalidatePath("/templates");
+    return { ok: true, message: "House rules saved." };
   } catch (err) {
     return fail(err);
   }

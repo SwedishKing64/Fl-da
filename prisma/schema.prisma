@@ -316,6 +316,7 @@ model ProductTemplate {
   /// Optional extra constraint: a brand template learned from a skis-only export should not
   /// tag that brand's beanies as skis.
   matchProductType String @default("")
+  notes            String @default("")
   sourceFileName String   @default("")
   productCount   Int      @default(0)
   setProductType String   @default("")

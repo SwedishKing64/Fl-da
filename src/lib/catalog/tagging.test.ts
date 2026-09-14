@@ -442,3 +442,22 @@ describe("touring boots reach the backcountry shelf", () => {
     expect(crossShelfTags("Snowboard Boots", ["traditional-boots"])).toEqual([]);
   });
 });
+
+describe("climbing skins", () => {
+  it("carries both spellings, from either shelf", () => {
+    for (const type of ["Skins", "Climbing Skins"]) {
+      const tags = generalTags({ type, vendor: "Pomoca", genders: [] });
+      expect(tags, type).toContain("skin");
+      expect(tags, type).toContain("skins");
+    }
+  });
+
+  it("keeps its own type tag alongside them", () => {
+    expect(generalTags({ type: "Climbing Skins", vendor: "Black Diamond", genders: [] })).toContain("climbing-skins");
+  });
+
+  it("does not put them on anything else", () => {
+    expect(crossShelfTags("Touring Skis")).toEqual([]);
+    expect(crossShelfTags("Snow Jackets")).toEqual([]);
+  });
+});

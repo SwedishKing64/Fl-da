@@ -116,6 +116,12 @@ export const BACKCOUNTRY_BINDING_TAG = "alpine-touring-bindings";
 export const BACKCOUNTRY_BOOT_TAG = "alpine-touring-boots";
 
 /**
+ * Skins appear twice in the menu — as Skins under Alpine Touring and as Climbing Skins under
+ * Backcountry Gear — and carry both the singular and the plural, so either spelling finds them.
+ */
+export const SKIN_TAGS = ["skin", "skins"] as const;
+
+/**
  * The tags that put a product on a second shelf beyond the one its Type names.
  *
  * A touring boot arrives by either route — as a "Touring Boots" type, or as a generic "Ski Boots"
@@ -127,6 +133,7 @@ export function crossShelfTags(type: string, alreadyTagged: string[] = []): stri
   const out: string[] = [];
   if (resolved === "Touring Bindings") out.push(BACKCOUNTRY_BINDING_TAG);
   if (resolved === "Touring Boots" || alreadyTagged.includes("touring-boots")) out.push(BACKCOUNTRY_BOOT_TAG);
+  if (resolved === "Skins" || resolved === "Climbing Skins") out.push(...SKIN_TAGS);
   return out;
 }
 

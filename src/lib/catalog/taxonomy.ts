@@ -181,6 +181,30 @@ export const TYPE_LEAVES: Record<string, string[]> = Object.fromEntries(
   ALPSPORT_TAXONOMY.flatMap((s) => s.groups.map((g) => [g.heading, g.leaves] as const)),
 );
 
+/**
+ * Clothing headings that group by who wears it rather than what the garment is for. A jacket sits
+ * under Mens Clothing and under Snow Clothing; only the second says anything about the product, and
+ * only the second is ever written — all seventy of the shop's snow garments are typed Snow Clothing.
+ */
+const AUDIENCE_HEADINGS = new Set(["Mens Clothing", "Womens Clothing", "Kids Clothing"]);
+
+/**
+ * The heading a product is filed under — which is what the Shopify `Type` column holds.
+ *
+ * Every one of the 673 typed products in the shop's exports carries a heading there and not one
+ * carries a sub-link: a Nemo tent is typed Tents with "2 person tents" as a tag, a One Planet bag is
+ * typed Sleeping Bags with "down sleeping bags" as a tag. So the sub-link a product is written
+ * against is resolved up to the heading it sits beneath, and rides along as a tag.
+ *
+ * More than one comes back where the menu genuinely files a product in two places — Climbing Shoes
+ * sits under Climbing & Abseiling and under Footwear — and then a person decides.
+ */
+export function headingsFor(type: string): string[] {
+  const resolved = resolveType(type) ?? type.trim();
+  if (TYPE_LEAVES[resolved]) return [resolved]; // it is already a heading
+  return (TYPE_PARENTS[resolved] ?? []).filter((h) => !AUDIENCE_HEADINGS.has(h));
+}
+
 const norm = (value: string) => value.trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 
 /**

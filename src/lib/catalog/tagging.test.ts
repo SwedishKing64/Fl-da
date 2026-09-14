@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BACKCOUNTRY_SHELF_TAGS, isBackcountryShelf, isSkin, skinType, sectionsFor, BACKCOUNTRY_BINDING_TAG, BACKCOUNTRY_BOOT_TAG, BOARD_DISCIPLINES, crossShelfTags, DEFAULT_TAGGING, EVERGREEN_SEASON, SKI_DISCIPLINES, BAG_TAGS, MANUAL_SEASON, TOURING_SKI_TAG, bagTags, clothingContextTags, isSkinAccessory, bindingType, bootTags, disciplinesFor, snowboardBindingTags, needsBindingKind, TAG_SPELLING, generalTags, isHardgood, isManualTag, isNotOurs, isNotLearnable, isRuleGenerated, isShopifyGenerated, needsSectionChoice, normaliseGenders, seasonFor, slugTag, withoutGenerated } from "./tagging";
+import { BACKCOUNTRY_SHELF_TAGS, isBackcountryShelf, isSkin, skinType, sectionsFor, productTypeFor, headingTags, spellHeading, BACKCOUNTRY_BINDING_TAG, BACKCOUNTRY_BOOT_TAG, BOARD_DISCIPLINES, crossShelfTags, DEFAULT_TAGGING, EVERGREEN_SEASON, SKI_DISCIPLINES, BAG_TAGS, MANUAL_SEASON, TOURING_SKI_TAG, bagTags, clothingContextTags, isSkinAccessory, bindingType, bootTags, disciplinesFor, snowboardBindingTags, needsBindingKind, TAG_SPELLING, generalTags, isHardgood, isManualTag, isNotOurs, isNotLearnable, isRuleGenerated, isShopifyGenerated, needsSectionChoice, normaliseGenders, seasonFor, slugTag, withoutGenerated } from "./tagging";
 import { ALPSPORT_TAXONOMY } from "./taxonomy";
 
 describe("the six general tags", () => {
@@ -82,12 +82,12 @@ describe("clothing", () => {
   it("tags a womens snow jacket with gender and garment", () => {
     expect(generalTags({ type: "Snow Jackets", vendor: "Burton", genders: ["womens"], section: "Clothing" })).toEqual([
       "snow-jackets",
+      "snow-clothing",
       "clothing",
       "2026",
       "123abc-js",
       "burton",
       "womens",
-      "snow-clothing",
     ]);
   });
 
@@ -507,6 +507,46 @@ describe("reaching a backcountry shelf takes the section too", () => {
       .not.toContain("backcountry");
     expect(generalTags({ type: "Ski Boots", vendor: "Atomic", genders: ["mens"], describedAs: "Atomic Hawx Ultra 100" }))
       .not.toContain("backcountry");
+  });
+});
+
+describe("the Type column holds the heading, never the sub-link", () => {
+  /** True of all 673 typed products in the shop's exports: not one is typed with a sub-link. */
+  it("resolves a sub-link up to the heading it sits under", () => {
+    expect(productTypeFor("Down Sleeping Bags")).toBe("Sleeping Bags");
+    expect(productTypeFor("2 Person Tents")).toBe("Tents");
+    expect(productTypeFor("Air Mats")).toBe("Sleeping Mats");
+    expect(productTypeFor("Ski Poles")).toBe("Ski Accessories");
+    expect(productTypeFor("Snow Jackets")).toBe("Snow Clothing");
+  });
+
+  it("spells the ampersand out, the way the column does", () => {
+    expect(productTypeFor("Hiking Packs")).toBe("Packs and Bags");
+    expect(productTypeFor("Climbing Harnesses")).toBe("Climbing and Abseiling");
+    expect(spellHeading("Stoves & Cooking")).toBe("Stoves and Cooking");
+  });
+
+  it("leaves a heading alone", () => {
+    for (const heading of ["Tents", "Sleeping Bags", "Ski Accessories", "Snowboard Boots"]) {
+      expect(productTypeFor(heading), heading).toBe(heading);
+      expect(headingTags(heading), heading).toEqual([]); // it is its own heading, not under one
+    }
+  });
+
+  it("waits to be told when the menu files a product under two headings", () => {
+    expect(productTypeFor("Climbing Shoes")).toBeUndefined();
+    expect(productTypeFor("Climbing Shoes", "Footwear")).toBe("Footwear");
+  });
+
+  it("carries the heading as a tag alongside the sub-link", () => {
+    const tent = generalTags({ type: "2 Person Tents", vendor: "Nemo", genders: [] });
+    expect(tent).toContain("2-person-tents");
+    expect(tent).toContain("tents");
+    expect(tent).toContain("outdoor");
+
+    const bag = generalTags({ type: "Down Sleeping Bags", vendor: "One Planet", genders: ["mens", "womens"] });
+    expect(bag).toContain("down-sleeping-bags");
+    expect(bag).toContain("sleeping-bags");
   });
 });
 

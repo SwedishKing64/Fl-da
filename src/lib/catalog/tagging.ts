@@ -10,7 +10,7 @@
  * vendor in lower case; the fourteen products with no gender tag are exactly the unisex ones.
  */
 
-import { ALPSPORT_TAXONOMY, PRODUCT_TYPES, TYPE_SECTIONS, clothingContextsFor, isValidType, resolveType } from "./taxonomy";
+import { ALPSPORT_TAXONOMY, PRODUCT_TYPES, TYPE_SECTIONS, clothingContextsFor, headingsFor, isValidType, resolveType } from "./taxonomy";
 import { classifyBinding, classifySnowboardBinding, type BindingKind } from "./bindings";
 import { classifySkiBoot, classifySnowboardBoot } from "./boots";
 import { accessoryKind } from "./accessories";
@@ -477,6 +477,8 @@ export function generalTags(input: TagInput, settings: TaggingSettings = DEFAULT
   const type = bindingType(input) ?? skinType(input) ?? resolveType(input.type) ?? input.type.trim();
   if (type) push(TAG_SPELLING[type] ?? slugTag(type));
 
+  for (const tag of headingTags(type, input.section ?? input.clothingContext)) push(tag);
+
   const chosen = sectionsFor(type, input.section);
   for (const value of chosen) push(slugTag(value));
 
@@ -531,6 +533,45 @@ export function generalTags(input: TagInput, settings: TaggingSettings = DEFAULT
 export function normaliseGenders(genders: Gender[]): Gender[] {
   const unique = [...new Set(genders)];
   return unique.includes("kids") ? ["kids"] : unique;
+}
+
+/**
+ * The heading a product sits under, as a tag.
+ *
+ * A product carries both: the sub-link it lands on and the heading above it. Every one of the 101
+ * Nemo and One Planet products carries its heading tag, and every one carries at least one sub-link
+ * tag — a tent is `tents` and `2 person tents`, not one or the other. Where the menu files a product
+ * under two headings it takes both if it genuinely belongs to both, and otherwise waits to be told.
+ */
+export function headingTags(type: string, told?: string): string[] {
+  const resolved = resolveType(type) ?? type.trim();
+  const headings = headingsFor(resolved).filter((h) => h !== resolved);
+  if (headings.length === 0) return [];
+  if (headings.length === 1 || BOTH_SECTIONS.has(resolved)) return headings.map((h) => TAG_SPELLING[h] ?? slugTag(h));
+  const wanted = headings.find((h) => slugTag(h) === slugTag(told ?? ""));
+  return wanted ? [TAG_SPELLING[wanted] ?? slugTag(wanted)] : [];
+}
+
+/**
+ * What goes in the Shopify `Type` column: the heading, never the sub-link.
+ *
+ * An invoice that says "Down Sleeping Bags" is naming a shelf, and the shop files that product as
+ * Sleeping Bags. Undefined where the menu files it under two headings and nobody has said which.
+ */
+export function productTypeFor(type: string, told?: string): string | undefined {
+  const resolved = resolveType(type) ?? type.trim();
+  const headings = headingsFor(resolved);
+  const heading = headings.length === 1 ? headings[0] : headings.find((h) => slugTag(h) === slugTag(told ?? ""));
+  return heading === undefined ? undefined : spellHeading(heading);
+}
+
+/**
+ * The menu draws an ampersand; the Type column spells it out. "Packs & Bags" is written Packs and
+ * Bags on all forty-six of the shop's packs, "Climbing & Abseiling" as Climbing and Abseiling on all
+ * forty. Only the tag keeps the menu's own punctuation.
+ */
+export function spellHeading(heading: string): string {
+  return heading.replace(/\s*&\s*/g, " and ");
 }
 
 /**

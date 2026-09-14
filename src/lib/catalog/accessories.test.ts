@@ -26,21 +26,36 @@ describe("working out what an accessory is", () => {
 });
 
 describe("putting it on the right shelf", () => {
-  it("uses each sport's own name for the same thing", () => {
-    expect(classifyAccessory("Snowboard", "Anon Helmet").type).toBe("Helmets");
-    expect(classifyAccessory("Ski", "Smith Helmet").type).toBe("Ski Helmets");
-    expect(classifyAccessory("Snowboard", "Deluxe Gloves").type).toBe("Gloves");
-    expect(classifyAccessory("Ski", "Deluxe Gloves").type).toBe("Ski Gloves");
-    // Goggles are called the same thing on both sides.
-    expect(classifyAccessory("Ski", "M4 Goggles").type).toBe("Goggles");
-    expect(classifyAccessory("Snowboard", "M4 Goggles").type).toBe("Goggles");
+  /** An accessory is the one place the Type stays the heading; the shelf rides along as a tag. */
+  it("makes the Type the accessories heading, not the shelf", () => {
+    const gloves = classifyAccessory("Snowboard", "Burton Deluxe GORE-TEX Gloves 2026");
+    expect(gloves.type).toBe("Ski Accessories");
+    expect(gloves.shelf).toBe("Ski Gloves");
   });
 
-  it("falls back to Other where a sport has no such shelf", () => {
-    // There is no ski-side body protection shelf, and no snowboard-side pole shelf.
-    expect(classifyAccessory("Ski", "Impact Shorts").type).toBe("Other Ski Accessories");
-    expect(classifyAccessory("Snowboard", "Ski Poles").type).toBe("Other Snowboard Accessories");
-    expect(classifyAccessory("Snowboard", "Impact Shorts").type).toBe("Body Protection");
+  it("files by what a thing serves, not by who made it", () => {
+    // Gloves, goggles, helmets and tuning work for either sport, so they sit under Ski
+    // Accessories even when the brand is a snowboard brand.
+    for (const name of ["Deluxe Gloves", "M4 Goggles", "Anon Helmet", "Tri-Scraper"]) {
+      expect(classifyAccessory("Snowboard", name).type, name).toBe("Ski Accessories");
+    }
+    // Snowboard-specific things stay on the snowboard side.
+    for (const name of ["Gig Snowboard Bag", "Men's Impact Shorts", "Aluminium Stud Stomp Pad"]) {
+      expect(classifyAccessory("Snowboard", name).type, name).toBe("Snowboard Accessories");
+    }
+  });
+
+  it("keeps each sport's own shelf name", () => {
+    expect(classifyAccessory("Ski", "Smith Helmet").shelf).toBe("Ski Helmets");
+    expect(classifyAccessory("Ski", "M4 Goggles").shelf).toBe("Goggles");
+    expect(classifyAccessory("Snowboard", "Gig Snowboard Bag").shelf).toBe("Snowboard Bags");
+    expect(classifyAccessory("Snowboard", "Men's Impact Shorts").shelf).toBe("Body Protection");
+  });
+
+  it("drops odds and ends onto the Other shelf of the side they came from", () => {
+    const tool = classifyAccessory("Snowboard", "Bullet Tool");
+    expect(tool.type).toBe("Snowboard Accessories");
+    expect(tool.shelf).toBe("Other Snowboard Accessories");
   });
 
   it("says when it is only filing something as Other for want of anywhere better", () => {
@@ -51,7 +66,11 @@ describe("putting it on the right shelf", () => {
   it("knows what serves both sports and what does not", () => {
     expect(sportsFor("gloves", "Snowboard")).toEqual(["Ski", "Snowboard"]);
     expect(sportsFor("goggles", "Ski")).toEqual(["Ski", "Snowboard"]);
+    expect(sportsFor("tuning", "Snowboard")).toEqual(["Ski", "Snowboard"]);
     expect(sportsFor("poles", "Ski")).toEqual(["Ski"]);
+    // A board bag and a pair of impact shorts are snowboard things, not shared ones.
+    expect(sportsFor("bags", "Snowboard")).toEqual(["Snowboard"]);
+    expect(sportsFor("body-protection", "Snowboard")).toEqual(["Snowboard"]);
     expect(sportsFor("other", "Snowboard")).toEqual(["Snowboard"]);
   });
 });

@@ -18,8 +18,14 @@ export type Sport = "Ski" | "Snowboard";
 
 export interface AccessoryVerdict {
   kind: AccessoryKind;
-  /** The menu leaf to file it under, for the sport asked about. */
+  /**
+   * The Shopify Type: the accessories heading, not the shelf. An accessory is the one place the
+   * catalogue keeps the heading as the Type — a glove is "Ski Accessories" and the shelf it lands
+   * on rides along as a tag.
+   */
   type: string;
+  /** The shelf tag: ski-gloves, body protection, snowboard-bags, other snowboard accessories. */
+  shelf: string;
   why: string;
   /** False when nothing matched and it fell through to Other. */
   confident: boolean;
@@ -55,27 +61,39 @@ export function accessoryKind(...parts: Array<string | undefined>): AccessoryKin
   return "other";
 }
 
-/** File an accessory onto the right shelf for a sport. */
+/**
+ * The kinds that genuinely serve both sports. A glove, a goggle, a helmet and a tin of wax do not
+ * care what is on your feet, and the catalogue files all of them on the ski side whatever the
+ * brand. Everything else is tied to its sport: a board bag, a stomp pad and a pair of impact
+ * shorts are snowboard things, and poles are a ski thing.
+ */
+const SHARED = new Set<AccessoryKind>(["goggles", "helmets", "gloves", "tuning"]);
+
+export function sportsFor(kind: AccessoryKind, from: Sport): Sport[] {
+  if (kind === "poles") return ["Ski"];
+  return SHARED.has(kind) ? ["Ski", "Snowboard"] : [from];
+}
+
+/**
+ * File an accessory: which accessories heading it belongs to, and which shelf within it.
+ *
+ * The heading follows what the thing serves rather than which brand made it. Gloves, goggles,
+ * helmets and tuning work for either sport, and the catalogue files all of them under Ski
+ * Accessories — Burton gloves included. Only what is snowboard-specific, a stomp pad or a board
+ * bag or impact shorts, sits under Snowboard Accessories.
+ */
 export function classifyAccessory(sport: Sport, ...parts: Array<string | undefined>): AccessoryVerdict {
   const kind = accessoryKind(...parts);
-  // A kind with no shelf on this side — body protection on the ski side, poles on the snowboard
-  // side — still has to go somewhere, and Other is where it goes.
-  const type = LEAF[kind][sport] ?? LEAF.other[sport]!;
+  const serves = sportsFor(kind, sport);
+  // Serves both -> the ski heading; snowboard-only -> the snowboard heading.
+  const heading: Sport = serves.length > 1 ? "Ski" : serves[0];
+  const shelf = LEAF[kind][heading] ?? LEAF.other[heading]!;
   return {
     kind,
-    type,
+    type: heading === "Ski" ? "Ski Accessories" : "Snowboard Accessories",
+    shelf,
     why: kind === "other" ? "no named shelf matched, so Other" : `reads as ${kind.replace("-", " ")}`,
     confident: kind !== "other",
   };
 }
 
-/**
- * Which sports an accessory serves. The shop's catalogue tags gloves, goggles, body protection,
- * bags and tuning into both sides — a glove does not care what is on your feet — while a pole is
- * ski-only and anything filed as Other stays with the sport it came from.
- */
-export function sportsFor(kind: AccessoryKind, from: Sport): Sport[] {
-  if (kind === "poles") return ["Ski"];
-  if (kind === "other") return [from];
-  return ["Ski", "Snowboard"];
-}

@@ -58,7 +58,7 @@ export default async function BatchPage(props: PageProps<"/batches/[id]">) {
         <div className="space-y-6">
           <Card title="Pricing inputs for this batch">
             <BatchSettingsForm
-              batch={{ id: batch.id, supplierId: batch.supplierId, currency: batch.currency, fxRateToAud: batch.fxRateToAud, gstTreatment: batch.gstTreatment, freightTotalAud: batch.freightTotalAud, freightMode: batch.freightMode, publishOnExport: batch.publishOnExport, splitExportBy: batch.splitExportBy, notes: batch.notes ?? "" }}
+              batch={{ id: batch.id, supplierId: batch.supplierId, currency: batch.currency, fxRateToAud: batch.fxRateToAud, gstTreatment: batch.gstTreatment, freightTotalAud: batch.freightTotalAud, freightMode: batch.freightMode, splitExportBy: batch.splitExportBy, notes: batch.notes ?? "" }}
               suppliers={suppliers.map((s) => ({ id: s.id, name: s.name }))}
               disabled={locked}
             />

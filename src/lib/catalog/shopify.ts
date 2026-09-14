@@ -288,7 +288,9 @@ export async function pushBatch(batchId: string, userId: string, opts: { confirm
   let updated = 0;
   const failures: string[] = [];
   for (const p of review.products) {
-    const input = buildProductSetInput(p, { publish: review.batch.publishOnExport, locationId, locationQuantities });
+    // Pushed straight to the store, a product still arrives as a draft: nothing reaches a customer
+    // until a person has looked at it.
+    const input = buildProductSetInput(p, { publish: false, locationId, locationQuantities });
     const before = p.shopifyProductId ? await prisma.shopifyCatalogItem.findMany({ where: { shopifyProductId: p.shopifyProductId } }) : null;
     try {
       const data = await graphql<{ productSet: { product: { id: string; handle: string; variants: { nodes: Array<{ id: string; sku: string; inventoryItem: { id: string } }> } } | null; userErrors: Array<{ field: string[] | null; message: string }> } }>(cfg, PRODUCT_SET, { input });

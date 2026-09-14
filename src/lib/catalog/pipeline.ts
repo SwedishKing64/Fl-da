@@ -342,8 +342,8 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
         category: g.category,
         tags: g.tags.join(", "),
         collections: g.collections.join(", "),
-        published: batch.publishOnExport,
-        status: batch.publishOnExport ? "active" : "draft",
+        published: false, // drafts, always — see csv.ts
+        status: "draft",
         option1Name: g.option1Name,
         option2Name: g.option2Name,
         option3Name: g.option3Name,
@@ -557,7 +557,6 @@ export interface ReviewData {
     gstTreatment: string;
     freightTotalAud: number;
     freightMode: string;
-    publishOnExport: boolean;
     splitExportBy: string;
     supplierName: string | null;
     notes: string | null;
@@ -656,7 +655,6 @@ export async function loadReview(batchId: string): Promise<ReviewData> {
       gstTreatment: batch.gstTreatment,
       freightTotalAud: batch.freightTotalAud,
       freightMode: batch.freightMode,
-      publishOnExport: batch.publishOnExport,
       splitExportBy: batch.splitExportBy,
       supplierName: batch.supplier?.name ?? null,
       notes: batch.notes,
@@ -713,7 +711,7 @@ export async function exportBatch(batchId: string, userId: string, opts: { overr
   if (errors.length) return { ok: false, errors, warnings, files: [] };
   if (warnings.length && !opts.overrideWarnings) return { ok: false, errors: [], warnings, files: [] };
 
-  const csvProducts = toCsvProducts(review.products, review.batch.publishOnExport);
+  const csvProducts = toCsvProducts(review.products);
   const structural = validateProducts(csvProducts).filter((i) => i.level === "error").map((i) => `${i.handle ?? ""}: ${i.message}`);
   if (structural.length) return { ok: false, errors: structural, warnings, files: [] };
 

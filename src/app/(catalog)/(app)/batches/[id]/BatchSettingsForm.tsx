@@ -6,7 +6,7 @@ import { updateBatchAction } from "@/app/(catalog)/actions";
 import { Alert, Button, Field, INPUT } from "@/app/(catalog)/ui";
 import { CURRENCIES } from "@/lib/catalog/types";
 
-interface BatchForm { id: string; supplierId: string | null; currency: string; fxRateToAud: number; gstTreatment: string; freightTotalAud: number; freightMode: string; publishOnExport: boolean; splitExportBy: string; notes: string }
+interface BatchForm { id: string; supplierId: string | null; currency: string; fxRateToAud: number; gstTreatment: string; freightTotalAud: number; freightMode: string; splitExportBy: string; notes: string }
 
 export function BatchSettingsForm({ batch, suppliers, disabled }: { batch: BatchForm; suppliers: Array<{ id: string; name: string }>; disabled: boolean }) {
   const router = useRouter();
@@ -24,7 +24,6 @@ export function BatchSettingsForm({ batch, suppliers, disabled }: { batch: Batch
         gstTreatment: form.gstTreatment as "INCLUSIVE" | "EXCLUSIVE" | "NONE",
         freightTotalAud: form.freightTotalAud,
         freightMode: form.freightMode as "PER_UNIT" | "BY_VALUE",
-        publishOnExport: form.publishOnExport,
         splitExportBy: form.splitExportBy as "NONE" | "BRAND" | "PRODUCT_TYPE",
         notes: form.notes,
       });
@@ -58,7 +57,6 @@ export function BatchSettingsForm({ batch, suppliers, disabled }: { batch: Batch
           <option value="BRAND">One CSV per brand</option><option value="PRODUCT_TYPE">One CSV per product type</option><option value="NONE">Single CSV</option>
         </select>
       </Field>
-      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.publishOnExport} onChange={(e) => set("publishOnExport", e.target.checked)} disabled={disabled} /> Publish products on export (otherwise draft)</label>
       <Field label="Notes"><textarea rows={2} value={form.notes} onChange={(e) => set("notes", e.target.value)} disabled={disabled} className={INPUT} /></Field>
       {msg && <Alert tone={msg.ok ? "success" : "danger"}>{msg.text}</Alert>}
       {!disabled && <Button variant="primary" onClick={save} disabled={pending}>{pending ? "Saving…" : "Save & reprice"}</Button>}

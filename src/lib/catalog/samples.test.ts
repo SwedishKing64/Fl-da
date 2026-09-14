@@ -64,7 +64,9 @@ describe("sample invoices → expected Shopify CSV", () => {
     expect(board.variants[0].landedCostAud).toBe(425); // 462 inc GST => 420 ex + 5 freight
     expect(board.variants[0].retailPrice).toBe(779.99);
     expect(board.variants[0].profitPerUnit).toBe(284.08);
-    expect(board.status).toBe("active");
+    // Everything the importer builds is a draft, whatever the invoice was.
+    expect(board.status).toBe("draft");
+    expect(board.published).toBe(false);
   });
 });
 

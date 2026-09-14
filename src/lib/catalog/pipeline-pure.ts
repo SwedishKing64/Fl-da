@@ -4,7 +4,7 @@ import { metafieldColumns } from "./categorize";
 import type { CsvProduct } from "./csv";
 import type { ReviewProduct } from "./review-types";
 
-export function toCsvProducts(products: ReviewProduct[], publishOnExport: boolean): CsvProduct[] {
+export function toCsvProducts(products: ReviewProduct[]): CsvProduct[] {
   return products.map((p) => {
     const productImages = p.images; // every image belongs to the product gallery; variant images also link via Variant Image
     const variantImage = new Map(p.images.filter((i) => i.variantId).map((i) => [i.variantId!, i.url]));
@@ -15,8 +15,8 @@ export function toCsvProducts(products: ReviewProduct[], publishOnExport: boolea
       vendor: p.vendor,
       productType: p.productType,
       tags: p.tags.split(",").map((t) => t.trim()).filter(Boolean),
-      published: publishOnExport,
-      status: publishOnExport ? "active" : "draft",
+      published: false, // drafts, always — see csv.ts
+      status: "draft",
       seoTitle: p.seoTitle,
       seoDescription: p.seoDescription,
       option1Name: p.option1Name,

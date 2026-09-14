@@ -90,7 +90,6 @@ const batchSchema = z.object({
   fxRateToAud: z.coerce.number().positive().default(1),
   freightTotalAud: z.coerce.number().min(0).default(0),
   freightMode: z.enum(["PER_UNIT", "BY_VALUE"]).default("PER_UNIT"),
-  publishOnExport: z.coerce.boolean().default(false),
   splitExportBy: z.enum(["NONE", "BRAND", "PRODUCT_TYPE"]).default("BRAND"),
   notes: z.string().optional(),
 });
@@ -100,7 +99,7 @@ export async function createBatchAction(_prev: ActionResult | null, formData: Fo
   let id: string;
   try {
     const raw = Object.fromEntries(formData.entries());
-    const data = batchSchema.parse({ ...raw, publishOnExport: raw.publishOnExport === "on" });
+    const data = batchSchema.parse(raw);
     let supplierId = data.supplierId || null;
     if (!supplierId && data.newSupplierName?.trim()) {
       const supplier = await prisma.supplier.upsert({
@@ -113,7 +112,7 @@ export async function createBatchAction(_prev: ActionResult | null, formData: Fo
     const settings = await getSettings();
     const fx = data.currency === "AUD" ? 1 : data.fxRateToAud !== 1 ? data.fxRateToAud : settings.fxRates[data.currency] ?? 1;
     const batch = await prisma.importBatch.create({
-      data: { name: data.name, supplierId, createdById: user.id, currency: data.currency, gstTreatment: data.gstTreatment, fxRateToAud: fx, freightTotalAud: data.freightTotalAud, freightMode: data.freightMode, publishOnExport: data.publishOnExport, splitExportBy: data.splitExportBy, notes: data.notes || null },
+      data: { name: data.name, supplierId, createdById: user.id, currency: data.currency, gstTreatment: data.gstTreatment, fxRateToAud: fx, freightTotalAud: data.freightTotalAud, freightMode: data.freightMode, splitExportBy: data.splitExportBy, notes: data.notes || null },
     });
     await logAudit("batch.created", { batchId: batch.id, userId: user.id, details: { name: batch.name } });
     id = batch.id;
@@ -136,9 +135,6 @@ export async function updateBatchAction(batchId: string, patch: Partial<z.infer<
         where: { product: { batchId } },
         data: { ...(rest.fxRateToAud !== undefined ? { fxRateToAud: rest.fxRateToAud } : {}), ...(rest.gstTreatment !== undefined ? { gstTreatment: rest.gstTreatment } : {}), ...(rest.currency !== undefined ? { costCurrency: rest.currency } : {}) },
       });
-    }
-    if (rest.publishOnExport !== undefined) {
-      await prisma.product.updateMany({ where: { batchId }, data: { published: rest.publishOnExport, status: rest.publishOnExport ? "active" : "draft" } });
     }
     await repriceBatch(batchId);
     await logAudit("batch.settings", { batchId, userId: user.id, details: rest });

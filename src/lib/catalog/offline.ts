@@ -18,7 +18,6 @@ export interface OfflineBatch {
   gstTreatment: GstTreatment;
   freightTotalAud: number;
   freightMode: "PER_UNIT" | "BY_VALUE";
-  publishOnExport: boolean;
 }
 
 export interface OfflineResult {
@@ -52,8 +51,8 @@ export function runOffline(
     category: g.category,
     tags: g.tags.join(", "),
     collections: g.collections.join(", "),
-    status: batch.publishOnExport ? "active" : "draft",
-    published: batch.publishOnExport,
+    status: "draft",
+    published: false,
     seoTitle: "",
     seoDescription: "",
     option1Name: g.option1Name,
@@ -101,7 +100,7 @@ export function runOffline(
   }
 
   validateReview(products, { minMarginPct: settings.minMarginPct });
-  const csvProducts = toCsvProducts(products, batch.publishOnExport);
+  const csvProducts = toCsvProducts(products);
   return {
     products,
     csvProducts,

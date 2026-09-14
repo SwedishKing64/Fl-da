@@ -48,6 +48,20 @@ const beanie: CsvProduct = {
   variants: [{ sku: "ACME-BEANIE", price: 29.99, quantity: 10 }],
 };
 
+describe("everything is exported as a draft", () => {
+  /**
+   * A product built from an invoice has never been read by anyone. It goes into the store where
+   * staff can check it, not where a customer can buy it, and there is no setting that changes that.
+   */
+  it("writes Published FALSE and Status draft whatever it is handed", () => {
+    for (const published of [true, false, undefined]) {
+      const [columns, first] = parseCsv(generateCsv([{ ...skis, published, status: "active" }]));
+      expect(first[columns.indexOf("Published")], `published=${published}`).toBe("FALSE");
+      expect(first[columns.indexOf("Status")], `published=${published}`).toBe("draft");
+    }
+  });
+});
+
 describe("row-per-variant model", () => {
   const rows = buildRows([skis, beanie]);
 

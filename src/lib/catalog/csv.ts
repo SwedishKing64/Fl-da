@@ -148,12 +148,15 @@ export function buildRows(products: CsvProduct[], options: GenerateOptions = {})
         row["Vendor"] = product.vendor ?? "";
         row["Type"] = product.productType ?? "";
         row["Tags"] = (product.tags ?? []).map((t) => t.trim()).filter(Boolean).join(", ");
-        row["Published"] = bool(product.published, false);
+        // Every product the importer builds arrives in the store as a draft, so someone looks at it
+        // before a customer can. There is no setting for this: a product that went live straight
+        // from an invoice would be a product nobody had read.
+        row["Published"] = "FALSE";
         row["SEO Title"] = product.seoTitle ?? "";
         row["SEO Description"] = product.seoDescription ?? "";
         row["Gift Card"] = "FALSE";
         row["Collection"] = product.collection ?? "";
-        row["Status"] = product.status ?? "draft";
+        row["Status"] = "draft";
         for (const [col, val] of Object.entries(metafields)) row[col] = val ?? "";
       }
       // Option names on every variant row (Shopify accepts them on the first row only, but

@@ -31,7 +31,6 @@ export default async function ExportPage(props: PageProps<"/batches/[id]/export"
             errors={errors}
             warnings={warnings}
             productCount={review.products.length}
-            publishOnExport={batch.publishOnExport}
             shopifyConfigured={Boolean(settings.shopify.storeDomain && settings.shopify.accessToken)}
             reconciled={reconciled}
             counts={{ new: review.products.filter((p) => p.reconcileStatus === "NEW").length, variantAdd: review.products.filter((p) => p.reconcileStatus === "VARIANT_ADD").length, update: review.products.filter((p) => p.reconcileStatus === "UPDATE").length }}
@@ -56,7 +55,7 @@ export default async function ExportPage(props: PageProps<"/batches/[id]/export"
             <Row k="Net profit = Σ ex-GST revenue − Σ landed cost" v={money(s.totalNetProfit)} strong />
             <Row k="Average margin" v={pct(s.averageMarginPct)} />
             <Row k="Rows below minimum margin" v={String(s.lowMarginVariants)} />
-            <Row k="Products defaulting to" v={batch.publishOnExport ? "Active (published)" : "Draft"} />
+            <Row k="Products export as" v="Draft, for checking before they go live" />
           </dl>
         </Card>
       </div>

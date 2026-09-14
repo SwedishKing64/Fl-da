@@ -90,7 +90,7 @@ model ImportBatch {
   gstTreatment    String   @default("EXCLUSIVE") // how invoice cost prices are expressed
   freightTotalAud Float    @default(0) // batch-level freight, allocated per unit
   freightMode     String   @default("PER_UNIT") // PER_UNIT (split evenly by qty) | BY_VALUE (pro-rata by cost)
-  publishOnExport Boolean  @default(false) // false => Status=draft in CSV
+  publishOnExport Boolean  @default(false) // unused: every export is a draft, see csv.ts
   splitExportBy   String   @default("BRAND") // NONE | BRAND | PRODUCT_TYPE — one CSV per group
   notes           String?
   summary         String? // JSON snapshot of last computed batch summary

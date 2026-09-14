@@ -7,7 +7,7 @@ import { Alert, Button, Card, fmtDate } from "@/app/(catalog)/ui";
 
 interface ExportFileRow { id: string; filename: string; rowCount: number; sizeBytes: number; partIndex: number; partCount: number; createdAt: string }
 
-export function ExportPanel(props: { batchId: string; status: string; errors: string[]; warnings: string[]; productCount: number; publishOnExport: boolean; shopifyConfigured: boolean; reconciled: number; counts: { new: number; variantAdd: number; update: number }; isAdmin: boolean; files: ExportFileRow[] }) {
+export function ExportPanel(props: { batchId: string; status: string; errors: string[]; warnings: string[]; productCount: number; shopifyConfigured: boolean; reconciled: number; counts: { new: number; variantAdd: number; update: number }; isAdmin: boolean; files: ExportFileRow[] }) {
   const { batchId, errors, warnings } = props;
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -42,7 +42,7 @@ export function ExportPanel(props: { batchId: string; status: string; errors: st
             <div className="font-semibold">{errors.length} blocking error{errors.length === 1 ? "" : "s"} must be fixed in the review grid before export:</div>
             <ul className="mt-2 max-h-48 list-disc space-y-0.5 overflow-auto pl-5 text-xs">{errors.slice(0, 50).map((e, i) => <li key={i}>{e}</li>)}{errors.length > 50 && <li>…and {errors.length - 50} more</li>}</ul>
           </Alert>
-        ) : props.productCount > 0 && <Alert tone="success">No blocking errors. {props.publishOnExport ? "Products will be exported as ACTIVE." : "Products will be exported as DRAFT (safe for pre-book stock)."}</Alert>}
+        ) : props.productCount > 0 && <Alert tone="success">No blocking errors. Products are exported as DRAFT, so each one can be checked before it goes live.</Alert>}
         {warnings.length > 0 && (
           <Alert tone="warning" className="mt-3">
             <div className="font-semibold">{warnings.length} warning{warnings.length === 1 ? "" : "s"} (missing images, low margins, etc.)</div>

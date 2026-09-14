@@ -570,3 +570,14 @@ describe("backcountry gear and avalanche gear", () => {
     }
   });
 });
+
+describe("backcountry gear", () => {
+  /** The heading is tagged back-country-gear in the live catalogue, not backcountry-gear. */
+  it("writes the heading tag the way the catalogue spells it", () => {
+    const tags = generalTags({ type: "Back-Country Gear", vendor: "Backcountry Access", genders: [], describedAs: "Stealth 240 Avalanche Probe" });
+    expect(tags).toContain("back-country-gear");
+    expect(tags).not.toContain("backcountry-gear");
+    expect(tags).toContain("backcountry");
+    expect(tags).toContain("backcountry-access");
+  });
+});

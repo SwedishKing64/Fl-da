@@ -80,3 +80,18 @@ describe("accessories keep their heading as the Type", () => {
     expect(PRODUCT_TYPES).not.toContain("Mens Clothing");
   });
 });
+
+describe("backcountry gear is filed under its heading", () => {
+  /** The shop's avalanche export types every product Back-Country Gear, shelf as a tag. */
+  it("accepts the heading as a Type with a section", () => {
+    expect(PRODUCT_TYPES).toContain("Backcountry Gear");
+    expect(TYPE_SECTIONS["Backcountry Gear"]).toEqual(["Backcountry"]);
+    expect(resolveType("Back-Country Gear")).toBe("Backcountry Gear");
+  });
+
+  it("keeps its shelves as Types too", () => {
+    for (const shelf of ["Avalanche Equipment", "Climbing Skins", "Snow Packs", "Ice Tools", "Other Back-Country Gear"]) {
+      expect(PRODUCT_TYPES, shelf).toContain(shelf);
+    }
+  });
+});

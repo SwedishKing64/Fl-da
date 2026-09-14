@@ -96,12 +96,18 @@ export function isAudienceLeaf(leaf: string): boolean {
 }
 
 /**
- * Accessories keep their heading as the Type. Everywhere else the Type is the most specific thing
- * a product is, but a glove is filed as "Ski Accessories" with ski-gloves riding along as a tag,
- * which is what the shop's catalogue does for every accessory it sells.
+ * Headings the catalogue files products directly under, keeping the heading as the Type and letting
+ * the shelf ride along as a tag.
+ *
+ * Everywhere else the Type is the most specific thing a product is. These are the exceptions: a
+ * glove is filed as "Ski Accessories" with ski-gloves as a tag, and an avalanche probe as
+ * "Back-Country Gear" with beacons-and-probes as a tag. Both are what the shop's own exports do.
  */
+const HEADING_TYPES = new Set(["Backcountry Gear"]);
+
 export function isAccessoryHeading(heading: string): boolean {
-  return /\bAccessories$/i.test(heading.trim());
+  const value = heading.trim();
+  return /\bAccessories$/i.test(value) || HEADING_TYPES.has(value);
 }
 
 /**

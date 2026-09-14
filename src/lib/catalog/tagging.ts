@@ -253,7 +253,11 @@ export function seasonFor(type: string, settings: TaggingSettings = DEFAULT_TAGG
  * hyphens everywhere, so "Snow Jackets" is written snow-jackets. Kept as the one place to pin an
  * exception if some page ever turns out to filter on a different string.
  */
-export const TAG_SPELLING: Record<string, string> = {};
+export const TAG_SPELLING: Record<string, string> = {
+  // The menu heading reads "Backcountry Gear" but every product filed under it is tagged
+  // back-country-gear, and a tag is an exact string.
+  "Backcountry Gear": "back-country-gear",
+};
 
 /**
  * Tags Shopify writes by itself — price bands, sizes, lengths and colours are all derived from the

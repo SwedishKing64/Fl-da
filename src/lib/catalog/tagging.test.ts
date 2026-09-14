@@ -104,7 +104,7 @@ describe("clothing", () => {
 
 describe("tags Shopify maintains for itself", () => {
   it("recognises price bands, sizes and colours", () => {
-    for (const tag of ["500-600", "100-200", "under-50", "size-medium", "size-9", "colour-true-black", "color-black"]) {
+    for (const tag of ["500-600", "100-200", "under-50", "size-medium", "size-9", "length-156", "length-156w", "colour-true-black", "color-black"]) {
       expect(isShopifyGenerated(tag), tag).toBe(true);
     }
   });

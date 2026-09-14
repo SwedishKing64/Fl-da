@@ -119,8 +119,8 @@ export function seasonFor(type: string, settings: TaggingSettings = DEFAULT_TAGG
 export const TAG_SPELLING: Record<string, string> = {};
 
 /**
- * Tags Shopify writes by itself — price bands, sizes and colours are derived from the variants
- * once a product is in the store.
+ * Tags Shopify writes by itself — price bands, sizes, lengths and colours are all derived from the
+ * variants once a product is in the store.
  *
  * These matter twice over. The importer must not write them, or it would fight Shopify over the
  * same tag. And the template learner must not *read* them either: a brand export is full of
@@ -131,6 +131,7 @@ const SHOPIFY_GENERATED: RegExp[] = [
   /^\d+-\d+$/, // price band, e.g. 500-600
   /^under-\d+$/, // e.g. under-50
   /^size-/i,
+  /^length-/i, // board and ski lengths, e.g. length-156, length-156w
   /^colou?r-/i,
 ];
 

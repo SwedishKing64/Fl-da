@@ -105,6 +105,20 @@ export function bootTags(type: string, describedAs?: string): string[] {
 /** Touring skis share a page with cross-country, so every touring ski carries this as well. */
 export const TOURING_SKI_TAG = "touring-and-cross-country-ski";
 
+/**
+ * A touring binding belongs in two places: on the Ski menu beside the alpine bindings, and under
+ * Backcountry with the rest of the touring kit. The Ski side comes from its Type; this is what
+ * puts it on the Backcountry shelf as well.
+ */
+export const BACKCOUNTRY_BINDING_TAG = "alpine-touring-bindings";
+
+/** The tags that put a product on a second shelf beyond the one its Type names. */
+export function crossShelfTags(type: string): string[] {
+  const resolved = resolveType(type) ?? type.trim();
+  if (resolved === "Touring Bindings") return [BACKCOUNTRY_BINDING_TAG];
+  return [];
+}
+
 export const BAG_TAGS = ["snow-bags", "snowboard-bags", "ski-and-boot-bags", "ski-and-snowboard-bags"] as const;
 
 export function bagTags(type: string, describedAs?: string): string[] {
@@ -282,6 +296,7 @@ export function generalTags(input: TagInput, settings: TaggingSettings = DEFAULT
 
   if (input.withBindings) push(TAG_SPELLING[packageTagFor(type)] ?? slugTag(packageTagFor(type)));
 
+  for (const tag of crossShelfTags(type)) push(tag);
   for (const tag of bagTags(type, input.describedAs)) push(tag);
   for (const tag of bootTags(type, input.describedAs)) push(tag);
   for (const tag of snowboardBindingTags(type, input.describedAs)) push(tag);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BOARD_DISCIPLINES, DEFAULT_TAGGING, EVERGREEN_SEASON, SKI_DISCIPLINES, BAG_TAGS, MANUAL_SEASON, TOURING_SKI_TAG, bagTags, bindingType, bootTags, disciplinesFor, snowboardBindingTags, needsBindingKind, TAG_SPELLING, generalTags, isHardgood, isManualTag, isNotOurs, isShopifyGenerated, needsSectionChoice, normaliseGenders, seasonFor, slugTag, withoutGenerated } from "./tagging";
+import { BACKCOUNTRY_BINDING_TAG, BOARD_DISCIPLINES, crossShelfTags, DEFAULT_TAGGING, EVERGREEN_SEASON, SKI_DISCIPLINES, BAG_TAGS, MANUAL_SEASON, TOURING_SKI_TAG, bagTags, bindingType, bootTags, disciplinesFor, snowboardBindingTags, needsBindingKind, TAG_SPELLING, generalTags, isHardgood, isManualTag, isNotOurs, isShopifyGenerated, needsSectionChoice, normaliseGenders, seasonFor, slugTag, withoutGenerated } from "./tagging";
 
 describe("the six general tags", () => {
   it("writes them in the shop's order: type, section, season, house, vendor, gender", () => {
@@ -390,5 +390,30 @@ describe("a ski sold as a package is still a ski", () => {
     expect(tags).toContain("snowboards");
     expect(tags).toContain("snowboard");
     expect(tags).toContain("snowboard-packages");
+  });
+});
+
+describe("touring bindings reach the backcountry shelf", () => {
+  it("tags a touring binding for Backcountry as well as Ski", () => {
+    const tags = generalTags({ type: "Touring Bindings", vendor: "Dynafit", genders: [] });
+    expect(tags).toContain("touring-bindings");          // the Ski menu, from its Type
+    expect(tags).toContain(BACKCOUNTRY_BINDING_TAG);     // and the Backcountry menu
+  });
+
+  it("reaches it from a supplier's generic ski binding too", () => {
+    const tags = generalTags({ type: "Ski Binding", vendor: "Marker", genders: [], describedAs: "Marker Alpinist 12 tech binding" });
+    expect(tags).toContain("touring-bindings");
+    expect(tags).toContain(BACKCOUNTRY_BINDING_TAG);
+  });
+
+  it("leaves an alpine binding on the ski side only", () => {
+    const tags = generalTags({ type: "Ski Binding", vendor: "Marker", genders: [], describedAs: "Marker Griffon 13 ID" });
+    expect(tags).toContain("alpine-bindings");
+    expect(tags).not.toContain(BACKCOUNTRY_BINDING_TAG);
+  });
+
+  it("does not put a snowboard binding there", () => {
+    expect(crossShelfTags("Snowboard Bindings")).toEqual([]);
+    expect(crossShelfTags("Alpine Bindings")).toEqual([]);
   });
 });

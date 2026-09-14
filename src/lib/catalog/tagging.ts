@@ -62,6 +62,18 @@ export function seasonFor(type: string, settings: TaggingSettings = DEFAULT_TAGG
   return isHardgood(type) ? settings.currentYear + 1 : settings.currentYear;
 }
 
+/**
+ * Tags whose live spelling is not the slug of their name. The catalogue hyphenates most tags
+ * ("ski-accessories", "colour-true-black") but writes the garment names with spaces
+ * ("snow jackets", "snow pants"), and a tag is an exact string: hyphenate one of these and the
+ * product stops appearing on the page that filters for it.
+ */
+export const TAG_SPELLING: Record<string, string> = {
+  "Snow Jackets": "snow jackets",
+  "Snow Pants": "snow pants",
+  "Down Jackets": "down jackets",
+};
+
 export const slugTag = (value: string): string =>
   value.trim().toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 
@@ -77,7 +89,7 @@ export function generalTags(input: TagInput, settings: TaggingSettings = DEFAULT
   };
 
   const type = resolveType(input.type) ?? input.type.trim();
-  if (type) push(slugTag(type));
+  if (type) push(TAG_SPELLING[type] ?? slugTag(type));
 
   // A Type can sit under two menus — Goggles under both Ski and Snowboard — so an explicit
   // section wins, and a Type that belongs to exactly one menu needs no help.
@@ -88,9 +100,18 @@ export function generalTags(input: TagInput, settings: TaggingSettings = DEFAULT
   push(String(input.year ?? seasonFor(type, settings)));
   push(settings.houseTag);
   push(slugTag(input.vendor));
-  for (const gender of input.genders) push(gender);
+  for (const gender of normaliseGenders(input.genders)) push(gender);
 
   return tags;
+}
+
+/**
+ * A kids product is tagged kids and nothing else. The catalogue never pairs kids with mens or
+ * womens — a child's jacket is not a small men's jacket, it is its own thing with its own page.
+ */
+export function normaliseGenders(genders: Gender[]): Gender[] {
+  const unique = [...new Set(genders)];
+  return unique.includes("kids") ? ["kids"] : unique;
 }
 
 /** Which menus a Type could be filed under, for asking a person when it is genuinely ambiguous. */

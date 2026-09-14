@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_TAGGING, generalTags, isHardgood, needsSectionChoice, seasonFor, slugTag } from "./tagging";
+import { DEFAULT_TAGGING, TAG_SPELLING, generalTags, isHardgood, needsSectionChoice, normaliseGenders, seasonFor, slugTag } from "./tagging";
 
 describe("the six general tags", () => {
   it("writes them in the shop's order: type, section, season, house, vendor, gender", () => {
@@ -67,5 +67,39 @@ describe("the six general tags", () => {
   it("never repeats a tag", () => {
     const tags = generalTags({ type: "Snowboards", vendor: "Snowboards", genders: [] });
     expect(new Set(tags).size).toBe(tags.length);
+  });
+});
+
+describe("clothing", () => {
+  it("tags a womens snow jacket with gender and garment", () => {
+    expect(generalTags({ type: "Snow Jackets", vendor: "Burton", genders: ["womens"], section: "Clothing" })).toEqual([
+      "snow jackets",
+      "clothing",
+      "2026",
+      "123abc-js",
+      "burton",
+      "womens",
+    ]);
+  });
+
+  it("writes the garment names the way the live catalogue spells them", () => {
+    // Hyphenating these would stop the product appearing on the page that filters for it.
+    expect(TAG_SPELLING["Snow Jackets"]).toBe("snow jackets");
+    expect(generalTags({ type: "Snow Pants", vendor: "Burton", genders: ["mens"], section: "Clothing" })).toContain("snow pants");
+    // Single-word garments were never ambiguous.
+    expect(generalTags({ type: "Rainwear", vendor: "Burton", genders: ["mens"], section: "Clothing" })).toContain("rainwear");
+    expect(generalTags({ type: "Midlayers", vendor: "Burton", genders: ["womens"], section: "Clothing" })).toContain("midlayers");
+  });
+
+  it("tags a kids item kids, with no gender beside it", () => {
+    const tags = generalTags({ type: "Snow Jackets", vendor: "Burton", genders: ["kids"], section: "Clothing" });
+    expect(tags).toContain("kids");
+    expect(tags).not.toContain("mens");
+    expect(tags).not.toContain("womens");
+  });
+
+  it("drops mens and womens the moment a product is a kids one", () => {
+    expect(normaliseGenders(["mens", "kids"])).toEqual(["kids"]);
+    expect(normaliseGenders(["mens", "womens"])).toEqual(["mens", "womens"]);
   });
 });

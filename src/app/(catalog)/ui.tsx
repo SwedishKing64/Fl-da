@@ -117,3 +117,22 @@ export function fmtDate(d: Date | string): string {
 export function Empty({ children }: { children: ReactNode }) {
   return <div className="rounded-lg border border-dashed border-[var(--line)] px-6 py-10 text-center text-sm text-[var(--ink-soft)]">{children}</div>;
 }
+
+/**
+ * Something a page needs but almost nobody opens — batch currency, an audit trail, a long list of
+ * defaults. Folding it away is the difference between a page you scan and a page you wade through.
+ */
+export function Details({ summary, hint, children, className }: { summary: string; hint?: string; children: ReactNode; className?: string }) {
+  return (
+    <details className={cx("group rounded-xl border border-[var(--line)] bg-white shadow-[var(--shadow-sm)]", className)}>
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-3 text-sm font-semibold transition hover:bg-[var(--alp-snow)]">
+        <span>
+          {summary}
+          {hint && <span className="ml-2 font-normal text-xs text-[var(--ink-soft)]">{hint}</span>}
+        </span>
+        <span className="text-[var(--ink-soft)] transition-transform group-open:rotate-90" aria-hidden>›</span>
+      </summary>
+      <div className="border-t border-[var(--line-soft)] p-5">{children}</div>
+    </details>
+  );
+}

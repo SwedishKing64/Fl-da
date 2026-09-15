@@ -4,7 +4,6 @@ import { isEphemeralDb } from "@/lib/catalog/db";
 import { databaseGate } from "../DatabaseGate";
 import { logoutAction } from "@/app/(catalog)/actions";
 import { NavLinks } from "./NavLinks";
-import { Logo } from "../Logo";
 import "../catalog.css";
 
 export const dynamic = "force-dynamic";
@@ -16,9 +15,9 @@ export default async function CatalogLayout({ children }: { children: React.Reac
   return (
     <div className="flex min-h-screen bg-[var(--canvas)]">
       <aside className="hidden w-56 shrink-0 flex-col border-r border-[var(--line)] bg-white md:flex">
-        <Link href="/" className="alp-gradient block border-b border-[var(--line-soft)] px-4 py-4 transition hover:brightness-110">
-          <Logo height={38} />
-          <div className="mt-2 text-[11px] font-medium text-white/80">Invoices → Shopify CSV</div>
+        <Link href="/" className="alp-gradient block px-5 py-5 transition hover:brightness-110">
+          <div className="text-base font-bold tracking-tight text-white">Alpsport CSV</div>
+          <div className="mt-0.5 text-[11px] text-white/75">Invoices → Shopify CSV</div>
         </Link>
         <NavLinks isAdmin={user.role === "ADMIN"} />
         <div className="mt-auto border-t border-[var(--line-soft)] px-5 py-4 text-xs">
@@ -31,7 +30,7 @@ export default async function CatalogLayout({ children }: { children: React.Reac
       </aside>
       <main className="min-w-0 flex-1 px-4 py-6 md:px-8">
         <div className="mb-4 flex items-center justify-between md:hidden">
-          <Link href="/" aria-label="Alpsport"><Logo height={30} /></Link>
+          <Link href="/" className="text-sm font-bold text-[var(--alp-blue-deep)]">Alpsport CSV</Link>
           <NavLinks isAdmin={user.role === "ADMIN"} compact />
         </div>
         {isEphemeralDb() && (

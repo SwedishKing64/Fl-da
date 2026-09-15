@@ -1,5 +1,4 @@
 import { databaseGate } from "../DatabaseGate";
-import { Logo } from "../Logo";
 
 export default async function AuthLayout({ children }: { children: React.ReactNode }) {
   const gate = await databaseGate();
@@ -7,9 +6,9 @@ export default async function AuthLayout({ children }: { children: React.ReactNo
   return (
     <main className="min-h-screen bg-[var(--canvas)]">
       <header className="alp-gradient relative overflow-hidden pb-24 pt-12 text-center">
-        <div className="rise relative z-10 flex flex-col items-center px-4">
-          <Logo height={64} />
-          <p className="mt-3 text-xs font-medium tracking-wide text-white/85">Supplier invoices → Shopify products</p>
+        <div className="rise relative z-10 px-4">
+          <h1 className="text-2xl font-bold tracking-tight text-white">Alpsport CSV</h1>
+          <p className="mt-1 text-xs font-medium tracking-wide text-white/80">Supplier invoices → Shopify products</p>
         </div>
         {/* The range, cut out of the blue in the colour of the ground below it. */}
         <svg className="pointer-events-none absolute inset-x-0 bottom-0 h-20 w-full text-[var(--canvas)]" viewBox="0 0 1200 120" preserveAspectRatio="none" aria-hidden>

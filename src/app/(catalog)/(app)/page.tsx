@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { prisma, parseJson } from "@/lib/catalog/db";
-import { Badge, Card, Empty, LinkButton, PageHeader, fmtDate, statusTone } from "@/app/(catalog)/ui";
+import { Badge, Card, Details, Empty, LinkButton, PageHeader, fmtDate, statusTone } from "@/app/(catalog)/ui";
 import type { ReviewSummary } from "@/lib/catalog/review-types";
 
 export default async function DashboardPage() {
@@ -30,7 +30,7 @@ export default async function DashboardPage() {
         <Stat label="Units" value={String(units)} />
       </div>
       <div className="grid gap-6 lg:grid-cols-3">
-        <Card title="Recent batches" className="lg:col-span-2" actions={<Link href="/batches" className="text-xs text-[var(--violet)]">All batches</Link>}>
+        <Card title="Recent batches" className={recent.length === 0 ? "lg:col-span-2" : "lg:col-span-3"} actions={<Link href="/batches" className="text-xs text-[var(--violet)]">All batches</Link>}>
           {recent.length === 0 ? (
             <Empty>No imports yet. Start by creating a batch and uploading an invoice or spec sheet.</Empty>
           ) : (
@@ -51,15 +51,15 @@ export default async function DashboardPage() {
             </table>
           )}
         </Card>
-        <Card title="How it works">
+        {recent.length === 0 && <Card title="How it works">
           <ol className="list-decimal space-y-2 pl-5 text-sm text-[var(--ink-2)]">
             <li><strong>Upload</strong> invoices, spec sheets or product photos. Spreadsheets are read directly; PDFs and photos are read by AI.</li>
             <li><strong>Review</strong> the products in the grid: fix anything, add images, check tags.</li>
             <li><strong>Export</strong> one Shopify CSV per brand (or product type), or push straight to the store.</li>
           </ol>
           <p className="mt-3 text-xs text-[var(--ink-soft)]">Tags, collections and types come from the <Link href="/rules" className="text-[var(--violet)]">Rules</Link> page; prices from <Link href="/pricing" className="text-[var(--violet)]">Pricing</Link>.</p>
-        </Card>
-        <Card title="Latest activity" className="lg:col-span-3">
+        </Card>}
+        <Details summary="Latest activity" className="lg:col-span-3">
           <ul className="divide-y divide-[var(--line-soft)] text-sm">
             {audit.map((a) => (
               <li key={a.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
@@ -69,7 +69,7 @@ export default async function DashboardPage() {
             ))}
             {audit.length === 0 && <li className="py-2 text-[var(--ink-soft)]">No activity yet.</li>}
           </ul>
-        </Card>
+        </Details>
       </div>
     </>
   );

@@ -31,3 +31,36 @@ describe("tag rules", () => {
     expect(compilePattern("100mm (").test("Griffon 100mm (")).toBe(true);
   });
 });
+
+describe("when two rules disagree", () => {
+  const specific = { id: "a", name: "Womens skis", matchField: "any", pattern: "womens", addTags: "womens", addCollections: "", setProductType: "Womens Skis", setMetafields: { gender: "Womens" }, priority: 90, active: true };
+  const general = { id: "b", name: "Anything with skis", matchField: "any", pattern: "skis", addTags: "skis", addCollections: "", setProductType: "Skis", setMetafields: { gender: "Unisex", terrain: "All-Mountain" }, priority: 10, active: true };
+  const product = { title: "Womens Skis 2026", vendor: "Volkl", category: "skis", productType: "", skus: [], tags: [], collections: [], metafields: {} };
+
+  /** It used to be the other way round: the least important rule had the final say. */
+  it("gives the more important rule the answer", () => {
+    const out = applyTagRules(product, [general, specific]);
+    expect(out.productType).toBe("Womens Skis");
+    expect(out.metafields.gender).toBe("Womens");
+  });
+
+  it("still lets the less important rule fill in what the first left alone", () => {
+    const out = applyTagRules(product, [general, specific]);
+    expect(out.metafields.terrain).toBe("All-Mountain");
+  });
+
+  /** Two rules adding tags both get their way, whatever order they are in. */
+  it("adds up every tag regardless of order", () => {
+    const a = applyTagRules(product, [specific, general]).tags.sort();
+    const b = applyTagRules(product, [general, specific]).tags.sort();
+    expect(a).toEqual(["skis", "womens"]);
+    expect(a).toEqual(b);
+  });
+
+  it("leaves a product alone when nothing matches", () => {
+    // "any" reads every field, so the sample has to be clear of the word entirely.
+    const out = applyTagRules({ ...product, title: "Hornet 1P Tent", category: "tents" }, [specific, general]);
+    expect(out.matched).toEqual([]);
+    expect(out.productType).toBe("");
+  });
+});

@@ -78,12 +78,25 @@ export function ruleMatches(rule: TagRuleLike, target: RuleTarget): boolean {
   return compilePattern(rule.pattern).test(fieldText(target, rule.matchField));
 }
 
-/** Apply all matching rules (highest priority first). Existing tags/collections are kept. */
+/**
+ * Apply every rule that matches, most important first.
+ *
+ * Tags and collections are added up: order changes nothing, because two rules adding tags simply
+ * both get their way. Order decides one thing only — what happens when two rules disagree about
+ * the product type or a metafield — and there the more important rule wins.
+ *
+ * That is worth stating because it used to work the other way round. Rules ran most-important
+ * first but each one overwrote what the last had set, so the least important rule had the final
+ * say: a rule at 90 saying "Womens Skis" lost to a rule at 10 saying "Skis". Now the first rule to
+ * answer a question owns the answer, and the rules below it can still fill in what it left alone.
+ */
 export function applyTagRules(target: RuleTarget, rules: TagRuleLike[]): RuleOutcome {
   const tags = new Set(target.tags);
   const collections = new Set(target.collections);
   const metafields = { ...target.metafields };
   let productType = target.productType;
+  let typeDecided = false;
+  const decided = new Set<string>();
   const matched: RuleOutcome["matched"] = [];
   const ordered = [...rules].filter((r) => r.active).sort((a, b) => b.priority - a.priority);
   for (const rule of ordered) {
@@ -91,9 +104,16 @@ export function applyTagRules(target: RuleTarget, rules: TagRuleLike[]): RuleOut
     matched.push({ id: rule.id, name: rule.name });
     for (const t of splitList(rule.addTags)) tags.add(t);
     for (const c of splitList(rule.addCollections)) collections.add(c);
-    if (rule.setProductType.trim()) productType = rule.setProductType.trim();
+    if (rule.setProductType.trim() && !typeDecided) {
+      productType = rule.setProductType.trim();
+      typeDecided = true;
+    }
     const mf = typeof rule.setMetafields === "string" ? safeParse(rule.setMetafields) : rule.setMetafields;
-    for (const [k, v] of Object.entries(mf)) if (v) metafields[k] = v;
+    for (const [k, v] of Object.entries(mf)) {
+      if (!v || decided.has(k)) continue;
+      metafields[k] = v;
+      decided.add(k);
+    }
   }
   return { tags: Array.from(tags), collections: Array.from(collections), productType, metafields, matched };
 }

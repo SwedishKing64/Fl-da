@@ -41,6 +41,8 @@ export interface CsvProduct {
   bodyHtml?: string;
   vendor?: string;
   productType?: string;
+  /** Shopify's own taxonomy. The shop does not use it, so this is Uncategorized on every product. */
+  productCategory?: string;
   tags?: string[]; // joined with ", "
   published?: boolean;
   status?: "draft" | "active" | "archived";
@@ -55,20 +57,35 @@ export interface CsvProduct {
   variants: CsvVariant[];
 }
 
+/**
+ * The columns a Shopify export of this store contains, in its order.
+ *
+ * Taken from the shop's own exports rather than from the import spec: all nine files it has sent
+ * carry these forty-eight, identically, so a file the importer builds can be read beside one of
+ * theirs without anything looking out of place. The plural "Variant Barcodes" is theirs, not a typo.
+ *
+ * Several are Shopify's own and are written empty — the linked-option columns, the unit-price
+ * measures, the tax code, and the metafields Shopify maintains for search and recommendations.
+ * They are here so the shape matches, not because the importer has anything to put in them.
+ */
 export const CORE_COLUMNS = [
   "Handle",
   "Title",
   "Body (HTML)",
   "Vendor",
+  "Product Category",
   "Type",
   "Tags",
   "Published",
   "Option1 Name",
   "Option1 Value",
+  "Option1 Linked To",
   "Option2 Name",
   "Option2 Value",
+  "Option2 Linked To",
   "Option3 Name",
   "Option3 Value",
+  "Option3 Linked To",
   "Variant SKU",
   "Variant Grams",
   "Variant Inventory Tracker",
@@ -79,17 +96,26 @@ export const CORE_COLUMNS = [
   "Variant Compare At Price",
   "Variant Requires Shipping",
   "Variant Taxable",
-  "Variant Barcode",
+  "Unit Price Total Measure",
+  "Unit Price Total Measure Unit",
+  "Unit Price Base Measure",
+  "Unit Price Base Measure Unit",
+  "Variant Barcodes",
   "Image Src",
   "Image Position",
   "Image Alt Text",
   "Gift Card",
   "SEO Title",
   "SEO Description",
+  "Size (product.metafields.shopify.size)",
+  "Complementary products (product.metafields.shopify--discovery--product_recommendation.complementary_products)",
+  "Related products (product.metafields.shopify--discovery--product_recommendation.related_products)",
+  "Related products settings (product.metafields.shopify--discovery--product_recommendation.related_products_display)",
+  "Search product boosts (product.metafields.shopify--discovery--product_search_boost.queries)",
   "Variant Image",
   "Variant Weight Unit",
+  "Variant Tax Code",
   "Cost per item",
-  "Collection",
   "Status",
 ] as const;
 
@@ -98,7 +124,7 @@ export type CsvRow = Record<string, string>;
 export interface GenerateOptions {
   /** Extra metafield column names appended after the core columns (stable order). */
   metafieldColumns?: string[];
-  /** Omit the import-only Collection column entirely. Default: include it. */
+  /** Append the import-only Collection column. Default: off, as the shop's own exports have none. */
   includeCollectionColumn?: boolean;
 }
 
@@ -121,9 +147,11 @@ export function escapeCsvField(value: string | number | boolean | null | undefin
 }
 
 export function columnsFor(options: GenerateOptions = {}): string[] {
-  const cols = [...CORE_COLUMNS] as string[];
-  const filtered = options.includeCollectionColumn === false ? cols.filter((c) => c !== "Collection") : cols;
-  return [...filtered, ...(options.metafieldColumns ?? [])];
+  const extra = options.metafieldColumns?.filter((c) => !CORE_COLUMNS.includes(c as never)) ?? [];
+  // Collections are not a column in this store's exports: its collections are built from tags, so
+  // the tags are what put a product on a page. It is appended only where someone asks for it.
+  const collection = options.includeCollectionColumn ? ["Collection"] : [];
+  return [...CORE_COLUMNS, ...extra, ...collection];
 }
 
 function bool(value: boolean | undefined, fallback: boolean): string {
@@ -148,6 +176,8 @@ export function buildRows(products: CsvProduct[], options: GenerateOptions = {})
         row["Title"] = product.title;
         row["Body (HTML)"] = product.bodyHtml ?? "";
         row["Vendor"] = product.vendor ?? "";
+        // The shop leaves Shopify's own taxonomy alone and files everything by its own Type.
+        row["Product Category"] = product.productCategory ?? "Uncategorized";
         row["Type"] = product.productType ?? "";
         row["Tags"] = (product.tags ?? []).map((t) => t.trim()).filter(Boolean).join(", ");
         // Every product the importer builds arrives in the store as a draft, so someone looks at it
@@ -198,7 +228,7 @@ export function buildRows(products: CsvProduct[], options: GenerateOptions = {})
         variant.compareAtPrice && variant.compareAtPrice > variant.price ? formatPrice(variant.compareAtPrice) : "";
       row["Variant Requires Shipping"] = bool(variant.requiresShipping, true);
       row["Variant Taxable"] = bool(variant.taxable, true);
-      row["Variant Barcode"] = variant.barcode ?? "";
+      row["Variant Barcodes"] = variant.barcode ?? "";
       // Grams is always grams; this is the unit the shop reads them in, on all 2,394 rows.
       row["Variant Weight Unit"] = "kg";
       row["Cost per item"] = variant.costPerItem != null ? formatPrice(variant.costPerItem) : "";
@@ -233,7 +263,26 @@ export function serialiseRows(rows: CsvRow[], columns: string[]): string {
 }
 
 export function generateCsv(products: CsvProduct[], options: GenerateOptions = {}): string {
-  return serialiseRows(buildRows(products, options), columnsFor(options));
+  return serialiseRows(buildRows(products, options), columnsFor(narrowMetafields(products, options)));
+}
+
+/**
+ * Drop the metafield columns nothing in this file fills.
+ *
+ * A file of tents should not carry a DIN Range column. Keeping only the columns with something in
+ * them means an ordinary export is the shop's own forty-eight and nothing else, and the extras
+ * appear exactly where a product has the data to put in them.
+ */
+export function narrowMetafields(products: CsvProduct[], options: GenerateOptions): GenerateOptions {
+  const candidates = options.metafieldColumns ?? [];
+  if (candidates.length === 0) return options;
+  const used = new Set<string>();
+  for (const p of products) {
+    for (const [column, value] of Object.entries(p.metafields ?? {})) {
+      if (String(value ?? "").trim()) used.add(column);
+    }
+  }
+  return { ...options, metafieldColumns: candidates.filter((c) => used.has(c)) };
 }
 
 // ---------------------------------------------------------------------------
@@ -260,7 +309,7 @@ export function generateCsvParts(
 ): CsvPart[] {
   const maxBytes = options.maxBytes ?? Math.floor(SHOPIFY_MAX_BYTES * 0.97);
   const maxRows = options.maxRows ?? Number.POSITIVE_INFINITY;
-  const columns = columnsFor(options);
+  const columns = columnsFor(narrowMetafields(products, options));
   const header = columns.map(escapeCsvField).join(",") + "\n";
   const headerBytes = Buffer.byteLength(header, "utf8");
 

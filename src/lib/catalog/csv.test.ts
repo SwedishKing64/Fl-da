@@ -93,7 +93,7 @@ describe("row-per-variant model", () => {
     expect(rows[0]["Variant Inventory Policy"]).toBe("deny");
     expect(rows[0]["Variant Fulfillment Service"]).toBe("manual");
     expect(rows[0]["Variant Grams"]).toBe("3200");
-    expect(rows[0]["Variant Barcode"]).toBe("887445290001");
+    expect(rows[0]["Variant Barcodes"]).toBe("887445290001");
     expect(rows[0]["Image Src"]).toBe("https://cdn.example.com/bent90-1.jpg");
     expect(rows[0]["Image Position"]).toBe("1");
     expect(rows[1]["Image Src"]).toBe("https://cdn.example.com/bent90-2.jpg");
@@ -120,7 +120,7 @@ describe("serialisation", () => {
     expect(escapeCsvField(null)).toBe("");
   });
 
-  it("produces a header with all core columns, the Collection column and metafields", () => {
+  it("produces the header a Shopify export of this store has, with metafields after it", () => {
     const csv = generateCsv([skis, beanie], { metafieldColumns: ["Flex (product.metafields.ski.flex)"] });
     const parsed = parseCsv(csv);
     expect(parsed[0]).toEqual(columnsFor({ metafieldColumns: ["Flex (product.metafields.ski.flex)"] }));
@@ -128,7 +128,10 @@ describe("serialisation", () => {
     expect(parsed[0]).toContain("Body (HTML)");
     expect(parsed[0]).toContain("Variant Inventory Qty");
     expect(parsed[0]).toContain("SEO Description");
-    expect(parsed[0]).toContain("Collection");
+    // Collections are not a column in this store's exports — its collections are built from tags.
+    expect(parsed[0]).not.toContain("Collection");
+    expect(parsed[0]).toContain("Product Category");
+    expect(parsed[0]).toContain("Variant Barcodes");
     expect(parsed[0]).toContain("Status");
     expect(parsed[0][parsed[0].length - 1]).toBe("Flex (product.metafields.ski.flex)");
     expect(parsed).toHaveLength(5);
@@ -256,8 +259,8 @@ describe("the columns the shop leaves to a person", () => {
   /** A barcode comes off the invoice when the supplier gives one, and is typed in when they don't. */
   it("writes a barcode when there is one and leaves it empty when there is not", () => {
     const withCode = parseCsv(generateCsv([{ ...skis, variants: [{ ...skis.variants[0], barcode: "887445290001" }] }]));
-    expect(withCode[1][withCode[0].indexOf("Variant Barcode")]).toBe("887445290001");
+    expect(withCode[1][withCode[0].indexOf("Variant Barcodes")]).toBe("887445290001");
     const without = parseCsv(generateCsv([{ ...skis, variants: [{ ...skis.variants[0], barcode: undefined }] }]));
-    expect(without[1][without[0].indexOf("Variant Barcode")]).toBe("");
+    expect(without[1][without[0].indexOf("Variant Barcodes")]).toBe("");
   });
 });

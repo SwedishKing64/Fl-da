@@ -69,9 +69,23 @@ export const LIVE_TAG_SPELLING: Record<string, string> = {
   "Ultralight Tents": "ultralight tents", // 12 of 12 in the exports
   "Water Bottles": "water bottles", // 9 of 9 in the exports
   "Winter Mats": "winter mats", // 1 of 1 in the exports
-  // The menu calls the sub-link "Snow Socks"; the products carry plain "socks". All twelve pairs
-  // in the exports are tagged socks, none snow socks, so the sub-link name is not the tag.
   "Snow Socks": "socks", // 12 of 12 in the exports
   "Midlayers": "midlayers", // 4 of 6 in the exports
   "Headwear": "headwear", // 4 of 4 in the exports
+};
+
+/**
+ * Shelves that carry more than one spelling of the same tag.
+ *
+ * The shop's instruction where a tag could be written two ways: carry both. A product on two
+ * spellings of its own shelf is found by either page, and a tag nobody searches costs nothing —
+ * whereas picking the wrong one leaves the product off its page entirely.
+ */
+export const TAG_ALSO: Record<string, readonly string[]> = {
+  // Asked for directly: socks carry the plain tag their twelve pairs already have, and the menu's
+  // own name for the shelf alongside it.
+  "Snow Socks": ["snow socks"],
+  // Both spellings are already live, so both are written rather than one of them guessed at.
+  "Hiking Boots": ["hiking-boots"], // 26 spaced, 2 hyphenated in the exports
+  "Ski Packages": ["ski-packages"], // 40 spaced, 1 hyphenated in the exports
 };

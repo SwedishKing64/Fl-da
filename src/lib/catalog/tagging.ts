@@ -14,7 +14,7 @@ import { ALPSPORT_TAXONOMY, PRODUCT_TYPES, TYPE_SECTIONS, clothingContextsFor, h
 import { classifyBinding, classifySnowboardBinding, type BindingKind } from "./bindings";
 import { classifySkiBoot, classifySnowboardBoot } from "./boots";
 import { accessoryKind } from "./accessories";
-import { LIVE_TAG_SPELLING } from "./tag-spelling";
+import { LIVE_TAG_SPELLING, TAG_ALSO } from "./tag-spelling";
 
 export type Gender = "mens" | "womens" | "kids";
 
@@ -349,6 +349,19 @@ export function seasonFor(type: string, settings: TaggingSettings = DEFAULT_TAGG
 export const TAG_SPELLING: Record<string, string> = { ...LIVE_TAG_SPELLING };
 
 /**
+ * Every tag a shelf is written as, in the order they belong on the product.
+ *
+ * Usually one. Where the shop writes a shelf two ways — or has asked for both — the product
+ * carries both, because a tag nobody searches costs nothing while a missing one leaves the
+ * product off its page.
+ */
+export function tagsFor(name: string): string[] {
+  const primary = TAG_SPELLING[name] ?? slugTag(name);
+  const also = TAG_ALSO[name] ?? [];
+  return [primary, ...also].filter((tag, i, all) => tag && all.indexOf(tag) === i);
+}
+
+/**
  * Tags Shopify writes by itself — price bands, sizes, lengths and colours are all derived from the
  * variants once a product is in the store.
  *
@@ -481,7 +494,7 @@ export function generalTags(input: TagInput, settings: TaggingSettings = DEFAULT
   };
 
   const type = bindingType(input) ?? skinType(input) ?? resolveType(input.type) ?? input.type.trim();
-  if (type) push(TAG_SPELLING[type] ?? slugTag(type));
+  if (type) for (const tag of tagsFor(type)) push(tag);
 
   for (const tag of headingTags(type, input.section ?? input.clothingContext)) push(tag);
 
@@ -511,7 +524,7 @@ export function generalTags(input: TagInput, settings: TaggingSettings = DEFAULT
   for (const discipline of input.disciplines ?? []) {
     const match = allowed.find((a) => slugTag(a) === slugTag(discipline));
     if (!match) continue;
-    const tag = TAG_SPELLING[match] ?? slugTag(match);
+    const tag = tagsFor(match)[0];
     disciplineTags.push(tag);
     push(tag);
     // Touring skis also sit on the cross-country shelf, which is one page for both.
@@ -574,9 +587,9 @@ export function headingTags(type: string, told?: string): string[] {
   const resolved = resolveType(type) ?? type.trim();
   const headings = headingsFor(resolved).filter((h) => h !== resolved);
   if (headings.length === 0) return [];
-  if (headings.length === 1 || BOTH_SECTIONS.has(resolved)) return headings.map((h) => TAG_SPELLING[h] ?? slugTag(h));
+  if (headings.length === 1 || BOTH_SECTIONS.has(resolved)) return headings.flatMap((h) => tagsFor(h));
   const wanted = headings.find((h) => slugTag(h) === slugTag(told ?? ""));
-  return wanted ? [TAG_SPELLING[wanted] ?? slugTag(wanted)] : [];
+  return wanted ? tagsFor(wanted) : [];
 }
 
 /**
@@ -647,8 +660,8 @@ export const KNOWN_TYPES = PRODUCT_TYPES;
  */
 export const BACKCOUNTRY_SHELF_TAGS: ReadonlySet<string> = new Set<string>([
   ...(ALPSPORT_TAXONOMY.find((s) => s.top === "Backcountry")?.groups.flatMap((g) => [
-    TAG_SPELLING[g.heading] ?? slugTag(g.heading),
-    ...g.leaves.map((leaf) => TAG_SPELLING[leaf] ?? slugTag(leaf)),
+    ...tagsFor(g.heading),
+    ...g.leaves.flatMap((leaf) => tagsFor(leaf)),
   ]) ?? []),
   ...SKIN_TAGS,
   TOURING_SKI_TAG,

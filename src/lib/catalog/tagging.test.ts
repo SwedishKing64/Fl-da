@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BACKCOUNTRY_SHELF_TAGS, isBackcountryShelf, isSkin, skinType, sectionsFor, productTypeFor, headingTags, spellHeading, BACKCOUNTRY_BINDING_TAG, BACKCOUNTRY_BOOT_TAG, BOARD_DISCIPLINES, crossShelfTags, DEFAULT_TAGGING, EVERGREEN_SEASON, SKI_DISCIPLINES, BAG_TAGS, MANUAL_SEASON, TOURING_SKI_TAG, bagTags, clothingContextTags, isSkinAccessory, bindingType, bootTags, disciplinesFor, snowboardBindingTags, needsBindingKind, TAG_SPELLING, generalTags, isHardgood, isManualTag, isNotOurs, isNotLearnable, isRuleGenerated, isShopifyGenerated, needsSectionChoice, normaliseGenders, seasonFor, slugTag, withoutGenerated } from "./tagging";
+import { BACKCOUNTRY_SHELF_TAGS, isBackcountryShelf, isSkin, skinType, sectionsFor, productTypeFor, headingTags, spellHeading, BACKCOUNTRY_BINDING_TAG, BACKCOUNTRY_BOOT_TAG, BOARD_DISCIPLINES, crossShelfTags, DEFAULT_TAGGING, EVERGREEN_SEASON, SKI_DISCIPLINES, BAG_TAGS, MANUAL_SEASON, TOURING_SKI_TAG, bagTags, clothingContextTags, isSkinAccessory, bindingType, bootTags, disciplinesFor, snowboardBindingTags, needsBindingKind, TAG_SPELLING, generalTags, isHardgood, isManualTag, isNotOurs, isNotLearnable, isRuleGenerated, isShopifyGenerated, needsSectionChoice, normaliseGenders, seasonFor, slugTag, tagsFor, withoutGenerated } from "./tagging";
 import { ALPSPORT_TAXONOMY, resolveType } from "./taxonomy";
 
 describe("the six general tags", () => {
@@ -53,13 +53,27 @@ describe("the six general tags", () => {
     expect(generalTags({ type: "Ski Tuning", vendor: "Swix", genders: [] })).not.toContain("mens");
   });
 
-  it("tags socks the way the catalogue does, not the way the menu names them", () => {
-    // The menu sub-link is "Snow Socks"; every one of the twelve pairs in the exports is tagged
-    // "socks", and none is tagged "snow socks".
+  it("tags socks both ways, because the shop asked for both", () => {
+    // The twelve pairs in the exports carry "socks" and the menu calls the shelf "Snow Socks".
+    // Asked for directly: carry both rather than pick, so the product is on either page.
     const tags = generalTags({ type: "Snow Socks", vendor: "Burton", genders: ["mens"] });
     expect(tags).toContain("socks");
-    expect(tags).not.toContain("snow socks");
+    expect(tags).toContain("snow socks");
     expect(tags).toContain("snow-clothing");
+    // The live spelling leads; the menu's name follows it.
+    expect(tags.indexOf("socks")).toBeLessThan(tags.indexOf("snow socks"));
+  });
+
+  it("carries both spellings of a shelf the shop already writes two ways", () => {
+    // 26 products tagged "hiking boots" and 2 tagged "hiking-boots"; 40 "ski packages" and 1
+    // "ski-packages". Picking one would leave the others' page short, so both go on.
+    expect(tagsFor("Hiking Boots")).toEqual(["hiking boots", "hiking-boots"]);
+    expect(tagsFor("Ski Packages")).toEqual(["ski packages", "ski-packages"]);
+  });
+
+  it("gives a shelf with one spelling exactly one tag", () => {
+    expect(tagsFor("Snow Jackets")).toEqual(["snow jackets"]);
+    expect(tagsFor("Snowboard Boots")).toEqual(["snowboard-boots"]);
   });
 
   it("types a garment as its heading, since Apparel is not a Type this shop has", () => {

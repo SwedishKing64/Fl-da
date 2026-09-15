@@ -495,7 +495,7 @@ export function generalTags(input: TagInput, settings: TaggingSettings = DEFAULT
   push(evergreen ? EVERGREEN_SEASON : String(input.year ?? seasonFor(type, settings)));
   push(settings.houseTag);
   push(slugTag(input.vendor));
-  for (const gender of normaliseGenders(input.genders)) push(gender);
+  for (const gender of gendersFor(type, input.genders)) push(gender);
 
   if (input.withBindings) push(TAG_SPELLING[packageTagFor(type)] ?? slugTag(packageTagFor(type)));
 
@@ -530,6 +530,27 @@ export function generalTags(input: TagInput, settings: TaggingSettings = DEFAULT
   if (tags.some(isBackcountryShelf)) push(BACKCOUNTRY_SECTION_TAG);
 
   return tags;
+}
+
+/**
+ * The gender tags a product carries, which depends on whether it is a garment.
+ *
+ * A garment always carries one. All seventy snow garments in the exports do, none carries none,
+ * and eight carry both — so a unisex garment is tagged mens and womens rather than left bare,
+ * because it belongs on both the men's and the women's page.
+ *
+ * Everything else keeps the opposite rule: glide wax and stomp pads are nobody's gender, and the
+ * 417 products in the exports that carry no gender tag are exactly those.
+ */
+export function gendersFor(type: string, genders: Gender[]): Gender[] {
+  const normalised = normaliseGenders(genders);
+  if (normalised.length > 0) return normalised;
+  return isGarment(type) ? ["mens", "womens"] : [];
+}
+
+/** Whether a Type is something somebody wears, which is what the menu's clothing headings mean. */
+export function isGarment(type: string): boolean {
+  return clothingContextsFor(resolveType(type) ?? type.trim()).length > 0;
 }
 
 /**

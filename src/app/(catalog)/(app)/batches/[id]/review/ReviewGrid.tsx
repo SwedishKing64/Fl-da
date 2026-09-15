@@ -295,6 +295,9 @@ export function ReviewGrid({ initial, batchId }: { initial: ReviewData; batchId:
   const toggleAll = (on: boolean) => setSelected(on ? new Set(visible.map((p) => p.id)) : new Set());
 
   const summary = data.summary;
+  // A product with no description exports an empty Body (HTML), which is the one thing nobody
+  // notices until the CSV is open in Shopify. Said here, next to the button that fills them.
+  const withoutDescription = data.products.filter((p) => !p.bodyHtml.trim()).length;
   const drawerProduct = drawer ? data.products.find((p) => p.id === drawer) ?? null : null;
 
   return (
@@ -326,6 +329,12 @@ export function ReviewGrid({ initial, batchId }: { initial: ReviewData; batchId:
           <Link href={`/batches/${batchId}/export`} style={{ color: "#fff" }} className={cx("inline-flex items-center rounded-lg px-3 py-1.5 text-xs font-medium", summary.errors ? "bg-neutral-400" : "bg-[var(--ink)] hover:bg-black")}>{summary.errors ? `${summary.errors} errors block export` : "Export →"}</Link>
         </div>
       </div>
+
+      {withoutDescription > 0 && !locked && (
+        <Alert tone="warning" className="mb-3">
+          {withoutDescription} of {data.products.length} products have no description yet. Press <strong>Find descriptions</strong> to pull them from the brand&apos;s website, or write them in a product&apos;s Details.
+        </Alert>
+      )}
 
       {message && <Alert tone={message.tone} className="mb-3 flex items-start justify-between gap-3"><span>{message.text}</span><button onClick={() => setMessage(null)} className="text-xs underline">dismiss</button></Alert>}
 
@@ -515,14 +524,14 @@ const LOOKUP_SAID: Record<string, string> = {
 };
 
 /** What a lookup pass found, said as a sentence rather than a row of counters. */
-function lookupMessage(d: { attempted: number; found: number; descriptions: number; prices: number; vendors: number; missing: number; capped: boolean; limit: number }): { tone: "info" | "success" | "warning"; text: string } {
+function lookupMessage(d: { attempted: number; found: number; descriptions: number; prices: number; vendors: number; missing: number; capped: boolean; remaining: number; limit: number }): { tone: "info" | "success" | "warning"; text: string } {
   if (d.attempted === 0) return { tone: "info", text: d.missing === 0 ? "Nothing is missing a description or a price." : "Everything missing has already been looked up. Nothing left to search." };
   const got = [
     d.descriptions ? `${d.descriptions} description${d.descriptions === 1 ? "" : "s"}` : "",
     d.prices ? `${d.prices} retail price${d.prices === 1 ? "" : "s"}` : "",
     d.vendors ? `${d.vendors} brand${d.vendors === 1 ? "" : "s"}` : "",
   ].filter(Boolean);
-  const capped = d.capped ? ` Stopped at ${d.limit}; run it again for the rest.` : "";
+  const capped = d.capped ? ` ${d.remaining} still to do — run it again for the rest.` : "";
   if (got.length === 0) return { tone: "warning", text: `Searched ${d.attempted} product${d.attempted === 1 ? "" : "s"} and found nothing usable. Open one and check its title reads the way the brand writes it.${capped}` };
   return { tone: "success", text: `Searched ${d.attempted}, filled in ${got.join(", ")}.${capped}` };
 }

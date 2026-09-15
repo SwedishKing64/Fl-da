@@ -20,6 +20,17 @@ const CONCURRENCY = 3;
 /** A ceiling on one pass, so a 300-line pre-book order cannot quietly run for an hour. */
 export const LOOKUP_LIMIT = 60;
 
+/**
+ * How long one pass may keep starting new lookups.
+ *
+ * A count is not a budget. Each lookup is a web search and takes tens of seconds, and a deployed
+ * function is killed at its time limit whatever it was in the middle of — which is how a batch got
+ * exported with no descriptions in it. So a pass stops starting work before it is stopped, leaves
+ * the rest marked as never looked up, and says how many are left; running it again carries on.
+ */
+export const AUTOMATIC_BUDGET_MS = 40_000;
+export const REQUESTED_BUDGET_MS = 240_000;
+
 export interface LookupOutcome {
   /** Products that were missing a description or a retail price. */
   missing: number;
@@ -33,11 +44,13 @@ export interface LookupOutcome {
   prices: number;
   /** Brands established for a product that had none. */
   vendors: number;
-  /** True when the cap stopped the pass short of everything that is missing. */
+  /** True when the cap or the clock stopped the pass short of everything that is missing. */
   capped: boolean;
+  /** Still missing and not yet looked up when the pass stopped. */
+  remaining: number;
 }
 
-const EMPTY: LookupOutcome = { missing: 0, attempted: 0, found: 0, descriptions: 0, prices: 0, vendors: 0, capped: false };
+const EMPTY: LookupOutcome = { missing: 0, attempted: 0, found: 0, descriptions: 0, prices: 0, vendors: 0, capped: false, remaining: 0 };
 
 type Candidate = {
   id: string;
@@ -74,7 +87,7 @@ async function candidates(batchId: string, productIds?: string[]): Promise<Candi
  */
 export async function lookupBatch(
   batchId: string,
-  opts: { productIds?: string[]; retry?: boolean; userId?: string | null } = {},
+  opts: { productIds?: string[]; retry?: boolean; userId?: string | null; budgetMs?: number } = {},
 ): Promise<LookupOutcome> {
   if (!lookupAvailable()) return { ...EMPTY };
 
@@ -89,13 +102,17 @@ export async function lookupBatch(
     : new Set((await prisma.product.findMany({ where: { batchId, lookupStatus: { not: "NONE" } }, select: { id: true } })).map((p) => p.id));
   const todo = wanting.filter((p) => !already.has(p.id));
 
-  const out: LookupOutcome = { ...EMPTY, missing: wanting.length, capped: todo.length > LOOKUP_LIMIT };
+  const out: LookupOutcome = { ...EMPTY, missing: wanting.length, capped: todo.length > LOOKUP_LIMIT, remaining: todo.length };
   const work = todo.slice(0, LOOKUP_LIMIT);
   if (work.length === 0) return out;
 
+  const deadline = Date.now() + (opts.budgetMs ?? REQUESTED_BUDGET_MS);
   let next = 0;
   const workers = Array.from({ length: Math.min(CONCURRENCY, work.length) }, async () => {
     for (let i = next++; i < work.length; i = next++) {
+      // Checked before starting, never in the middle: a lookup that has begun is allowed to finish
+      // and be written down, so a pass never leaves a product half-filled.
+      if (Date.now() >= deadline) { out.capped = true; return; }
       const applied = await lookupOne(work[i]);
       out.attempted++;
       if (!applied) continue;
@@ -106,6 +123,7 @@ export async function lookupBatch(
     }
   });
   await Promise.all(workers);
+  out.remaining = Math.max(0, todo.length - out.attempted);
 
   if (out.prices > 0) await repriceBatch(batchId);
   await logAudit("batch.lookup", { batchId, userId: opts.userId ?? null, details: { ...out } });

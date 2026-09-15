@@ -1,6 +1,7 @@
 // Server-side orchestration: ingest -> extract -> map -> group -> price -> images -> review -> export.
 
 import type { Prisma } from "@prisma/client";
+import { after } from "next/server";
 import { productTitle, seoTitle } from "./titles";
 import { parseDirectives } from "./instructions";
 import { prisma, parseJson } from "./db";
@@ -8,6 +9,7 @@ import { extractFile, type UploadKind } from "./extract";
 import { applyMapping, headerHash, mappingProblems, suggestMapping, suggestOptions, type Mapping, type MappingOptions } from "./mapping";
 import { groupLineItems } from "./grouping";
 import { DEFAULT_CATEGORY_RULES, type CategoryRuleLike } from "./categorize";
+import { repairCategoryRules } from "./seed";
 import { applyTagRules, type TagRuleLike } from "./rules";
 import { applyTemplates, type ProductTemplateLike } from "./templates";
 import { allocateFreight, exGstCostAud, priceVariant, selectRule, type PricingRuleLike } from "./pricing";
@@ -104,6 +106,11 @@ function splitCsv(s: string): string[] {
 }
 
 export async function loadCategoryRules(): Promise<CategoryRuleLike[]> {
+  // Correct a rule naming a Type the shop does not have before using it, rather than writing that
+  // Type onto every product it matches. Does nothing once there is nothing wrong, which is almost
+  // always, and it has to be here: the button that seeds defaults only shows on an empty list, so
+  // a shop that seeded a bad rule once had no way to reach the fix.
+  await repairCategoryRules().catch(() => 0);
   const rows = await prisma.categoryRule.findMany({ orderBy: { priority: "desc" } });
   return rows.length > 0 ? rows : DEFAULT_CATEGORY_RULES;
 }
@@ -434,8 +441,17 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
   await logAudit("batch.mapped", { batchId, userId, details: { products: grouped.length, variants: variantCount } });
   void verifyBatchImages(batchId).catch(() => undefined);
   // What the invoice did not carry is looked up on the brand's site while the grid is being read.
+  //
+  // Through `after` rather than a loose promise: a deployed function stops the moment it has
+  // replied, so fire-and-forget work simply never ran there — which is how a batch reached the CSV
+  // with no descriptions in it. `after` keeps the function alive until this finishes or its time
+  // runs out, and the lookup stops itself before that so the rest can be picked up by the button.
+  //
   // Imported here rather than at the top: enrich reprices the batch, so it imports this module back.
-  void import("./enrich").then((m) => m.lookupBatch(batchId, { userId })).catch(() => undefined);
+  after(async () => {
+    const { lookupBatch, AUTOMATIC_BUDGET_MS } = await import("./enrich");
+    await lookupBatch(batchId, { userId, budgetMs: AUTOMATIC_BUDGET_MS }).catch(() => undefined);
+  });
   return { products: grouped.length, variants: variantCount, problems: [] };
 }
 
@@ -550,6 +566,8 @@ export function computePricing(v: VariantRow, p: ProductRow, rules: PricingRuleL
   return {
     landedCostAud: r.landedCostAud,
     retailPrice: r.retailPrice,
+    // The strikethrough, written whenever the product is selling for less than it would have.
+    compareAtPrice: r.compareAtPrice,
     exGstRevenue: r.exGstRevenue,
     gstComponent: r.gstComponent,
     profitPerUnit: r.profitPerUnit,

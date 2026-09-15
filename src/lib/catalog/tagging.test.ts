@@ -41,6 +41,32 @@ describe("the six general tags", () => {
     expect(tags).toEqual(["snowboard-accessories", "snowboard", "2026", "123abc-js", "burton"]);
   });
 
+  it("gives a unisex garment both genders, because it belongs on both pages", () => {
+    // All seventy snow garments in the exports carry a gender and none carries none, so a garment
+    // is never left bare the way a stomp pad above is. Eight of them carry both.
+    const tags = generalTags({ type: "Snow Socks", vendor: "Burton", genders: [] });
+    expect(tags).toContain("mens");
+    expect(tags).toContain("womens");
+  });
+
+  it("still leaves a hardgood alone when it has no gender", () => {
+    expect(generalTags({ type: "Ski Tuning", vendor: "Swix", genders: [] })).not.toContain("mens");
+  });
+
+  it("tags socks the way the catalogue does, not the way the menu names them", () => {
+    // The menu sub-link is "Snow Socks"; every one of the twelve pairs in the exports is tagged
+    // "socks", and none is tagged "snow socks".
+    const tags = generalTags({ type: "Snow Socks", vendor: "Burton", genders: ["mens"] });
+    expect(tags).toContain("socks");
+    expect(tags).not.toContain("snow socks");
+    expect(tags).toContain("snow-clothing");
+  });
+
+  it("types a garment as its heading, since Apparel is not a Type this shop has", () => {
+    expect(productTypeFor("Snow Socks")).toBe("Snow Clothing");
+    expect(productTypeFor("Snow Jackets")).toBe("Snow Clothing");
+  });
+
   it("carries both genders when a product is sold to both", () => {
     const tags = generalTags({ type: "Snowboards", vendor: "Burton", genders: ["mens", "womens"] });
     expect(tags.slice(-2)).toEqual(["mens", "womens"]);

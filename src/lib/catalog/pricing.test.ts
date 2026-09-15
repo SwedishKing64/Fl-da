@@ -192,3 +192,37 @@ describe("money parsing", () => {
     expect(parseMoney(12)).toBe(12);
   });
 });
+
+describe("the strikethrough price", () => {
+  const settings = { gstRate: 0.1, pricesIncludeGst: true, minMarginPct: 25 };
+  const rule = { id: "r", name: "40%", scope: "DEFAULT" as const, matchValue: "", mode: "MARGIN" as const, percent: 40, roundTo: "0.99", priority: 0, active: true };
+  const base = { costPrice: 500, gstTreatment: "EXCLUSIVE" as const, fxRateToAud: 1, freightPerUnitAud: 0, quantity: 1, rule };
+
+  it("writes the recommended retail into compare-at when the product is discounted", () => {
+    // What every one of the 1657 variant rows in the shop's exports that carries a compare-at does:
+    // compare above price, never equal, never below.
+    const r = priceVariant({ ...base, retailOverride: 999.95, discountPct: 30 }, settings);
+    expect(r.retailPrice).toBeCloseTo(699.97, 2);
+    expect(r.compareAtPrice).toBeCloseTo(999.95, 2);
+    expect(r.compareAtPrice!).toBeGreaterThan(r.retailPrice);
+  });
+
+  it("leaves compare-at empty when nothing is marked down", () => {
+    expect(priceVariant({ ...base, retailOverride: 999.95, discountPct: null }, settings).compareAtPrice).toBeNull();
+    expect(priceVariant({ ...base, retailOverride: 999.95, discountPct: 0 }, settings).compareAtPrice).toBeNull();
+  });
+
+  it("marks down from the priced-up figure when the invoice carried no recommended retail", () => {
+    const full = priceVariant({ ...base, retailOverride: null, discountPct: null }, settings);
+    const cut = priceVariant({ ...base, retailOverride: null, discountPct: 20 }, settings);
+    expect(cut.compareAtPrice).toBeCloseTo(full.retailPrice, 2);
+    expect(cut.retailPrice).toBeLessThan(full.retailPrice);
+  });
+
+  it("prices the profit off what the shop actually takes, not the compare-at", () => {
+    const r = priceVariant({ ...base, retailOverride: 1000, discountPct: 50 }, settings);
+    expect(r.retailPrice).toBeCloseTo(500, 2);
+    expect(r.exGstRevenue).toBeCloseTo(454.55, 1);
+    expect(r.profitPerUnit).toBeCloseTo(-45.45, 1); // cost 500 ex-GST against 454.55 taken
+  });
+});

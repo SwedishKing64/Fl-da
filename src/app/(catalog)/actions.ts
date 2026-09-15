@@ -17,7 +17,7 @@ import { CURRENCIES, type AppSettings } from "@/lib/catalog/types";
 import { seedDefaults } from "@/lib/catalog/seed";
 import { answerFeedback, feedbackAvailable, withRule, type FeedbackTurn } from "@/lib/catalog/feedback";
 import { describeDirectives, instructionsAvailable, parseDirectives, readInstructions, NO_DIRECTIVES } from "@/lib/catalog/instructions";
-import { lookupBatch, lookupEnabled, LOOKUP_LIMIT, type LookupOutcome } from "@/lib/catalog/enrich";
+import { lookupBatch, lookupEnabled, LOOKUP_LIMIT, REQUESTED_BUDGET_MS, type LookupOutcome } from "@/lib/catalog/enrich";
 
 export type ActionResult<T = undefined> = { ok: true; data?: T; message?: string } | { ok: false; error: string };
 
@@ -652,7 +652,7 @@ export async function lookupProductsAction(batchId: string, opts: { productIds?:
   const user = await requireUser();
   if (!lookupEnabled()) return { ok: false, error: "Set ANTHROPIC_API_KEY to look products up on the web." };
   try {
-    const data = await lookupBatch(batchId, { ...opts, userId: user.id });
+    const data = await lookupBatch(batchId, { ...opts, userId: user.id, budgetMs: REQUESTED_BUDGET_MS });
     revalidatePath(`/batches/${batchId}/review`);
     return { ok: true, data: { ...data, limit: LOOKUP_LIMIT } };
   } catch (err) {

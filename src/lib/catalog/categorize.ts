@@ -24,14 +24,22 @@ export const DEFAULT_CATEGORY_RULES: CategoryRuleLike[] = [
   { category: "helmets", pattern: String.raw`\bhelmets?\b`, productType: "Helmets", collections: "Helmets", tags: "helmets, protection", option1: "size", option2: "colour", option3: null, priority: 85, active: true },
   { category: "goggles", pattern: String.raw`\bgoggles?\b|\blens\b`, productType: "Goggles", collections: "Goggles", tags: "goggles", option1: "colour", option2: "size", option3: null, priority: 84, active: true },
   { category: "snowboards", pattern: String.raw`\bsnowboards?\b|\bboard\b`, productType: "Snowboards", collections: "Snowboards", tags: "snowboards", option1: "length", option2: "colour", option3: null, priority: 80, active: true },
-  { category: "apparel", pattern: String.raw`\bjackets?\b|\bpants?\b|\bbibs?\b|\bgloves?\b|\bmitts?\b|\bbase ?layer|\bhoodie|\bfleece|\bsocks?\b|\bthermal|\bshell\b`, productType: "Apparel", collections: "Apparel", tags: "apparel", option1: "size", option2: "colour", option3: null, priority: 75, active: true },
+  // Clothing by garment, not as one lump. "Apparel" was never a Type this shop uses — no product
+  // in the catalogue carries it — and a garment's Type is Snow Clothing, which these leaves resolve
+  // to, while the leaf itself rides along as the tag.
+  { category: "apparel", pattern: String.raw`\bsocks?\b`, productType: "Snow Socks", collections: "Snow Clothing", tags: "socks", option1: "size", option2: "colour", option3: null, priority: 79, active: true },
+  { category: "apparel", pattern: String.raw`\bjackets?\b|\bshell\b|\banorak\b`, productType: "Snow Jackets", collections: "Snow Clothing", tags: "snow jackets", option1: "size", option2: "colour", option3: null, priority: 78, active: true },
+  { category: "apparel", pattern: String.raw`\bpants?\b|\bbibs?\b`, productType: "Snow Pants", collections: "Snow Clothing", tags: "snow pants", option1: "size", option2: "colour", option3: null, priority: 77, active: true },
+  { category: "apparel", pattern: String.raw`\bbase ?layer|\bthermal`, productType: "Baselayers", collections: "Snow Clothing", tags: "baselayers", option1: "size", option2: "colour", option3: null, priority: 76, active: true },
+  { category: "apparel", pattern: String.raw`\bmidlayer|\bfleece|\bhoodie`, productType: "Midlayers", collections: "Snow Clothing", tags: "midlayers", option1: "size", option2: "colour", option3: null, priority: 75, active: true },
+  { category: "apparel", pattern: String.raw`\bgloves?\b|\bmitts?\b`, productType: "Gloves", collections: "Clothing Accessories", tags: "gloves", option1: "size", option2: "colour", option3: null, priority: 74, active: true },
   { category: "accessories", pattern: String.raw`\bbeanie|\bwax\b|\btune|\bbag\b|\block\b|\bleash|\bstrap|\bneck ?warmer|\bbalaclava|\btool\b`, productType: "Accessories", collections: "Accessories", tags: "accessories", option1: "size", option2: "colour", option3: null, priority: 70, active: true },
   { category: "skis", pattern: String.raw`\bskis?\b|\bmantra\b|\bbent\b|\benforcer\b|\brustler\b|\bkore\b|\bexperience\b|\bmaverick\b`, productType: "Skis", collections: "Skis", tags: "skis", option1: "length", option2: "colour", option3: null, priority: 60, active: true },
 ];
 
 export const CATEGORY_LABELS: Record<Category, string> = {
   skis: "Skis", snowboards: "Snowboards", boots: "Ski Boots", bindings: "Bindings", poles: "Poles",
-  helmets: "Helmets", goggles: "Goggles", apparel: "Apparel", accessories: "Accessories", other: "Other",
+  helmets: "Helmets", goggles: "Goggles", apparel: "Snow Clothing", accessories: "Accessories", other: "Other",
 };
 
 export function detectCategory(item: CanonicalLineItem, rules: CategoryRuleLike[]): CategoryRuleLike | null {

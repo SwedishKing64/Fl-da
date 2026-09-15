@@ -50,6 +50,14 @@ export interface PricingInput {
 export interface PricingResult {
   landedCostAud: number;
   retailPrice: number; // storefront price written to CSV
+  /**
+   * What the product would have sold for, when it is selling for less — the strikethrough.
+   *
+   * Null unless there is genuinely a discount. Every one of the 1657 variant rows in the shop's
+   * exports that carries a compare-at price carries one above the price; none is equal to it and
+   * none below, so a compare-at that is not a saving is not written at all.
+   */
+  compareAtPrice: number | null;
   exGstRevenue: number;
   gstComponent: number;
   profitPerUnit: number;
@@ -144,7 +152,11 @@ export function priceVariant(input: PricingInput, settings: PricingSettings): Pr
   // A closeout is a share off whatever the price would have been — off the recommended retail on a
   // line that has one, off the marked-up price on a line that does not. It is the last thing that
   // happens to the number, so the profit below is the profit on what the shop will actually take.
+  const undiscounted = retailPrice;
   retailPrice = discounted(retailPrice, input.discountPct);
+
+  // The price it is marked down from, which is the recommended retail whenever one applies.
+  const compareAtPrice = retailPrice < undiscounted ? roundCents(undiscounted) : null;
 
   const exGstRevenue = roundCents(settings.pricesIncludeGst ? retailPrice / (1 + gst) : retailPrice);
   const gstComponent = roundCents(settings.pricesIncludeGst ? retailPrice - exGstRevenue : retailPrice * gst);
@@ -155,6 +167,7 @@ export function priceVariant(input: PricingInput, settings: PricingSettings): Pr
   return {
     landedCostAud,
     retailPrice,
+    compareAtPrice,
     exGstRevenue,
     gstComponent,
     profitPerUnit,

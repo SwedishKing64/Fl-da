@@ -69,4 +69,9 @@ export const LIVE_TAG_SPELLING: Record<string, string> = {
   "Ultralight Tents": "ultralight tents", // 12 of 12 in the exports
   "Water Bottles": "water bottles", // 9 of 9 in the exports
   "Winter Mats": "winter mats", // 1 of 1 in the exports
+  // The menu calls the sub-link "Snow Socks"; the products carry plain "socks". All twelve pairs
+  // in the exports are tagged socks, none snow socks, so the sub-link name is not the tag.
+  "Snow Socks": "socks", // 12 of 12 in the exports
+  "Midlayers": "midlayers", // 4 of 6 in the exports
+  "Headwear": "headwear", // 4 of 4 in the exports
 };

@@ -71,10 +71,28 @@ const run = (cmd, env = process.env) => {
 
 const originalSchema = readFileSync(schemaPath, "utf8");
 
+/** The datasource block's provider line, and only that one. */
+const DATASOURCE_PROVIDER = /(datasource\s+db\s*\{[^}]*?provider\s*=\s*)"sqlite"/;
+
+/**
+ * Point the datasource at Postgres.
+ *
+ * Scoped to the datasource block rather than the whole file on purpose. The header comment above
+ * it explains this very swap and quotes `provider = "sqlite"` verbatim, so a plain string replace
+ * rewrote the comment, left the datasource on SQLite, and shipped a SQLite client that met a
+ * postgres:// URL at runtime — which Prisma reports as "the URL must start with the protocol
+ * file:", nothing like the connection problem it looks like.
+ */
+function toPostgres(schema) {
+  const swapped = schema.replace(DATASOURCE_PROVIDER, '$1"postgresql"');
+  if (DATASOURCE_PROVIDER.test(swapped)) throw new Error("the Prisma datasource is still sqlite after the swap");
+  return swapped;
+}
+
 /** Point Prisma at the database and create the tables. Everything here is best effort. */
 function prepareDatabase() {
   if (PG.test(url)) {
-    writeFileSync(schemaPath, originalSchema.replace('provider = "sqlite"', 'provider = "postgresql"'));
+    writeFileSync(schemaPath, toPostgres(originalSchema));
     process.env.DATABASE_URL = url;
     console.log("[vercel-build] Postgres database detected; Prisma provider switched to postgresql");
   } else if (url) {
@@ -97,19 +115,36 @@ function prepareDatabase() {
 }
 
 // Nothing about the database may fail the deployment. If preparing it throws for any reason —
-// an unusable connection string, a provider swap Prisma rejects — fall all the way back to the
-// bundled SQLite template, which always works, and let the app explain itself on screen.
+// an unusable connection string, a provider swap Prisma rejects — fall back to something that
+// still builds, and let the app explain itself on screen.
+//
+// Which fallback depends on what is set. The SQLite template is only a fallback when there is no
+// Postgres URL: the app reads DATABASE_URL again at runtime, so a SQLite client next to a live
+// postgres:// variable cannot work, and fails in a way that reads like an unreachable database.
+// With a Postgres URL present, keep the Postgres client and let the connection speak for itself.
 try {
   prepareDatabase();
 } catch (error) {
-  console.warn(`\n[vercel-build] WARNING: database preparation failed (${error?.message ?? error}). Falling back to the bundled SQLite template so the deployment still succeeds.\n`);
-  writeFileSync(schemaPath, originalSchema);
-  process.env.DATABASE_URL = "file:./template.db";
-  run("npx prisma generate");
-  try {
-    run("npx prisma db push --skip-generate");
-  } catch {
-    console.warn("[vercel-build] WARNING: could not create the fallback template database either.");
+  const reason = error?.message ?? error;
+  if (PG.test(url)) {
+    console.warn(`\n[vercel-build] WARNING: database preparation failed (${reason}). A Postgres URL is set, so the build keeps the postgresql client rather than falling back to SQLite — the app will report the connection itself.\n`);
+    try {
+      writeFileSync(schemaPath, toPostgres(originalSchema));
+      process.env.DATABASE_URL = url;
+      run("npx prisma generate");
+    } catch (second) {
+      console.warn(`[vercel-build] WARNING: could not generate a Postgres client either (${second?.message ?? second}).`);
+    }
+  } else {
+    console.warn(`\n[vercel-build] WARNING: database preparation failed (${reason}). Falling back to the bundled SQLite template so the deployment still succeeds.\n`);
+    writeFileSync(schemaPath, originalSchema);
+    process.env.DATABASE_URL = "file:./template.db";
+    run("npx prisma generate");
+    try {
+      run("npx prisma db push --skip-generate");
+    } catch {
+      console.warn("[vercel-build] WARNING: could not create the fallback template database either.");
+    }
   }
 }
 

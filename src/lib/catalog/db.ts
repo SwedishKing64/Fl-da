@@ -73,6 +73,7 @@ export type DatabaseStatus =
   | { state: "ephemeral"; source: string }
   | { state: "missing"; source?: undefined }
   | { state: "unreachable"; source: string; detail: string }
+  | { state: "wrong-provider"; source: string; detail: string }
   | { state: "no-tables"; source: string; detail: string };
 
 /** Strip any credentials Prisma may have echoed back before showing an error on screen. */
@@ -86,6 +87,18 @@ function scrub(error: unknown): string {
   return firstMeaningfulLine.replace(/\/\/[^@\s/]*@/g, "//***@").slice(0, 240);
 }
 
+/**
+ * Prisma rejecting the URL's protocol, rather than failing to reach it.
+ *
+ * It means the client was generated against one datasource provider and handed another's URL —
+ * a build problem, not a database problem. It is worth telling apart, because it otherwise reads
+ * as an unreachable database and sends someone to check a database that is perfectly healthy.
+ */
+function isProviderMismatch(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /the URL must start with the protocol/i.test(message);
+}
+
 export async function databaseStatus(): Promise<DatabaseStatus> {
   const resolved = resolveDatabaseUrl();
   if (!resolved) return { state: "missing" };
@@ -93,6 +106,7 @@ export async function databaseStatus(): Promise<DatabaseStatus> {
   try {
     await prisma.$queryRaw`SELECT 1`;
   } catch (error) {
+    if (isProviderMismatch(error)) return { state: "wrong-provider", source, detail: scrub(error) };
     return { state: "unreachable", source, detail: scrub(error) };
   }
   try {

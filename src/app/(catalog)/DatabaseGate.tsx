@@ -15,6 +15,7 @@ const TITLES: Record<DatabaseStatus["state"], string> = {
   ephemeral: "Connect a database to finish setup",
   missing: "No database is configured",
   unreachable: "The database cannot be reached",
+  "wrong-provider": "This build was made for the wrong kind of database",
   "no-tables": "The database is connected but empty",
 };
 
@@ -34,7 +35,7 @@ function Diagnostics({ status }: { status: DatabaseStatus }) {
   const branch = process.env.VERCEL_GIT_COMMIT_REF ?? "unknown";
   const present = databaseEnvNamesPresent();
   const accelerate = accelerateEnvName();
-  const detail = status.state === "unreachable" || status.state === "no-tables" ? status.detail : null;
+  const detail = status.state === "unreachable" || status.state === "no-tables" || status.state === "wrong-provider" ? status.detail : null;
   return (
     <div className="mt-4 rounded-lg border border-[var(--line-soft)] bg-[var(--canvas)] p-3 text-xs text-[var(--ink-2)]">
       <div className="font-semibold uppercase tracking-wide text-[var(--ink-soft)]">Diagnostics</div>
@@ -94,6 +95,25 @@ export async function databaseGate(): Promise<ReactElement | null> {
             <>Check that this project&apos;s connection string is a <strong>direct</strong> one, not a pooled or Accelerate URL.</>,
             <>Redeploy. The build creates the tables when it can reach the database directly.</>,
             <>Or create them yourself: <code className="rounded bg-neutral-100 px-1">npx prisma db push</code> with that connection string.</>,
+          ]}
+        />
+        <Diagnostics status={status} />
+      </Wrap>
+    );
+  }
+
+  if (status.state === "wrong-provider") {
+    return (
+      <Wrap title={title}>
+        <p className="mt-2 text-sm text-[var(--ink-2)]">
+          The database itself is fine. The build produced a Prisma client for SQLite and then handed it a
+          Postgres connection string, so the two do not match. Nothing here is worth changing in your
+          database provider — it is the deployment that needs redoing.
+        </p>
+        <Steps
+          items={[
+            <>Redeploy this project, so the build runs again against the Postgres URL it can now see.</>,
+            <>If it comes back to this screen, open the build log and look for the <code className="rounded bg-neutral-100 px-1">[vercel-build]</code> lines — they say which variable was used and whether the provider was switched.</>,
           ]}
         />
         <Diagnostics status={status} />

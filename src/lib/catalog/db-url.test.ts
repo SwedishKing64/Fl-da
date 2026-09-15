@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { accelerateEnvName, databaseEnvNamesPresent, directDatabaseUrl, findDatabaseUrl } from "./db-url";
 
@@ -55,5 +56,32 @@ describe("database url discovery", () => {
   it("prefers an explicitly unpooled variable for the schema push", () => {
     const direct = "postgresql://u:p@direct.example.com/main";
     expect(directDatabaseUrl({ DATABASE_URL: PG, POSTGRES_URL_NON_POOLING: direct })).toBe(direct);
+  });
+});
+
+describe("switching the checked-in schema to Postgres", () => {
+  // The build script rewrites prisma/schema.prisma before generating the client. It used to do it
+  // with a plain string replace, which hit the header comment above the datasource — the comment
+  // explains this very swap and quotes `provider = "sqlite"` verbatim. The datasource stayed on
+  // SQLite, Vercel shipped a SQLite client, and it met a postgres:// URL at runtime.
+  const DATASOURCE_PROVIDER = /(datasource\s+db\s*\{[^}]*?provider\s*=\s*)"sqlite"/;
+  const schema = readFileSync(new URL("../../../prisma/schema.prisma", import.meta.url), "utf8");
+
+  it("has the trap still in the file, so this test is testing something real", () => {
+    expect(schema.indexOf('provider = "sqlite"')).toBeLessThan(schema.indexOf("datasource db"));
+  });
+
+  it("switches the datasource and leaves the comment alone", () => {
+    const swapped = schema.replace(DATASOURCE_PROVIDER, '$1"postgresql"');
+    expect(swapped).toMatch(/datasource\s+db\s*\{[^}]*provider\s*=\s*"postgresql"/);
+    expect(swapped).not.toMatch(DATASOURCE_PROVIDER);
+    // The comment is documentation for a person; rewriting it makes it say nothing.
+    expect(swapped).toContain('`provider = "sqlite"` to `provider = "postgresql"`');
+  });
+
+  it("is what the build script actually runs", () => {
+    const script = readFileSync(new URL("../../../scripts/vercel-build.mjs", import.meta.url), "utf8");
+    expect(script).toContain(String(DATASOURCE_PROVIDER));
+    expect(script).not.toContain(`originalSchema.replace('provider = "sqlite"'`);
   });
 });

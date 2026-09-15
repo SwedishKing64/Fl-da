@@ -5,7 +5,7 @@ import { applyMapping, type Mapping, type MappingOptions } from "./mapping";
 import { productTitle, seoTitle } from "./titles";
 import { groupLineItems } from "./grouping";
 import type { CategoryRuleLike } from "./categorize";
-import { allocateFreight, exGstCostAud, priceVariant, selectRule, type PricingRuleLike } from "./pricing";
+import { allocateFreight, exGstCostAud, priceVariant, type PricingRuleLike } from "./pricing";
 import { generateCsv, type CsvProduct } from "./csv";
 import { toCsvProducts } from "./pipeline-pure";
 import { SKI_METAFIELDS, metafieldColumn, type AppSettings, type GstTreatment } from "./types";
@@ -93,10 +93,9 @@ export function runOffline(
 
   const allVariants = products.flatMap((p) => p.variants.map((v) => ({ p, v })));
   const freight = allocateFreight(batch.freightTotalAud, batch.freightMode, allVariants.map(({ v }) => ({ id: v.id, quantity: v.quantity, exGstCostAud: exGstCostAud(v.costPrice, v.gstTreatment as GstTreatment, v.fxRateToAud, settings.gstRate) })));
-  for (const { p, v } of allVariants) {
+  for (const { v } of allVariants) {
     v.freightPerUnitAud = freight[v.id] ?? 0;
-    const rule = selectRule(pricingRules, { category: p.category, brand: p.vendor, sku: v.sku, modelCode: "" });
-    const r = priceVariant({ costPrice: v.costPrice, gstTreatment: v.gstTreatment as GstTreatment, fxRateToAud: v.fxRateToAud, freightPerUnitAud: v.freightPerUnitAud, quantity: v.quantity, rule, retailOverride: v.retailOverride }, settings);
+    const r = priceVariant({ costPrice: v.costPrice, gstTreatment: v.gstTreatment as GstTreatment, fxRateToAud: v.fxRateToAud, freightPerUnitAud: v.freightPerUnitAud, quantity: v.quantity, retailOverride: v.retailOverride }, settings);
     Object.assign(v, { landedCostAud: r.landedCostAud, retailPrice: r.retailPrice, exGstRevenue: r.exGstRevenue, gstComponent: r.gstComponent, profitPerUnit: r.profitPerUnit, marginPct: r.marginPct, markupPct: r.markupPct, pricingRuleName: r.ruleName });
   }
 

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Field, INPUT, money, pct } from "@/app/(catalog)/ui";
-import { priceVariant, type PricingRuleLike } from "@/lib/catalog/pricing";
+import { priceVariant, retailFromRule, exGstCostAud, type PricingRuleLike } from "@/lib/catalog/pricing";
 import type { GstTreatment } from "@/lib/catalog/types";
 
 interface Props {
@@ -36,6 +36,10 @@ export function PriceCalculator({ settings }: Props) {
 
   const result = useMemo(() => {
     try {
+      // Typing a price asks "what margin is that?"; dragging the margin asks "what price is that?".
+      // Both end up pricing a known figure, because that is the only way this engine sets a price.
+      const landed = exGstCostAud(cost || 0, gst, 1, settings.gstRate) + (freight || 0);
+      const retail = usingTypedPrice ? typedPrice : retailFromRule(landed, rule, settings);
       return priceVariant(
         {
           costPrice: cost || 0,
@@ -43,8 +47,7 @@ export function PriceCalculator({ settings }: Props) {
           fxRateToAud: 1,
           freightPerUnitAud: freight || 0,
           quantity: qty || 1,
-          rule,
-          retailOverride: usingTypedPrice ? typedPrice : null,
+          retailOverride: retail,
         },
         settings,
       );

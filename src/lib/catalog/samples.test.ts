@@ -16,7 +16,10 @@ const fixtures = buildFixtures();
 const expectedProfit = JSON.parse(readFileSync(path.join(SAMPLES, "expected/profit.json"), "utf8"));
 
 describe("sample invoices → expected Shopify CSV", () => {
-  for (const name of ["atomic", "volkl", "burton"] as const) {
+  // Only the Atomic sample carries a recommended retail column, and the price is the recommended
+  // retail — so it is the only one of the three that can produce a priced CSV at all. That is the
+  // point rather than a gap in the fixtures: the other two prove what a costs-only invoice does.
+  for (const name of ["atomic"] as const) {
     it(`${name}: CSV matches samples/expected/${name}.shopify.csv and passes the file validator`, () => {
       const result = fixtures.results[name];
       expect(result.errors).toEqual([]);
@@ -32,13 +35,23 @@ describe("sample invoices → expected Shopify CSV", () => {
     });
   }
 
+  for (const name of ["volkl", "burton"] as const) {
+    it(`${name}: an invoice with no recommended retail gets no price, and cannot be exported`, () => {
+      const result = fixtures.results[name];
+      const prices = result.products.flatMap((p) => p.variants.map((v) => v.retailPrice));
+      expect(prices.every((price) => price === 0)).toBe(true);
+      // Blocked, and the reason names the product rather than a rule that should have priced it.
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors[0]).toContain("No recommended retail on the invoice");
+    });
+  }
+
   it("atomic: the recommended retail is the price, and the profit follows from it", () => {
     const { products, summary } = fixtures.results.atomic;
     const skis = products.find((p) => p.handle === "atomic-bent-90-skis")!;
     expect(skis.option1Name).toBe("Length");
     expect(skis.variants.map((v) => v.option1Value)).toEqual(["166", "172", "178"]);
-    // The supplier's recommended retail sets the shelf price; the markup rules are what price a
-    // line that arrives without one.
+    // The supplier's recommended retail is the price. Nothing adjusts it.
     expect(skis.variants[0].retailPrice).toBe(999);
     expect(skis.variants[0].compareAtPrice).toBeNull(); // nothing to strike through at full price
     expect(skis.variants[0].profitPerUnit).toBe(458.18); // 908.18 ex-GST revenue − 450 landed
@@ -62,12 +75,12 @@ describe("sample invoices → expected Shopify CSV", () => {
     expect(griffon.variants.map((v) => v.option2Value)).toEqual(["100", "110"]);
   });
 
-  it("burton: GST-inclusive text invoice backs GST out of cost before markup", () => {
+  it("burton: GST-inclusive text invoice backs GST out of the cost", () => {
     const { products } = fixtures.results.burton;
     const board = products.find((p) => p.handle === "burton-custom-snowboard")!;
     expect(board.variants[0].landedCostAud).toBe(425); // 462 inc GST => 420 ex + 5 freight
-    expect(board.variants[0].retailPrice).toBe(779.99);
-    expect(board.variants[0].profitPerUnit).toBe(284.08);
+    // The cost is understood; the price is not, because this invoice never stated one.
+    expect(board.variants[0].retailPrice).toBe(0);
     // Everything the importer builds is a draft, whatever the invoice was.
     expect(board.status).toBe("draft");
     expect(board.published).toBe(false);

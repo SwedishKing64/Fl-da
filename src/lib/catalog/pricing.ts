@@ -4,13 +4,21 @@
 // results) and in the browser (live recalculation while a staff member edits the grid).
 //
 // Money flow for one unit:
+// The price is the supplier's recommended retail. Always. Whatever margin that leaves — 70% or
+// 1% — is the shop's business and not this program's to improve on, and a price nobody quoted is
+// not a price, it is a guess with a dollar sign in front of it. A product whose invoice carries no
+// recommended retail gets no price here; it is flagged, and somebody enters or looks one up.
+//
+// Money flow for one unit:
 //   invoice cost (any currency, any GST treatment)
 //     -> ex-GST cost in AUD  (GST on purchases is an input tax credit, so it's never a cost)
 //     -> + freight allocation           = LANDED COST
-//     -> apply margin/markup rule       = target ex-GST sell price
-//     -> + GST, round to price ending   = RETAIL PRICE (what goes into `Variant Price`)
+//   recommended retail (less any instructed discount) = RETAIL PRICE (`Variant Price`)
 //   ex-GST revenue = retail / (1 + GST)
 //   profit         = ex-GST revenue - landed cost      <- the true figure, GST backed out
+//
+// Margin and markup are still reported, because it is worth seeing what a line actually earns.
+// They are an observation about the price, never a way of setting it.
 
 import { roundCents } from "./money";
 import { discounted } from "./instructions";
@@ -41,14 +49,19 @@ export interface PricingInput {
   fxRateToAud: number; // AUD per 1 unit of costCurrency
   freightPerUnitAud: number;
   quantity: number;
-  rule: PricingRuleLike | null;
-  retailOverride?: number | null; // storefront price entered by staff (GST-inclusive when pricesIncludeGst)
+  /**
+   * The recommended retail, and so the price. From the invoice, from a web lookup, or typed in.
+   * Null means the product has no price yet — which is reported, not filled in.
+   */
+  retailOverride?: number | null;
   /** A batch-wide markdown, from a written instruction like "this is a closeout, 30% off". */
   discountPct?: number | null;
 }
 
 export interface PricingResult {
   landedCostAud: number;
+  /** True when no recommended retail is known, so there is no price to write. */
+  missingRetail: boolean;
   retailPrice: number; // storefront price written to CSV
   /**
    * What the product would have sold for, when it is selling for less — the strikethrough.
@@ -70,17 +83,6 @@ export interface PricingResult {
   ruleName: string | null;
 }
 
-export const FALLBACK_RULE: PricingRuleLike = {
-  id: "fallback",
-  name: "Fallback 40% margin",
-  scope: "DEFAULT",
-  matchValue: "",
-  mode: "MARGIN",
-  percent: 40,
-  roundTo: "0.99",
-  priority: -1000,
-  active: true,
-};
 
 /** Convert an invoice cost to an ex-GST AUD figure (before freight). */
 export function exGstCostAud(
@@ -94,6 +96,19 @@ export function exGstCostAud(
 }
 
 /** Target ex-GST sell price for a landed cost under a MARGIN or MARKUP rule. */
+/**
+ * What a margin or markup would price something at — the price calculator's question.
+ *
+ * Deliberately not part of pricing a product. It answers "what would I have to charge for 45%?",
+ * which is a useful thing to ask while deciding what to buy, and a terrible way to decide what to
+ * sell at when the supplier has already told you their recommended retail.
+ */
+export function retailFromRule(landedCostAud: number, rule: PricingRuleLike, settings: PricingSettings): number {
+  const exGst = targetExGstPrice(landedCostAud, rule);
+  const storefront = settings.pricesIncludeGst ? exGst * (1 + settings.gstRate) : exGst;
+  return applyRounding(storefront, rule.roundTo);
+}
+
 export function targetExGstPrice(landedCost: number, rule: PricingRuleLike): number {
   const pct = rule.percent / 100;
   if (rule.mode === "MARGIN") {
@@ -132,7 +147,6 @@ export function applyRounding(price: number, roundTo: string): number {
 
 export function priceVariant(input: PricingInput, settings: PricingSettings): PricingResult {
   const gst = settings.gstRate;
-  const rule = input.rule ?? FALLBACK_RULE;
   const qty = Math.max(0, input.quantity || 0);
 
   const landedCostAud = roundCents(
@@ -140,14 +154,10 @@ export function priceVariant(input: PricingInput, settings: PricingSettings): Pr
       (input.freightPerUnitAud || 0),
   );
 
-  let retailPrice: number;
-  if (input.retailOverride !== null && input.retailOverride !== undefined && input.retailOverride >= 0) {
-    retailPrice = roundCents(input.retailOverride);
-  } else {
-    const exGst = targetExGstPrice(landedCostAud, rule);
-    const storefront = settings.pricesIncludeGst ? exGst * (1 + gst) : exGst;
-    retailPrice = applyRounding(storefront, rule.roundTo);
-  }
+  // The recommended retail is the price. Nothing else sets one.
+  const known = input.retailOverride !== null && input.retailOverride !== undefined && input.retailOverride > 0;
+  const missingRetail = !known;
+  let retailPrice = known ? roundCents(input.retailOverride!) : 0;
 
   // A closeout is a share off whatever the price would have been — off the recommended retail on a
   // line that has one, off the marked-up price on a line that does not. It is the last thing that
@@ -166,6 +176,7 @@ export function priceVariant(input: PricingInput, settings: PricingSettings): Pr
 
   return {
     landedCostAud,
+    missingRetail,
     retailPrice,
     compareAtPrice,
     exGstRevenue,
@@ -177,7 +188,7 @@ export function priceVariant(input: PricingInput, settings: PricingSettings): Pr
     lineRevenueIncGst: roundCents((settings.pricesIncludeGst ? retailPrice : retailPrice * (1 + gst)) * qty),
     lowMargin: marginPct < settings.minMarginPct,
     negativeProfit: profitPerUnit < 0,
-    ruleName: rule.name,
+    ruleName: null,
   };
 }
 

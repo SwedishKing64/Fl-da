@@ -98,64 +98,70 @@
       "units": 11,
       "variants": 5,
       "products": 2,
-      "totalRetailIncGst": 10748.89,
-      "totalGst": 977.18,
-      "totalExGstRevenue": 9771.71,
+      "totalRetailIncGst": 0,
+      "totalGst": 0,
+      "totalExGstRevenue": 0,
       "totalLandedCost": 5859.19,
-      "totalNetProfit": 3912.52,
-      "averageMarginPct": 40,
+      "totalNetProfit": -5859.19,
+      "averageMarginPct": 0,
       "lowMarginVariants": 0,
-      "errors": 0,
+      "errors": 5,
       "warnings": 2
     },
     "variants": [
       {
         "sku": "V2410170",
         "landedCostAud": 868.61,
-        "retailPrice": 1592.99,
-        "exGstRevenue": 1448.17,
-        "gstComponent": 144.82,
-        "profitPerUnit": 579.56,
-        "marginPct": 40
+        "retailPrice": 0,
+        "exGstRevenue": 0,
+        "gstComponent": 0,
+        "profitPerUnit": -868.61,
+        "marginPct": 0
       },
       {
         "sku": "V2410177",
         "landedCostAud": 868.61,
-        "retailPrice": 1592.99,
-        "exGstRevenue": 1448.17,
-        "gstComponent": 144.82,
-        "profitPerUnit": 579.56,
-        "marginPct": 40
+        "retailPrice": 0,
+        "exGstRevenue": 0,
+        "gstComponent": 0,
+        "profitPerUnit": -868.61,
+        "marginPct": 0
       },
       {
         "sku": "V2410184",
         "landedCostAud": 868.61,
-        "retailPrice": 1592.99,
-        "exGstRevenue": 1448.17,
-        "gstComponent": 144.82,
-        "profitPerUnit": 579.56,
-        "marginPct": 40
+        "retailPrice": 0,
+        "exGstRevenue": 0,
+        "gstComponent": 0,
+        "profitPerUnit": -868.61,
+        "marginPct": 0
       },
       {
         "sku": "M7201100",
         "landedCostAud": 252.69,
-        "retailPrice": 463.99,
-        "exGstRevenue": 421.81,
-        "gstComponent": 42.18,
-        "profitPerUnit": 169.12,
-        "marginPct": 40.1
+        "retailPrice": 0,
+        "exGstRevenue": 0,
+        "gstComponent": 0,
+        "profitPerUnit": -252.69,
+        "marginPct": 0
       },
       {
         "sku": "M7201110",
         "landedCostAud": 252.69,
-        "retailPrice": 463.99,
-        "exGstRevenue": 421.81,
-        "gstComponent": 42.18,
-        "profitPerUnit": 169.12,
-        "marginPct": 40.1
+        "retailPrice": 0,
+        "exGstRevenue": 0,
+        "gstComponent": 0,
+        "profitPerUnit": -252.69,
+        "marginPct": 0
       }
     ],
-    "errors": [],
+    "errors": [
+      "M6 Mantra 2026 / V2410170: No recommended retail on the invoice — enter one, or use Find descriptions to look it up",
+      "M6 Mantra 2026 / V2410177: No recommended retail on the invoice — enter one, or use Find descriptions to look it up",
+      "M6 Mantra 2026 / V2410184: No recommended retail on the invoice — enter one, or use Find descriptions to look it up",
+      "Griffon 13 ID Bindings 2026 / M7201100: No recommended retail on the invoice — enter one, or use Find descriptions to look it up",
+      "Griffon 13 ID Bindings 2026 / M7201110: No recommended retail on the invoice — enter one, or use Find descriptions to look it up"
+    ],
     "warnings": [
       "M6 Mantra 2026: No image - add one or export anyway",
       "Griffon 13 ID Bindings 2026: No image - add one or export anyway"
@@ -166,64 +172,70 @@
       "units": 11,
       "variants": 5,
       "products": 2,
-      "totalRetailIncGst": 6654.89,
-      "totalGst": 605.01,
-      "totalExGstRevenue": 6049.88,
+      "totalRetailIncGst": 0,
+      "totalGst": 0,
+      "totalExGstRevenue": 0,
       "totalLandedCost": 3625,
-      "totalNetProfit": 2424.88,
-      "averageMarginPct": 40.1,
+      "totalNetProfit": -3625,
+      "averageMarginPct": 0,
       "lowMarginVariants": 0,
-      "errors": 0,
+      "errors": 5,
       "warnings": 2
     },
     "variants": [
       {
         "sku": "BUR-CUST-154",
         "landedCostAud": 425,
-        "retailPrice": 779.99,
-        "exGstRevenue": 709.08,
-        "gstComponent": 70.91,
-        "profitPerUnit": 284.08,
-        "marginPct": 40.1
+        "retailPrice": 0,
+        "exGstRevenue": 0,
+        "gstComponent": 0,
+        "profitPerUnit": -425,
+        "marginPct": 0
       },
       {
         "sku": "BUR-CUST-158",
         "landedCostAud": 425,
-        "retailPrice": 779.99,
-        "exGstRevenue": 709.08,
-        "gstComponent": 70.91,
-        "profitPerUnit": 284.08,
-        "marginPct": 40.1
+        "retailPrice": 0,
+        "exGstRevenue": 0,
+        "gstComponent": 0,
+        "profitPerUnit": -425,
+        "marginPct": 0
       },
       {
         "sku": "BUR-CUST-162",
         "landedCostAud": 425,
-        "retailPrice": 779.99,
-        "exGstRevenue": 709.08,
-        "gstComponent": 70.91,
-        "profitPerUnit": 284.08,
-        "marginPct": 40.1
+        "retailPrice": 0,
+        "exGstRevenue": 0,
+        "gstComponent": 0,
+        "profitPerUnit": -425,
+        "marginPct": 0
       },
       {
         "sku": "BUR-CART-M",
         "landedCostAud": 215,
-        "retailPrice": 394.99,
-        "exGstRevenue": 359.08,
-        "gstComponent": 35.91,
-        "profitPerUnit": 144.08,
-        "marginPct": 40.1
+        "retailPrice": 0,
+        "exGstRevenue": 0,
+        "gstComponent": 0,
+        "profitPerUnit": -215,
+        "marginPct": 0
       },
       {
         "sku": "BUR-CART-L",
         "landedCostAud": 215,
-        "retailPrice": 394.99,
-        "exGstRevenue": 359.08,
-        "gstComponent": 35.91,
-        "profitPerUnit": 144.08,
-        "marginPct": 40.1
+        "retailPrice": 0,
+        "exGstRevenue": 0,
+        "gstComponent": 0,
+        "profitPerUnit": -215,
+        "marginPct": 0
       }
     ],
-    "errors": [],
+    "errors": [
+      "Custom Snowboard / BUR-CUST-154: No recommended retail on the invoice — enter one, or use Find descriptions to look it up",
+      "Custom Snowboard / BUR-CUST-158: No recommended retail on the invoice — enter one, or use Find descriptions to look it up",
+      "Custom Snowboard / BUR-CUST-162: No recommended retail on the invoice — enter one, or use Find descriptions to look it up",
+      "Cartel Bindings / BUR-CART-M: No recommended retail on the invoice — enter one, or use Find descriptions to look it up",
+      "Cartel Bindings / BUR-CART-L: No recommended retail on the invoice — enter one, or use Find descriptions to look it up"
+    ],
     "warnings": [
       "Custom Snowboard: No image - add one or export anyway",
       "Cartel Bindings: No image - add one or export anyway"

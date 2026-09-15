@@ -5,26 +5,18 @@ import { DEFAULT_CATEGORY_RULES } from "./categorize";
 import { DEFAULT_TAG_RULES } from "./rules";
 import { isValidType } from "./taxonomy";
 
-export const DEFAULT_PRICING_RULES = [
-  { name: "Default 40% margin", scope: "DEFAULT", matchValue: "", mode: "MARGIN", percent: 40, roundTo: "0.99", priority: 0 },
-  { name: "Skis 40% margin", scope: "CATEGORY", matchValue: "skis", mode: "MARGIN", percent: 40, roundTo: "0.99", priority: 0 },
-  { name: "Snowboards 40% margin", scope: "CATEGORY", matchValue: "snowboards", mode: "MARGIN", percent: 40, roundTo: "0.99", priority: 0 },
-  { name: "Boots 38% margin", scope: "CATEGORY", matchValue: "boots", mode: "MARGIN", percent: 38, roundTo: "0.99", priority: 0 },
-  { name: "Bindings 40% margin", scope: "CATEGORY", matchValue: "bindings", mode: "MARGIN", percent: 40, roundTo: "0.99", priority: 0 },
-  { name: "Apparel 45% margin", scope: "CATEGORY", matchValue: "apparel", mode: "MARGIN", percent: 45, roundTo: "0.99", priority: 0 },
-  { name: "Accessories keystone", scope: "CATEGORY", matchValue: "accessories", mode: "MARKUP", percent: 100, roundTo: "0.99", priority: 0 },
-  { name: "Helmets & goggles 45% margin", scope: "CATEGORY", matchValue: "helmets", mode: "MARGIN", percent: 45, roundTo: "0.99", priority: 0 },
-  { name: "Goggles 45% margin", scope: "CATEGORY", matchValue: "goggles", mode: "MARGIN", percent: 45, roundTo: "0.99", priority: 0 },
-];
+/**
+ * No pricing rules. The price is the supplier's recommended retail, so there is nothing for a
+ * margin rule to decide — and a seeded "45% margin" is exactly the kind of invented price this
+ * shop does not want. Kept as an empty list rather than deleted so the seeding step below still
+ * reads straightforwardly, and so an existing shop's rules are cleared rather than left behind.
+ */
+export const DEFAULT_PRICING_RULES: { name: string; scope: string; matchValue: string; mode: string; percent: number; roundTo: string; priority: number }[] = [];
 
 export async function seedDefaults(): Promise<{ pricingRules: number; categoryRules: number; tagRules: number }> {
-  let pricingRules = 0;
-  for (const r of DEFAULT_PRICING_RULES) {
-    const existing = await prisma.pricingRule.findFirst({ where: { name: r.name } });
-    if (existing) continue;
-    await prisma.pricingRule.create({ data: r });
-    pricingRules++;
-  }
+  // Clear any margin rules a previous version seeded: nothing prices off them now, and leaving
+  // them in place only invites someone to wonder why a 45% rule exists and does nothing.
+  const { count: pricingRules } = await prisma.pricingRule.deleteMany({});
   // A category rule that names a Type the shop does not have writes that Type onto every product
   // it matches — "Apparel" reached the CSV that way, on a shop whose garments are Snow Clothing.
   // The rules are seeded once and then owned by whoever edits them, so only the invalid ones are

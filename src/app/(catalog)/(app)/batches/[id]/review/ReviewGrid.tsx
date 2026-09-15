@@ -27,7 +27,7 @@ import {
 import { Alert, Badge, Button, INPUT, INPUT_INLINE, cx, money, pct } from "@/app/(catalog)/ui";
 import type { ReviewData } from "@/lib/catalog/pipeline";
 import type { ReviewProduct, ReviewVariant } from "@/lib/catalog/review-types";
-import { priceVariant, selectRule, type PricingRuleLike } from "@/lib/catalog/pricing";
+import { priceVariant } from "@/lib/catalog/pricing";
 import { CATEGORIES, type GstTreatment, type RowFlag } from "@/lib/catalog/types";
 
 type VariantField = "sku" | "barcode" | "option1Value" | "option2Value" | "option3Value" | "quantity" | "costPrice" | "gstTreatment" | "freightPerUnitAud" | "retailOverride" | "compareAtPrice" | "grams" | "pricingRuleId";
@@ -60,8 +60,6 @@ const VARIANT_COLS: Col[] = [
   { key: "gstComponent", label: "GST", num: true, width: 70 },
   { key: "profitPerUnit", label: "Profit/u", num: true, width: 80 },
   { key: "marginPct", label: "Margin", num: true, width: 70 },
-  { key: "markupPct", label: "Markup", num: true, width: 70 },
-  { key: "pricingRuleId", label: "Rule", editable: true, kind: "select", width: 150 },
 ];
 
 const FLAG_LABELS: Record<string, string> = {
@@ -118,10 +116,6 @@ export function ReviewGrid({ initial, batchId }: { initial: ReviewData; batchId:
     setData(fresh);
   }, [batchId]);
 
-  const rules: PricingRuleLike[] = useMemo(
-    () => data.rules.map((r) => ({ id: r.id, name: r.name, scope: r.scope as PricingRuleLike["scope"], matchValue: r.matchValue, mode: r.mode as PricingRuleLike["mode"], percent: r.percent, roundTo: r.roundTo, priority: 0, active: true })),
-    [data.rules],
-  );
 
   const brands = useMemo(() => Array.from(new Set(data.products.map((p) => p.vendor).filter(Boolean))).sort(), [data.products]);
 
@@ -159,12 +153,11 @@ export function ReviewGrid({ initial, batchId }: { initial: ReviewData; batchId:
         variants: p.variants.map((v) => {
           if (v.id !== variantId) return v;
           const next = { ...v, ...patch };
-          const rule = (next.pricingRuleId && rules.find((r) => r.id === next.pricingRuleId)) || selectRule(rules, { category: p.category, brand: p.vendor, sku: next.sku, modelCode: "" });
           const r = priceVariant(
-            { costPrice: next.costPrice, gstTreatment: next.gstTreatment as GstTreatment, fxRateToAud: next.fxRateToAud, freightPerUnitAud: next.freightPerUnitAud, quantity: next.quantity, rule, retailOverride: next.retailOverride },
+            { costPrice: next.costPrice, gstTreatment: next.gstTreatment as GstTreatment, fxRateToAud: next.fxRateToAud, freightPerUnitAud: next.freightPerUnitAud, quantity: next.quantity, retailOverride: next.retailOverride },
             { gstRate: d.settings.gstRate, pricesIncludeGst: d.settings.pricesIncludeGst, minMarginPct: d.settings.minMarginPct },
           );
-          return { ...next, landedCostAud: r.landedCostAud, retailPrice: r.retailPrice, exGstRevenue: r.exGstRevenue, gstComponent: r.gstComponent, profitPerUnit: r.profitPerUnit, marginPct: r.marginPct, markupPct: r.markupPct, pricingRuleName: rule?.name ?? "Fallback 40% margin" };
+          return { ...next, landedCostAud: r.landedCostAud, retailPrice: r.retailPrice, exGstRevenue: r.exGstRevenue, gstComponent: r.gstComponent, profitPerUnit: r.profitPerUnit, marginPct: r.marginPct, markupPct: r.markupPct, pricingRuleName: null };
         }),
       })),
     }));
@@ -344,7 +337,7 @@ export function ReviewGrid({ initial, batchId }: { initial: ReviewData; batchId:
           <strong>{selected.size} selected</strong>
           <select value={bulk.field} onChange={(e) => setBulk({ field: e.target.value, value: "" })} className={`${INPUT_INLINE} w-44`}>
             <option value="addTag">Add tag</option><option value="addCollection">Add collection</option><option value="vendor">Set vendor</option><option value="productType">Set product type</option>
-            <option value="category">Set category</option><option value="status">Set status</option><option value="pricingRuleId">Apply pricing rule</option><option value="gstTreatment">Set cost GST treatment</option>
+            <option value="category">Set category</option><option value="status">Set status</option><option value="gstTreatment">Set cost GST treatment</option>
             <option value="clearOverride">Clear retail overrides</option><option value="dismissWarnings">Dismiss warnings</option><option value="restoreWarnings">Restore dismissed warnings</option>
           </select>
           {["addTag", "addCollection", "vendor", "productType"].includes(bulk.field) && <input value={bulk.value} onChange={(e) => setBulk({ ...bulk, value: e.target.value })} className={`${INPUT_INLINE} w-48`} placeholder="Value" />}

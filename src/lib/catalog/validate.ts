@@ -69,7 +69,10 @@ export function validateReview(products: ReviewProduct[], ctx: ValidationContext
     for (const v of p.variants) {
       const vf: RowFlag[] = [];
       const dismissed = new Set(v.warningsDismissed);
-      if (!(v.retailPrice > 0)) vf.push({ code: "MISSING_PRICE", severity: "error", message: "No retail price" });
+      // The price is the supplier's recommended retail and nothing invents one, so a line without
+      // it has no price at all. Blocking, because a product priced at nothing is worse in Shopify
+      // than a product that never got there.
+      if (!(v.retailPrice > 0)) vf.push({ code: "MISSING_PRICE", severity: "error", message: "No recommended retail on the invoice — enter one, or use Find descriptions to look it up" });
       if (!(v.costPrice > 0)) vf.push({ code: "MISSING_COST", severity: "warning", message: "No cost price - profit cannot be calculated" });
       const sku = v.sku.trim().toLowerCase();
       if (!sku) vf.push({ code: "MISSING_SKU", severity: "warning", message: "No SKU" });

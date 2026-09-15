@@ -12,7 +12,7 @@ import { DEFAULT_CATEGORY_RULES, type CategoryRuleLike } from "./categorize";
 import { repairCategoryRules } from "./seed";
 import { applyTagRules, type TagRuleLike } from "./rules";
 import { applyTemplates, type ProductTemplateLike } from "./templates";
-import { allocateFreight, exGstCostAud, priceVariant, selectRule, type PricingRuleLike } from "./pricing";
+import { allocateFreight, exGstCostAud, priceVariant, type PricingRuleLike } from "./pricing";
 import { getSettings } from "./settings";
 import { checkImageUrl, findLibraryImages, recordLibraryImages } from "./images";
 import { generateCsvParts, validateCsvFile, validateProducts } from "./csv";
@@ -557,10 +557,9 @@ type VariantRow = { costPrice: number; gstTreatment: string; fxRateToAud: number
 type ProductRow = { category: string; vendor: string };
 
 export function computePricing(v: VariantRow, p: ProductRow, rules: PricingRuleLike[], settings: AppSettings, discountPct: number | null = null) {
-  const pinned = v.pricingRuleId ? rules.find((r) => r.id === v.pricingRuleId) ?? null : null;
-  const rule = pinned ?? selectRule(rules, { category: p.category, brand: p.vendor, sku: v.sku, modelCode: "" });
+  void rules; void p; // kept in the signature while callers are unchanged; nothing prices off a rule
   const r = priceVariant(
-    { costPrice: v.costPrice, gstTreatment: v.gstTreatment as GstTreatment, fxRateToAud: v.fxRateToAud, freightPerUnitAud: v.freightPerUnitAud, quantity: v.quantity, rule, retailOverride: v.retailOverride, discountPct },
+    { costPrice: v.costPrice, gstTreatment: v.gstTreatment as GstTreatment, fxRateToAud: v.fxRateToAud, freightPerUnitAud: v.freightPerUnitAud, quantity: v.quantity, retailOverride: v.retailOverride, discountPct },
     { gstRate: settings.gstRate, pricesIncludeGst: settings.pricesIncludeGst, minMarginPct: settings.minMarginPct },
   );
   return {
@@ -633,7 +632,6 @@ export async function loadReview(batchId: string): Promise<ReviewData> {
     orderBy: { sortOrder: "asc" },
     include: { variants: { orderBy: { sortOrder: "asc" } }, images: { orderBy: { position: "asc" } } },
   });
-  const ruleNames = new Map(rules.map((r) => [r.id, r.name]));
   const view: ReviewProduct[] = products.map((p) => ({
     id: p.id,
     handle: p.handle,
@@ -658,8 +656,6 @@ export async function loadReview(batchId: string): Promise<ReviewData> {
     shopifyProductId: p.shopifyProductId,
     images: p.images.map((i) => ({ id: i.id, url: i.url, position: i.position, variantId: i.variantId, source: i.source, validated: i.validated })),
     variants: p.variants.map<ReviewVariant>((v) => {
-      const pinned = v.pricingRuleId ? ruleNames.get(v.pricingRuleId) ?? null : null;
-      const auto = selectRule(rules, { category: p.category, brand: p.vendor, sku: v.sku, modelCode: "" });
       return {
         id: v.id,
         productId: p.id,
@@ -676,7 +672,7 @@ export async function loadReview(batchId: string): Promise<ReviewData> {
         fxRateToAud: v.fxRateToAud,
         freightPerUnitAud: v.freightPerUnitAud,
         pricingRuleId: v.pricingRuleId,
-        pricingRuleName: pinned ?? auto?.name ?? "Fallback 40% margin",
+        pricingRuleName: null, // nothing prices off a rule; the price is the recommended retail
         retailOverride: v.retailOverride,
         compareAtPrice: v.compareAtPrice,
         landedCostAud: v.landedCostAud,

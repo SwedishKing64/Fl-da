@@ -36,7 +36,7 @@ describe("GST back-out", () => {
   it("profit is ex-GST revenue minus landed cost, not retail minus cost", () => {
     // Landed $300, 40% margin => ex-GST sell 500, retail 550 inc GST.
     const r = priceVariant(
-      { costPrice: 300, gstTreatment: "EXCLUSIVE", fxRateToAud: 1, freightPerUnitAud: 0, quantity: 1, rule: margin40 },
+      { costPrice: 300, gstTreatment: "EXCLUSIVE", fxRateToAud: 1, freightPerUnitAud: 0, quantity: 1, retailOverride: 550 },
       settings,
     );
     expect(r.landedCostAud).toBe(300);
@@ -51,7 +51,7 @@ describe("GST back-out", () => {
 
   it("supports GST-exclusive storefront pricing", () => {
     const r = priceVariant(
-      { costPrice: 300, gstTreatment: "EXCLUSIVE", fxRateToAud: 1, freightPerUnitAud: 0, quantity: 1, rule: margin40 },
+      { costPrice: 300, gstTreatment: "EXCLUSIVE", fxRateToAud: 1, freightPerUnitAud: 0, quantity: 1, retailOverride: 500 },
       { ...settings, pricesIncludeGst: false },
     );
     expect(r.retailPrice).toBe(500);
@@ -86,12 +86,12 @@ describe("rounding", () => {
     expect(applyRounding(101.456, "NONE")).toBe(101.46);
   });
 
-  it("keystone accessory ends in .99", () => {
+  it("prices a keystone accessory to end in .99", () => {
     const r = priceVariant(
-      { costPrice: 20, gstTreatment: "EXCLUSIVE", fxRateToAud: 1, freightPerUnitAud: 0, quantity: 3, rule: keystone },
+      { costPrice: 20, gstTreatment: "EXCLUSIVE", fxRateToAud: 1, freightPerUnitAud: 0, quantity: 3, retailOverride: 44.99 },
       settings,
     );
-    // ex-GST 40 => 44.00 inc GST => 44.99
+    // keystone on a $20 cost gives ex-GST 40 => 44.00 inc GST => 44.99
     expect(r.retailPrice).toBe(44.99);
     expect(r.exGstRevenue).toBe(40.9);
     expect(r.profitPerUnit).toBe(20.9);
@@ -101,9 +101,9 @@ describe("rounding", () => {
 });
 
 describe("override, freight, warnings", () => {
-  it("recalculates profit from a manual retail override", () => {
+  it("recalculates profit from the retail price it is given", () => {
     const r = priceVariant(
-      { costPrice: 300, gstTreatment: "EXCLUSIVE", fxRateToAud: 1, freightPerUnitAud: 0, quantity: 1, rule: margin40, retailOverride: 399 },
+      { costPrice: 300, gstTreatment: "EXCLUSIVE", fxRateToAud: 1, freightPerUnitAud: 0, quantity: 1, retailOverride: 399 },
       settings,
     );
     expect(r.retailPrice).toBe(399);
@@ -114,9 +114,9 @@ describe("override, freight, warnings", () => {
     expect(r.negativeProfit).toBe(false);
   });
 
-  it("flags negative profit when override is below landed cost", () => {
+  it("flags negative profit when the retail is below landed cost", () => {
     const r = priceVariant(
-      { costPrice: 300, gstTreatment: "EXCLUSIVE", fxRateToAud: 1, freightPerUnitAud: 0, quantity: 1, rule: margin40, retailOverride: 200 },
+      { costPrice: 300, gstTreatment: "EXCLUSIVE", fxRateToAud: 1, freightPerUnitAud: 0, quantity: 1, retailOverride: 200 },
       settings,
     );
     expect(r.profitPerUnit).toBe(-118.18);
@@ -125,7 +125,7 @@ describe("override, freight, warnings", () => {
 
   it("adds freight into landed cost", () => {
     const r = priceVariant(
-      { costPrice: 100, gstTreatment: "NONE", fxRateToAud: 1.5, freightPerUnitAud: 10, quantity: 1, rule: margin40 },
+      { costPrice: 100, gstTreatment: "NONE", fxRateToAud: 1.5, freightPerUnitAud: 10, quantity: 1, retailOverride: 293.33 },
       settings,
     );
     expect(r.landedCostAud).toBe(160);
@@ -164,8 +164,8 @@ describe("rule selection", () => {
 
 describe("batch summary", () => {
   it("sums GST-inclusive revenue, GST, landed cost and true net profit", () => {
-    const a = priceVariant({ costPrice: 300, gstTreatment: "EXCLUSIVE", fxRateToAud: 1, freightPerUnitAud: 0, quantity: 2, rule: margin40 }, settings);
-    const b = priceVariant({ costPrice: 20, gstTreatment: "EXCLUSIVE", fxRateToAud: 1, freightPerUnitAud: 0, quantity: 3, rule: keystone }, settings);
+    const a = priceVariant({ costPrice: 300, gstTreatment: "EXCLUSIVE", fxRateToAud: 1, freightPerUnitAud: 0, quantity: 2, retailOverride: 550 }, settings);
+    const b = priceVariant({ costPrice: 20, gstTreatment: "EXCLUSIVE", fxRateToAud: 1, freightPerUnitAud: 0, quantity: 3, retailOverride: 44.99 }, settings);
     const s = summariseBatch([
       { quantity: 2, result: a },
       { quantity: 3, result: b },
@@ -212,11 +212,12 @@ describe("the strikethrough price", () => {
     expect(priceVariant({ ...base, retailOverride: 999.95, discountPct: 0 }, settings).compareAtPrice).toBeNull();
   });
 
-  it("marks down from the priced-up figure when the invoice carried no recommended retail", () => {
-    const full = priceVariant({ ...base, retailOverride: null, discountPct: null }, settings);
+  it("has nothing to mark down when the invoice carried no recommended retail", () => {
+    // There is no priced-up figure to discount from, because nothing prices anything up.
     const cut = priceVariant({ ...base, retailOverride: null, discountPct: 20 }, settings);
-    expect(cut.compareAtPrice).toBeCloseTo(full.retailPrice, 2);
-    expect(cut.retailPrice).toBeLessThan(full.retailPrice);
+    expect(cut.retailPrice).toBe(0);
+    expect(cut.compareAtPrice).toBeNull();
+    expect(cut.missingRetail).toBe(true);
   });
 
   it("prices the profit off what the shop actually takes, not the compare-at", () => {
@@ -224,5 +225,36 @@ describe("the strikethrough price", () => {
     expect(r.retailPrice).toBeCloseTo(500, 2);
     expect(r.exGstRevenue).toBeCloseTo(454.55, 1);
     expect(r.profitPerUnit).toBeCloseTo(-45.45, 1); // cost 500 ex-GST against 454.55 taken
+  });
+});
+
+
+describe("the price is the supplier's recommended retail", () => {
+  const settings = { gstRate: 0.1, pricesIncludeGst: true, minMarginPct: 25 };
+  const base = { costPrice: 500, gstTreatment: "EXCLUSIVE" as const, fxRateToAud: 1, freightPerUnitAud: 0, quantity: 1 };
+
+  it("uses the recommended retail whatever margin it leaves", () => {
+    // A thin one and a fat one. Neither is improved on: the shop quoted it, so it is the price.
+    expect(priceVariant({ ...base, retailOverride: 505 }, settings).retailPrice).toBe(505);
+    expect(priceVariant({ ...base, retailOverride: 2500 }, settings).retailPrice).toBe(2500);
+  });
+
+  it("reports the margin without touching the price", () => {
+    const thin = priceVariant({ ...base, retailOverride: 505 }, settings);
+    expect(thin.retailPrice).toBe(505);
+    expect(thin.lowMargin).toBe(true); // said out loud, and left alone
+    expect(thin.marginPct).toBeLessThan(25);
+  });
+
+  it("gives no price at all when no recommended retail is known", () => {
+    const none = priceVariant({ ...base, retailOverride: null }, settings);
+    expect(none.retailPrice).toBe(0);
+    expect(none.missingRetail).toBe(true);
+    // Which the validator blocks the export on, rather than shipping an invented number.
+    expect(none.ruleName).toBeNull();
+  });
+
+  it("treats a zero recommended retail as no price, not a free product", () => {
+    expect(priceVariant({ ...base, retailOverride: 0 }, settings).missingRetail).toBe(true);
   });
 });

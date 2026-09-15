@@ -87,7 +87,9 @@ describe("grouping", () => {
     const products = groupLineItems(items, DEFAULT_CATEGORY_RULES);
     expect(products).toHaveLength(2);
     const skis = products[0];
-    expect(skis.title).toBe("Atomic Bent 90 Skis");
+    // The Title column carries the product's name, not its brand: that is the Vendor column's job.
+    expect(skis.title).toBe("Bent 90 Skis");
+    expect(skis.brand).toBe("Atomic");
     expect(skis.handle).toBe("atomic-bent-90-skis");
     expect(skis.category).toBe("skis");
     expect(skis.productType).toBe("Skis");
@@ -97,6 +99,6 @@ describe("grouping", () => {
     expect(skis.variants[1].item.quantity).toBe(3); // duplicate sku line merged
     expect(skis.metafields.length_cm).toBe("166, 172");
     expect(skis.tags).toContain("Atomic");
-    expect(products[1].title).toBe("Acme Beanie");
+    expect(products[1].title).toBe("Beanie");
   });
 });

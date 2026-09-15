@@ -1,6 +1,7 @@
 // Server-side orchestration: ingest -> extract -> map -> group -> price -> images -> review -> export.
 
 import type { Prisma } from "@prisma/client";
+import { productTitle, seoTitle } from "./titles";
 import { prisma, parseJson } from "./db";
 import { extractFile, type UploadKind } from "./extract";
 import { applyMapping, headerHash, mappingProblems, suggestMapping, suggestOptions, type Mapping, type MappingOptions } from "./mapping";
@@ -253,7 +254,7 @@ export interface ApplyMappingInput {
 
 /** Apply column mappings to every extracted file, then (re)build products, variants, prices and images. */
 export async function applyMappings(batchId: string, inputs: ApplyMappingInput[], userId: string | null): Promise<{ products: number; variants: number; problems: string[] }> {
-  const batch = await prisma.importBatch.findUniqueOrThrow({ where: { id: batchId }, include: { files: true } });
+  const batch = await prisma.importBatch.findUniqueOrThrow({ where: { id: batchId }, include: { files: true, supplier: true } });
   const problems: string[] = [];
   for (const input of inputs) for (const p of mappingProblems(input.mapping)) problems.push(`${input.hash}: ${p}`);
   if (problems.length) return { products: 0, variants: 0, problems };
@@ -303,7 +304,16 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
   }
 
   const [categoryRules, tagRules, templates] = await Promise.all([loadCategoryRules(), loadTagRules(), loadProductTemplates()]);
-  const grouped = enrichFromSpecs(groupLineItems(items.map((i) => i.item), categoryRules), specItems).map((g) => {
+
+  /**
+   * Plenty of invoices never name the brand: a Giro order lists a helmet and a pair of goggles and
+   * assumes you know who sent it. The supplier the batch was filed under does know, so a product
+   * that arrives without a vendor takes theirs rather than going out with the column empty.
+   */
+  const supplierBrand = batch.supplier?.defaultBrand?.trim() || batch.supplier?.name?.trim() || "";
+
+  const grouped = enrichFromSpecs(groupLineItems(items.map((i) => i.item), categoryRules), specItems).map((raw) => {
+    const g = raw.brand.trim() ? raw : { ...raw, brand: supplierBrand };
     // Learned conventions first, then hand-written rules, which can always override them.
     const viaTemplate = applyTemplates(
       { vendor: g.brand, productType: g.productType, category: g.category, tags: g.tags, collections: g.collections, metafields: g.metafields, optionNames: [g.option1Name, g.option2Name, g.option3Name].filter((n): n is string => Boolean(n)) },
@@ -331,11 +341,16 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
   let variantCount = 0;
   let sort = 0;
   for (const g of grouped) {
+    // A seasonal product carries its year after the name — the same products that carry a year tag.
+    // The SEO title is that title with the brand in front of it, which is the one place it appears.
+    const season = seasonTagFrom(g.tags);
+    const title = productTitle(g.title, season);
     const product = await prisma.product.create({
       data: {
         batchId,
         handle: g.handle,
-        title: g.title,
+        title,
+        seoTitle: seoTitle(g.brand, title),
         bodyHtml: g.description ? `<p>${escapeHtml(g.description)}</p>` : "",
         vendor: g.brand,
         productType: g.productType,
@@ -775,4 +790,9 @@ export async function readExportFile(id: string): Promise<{ filename: string; co
   const rec = await prisma.exportFile.findUnique({ where: { id } });
   if (!rec) return null;
   return { filename: rec.filename, content: await readFile(rec.storagePath) };
+}
+
+/** The season a product was tagged with, which is also the year its name carries. */
+function seasonTagFrom(tags: string[]): string | null {
+  return tags.find((t) => /^20\d{2}$/.test(t.trim())) ?? null;
 }

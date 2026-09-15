@@ -2,6 +2,7 @@
 // grouped products -> priced variants -> validated review view -> Shopify CSV.
 
 import { applyMapping, type Mapping, type MappingOptions } from "./mapping";
+import { productTitle, seoTitle } from "./titles";
 import { groupLineItems } from "./grouping";
 import type { CategoryRuleLike } from "./categorize";
 import { allocateFreight, exGstCostAud, priceVariant, selectRule, type PricingRuleLike } from "./pricing";
@@ -44,7 +45,7 @@ export function runOffline(
   const products: ReviewProduct[] = grouped.map((g, pi) => ({
     id: `p${pi + 1}`,
     handle: g.handle,
-    title: g.title,
+    title: titleFor(g),
     bodyHtml: g.description ? `<p>${g.description}</p>` : "",
     vendor: g.brand,
     productType: g.productType,
@@ -53,7 +54,7 @@ export function runOffline(
     collections: g.collections.join(", "),
     status: "draft",
     published: false,
-    seoTitle: "",
+    seoTitle: seoTitle(g.brand, titleFor(g)),
     seoDescription: "",
     option1Name: g.option1Name,
     option2Name: g.option2Name,
@@ -109,4 +110,9 @@ export function runOffline(
     errors: blockingErrors(products),
     warnings: warningList(products),
   };
+}
+
+/** The same naming the database pipeline does: the season goes after the name. */
+function titleFor(g: { title: string; tags: string[] }): string {
+  return productTitle(g.title, g.tags.find((t) => /^20\d{2}$/.test(t.trim())) ?? null);
 }

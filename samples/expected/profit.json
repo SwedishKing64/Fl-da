@@ -81,16 +81,16 @@
     ],
     "errors": [],
     "warnings": [
-      "Atomic Bent 90 Skis: Only 1 image - the shop wants 6-8 from the supplier's site",
-      "Atomic Bent 90 Skis / (no sku): No SKU",
-      "Atomic Bent 90 Skis / (no sku): No SKU",
-      "Atomic Bent 90 Skis / (no sku): No SKU",
-      "Atomic Hawx Ultra 100 Ski Boots: Only 1 image - the shop wants 6-8 from the supplier's site",
-      "Atomic Hawx Ultra 100 Ski Boots / (no sku): No SKU",
-      "Atomic Hawx Ultra 100 Ski Boots / (no sku): No SKU",
-      "Atomic Hawx Ultra 100 Ski Boots / (no sku): No SKU",
-      "Atomic Alps Beanie: No image - add one or export anyway",
-      "Atomic Alps Beanie / (no sku): No SKU"
+      "Bent 90 Skis 2026: Only 1 image - the shop wants 6-8 from the supplier's site",
+      "Bent 90 Skis 2026 / (no sku): No SKU",
+      "Bent 90 Skis 2026 / (no sku): No SKU",
+      "Bent 90 Skis 2026 / (no sku): No SKU",
+      "Hawx Ultra 100 Ski Boots 2026: Only 1 image - the shop wants 6-8 from the supplier's site",
+      "Hawx Ultra 100 Ski Boots 2026 / (no sku): No SKU",
+      "Hawx Ultra 100 Ski Boots 2026 / (no sku): No SKU",
+      "Hawx Ultra 100 Ski Boots 2026 / (no sku): No SKU",
+      "Alps Beanie 2026: No image - add one or export anyway",
+      "Alps Beanie 2026 / (no sku): No SKU"
     ]
   },
   "volkl": {
@@ -157,8 +157,8 @@
     ],
     "errors": [],
     "warnings": [
-      "Völkl M6 Mantra: No image - add one or export anyway",
-      "Marker Griffon 13 ID Bindings: No image - add one or export anyway"
+      "M6 Mantra 2026: No image - add one or export anyway",
+      "Griffon 13 ID Bindings 2026: No image - add one or export anyway"
     ]
   },
   "burton": {
@@ -225,8 +225,8 @@
     ],
     "errors": [],
     "warnings": [
-      "Burton Custom Snowboard: No image - add one or export anyway",
-      "Burton Cartel Bindings: No image - add one or export anyway"
+      "Custom Snowboard: No image - add one or export anyway",
+      "Cartel Bindings: No image - add one or export anyway"
     ]
   }
 }

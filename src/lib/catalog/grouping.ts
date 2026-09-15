@@ -3,6 +3,7 @@
 import { buildHandle } from "./handle";
 import { chooseOptions, collectionsFor, detectCategory, enrichFromTitle, metafieldsFor, OPTION_LABELS, tagsFor, type CategoryRuleLike } from "./categorize";
 import { normaliseOptionName, optionNamesFor } from "./options";
+import { withoutVendor } from "./titles";
 import type { CanonicalLineItem } from "./types";
 
 export interface GroupedVariant {
@@ -94,7 +95,9 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
     const first = entries[0].item;
     const brand = entries.map((e) => e.item.brand.trim()).find(Boolean) ?? "";
     const baseTitle = entries.map((e) => e.item.title.trim()).find(Boolean) ?? first.modelCode ?? "Untitled";
-    const title = brand && !baseTitle.toLowerCase().startsWith(brand.toLowerCase()) ? `${brand} ${baseTitle}` : baseTitle;
+    // The Title column does not carry the brand — not one of the shop's 827 products begins with
+    // its own vendor. The brand belongs in the Vendor column and in the SEO title.
+    const title = withoutVendor(brand, baseTitle);
     const items = entries.map((e) => e.item);
     const productType = group.rule?.productType ?? (first.productType || "");
     // What varies decides which options exist; the shop's own habit decides the order they are

@@ -5,7 +5,7 @@ import { createUserAction, deleteUserAction, saveSettingsAction } from "@/app/(c
 import { Alert, Button, Field, INPUT } from "@/app/(catalog)/ui";
 import { ActionForm } from "@/app/(catalog)/ActionForm";
 
-export function GeneralSettingsForm({ settings, aiConfigured, storage }: { settings: { publicBaseUrl: string; seoTone: string }; aiConfigured: boolean; storage: "blob" | "disk" | "ephemeral" }) {
+export function GeneralSettingsForm({ settings, aiConfigured, storage, latency }: { settings: { publicBaseUrl: string; seoTone: string }; aiConfigured: boolean; storage: "blob" | "disk" | "ephemeral"; latency: { ms: number; region: string | null } | null }) {
   const [form, setForm] = useState(settings);
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -16,6 +16,14 @@ export function GeneralSettingsForm({ settings, aiConfigured, storage }: { setti
       {storage === "blob" && <Alert tone="success">Files are stored in Vercel Blob; uploaded images get public URLs automatically.</Alert>}
       {storage === "ephemeral" && <Alert tone="danger">Running on Vercel without a Blob store: uploads will be lost between requests. Add Storage → Blob to the Vercel project.</Alert>}
       <Alert tone={aiConfigured ? "success" : "warning"}>{aiConfigured ? "ANTHROPIC_API_KEY is set: PDF/image extraction and AI copywriting are enabled." : "ANTHROPIC_API_KEY is not set. CSV/XLSX imports and template copy still work; PDFs use pattern matching and images cannot be read."}</Alert>
+      {latency && <Alert tone={latency.ms < 40 ? "success" : latency.ms < 120 ? "info" : "warning"}>
+        {`The database answers in about ${latency.ms}ms${latency.region ? `, from ${latency.region}` : ""}. `}
+        {latency.ms < 40
+          ? "That is next door; pages are as quick as they will get."
+          : latency.ms < 120
+            ? "Workable. Every page waits on a few of these, so it is felt but not painful."
+            : "That is a long way. Every page waits on several of these, which is most of why the app feels slow — the app and the database are almost certainly in different parts of the world. Moving them together is the single biggest thing that would speed this up."}
+      </Alert>}
       {msg && <Alert tone={msg.ok ? "success" : "danger"}>{msg.text}</Alert>}
       <Button variant="primary" disabled={pending} onClick={() => start(async () => { const r = await saveSettingsAction({ publicBaseUrl: form.publicBaseUrl.trim().replace(/\/+$/, ""), seoTone: form.seoTone }); setMsg(r.ok ? { ok: true, text: "Saved." } : { ok: false, text: r.error }); })}>Save</Button>
     </div>

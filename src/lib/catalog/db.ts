@@ -99,20 +99,48 @@ function isProviderMismatch(error: unknown): boolean {
   return /the URL must start with the protocol/i.test(message);
 }
 
+/**
+ * How long a healthy verdict is trusted before checking again.
+ *
+ * Every page asks this before it renders, and asking cost two queries — on a database in another
+ * region that was most of the wait, on every single page, to re-answer a question whose answer
+ * had not changed since the process started. A short window keeps the screens working: a database
+ * that dies still explains itself within the minute rather than turning into a raw 500.
+ */
+const HEALTHY_FOR_MS = 60_000;
+let healthyUntil = 0;
+let healthySource = "";
+
+/** Forget a cached healthy verdict — after creating the tables, the state genuinely has changed. */
+export function forgetDatabaseStatus(): void {
+  healthyUntil = 0;
+}
+
 export async function databaseStatus(): Promise<DatabaseStatus> {
   const resolved = resolveDatabaseUrl();
   if (!resolved) return { state: "missing" };
+  if (!resolved.ephemeral && Date.now() < healthyUntil) return { state: "ok", source: healthySource };
   const source = resolved.ephemeral ? "the SQLite template bundled with the build" : findDatabaseUrl()?.key ?? "DATABASE_URL";
-  try {
-    await prisma.$queryRaw`SELECT 1`;
-  } catch (error) {
-    if (isProviderMismatch(error)) return { state: "wrong-provider", source, detail: scrub(error) };
-    return { state: "unreachable", source, detail: scrub(error) };
-  }
+
+  // One query, not two. Counting the users answers both questions at once: it can only succeed if
+  // the connection works and the tables exist. Only a failure needs telling apart, and a failure
+  // is the one case where a second round trip costs nothing anybody is waiting on.
   try {
     await prisma.user.count();
   } catch (error) {
-    return { state: "no-tables", source, detail: scrub(error) };
+    if (isProviderMismatch(error)) return { state: "wrong-provider", source, detail: scrub(error) };
+    const detail = scrub(error);
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+    } catch (reachError) {
+      return { state: "unreachable", source, detail: scrub(reachError) };
+    }
+    return { state: "no-tables", source, detail };
+  }
+
+  if (!resolved.ephemeral) {
+    healthyUntil = Date.now() + HEALTHY_FOR_MS;
+    healthySource = source;
   }
   return { state: resolved.ephemeral ? "ephemeral" : "ok", source };
 }
@@ -133,7 +161,27 @@ export async function createTables(): Promise<{ statements: number }> {
   for (const statement of statements) {
     await prisma.$executeRawUnsafe(statement);
   }
+  forgetDatabaseStatus();
   return { statements: statements.length };
+}
+
+/**
+ * How long one trivial query takes, and where the app is running from.
+ *
+ * Almost all of a slow page here is the wait for the database, and almost all of that wait is
+ * distance: a function in Washington talking to a database in Sydney pays about 200ms per query
+ * whatever the query is. That is invisible from the outside and guessable only by someone who
+ * knows both regions, so the app measures it and says so.
+ */
+export async function databaseLatency(): Promise<{ ms: number; region: string | null } | null> {
+  const region = process.env.VERCEL_REGION ?? null;
+  try {
+    const started = Date.now();
+    await prisma.$queryRaw`SELECT 1`;
+    return { ms: Date.now() - started, region };
+  } catch {
+    return null;
+  }
 }
 
 /** Parse a JSON column, returning `fallback` when the column is empty or malformed. */

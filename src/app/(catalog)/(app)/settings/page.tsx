@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/catalog/db";
+import { prisma, databaseLatency } from "@/lib/catalog/db";
 import { getSettings } from "@/lib/catalog/settings";
 import { requireUser } from "@/lib/catalog/auth";
 import { Card, PageHeader, fmtDate } from "@/app/(catalog)/ui";
@@ -7,13 +7,13 @@ import { usingBlob } from "@/lib/catalog/storage";
 
 export default async function SettingsPage() {
   const me = await requireUser("ADMIN");
-  const [settings, users] = await Promise.all([getSettings(), prisma.user.findMany({ orderBy: { createdAt: "asc" } })]);
+  const [settings, users, latency] = await Promise.all([getSettings(), prisma.user.findMany({ orderBy: { createdAt: "asc" } }), databaseLatency()]);
   return (
     <>
       <PageHeader title="Settings" subtitle="Admin only." />
       <div className="grid gap-6 lg:grid-cols-2">
         <Card title="General">
-          <GeneralSettingsForm settings={{ publicBaseUrl: settings.publicBaseUrl, seoTone: settings.seoTone }} aiConfigured={Boolean(process.env.ANTHROPIC_API_KEY)} storage={usingBlob() ? "blob" : process.env.VERCEL ? "ephemeral" : "disk"} />
+          <GeneralSettingsForm settings={{ publicBaseUrl: settings.publicBaseUrl, seoTone: settings.seoTone }} aiConfigured={Boolean(process.env.ANTHROPIC_API_KEY)} storage={usingBlob() ? "blob" : process.env.VERCEL ? "ephemeral" : "disk"} latency={latency} />
         </Card>
         <Card title="Staff accounts">
           <table className="mb-4 w-full text-sm">

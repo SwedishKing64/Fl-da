@@ -19,8 +19,8 @@ import { EXTRACTION_MODEL, aiAvailable } from "./extract/ai";
 
 const ReplySchema = z.object({
   reply: z.string().describe("The answer to the person, in two or three sentences. Say what went wrong and what would fix it. Plain words, no markdown."),
-  proposal: z.string().describe("One sentence, written as an instruction, to add to the shop's standing rules so this does not happen again. Empty when the correction is about this one product only, or when you are not sure enough to make it a rule for every future import."),
-  confident: z.boolean().describe("True when you understood the correction well enough that the proposal is safe to apply to every future product."),
+  proposal: z.string().describe("What they told you, written as a standing instruction — their correction, in their terms, tidied into an imperative and no more. Do not soften it, do not generalise past it, and do not add conditions they did not state. Empty only when they asked a question rather than correcting something."),
+  aboutOneProduct: z.boolean().describe("True when the correction is about one product on this invoice and could not sensibly apply to future ones."),
 });
 
 export type FeedbackReply = z.infer<typeof ReplySchema>;
@@ -42,7 +42,9 @@ const SYSTEM = `You are the person who built a Shopify import for a ski and snow
 
 Answer them the way a good colleague would: say what went wrong, and what the right answer is. Be brief and concrete, and name the products you are talking about.
 
-Then decide whether the correction is general. If it is — "goggles from snowboard brands belong under Snowboard Accessories" — write it as one instruction for the shop's standing rules, in the imperative, specific enough to act on and short enough to read. If it is about one product on one invoice, or you are not certain what they meant, leave the proposal empty and say what you would need to know. A rule written from a misunderstanding is worse than no rule, because it goes on being wrong on every product after it.
+Then write what they told you as a standing instruction, in their terms. Take them literally. They know this catalogue and you do not: if they say goggles from snowboard brands are Snowboard Accessories, that is the rule, exactly that, not a hedged version of it and not a broader one. Tidy it into an imperative and change nothing else. Only leave the instruction empty when they asked you a question rather than correcting something.
+
+Mark it as about one product when the correction plainly could not apply to a future invoice — a typo in one title, a price on one line — so nobody is offered a rule that makes no sense as a rule.
 
 Never claim to have changed anything. You are proposing; a person decides.`;
 
@@ -89,8 +91,9 @@ export async function answerFeedback(context: FeedbackContext, thread: FeedbackT
   if (!text) return null;
   const parsed = ReplySchema.safeParse(JSON.parse(text));
   if (!parsed.success) return null;
-  // A proposal nobody is confident about is not offered at all, so the button is never a trap.
-  return parsed.data.confident ? parsed.data : { ...parsed.data, proposal: "" };
+  // A correction about one product is not a rule; everything else is offered as one, in the words
+  // the person used. They know the catalogue, so their correction is taken at face value.
+  return parsed.data.aboutOneProduct ? { ...parsed.data, proposal: "" } : parsed.data;
 }
 
 /** Add an accepted instruction to the standing rules, keeping what is already there. */

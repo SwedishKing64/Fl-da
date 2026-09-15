@@ -739,6 +739,40 @@ export interface ExportResult {
   files: Array<{ id: string; filename: string; rowCount: number; sizeBytes: number; partIndex: number; partCount: number }>;
 }
 
+type PlannedPart = { group: string; part: ReturnType<typeof generateCsvParts>[number]; partCount: number };
+
+/**
+ * Turn a batch's reviewed products into the CSV files it exports as.
+ *
+ * Separated from writing them down because it is worth being able to run twice. Given the same
+ * batch it produces the same files in the same order, which is what lets a download rebuild a
+ * file rather than depend on one still being on a disk somewhere.
+ *
+ * One CSV per brand or product type — the shop imports and manages them separately — each split
+ * further only if it would exceed Shopify's size limit.
+ */
+function planExport(review: ReviewData): { ok: true; planned: PlannedPart[] } | { ok: false; errors: string[] } {
+  const csvProducts = toCsvProducts(review.products);
+  const structural = validateProducts(csvProducts).filter((i) => i.level === "error").map((i) => `${i.handle ?? ""}: ${i.message}`);
+  if (structural.length) return { ok: false, errors: structural };
+
+  const groups = new Map<string, typeof csvProducts>();
+  for (const p of csvProducts) {
+    const key = review.batch.splitExportBy === "BRAND" ? p.vendor || "unbranded" : review.batch.splitExportBy === "PRODUCT_TYPE" ? p.productType || "untyped" : "";
+    groups.set(key, [...(groups.get(key) ?? []), p]);
+  }
+  const planned: PlannedPart[] = [];
+  for (const [group, list] of groups) {
+    const parts = generateCsvParts(list, { metafieldColumns: review.metafieldColumns });
+    for (const part of parts) {
+      const fileIssues = validateCsvFile(part.content).filter((i) => i.level === "error");
+      if (fileIssues.length) return { ok: false, errors: fileIssues.map((i) => i.message) };
+      planned.push({ group, part, partCount: parts.length });
+    }
+  }
+  return { ok: true, planned };
+}
+
 /** Hard gate: refuses while blocking errors exist; warnings need `overrideWarnings`. */
 export async function exportBatch(batchId: string, userId: string, opts: { overrideWarnings: boolean }): Promise<ExportResult> {
   const review = await loadReview(batchId);
@@ -748,26 +782,9 @@ export async function exportBatch(batchId: string, userId: string, opts: { overr
   if (errors.length) return { ok: false, errors, warnings, files: [] };
   if (warnings.length && !opts.overrideWarnings) return { ok: false, errors: [], warnings, files: [] };
 
-  const csvProducts = toCsvProducts(review.products);
-  const structural = validateProducts(csvProducts).filter((i) => i.level === "error").map((i) => `${i.handle ?? ""}: ${i.message}`);
-  if (structural.length) return { ok: false, errors: structural, warnings, files: [] };
-
-  // One CSV per brand / product type (the retailer imports and manages them separately), each
-  // further split only if it would exceed Shopify's size limit.
-  const groups = new Map<string, typeof csvProducts>();
-  for (const p of csvProducts) {
-    const key = review.batch.splitExportBy === "BRAND" ? p.vendor || "unbranded" : review.batch.splitExportBy === "PRODUCT_TYPE" ? p.productType || "untyped" : "";
-    groups.set(key, [...(groups.get(key) ?? []), p]);
-  }
-  const planned: Array<{ group: string; part: ReturnType<typeof generateCsvParts>[number]; partCount: number }> = [];
-  for (const [group, list] of groups) {
-    const parts = generateCsvParts(list, { metafieldColumns: review.metafieldColumns });
-    for (const part of parts) {
-      const fileIssues = validateCsvFile(part.content).filter((i) => i.level === "error");
-      if (fileIssues.length) return { ok: false, errors: fileIssues.map((i) => i.message), warnings, files: [] };
-      planned.push({ group, part, partCount: parts.length });
-    }
-  }
+  const plan = planExport(review);
+  if (!plan.ok) return { ok: false, errors: plan.errors, warnings, files: [] };
+  const planned = plan.planned;
 
   await prisma.exportFile.deleteMany({ where: { batchId } });
   const stamp = new Date().toISOString().replace(/[:T]/g, "-").slice(0, 16);
@@ -796,7 +813,7 @@ export async function exportBatch(batchId: string, userId: string, opts: { overr
   await logAudit("batch.exported", {
     batchId,
     userId,
-    details: { files: files.map((f) => f.filename), products: review.products.length, variants: review.summary.variants, overrideWarnings: opts.overrideWarnings, warnings: warnings.length, summary: review.summary, snapshot: csvProducts },
+    details: { files: files.map((f) => f.filename), products: review.products.length, variants: review.summary.variants, overrideWarnings: opts.overrideWarnings, warnings: warnings.length, summary: review.summary, snapshot: toCsvProducts(review.products) },
   });
   return { ok: true, errors: [], warnings, files };
 }
@@ -805,10 +822,32 @@ function slugForFile(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "batch";
 }
 
+/**
+ * The CSV to hand back for a download.
+ *
+ * The saved file first, and when it is not there, built again from the batch.
+ *
+ * It is often not there. Without blob storage a deployment writes to the instance's own /tmp, and
+ * the request that asks for the file is usually served by a different instance, so the download
+ * failed on the one thing the app exists to produce. Rebuilding is safe because a batch is locked
+ * once exported: the same products, split the same way, in the same order.
+ */
 export async function readExportFile(id: string): Promise<{ filename: string; content: Buffer } | null> {
   const rec = await prisma.exportFile.findUnique({ where: { id } });
   if (!rec) return null;
-  return { filename: rec.filename, content: await readFile(rec.storagePath) };
+  try {
+    return { filename: rec.filename, content: await readFile(rec.storagePath) };
+  } catch {
+    // Fall through and rebuild it.
+  }
+  try {
+    const plan = planExport(await loadReview(rec.batchId));
+    const part = plan.ok ? plan.planned[rec.partIndex - 1] : undefined;
+    if (!part) return null;
+    return { filename: rec.filename, content: Buffer.from(part.part.content, "utf8") };
+  } catch {
+    return null;
+  }
 }
 
 /** The season a product was tagged with, which is also the year its name carries. */

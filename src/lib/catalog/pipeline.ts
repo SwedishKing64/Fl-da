@@ -433,6 +433,9 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
   await prisma.importBatch.update({ where: { id: batchId }, data: { status: "REVIEW" } });
   await logAudit("batch.mapped", { batchId, userId, details: { products: grouped.length, variants: variantCount } });
   void verifyBatchImages(batchId).catch(() => undefined);
+  // What the invoice did not carry is looked up on the brand's site while the grid is being read.
+  // Imported here rather than at the top: enrich reprices the batch, so it imports this module back.
+  void import("./enrich").then((m) => m.lookupBatch(batchId, { userId })).catch(() => undefined);
   return { products: grouped.length, variants: variantCount, problems: [] };
 }
 
@@ -627,6 +630,8 @@ export async function loadReview(batchId: string): Promise<ReviewData> {
     published: p.published,
     seoTitle: p.seoTitle,
     seoDescription: p.seoDescription,
+    lookupStatus: p.lookupStatus,
+    lookupSource: p.lookupSource,
     option1Name: p.option1Name,
     option2Name: p.option2Name,
     option3Name: p.option3Name,

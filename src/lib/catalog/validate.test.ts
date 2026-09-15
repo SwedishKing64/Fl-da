@@ -5,7 +5,7 @@ import type { ReviewProduct } from "./review-types";
 function product(partial: Partial<ReviewProduct>): ReviewProduct {
   return {
     id: "p1", handle: "atomic-bent-90", title: "Atomic Bent 90", bodyHtml: "", vendor: "Atomic", productType: "Skis", category: "skis",
-    tags: "", collections: "", status: "draft", published: false, seoTitle: "", seoDescription: "", option1Name: "Length", option2Name: null, option3Name: null,
+    tags: "", collections: "", status: "draft", published: false, seoTitle: "", seoDescription: "", lookupStatus: "NONE", lookupSource: "", option1Name: "Length", option2Name: null, option3Name: null,
     metafields: {}, reconcileStatus: "UNKNOWN", shopifyProductId: null, images: [{ id: "i", url: "https://cdn.x.com/a.jpg", position: 1, variantId: null, source: "SUPPLIER", validated: true }],
     variants: [], flags: [], ...partial,
   };

@@ -57,6 +57,9 @@ export interface ReviewProduct {
   published: boolean;
   seoTitle: string;
   seoDescription: string;
+  /** What the web lookup did about the columns the invoice left empty. */
+  lookupStatus: string;
+  lookupSource: string;
   option1Name: string | null;
   option2Name: string | null;
   option3Name: string | null;

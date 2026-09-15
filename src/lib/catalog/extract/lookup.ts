@@ -18,8 +18,8 @@ import { EXTRACTION_MODEL, aiAvailable } from "./ai";
 /** What a lookup can establish. Anything it could not find comes back empty rather than invented. */
 const FoundSchema = z.object({
   vendor: z.string().describe("The brand that makes this product, capitalised as the brand writes it. Empty if the search did not establish it."),
-  description: z.string().describe("The manufacturer's own description of the product, in plain prose, 2-4 sentences. Empty if not found."),
-  features: z.array(z.string()).describe("Short technical specification lines from the manufacturer, as they are written. Empty when none were found."),
+  description: z.string().describe("The manufacturer's own description of the product, in their words, 50-110 words. Blank line between paragraphs if it runs to two. Empty if not found."),
+  features: z.array(z.string()).describe("The manufacturer's published specification lines, 6-14 of them, each as they write it — \"Label: value\" where their spec table is written that way, a bare phrase where it is not. Empty when none were found."),
   rrp: z.number().nullable().describe("Australian recommended retail in dollars, as a number. Null unless an Australian price was actually seen."),
   sourceUrl: z.string().describe("The page the description came from. Empty if none."),
   confident: z.boolean().describe("True only when the page found is unambiguously this exact product, not a similar model or a different year."),
@@ -40,12 +40,13 @@ const RESEARCH_SYSTEM = `You research products for a ski and snowboard retailer 
 
 For the product you are given, find the manufacturer's own page for it and report:
 - which brand makes it
-- how the manufacturer describes it, and the specification lines they publish
+- the copy the manufacturer opens the product page with, quoted rather than summarised, to about 50-110 words
+- the specification lines from the manufacturer's own spec table, as they write them — most read "Label: value" ("Sidecut radius front: 35 m @ 172", "Packed Size: 23 x 15 x 3 cm"), some are a bare phrase ("Multilayer Woodcore"). Ten or so is the usual number; report the ones the manufacturer publishes, not ones you compose.
 - its recommended retail price in Australian dollars
 
 Prefer the brand's own website, then its Australian distributor, then a major Australian retailer. Say plainly when you cannot find the product, when the page you found is a different model year, or when the only price you can see is in another currency — a wrong price is worse to this shop than no price. Quote the manufacturer rather than writing your own marketing copy, and give the URL of every page you rely on.`;
 
-const SHAPE_SYSTEM = `Turn the research notes into fields. Copy what the notes establish and leave everything else empty or null — never fill a gap with something plausible. Only give an rrp when the notes report an Australian price for this exact product, and only set confident when the notes identify the exact product rather than a similar one.`;
+const SHAPE_SYSTEM = `Turn the research notes into fields. Copy what the notes establish and leave everything else empty or null — never fill a gap with something plausible. Keep the manufacturer's wording; do not paraphrase it into your own. Only give an rrp when the notes report an Australian price for this exact product, and only set confident when the notes identify the exact product rather than a similar one.`;
 
 function describe(request: LookupRequest): string {
   return [
@@ -119,17 +120,28 @@ export function applyLookup<T extends { vendor: string; bodyHtml: string; rrp: n
   return out;
 }
 
-/** The shop's own body layout: the description, then a Tech Specs list of whatever was published. */
+/**
+ * The shop's own body layout, as their 827 existing products write it: a paragraph of the
+ * manufacturer's copy per line, then a Tech Specs heading, then the spec lines as a list.
+ *
+ *   <p>...</p>
+ *   <h2>Tech Specs</h2>
+ *   <ul>
+ *   <li>Sidecut radius front: 35 m @ 172</li>
+ *   </ul>
+ *
+ * 414 of the 714 products that carry a body are exactly this with one paragraph, and another 143
+ * are the same with two or three. Nothing follows the list.
+ */
 export function bodyHtmlFrom(found: ProductLookup): string {
-  const description = found.description.trim();
-  const features = found.features.map((f) => f.trim()).filter(Boolean);
-  if (!description && features.length === 0) return "";
-  const parts = [description ? `<p>${escapeHtml(description)}</p>` : ""];
+  const paragraphs = found.description.split(/\n\s*\n/).map((p) => p.replace(/\s+/g, " ").trim()).filter(Boolean);
+  const features = found.features.map((f) => f.replace(/\s+/g, " ").trim()).filter(Boolean);
+  if (paragraphs.length === 0 && features.length === 0) return "";
+  const lines = paragraphs.map((p) => `<p>${escapeHtml(p)}</p>`);
   if (features.length > 0) {
-    parts.push("<h2>Tech Specs</h2>");
-    parts.push(`<ul>${features.map((f) => `<li>${escapeHtml(f)}</li>`).join("")}</ul>`);
+    lines.push("<h2>Tech Specs</h2>", "<ul>", ...features.map((f) => `<li>${escapeHtml(f)}</li>`), "</ul>");
   }
-  return parts.filter(Boolean).join("\n");
+  return lines.join("\n");
 }
 
 function escapeHtml(value: string): string {

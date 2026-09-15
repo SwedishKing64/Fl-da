@@ -17,6 +17,7 @@ import { CURRENCIES, type AppSettings } from "@/lib/catalog/types";
 import { seedDefaults } from "@/lib/catalog/seed";
 import { answerFeedback, feedbackAvailable, withRule, type FeedbackTurn } from "@/lib/catalog/feedback";
 import { describeDirectives, instructionsAvailable, parseDirectives, readInstructions, NO_DIRECTIVES } from "@/lib/catalog/instructions";
+import { lookupBatch, lookupEnabled, LOOKUP_LIMIT, type LookupOutcome } from "@/lib/catalog/enrich";
 
 export type ActionResult<T = undefined> = { ok: true; data?: T; message?: string } | { ok: false; error: string };
 
@@ -615,6 +616,24 @@ export async function applyRulesAction(batchId: string): Promise<ActionResult<{ 
     const data = await applyRulesToBatch(batchId);
     await logAudit("batch.rules_applied", { batchId, userId: user.id, details: data });
     return { ok: true, data };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/**
+ * Fill the description and the retail price from the brand's own website.
+ *
+ * It already runs once on its own when a batch is built, so this is the second look — for the
+ * products it could not find the first time, or for one product somebody wants re-checked.
+ */
+export async function lookupProductsAction(batchId: string, opts: { productIds?: string[]; retry?: boolean } = {}): Promise<ActionResult<LookupOutcome & { limit: number }>> {
+  const user = await requireUser();
+  if (!lookupEnabled()) return { ok: false, error: "Set ANTHROPIC_API_KEY to look products up on the web." };
+  try {
+    const data = await lookupBatch(batchId, { ...opts, userId: user.id });
+    revalidatePath(`/batches/${batchId}/review`);
+    return { ok: true, data: { ...data, limit: LOOKUP_LIMIT } };
   } catch (err) {
     return fail(err);
   }

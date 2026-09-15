@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   addImageUrlAction,
   applyRulesAction,
+  lookupProductsAction,
   attachPhotoAction,
   autoAttachPhotosAction,
   bulkUpdateAction,
@@ -317,6 +318,7 @@ export function ReviewGrid({ initial, batchId }: { initial: ReviewData; batchId:
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <Button size="sm" onClick={() => setExpanded(expanded.size ? new Set() : new Set(data.products.map((p) => p.id)))}>{expanded.size ? "Collapse all" : "Expand all"}</Button>
           <Button size="sm" disabled={pending || locked} title="Re-run the tag, collection, type and metafield rules" onClick={() => start(async () => { const r = await applyRulesAction(batchId); setMessage(r.ok ? { tone: "success", text: `Rules applied: ${r.data!.matched} of ${r.data!.products} products matched a rule.` } : { tone: "danger", text: r.error }); await refresh(); })}>Apply rules</Button>
+          <Button size="sm" disabled={pending || locked} title="Search the brand's website for the description and the recommended retail of anything the invoice did not carry" onClick={() => start(async () => { const r = await lookupProductsAction(batchId, { retry: true }); setMessage(r.ok ? lookupMessage(r.data!) : { tone: "danger", text: r.error }); await refresh(); })}>Find descriptions</Button>
           {data.unassignedImages.length > 0 && !locked && <Button size="sm" disabled={pending} onClick={() => start(async () => { const r = await autoAttachPhotosAction(batchId); setMessage(r.ok ? { tone: "info", text: `${r.data!.attached} photo${r.data!.attached === 1 ? "" : "s"} matched by name/SKU. Open a product's Details to attach the rest.` } : { tone: "danger", text: r.error }); await refresh(); })}>Match photos</Button>}
           <Button size="sm" disabled={pending} onClick={() => start(async () => { const r = await verifyImagesAction(batchId); setMessage(r.ok ? { tone: r.data!.failed ? "warning" : "success", text: `Checked ${r.data!.checked} image URLs, ${r.data!.failed} unreachable.` } : { tone: "danger", text: r.error }); await refresh(); })}>Check images</Button>
           <Button size="sm" disabled={pending || locked} onClick={() => start(async () => { const r = await enrichSeoAction(batchId, true); setMessage(r.ok ? { tone: "success", text: `SEO written for ${r.data!.updated} products (${r.data!.source === "AI" ? "AI" : r.data!.source === "TEMPLATE" ? "template - set ANTHROPIC_API_KEY for AI copy" : "AI + template"}).` } : { tone: "danger", text: r.error }); await refresh(); })}>Write SEO copy</Button>
@@ -471,7 +473,7 @@ export function ReviewGrid({ initial, batchId }: { initial: ReviewData; batchId:
         <div className="self-center text-[11px] text-[var(--ink-soft)]">{pending ? "Saving…" : "Double-click or Enter to edit · arrows to move · paste a column from Excel"}</div>
       </div>
 
-      {drawerProduct && <ProductDrawer key={drawerProduct.id} product={drawerProduct} unassigned={data.unassignedImages} locked={locked} publicBaseUrl={data.settings.publicBaseUrl} onClose={() => setDrawer(null)} refresh={refresh} setMessage={setMessage} />}
+      {drawerProduct && <ProductDrawer key={drawerProduct.id} batchId={batchId} product={drawerProduct} unassigned={data.unassignedImages} locked={locked} publicBaseUrl={data.settings.publicBaseUrl} onClose={() => setDrawer(null)} refresh={refresh} setMessage={setMessage} />}
     </div>
   );
 }
@@ -504,7 +506,28 @@ function ProductCell({ p, field, width, edit, setEdit, commit, locked, strong, m
   );
 }
 
-function ProductDrawer({ product, unassigned, locked, publicBaseUrl, onClose, refresh, setMessage }: { product: ReviewProduct; unassigned: Array<{ id: string; filename: string; url: string; hint: string }>; locked: boolean; publicBaseUrl: string; onClose: () => void; refresh: () => Promise<void>; setMessage: (m: { tone: "info" | "success" | "warning" | "danger"; text: string } | null) => void }) {
+/** What a past lookup did about this product, in the words a person would use about it. */
+const LOOKUP_SAID: Record<string, string> = {
+  FOUND: "Description and price taken from the brand's website.",
+  UNSURE: "Found a page, but not certainly this exact product — description only, no price or brand.",
+  NOT_FOUND: "Searched, but the brand's website did not turn it up.",
+  FAILED: "The search itself failed. Try it again.",
+};
+
+/** What a lookup pass found, said as a sentence rather than a row of counters. */
+function lookupMessage(d: { attempted: number; found: number; descriptions: number; prices: number; vendors: number; missing: number; capped: boolean; limit: number }): { tone: "info" | "success" | "warning"; text: string } {
+  if (d.attempted === 0) return { tone: "info", text: d.missing === 0 ? "Nothing is missing a description or a price." : "Everything missing has already been looked up. Nothing left to search." };
+  const got = [
+    d.descriptions ? `${d.descriptions} description${d.descriptions === 1 ? "" : "s"}` : "",
+    d.prices ? `${d.prices} retail price${d.prices === 1 ? "" : "s"}` : "",
+    d.vendors ? `${d.vendors} brand${d.vendors === 1 ? "" : "s"}` : "",
+  ].filter(Boolean);
+  const capped = d.capped ? ` Stopped at ${d.limit}; run it again for the rest.` : "";
+  if (got.length === 0) return { tone: "warning", text: `Searched ${d.attempted} product${d.attempted === 1 ? "" : "s"} and found nothing usable. Open one and check its title reads the way the brand writes it.${capped}` };
+  return { tone: "success", text: `Searched ${d.attempted}, filled in ${got.join(", ")}.${capped}` };
+}
+
+function ProductDrawer({ batchId, product, unassigned, locked, publicBaseUrl, onClose, refresh, setMessage }: { batchId: string; product: ReviewProduct; unassigned: Array<{ id: string; filename: string; url: string; hint: string }>; locked: boolean; publicBaseUrl: string; onClose: () => void; refresh: () => Promise<void>; setMessage: (m: { tone: "info" | "success" | "warning" | "danger"; text: string } | null) => void }) {
   const [tab, setTab] = useState<"images" | "details">("images");
   const [url, setUrl] = useState("");
   const [variantForUrl, setVariantForUrl] = useState("");
@@ -598,6 +621,11 @@ function ProductDrawer({ product, unassigned, locked, publicBaseUrl, onClose, re
             <label className="block"><span className="text-xs font-medium text-[var(--ink-2)]">SEO title <span className="text-[var(--ink-soft)]">({details.seoTitle.length}/60)</span></span><input value={details.seoTitle} disabled={locked} onChange={(e) => setDetails({ ...details, seoTitle: e.target.value })} className={INPUT} /></label>
             <label className="block"><span className="text-xs font-medium text-[var(--ink-2)]">SEO description <span className="text-[var(--ink-soft)]">({details.seoDescription.length}/155)</span></span><textarea rows={3} value={details.seoDescription} disabled={locked} onChange={(e) => setDetails({ ...details, seoDescription: e.target.value })} className={INPUT} /></label>
             <label className="block"><span className="text-xs font-medium text-[var(--ink-2)]">Description (HTML)</span><textarea rows={6} value={details.bodyHtml} disabled={locked} onChange={(e) => setDetails({ ...details, bodyHtml: e.target.value })} className={`${INPUT} font-mono text-xs`} /></label>
+            <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--ink-soft)]">
+              <span>{LOOKUP_SAID[product.lookupStatus] ?? "Not looked up yet."}</span>
+              {product.lookupSource && <a href={product.lookupSource} target="_blank" rel="noreferrer" className="underline">source</a>}
+              {!locked && <Button size="sm" disabled={pending} onClick={() => start(async () => { const r = await lookupProductsAction(batchId, { productIds: [product.id] }); setMessage(r.ok ? lookupMessage(r.data!) : { tone: "danger", text: r.error }); await refresh(); })}>Look this one up</Button>}
+            </div>
             <div className="grid grid-cols-3 gap-2">
               {(["option1Name", "option2Name", "option3Name"] as const).map((k, i) => <label key={k} className="block"><span className="text-xs font-medium text-[var(--ink-2)]">Option {i + 1} name</span><input value={details[k]} disabled={locked} onChange={(e) => setDetails({ ...details, [k]: e.target.value })} className={INPUT} /></label>)}
             </div>

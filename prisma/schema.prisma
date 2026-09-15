@@ -181,6 +181,10 @@ model Product {
   metafields      String   @default("{}") // JSON { [key]: value } keyed by ski metafield key
   reconcileStatus String   @default("UNKNOWN") // UNKNOWN | NEW | VARIANT_ADD | UPDATE
   shopifyProductId String?
+  // What the web lookup did about the columns the invoice left empty.
+  lookupStatus    String   @default("NONE") // NONE | FOUND | UNSURE | NOT_FOUND | FAILED
+  lookupSource    String   @default("") // the manufacturer page the copy was taken from
+  lookupAt        DateTime?
   sortOrder       Int      @default(0)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt

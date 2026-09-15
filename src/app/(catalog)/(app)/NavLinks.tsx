@@ -29,7 +29,12 @@ export function NavLinks({ isAdmin, compact }: { isAdmin: boolean; compact?: boo
       {links.map((l) => {
         const active = l.exact ? pathname === l.href : pathname.startsWith(l.href);
         return (
-          <Link key={l.href} href={l.href} className={cx("rounded-lg px-3 py-2 text-sm", active ? "bg-[var(--violet-soft)] font-medium text-[var(--violet)]" : "text-[var(--ink-2)] hover:bg-neutral-100")}>
+          <Link key={l.href} href={l.href} className={cx(
+              "relative rounded-lg px-3 py-2 text-sm transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)]",
+              active
+                ? "bg-[var(--alp-snow)] font-semibold text-[var(--alp-blue)] before:absolute before:inset-y-1.5 before:left-0 before:w-1 before:rounded-full before:bg-[var(--alp-yellow)]"
+                : "text-[var(--ink-2)] hover:translate-x-0.5 hover:bg-[var(--alp-snow)] hover:text-[var(--alp-blue)]",
+            )}>
             {l.label}
           </Link>
         );

@@ -77,9 +77,10 @@ export default async function DashboardPage() {
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-[var(--line)] bg-white p-4 shadow-[var(--shadow-sm)]">
+    <div className="lift relative overflow-hidden rounded-xl border border-[var(--line)] bg-white p-4 shadow-[var(--shadow-sm)]">
+      <span className="alp-gradient absolute inset-x-0 top-0 h-1" aria-hidden />
       <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--ink-soft)]">{label}</div>
-      <div className="mt-1 text-xl font-semibold tabular-nums">{value}</div>
+      <div className="mt-1 text-xl font-semibold tabular-nums text-[var(--alp-blue-deep)]">{value}</div>
     </div>
   );
 }

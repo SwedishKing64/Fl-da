@@ -7,7 +7,7 @@ export function cx(...parts: Array<string | false | null | undefined>): string {
 
 export function Card({ children, className, title, actions }: { children: ReactNode; className?: string; title?: ReactNode; actions?: ReactNode }) {
   return (
-    <section className={cx("rounded-xl border border-[var(--line)] bg-white shadow-[var(--shadow-sm)]", className)}>
+    <section className={cx("lift rounded-xl border border-[var(--line)] bg-white shadow-[var(--shadow-sm)]", className)}>
       {(title || actions) && (
         <header className="flex items-center justify-between gap-3 border-b border-[var(--line-soft)] px-5 py-3">
           <h2 className="text-sm font-semibold">{title}</h2>
@@ -20,7 +20,7 @@ export function Card({ children, className, title, actions }: { children: ReactN
 }
 
 const BUTTON = {
-  primary: "bg-[var(--ink)] text-white hover:bg-black disabled:bg-neutral-400",
+  primary: "alp-gradient text-white shadow-[var(--shadow-sm)] hover:brightness-110 active:brightness-95 disabled:bg-neutral-400 disabled:bg-none",
   secondary: "border border-[var(--line)] bg-white hover:bg-neutral-50 disabled:text-neutral-400",
   danger: "border border-red-200 bg-white text-red-700 hover:bg-red-50 disabled:text-neutral-400",
   ghost: "hover:bg-neutral-100 disabled:text-neutral-400",
@@ -31,7 +31,7 @@ export function Button({ variant = "secondary", size = "md", className, ...props
     <button
       {...props}
       className={cx(
-        "inline-flex items-center justify-center gap-1.5 rounded-lg font-medium transition disabled:cursor-not-allowed",
+        "inline-flex items-center justify-center gap-1.5 rounded-lg font-medium transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-[0.98] disabled:cursor-not-allowed disabled:active:scale-100",
         size === "sm" ? "px-2.5 py-1 text-xs" : "px-3.5 py-2 text-sm",
         BUTTON[variant],
         className,
@@ -90,9 +90,9 @@ export const INPUT = "w-full rounded-lg border border-[var(--line)] bg-white px-
 
 export function PageHeader({ title, subtitle, actions }: { title: ReactNode; subtitle?: ReactNode; actions?: ReactNode }) {
   return (
-    <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+    <div className="mb-6 flex flex-wrap items-end justify-between gap-3 border-b-2 border-[var(--alp-yellow)] pb-4">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-[var(--alp-blue-deep)]">{title}</h1>
         {subtitle && <p className="mt-1 text-sm text-[var(--ink-soft)]">{subtitle}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}

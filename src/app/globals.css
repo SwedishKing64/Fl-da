@@ -1,25 +1,37 @@
 @import "tailwindcss";
 
-/* Afterword — clean, modern commerce SaaS. Distinct from the travel work: warm off-white
-   ground, near-black ink, a confident violet brand, and clear sentiment semantics. */
+/* Alpsport — the shop's own colours: the deep blue and mountain-sky of the oval, the yellow of
+   the wordmark, and snow for the ground. Blue carries every action; yellow is the highlight and is
+   spent sparingly, the way the logo spends it. */
 :root {
   --paper: #ffffff;
-  --canvas: #f7f6f3;
-  --ink: #17150f;
-  --ink-2: #56514a;
-  --ink-soft: #8b857c;
-  --line: #e7e3dc;
-  --line-soft: #f0ede7;
-  --violet: #5b4bd6;
-  --violet-soft: #efeaff;
+  --canvas: #f2f6fb;
+  --ink: #0f1b2a;
+  --ink-2: #4a5a6d;
+  --ink-soft: #7d8b9c;
+  --line: #d9e3ef;
+  --line-soft: #eaf0f7;
+
+  --alp-blue: #0b4ea2;
+  --alp-blue-deep: #06356f;
+  --alp-sky: #2f8fd8;
+  --alp-yellow: #ffd400;
+  --alp-yellow-deep: #e8b400;
+  --alp-snow: #eef5fd;
+
+  /* The app was built on a violet accent; these keep every existing class on brand. */
+  --violet: var(--alp-blue);
+  --violet-soft: var(--alp-snow);
   --promoter: #12a594;
   --passive: #d99a2b;
   --detractor: #e05543;
   --promoter-tint: #e6f6f2;
   --passive-tint: #faf1dd;
   --detractor-tint: #fbe9e5;
-  --shadow-sm: 0 1px 2px rgba(23, 21, 15, 0.05), 0 1px 3px rgba(23, 21, 15, 0.04);
-  --shadow: 0 12px 34px -18px rgba(23, 21, 15, 0.22);
+  --shadow-sm: 0 1px 2px rgba(11, 78, 162, 0.06), 0 1px 3px rgba(11, 78, 162, 0.05);
+  --shadow: 0 14px 38px -20px rgba(11, 78, 162, 0.35);
+  --shadow-lift: 0 10px 26px -12px rgba(11, 78, 162, 0.28);
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
   --r: 16px;
   --sans: var(--font-body), system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
@@ -345,4 +357,54 @@ p {
   * {
     transition: none !important;
   }
+}
+
+/* ---------------------------------------------------------------------------
+   Motion. Small and purposeful: things that arrive rise into place, things you
+   can press answer to the cursor, and anything working says so. Everything is
+   dropped for a viewer who has asked for less movement.
+   --------------------------------------------------------------------------- */
+
+@keyframes alp-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes alp-sheen {
+  from { background-position: -200% 0; }
+  to { background-position: 200% 0; }
+}
+
+@keyframes alp-pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(11, 78, 162, 0.35); }
+  70% { box-shadow: 0 0 0 10px rgba(11, 78, 162, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(11, 78, 162, 0); }
+}
+
+.rise { animation: alp-rise 0.42s var(--ease) both; }
+.rise-1 { animation-delay: 0.04s; }
+.rise-2 { animation-delay: 0.08s; }
+.rise-3 { animation-delay: 0.12s; }
+.rise-4 { animation-delay: 0.16s; }
+
+/* A card you can act on lifts a little under the cursor. */
+.lift { transition: transform 0.22s var(--ease), box-shadow 0.22s var(--ease), border-color 0.22s var(--ease); }
+.lift:hover { transform: translateY(-2px); box-shadow: var(--shadow-lift); border-color: color-mix(in srgb, var(--alp-sky) 45%, var(--line)); }
+
+/* The band of colour the logo has, for headers and the primary button. */
+.alp-gradient { background: linear-gradient(135deg, var(--alp-blue-deep) 0%, var(--alp-blue) 45%, var(--alp-sky) 100%); }
+
+/* Something is loading and there is nothing to show yet. */
+.shimmer {
+  background: linear-gradient(90deg, var(--line-soft) 25%, #fff 50%, var(--line-soft) 75%);
+  background-size: 200% 100%;
+  animation: alp-sheen 1.4s linear infinite;
+}
+
+.pulse-ring { animation: alp-pulse-ring 1.8s var(--ease) infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rise, .shimmer, .pulse-ring { animation: none !important; }
+  .lift { transition: none; }
+  .lift:hover { transform: none; }
 }

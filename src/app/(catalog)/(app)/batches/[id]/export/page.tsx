@@ -7,11 +7,12 @@ import { requireUser } from "@/lib/catalog/auth";
 import { Badge, Card, LinkButton, PageHeader, cx, fmtDate, money, pct, statusTone } from "@/app/(catalog)/ui";
 import { Steps } from "../Steps";
 import { ExportPanel } from "./ExportPanel";
+import { FeedbackChat } from "./FeedbackChat";
 
 export default async function ExportPage(props: PageProps<"/batches/[id]/export">) {
   const { id } = await props.params;
   const user = await requireUser();
-  const batch = await prisma.importBatch.findUnique({ where: { id }, include: { exports: { orderBy: { partIndex: "asc" } }, auditLogs: { orderBy: { createdAt: "desc" }, take: 20, include: { user: true } } } });
+  const batch = await prisma.importBatch.findUnique({ where: { id }, include: { exports: { orderBy: { partIndex: "asc" } }, feedback: { orderBy: { createdAt: "asc" } }, auditLogs: { orderBy: { createdAt: "desc" }, take: 20, include: { user: true } } } });
   if (!batch) notFound();
   const [review, settings] = await Promise.all([loadReview(id), getSettings()]);
   const errors = blockingErrors(review.products);
@@ -37,6 +38,11 @@ export default async function ExportPage(props: PageProps<"/batches/[id]/export"
             isAdmin={user.role === "ADMIN"}
             files={batch.exports.map((f) => ({ id: f.id, filename: f.filename, rowCount: f.rowCount, sizeBytes: f.sizeBytes, partIndex: f.partIndex, partCount: f.partCount, createdAt: f.createdAt.toISOString() }))}
           />
+          <FeedbackChat
+            batchId={id}
+            aiEnabled={Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN)}
+            initial={batch.feedback.map((f) => ({ id: f.id, role: f.role, body: f.body, proposal: f.proposal, appliedRule: f.appliedRule, createdAt: f.createdAt.toISOString() }))}
+          />
           <Card title="Activity on this batch">
             <ul className="divide-y divide-[var(--line-soft)] text-sm">
               {batch.auditLogs.map((a) => (
@@ -55,7 +61,7 @@ export default async function ExportPage(props: PageProps<"/batches/[id]/export"
             <Row k="Net profit = Σ ex-GST revenue − Σ landed cost" v={money(s.totalNetProfit)} strong />
             <Row k="Average margin" v={pct(s.averageMarginPct)} />
             <Row k="Rows below minimum margin" v={String(s.lowMarginVariants)} />
-            <Row k="Products export as" v="Draft, for checking before they go live" />
+            <Row k="Exported as" v="Drafts" />
           </dl>
         </Card>
       </div>

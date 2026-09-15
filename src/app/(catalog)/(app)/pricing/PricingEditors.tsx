@@ -18,12 +18,12 @@ export function CategoryRulesEditor({ rules, usingDefaults, isAdmin }: { rules: 
       {usingDefaults && <Alert tone="info">Showing the built-in defaults. Saving any rule here switches to your own list (copy the ones you want to keep, or run the seed script).</Alert>}
       <div className="overflow-auto">
         <table className="w-full text-sm">
-          <thead className="text-left text-xs text-[var(--ink-soft)]"><tr><th className="py-1">Category</th><th>Pattern</th><th>Type</th><th>Collections</th><th>Options</th><th className="text-right">Prio</th><th /></tr></thead>
+          <thead className="text-left text-xs text-[var(--ink-soft)]"><tr><th className="w-10 py-1">#</th><th>Category</th><th>Recognised by</th><th>Type</th><th>Collections</th><th>Options</th><th /></tr></thead>
           <tbody>
-            {rules.map((r) => (
-              <tr key={r.id} className="border-t border-[var(--line-soft)]">
-                <td className="py-1.5">{r.category}</td><td className="max-w-xs truncate font-mono text-[11px]" title={r.pattern}>{r.pattern}</td><td>{r.productType}</td><td className="text-xs">{r.collections}</td><td className="text-xs">{[r.option1, r.option2, r.option3].filter(Boolean).join(" / ")}</td><td className="text-right">{r.priority}</td>
-                <td className="text-right">{isAdmin && <><button className="text-xs text-[var(--violet)]" onClick={() => setEditing(usingDefaults ? { ...r, id: "" } : r)}>{usingDefaults ? "Copy" : "Edit"}</button>{!usingDefaults && <button className="ml-2 text-xs text-red-600" onClick={() => { if (confirm("Delete rule?")) start(async () => { await deleteCategoryRuleAction(r.id); }); }}>Delete</button>}</>}</td>
+            {rules.map((r, i) => (
+              <tr key={r.id} className="border-t border-[var(--line-soft)] transition-colors hover:bg-[var(--alp-snow)]">
+                <td className="py-1.5 text-xs font-semibold tabular-nums text-[var(--ink-soft)]" title={`Tried ${i + 1} of ${rules.length}. Weight ${r.priority}.`}>{i + 1}</td>
+                <td className="py-1.5">{r.category}</td><td className="max-w-xs truncate font-mono text-[11px]" title={r.pattern}>{r.pattern}</td><td>{r.productType}</td><td className="text-xs">{r.collections}</td><td className="text-xs">{[r.option1, r.option2, r.option3].filter(Boolean).join(" / ")}</td><td className="text-right">{isAdmin && <><button className="text-xs text-[var(--violet)]" onClick={() => setEditing(usingDefaults ? { ...r, id: "" } : r)}>{usingDefaults ? "Copy" : "Edit"}</button>{!usingDefaults && <button className="ml-2 text-xs text-red-600" onClick={() => { if (confirm("Delete rule?")) start(async () => { await deleteCategoryRuleAction(r.id); }); }}>Delete</button>}</>}</td>
               </tr>
             ))}
           </tbody>
@@ -37,7 +37,7 @@ export function CategoryRulesEditor({ rules, usingDefaults, isAdmin }: { rules: 
           <Field label="Product type"><input name="productType" required defaultValue={editing?.productType} className={INPUT} /></Field>
           <Field label="Collections (comma separated)"><input name="collections" defaultValue={editing?.collections} className={INPUT} /></Field>
           <Field label="Tags (comma separated)"><input name="tags" defaultValue={editing?.tags} className={INPUT} /></Field>
-          <Field label="Priority"><input name="priority" type="number" defaultValue={editing?.priority ?? 0} className={INPUT} /></Field>
+          <Field label="Weight" hint="Higher is tried first. The first rule that recognises a product decides what it is."><input name="priority" type="number" defaultValue={editing?.priority ?? 0} className={INPUT} /></Field>
           <label className="flex items-center gap-2 self-end pb-2 text-sm"><input type="checkbox" name="active" defaultChecked={editing?.active ?? true} /> Active</label>
           {(["option1", "option2", "option3"] as const).map((k, i) => <Field key={k} label={`Option ${i + 1}`}><select name={k} defaultValue={editing?.[k] ?? ""} className={INPUT}>{OPTS.map((o) => <option key={o} value={o}>{o || "—"}</option>)}</select></Field>)}
           <div className="flex items-end gap-2">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 /**
  * The shop's mark.
@@ -10,23 +10,23 @@ import { useState } from "react";
  * the moment someone drops the real artwork in. Nothing else has to change.
  */
 export function Logo({ className, height = 34 }: { className?: string; height?: number }) {
-  const [missing, setMissing] = useState(false);
+  // The drawn mark is what renders until the file is known to be good. Going the other way — render
+  // the file and fall back on error — leaves a broken image on screen whenever the error beats
+  // hydration to it, which on a server-rendered page it usually does.
+  const [artwork, setArtwork] = useState(false);
 
-  if (!missing) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element -- the file is optional; onError is the fallback
-      <img
-        src="/alpsport-logo.png"
-        alt="Alpsport"
-        height={height}
-        style={{ height, width: "auto" }}
-        className={className}
-        onError={() => setMissing(true)}
-      />
-    );
-  }
+  useEffect(() => {
+    const probe = new Image();
+    probe.onload = () => setArtwork(probe.naturalWidth > 0);
+    probe.src = "/alpsport-logo.png";
+  }, []);
 
-  return <Wordmark className={className} height={height} />;
+  if (!artwork) return <Wordmark className={className} height={height} />;
+
+  return (
+    // eslint-disable-next-line @next/next/no-img-element -- optional artwork, probed above
+    <img src="/alpsport-logo.png" alt="Alpsport" height={height} style={{ height, width: "auto" }} className={className} />
+  );
 }
 
 /** The oval, the peak and the two-tone wordmark, drawn rather than loaded. */
@@ -41,13 +41,14 @@ export function Wordmark({ className, height = 34 }: { className?: string; heigh
         </linearGradient>
       </defs>
       <ellipse cx="120" cy="44" rx="118" ry="42" fill="url(#alp-oval)" stroke="#ffd400" strokeWidth="4" />
-      <path d="M36 54 L57 24 L71 44 L79 34 L100 54 Z" fill="#ffffff" opacity="0.95" />
-      <path d="M57 24 L64 34 L50 34 Z" fill="#dce9f7" />
-      <text x="120" y="52" textAnchor="middle" fontFamily="system-ui, -apple-system, Segoe UI, sans-serif" fontSize="34" fontWeight="800" fontStyle="italic" letterSpacing="-0.5">
+      {/* The peak sits above the wordmark, the way it sits above it on the sign. */}
+      <path d="M78 34 L100 8 L114 24 L122 16 L144 34 Z" fill="#ffffff" opacity="0.92" />
+      <path d="M100 8 L107 16 L93 16 Z" fill="#c9ddf2" />
+      <text x="120" y="62" textAnchor="middle" fontFamily="system-ui, -apple-system, Segoe UI, sans-serif" fontSize="30" fontWeight="800" fontStyle="italic" letterSpacing="-0.5">
         <tspan fill="#ffffff">Alp</tspan>
         <tspan fill="#ffd400">sport</tspan>
       </text>
-      <text x="120" y="70" textAnchor="middle" fontFamily="system-ui, -apple-system, Segoe UI, sans-serif" fontSize="11" fontWeight="600" fill="#ffd400" letterSpacing="1.5">
+      <text x="120" y="78" textAnchor="middle" fontFamily="system-ui, -apple-system, Segoe UI, sans-serif" fontSize="9" fontWeight="700" fill="#ffd400" letterSpacing="2">
         SNOW &amp; OUTDOOR
       </text>
     </svg>

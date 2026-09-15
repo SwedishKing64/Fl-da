@@ -5,19 +5,18 @@ export default async function AuthLayout({ children }: { children: React.ReactNo
   const gate = await databaseGate();
   if (gate) return gate;
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[var(--canvas)] px-4">
-      {/* A suggestion of the range behind the sign-in card. */}
-      <div className="alp-gradient pointer-events-none absolute inset-x-0 top-0 h-56" aria-hidden />
-      <svg className="pointer-events-none absolute inset-x-0 top-24 h-40 w-full text-[var(--canvas)]" viewBox="0 0 1200 160" preserveAspectRatio="none" aria-hidden>
-        <path d="M0 160 L240 54 L360 112 L520 20 L700 120 L860 62 L1040 128 L1200 70 L1200 160 Z" fill="currentColor" />
-      </svg>
-      <div className="rise relative w-full max-w-sm">
-        <div className="mb-6 flex flex-col items-center text-center">
-          <Logo height={56} />
-          <div className="mt-3 text-xs font-medium text-white/85">Supplier invoices → Shopify products</div>
+    <main className="min-h-screen bg-[var(--canvas)]">
+      <header className="alp-gradient relative overflow-hidden pb-24 pt-12 text-center">
+        <div className="rise relative z-10 flex flex-col items-center px-4">
+          <Logo height={64} />
+          <p className="mt-3 text-xs font-medium tracking-wide text-white/85">Supplier invoices → Shopify products</p>
         </div>
-        {children}
-      </div>
+        {/* The range, cut out of the blue in the colour of the ground below it. */}
+        <svg className="pointer-events-none absolute inset-x-0 bottom-0 h-20 w-full text-[var(--canvas)]" viewBox="0 0 1200 120" preserveAspectRatio="none" aria-hidden>
+          <path d="M0 120 L190 44 L300 92 L470 18 L640 98 L820 52 L1000 104 L1200 60 L1200 120 Z" fill="currentColor" />
+        </svg>
+      </header>
+      <div className="rise rise-1 mx-auto -mt-12 w-full max-w-sm px-4 pb-16">{children}</div>
     </main>
   );
 }

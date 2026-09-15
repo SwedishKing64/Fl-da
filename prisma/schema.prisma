@@ -28,6 +28,7 @@ model User {
   sessions  Session[]
   batches   ImportBatch[]
   auditLogs AuditLog[]
+  feedback  ExportFeedback[]
 }
 
 model Session {
@@ -106,6 +107,7 @@ model ImportBatch {
   exports   ExportFile[]
   auditLogs AuditLog[]
   unassignedImages UnassignedImage[]
+  feedback  ExportFeedback[]
 
   @@index([createdById])
   @@index([status])
@@ -369,6 +371,29 @@ model AppSetting {
 // ---------------------------------------------------------------------------
 // Exports, Shopify catalog cache, audit
 // ---------------------------------------------------------------------------
+
+/**
+ * What someone said after looking at a finished CSV, and what was done about it.
+ *
+ * The point is not the conversation — it is that a correction made once becomes a standing
+ * instruction, so the next invoice does not repeat the mistake. `appliedRule` records the house
+ * rule a message turned into, when it turned into one.
+ */
+model ExportFeedback {
+  id          String   @id @default(cuid())
+  batchId     String
+  userId      String?
+  role        String // USER | ASSISTANT
+  body        String
+  proposal    String   @default("") // the standing rule the assistant suggested, if any
+  appliedRule String   @default("") // the rule text actually saved to house rules
+  createdAt   DateTime @default(now())
+
+  batch ImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  user  User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([batchId, createdAt])
+}
 
 model ExportFile {
   id          String   @id @default(cuid())

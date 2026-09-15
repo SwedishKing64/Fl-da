@@ -15,6 +15,7 @@ import { enrichBatchSeo } from "@/lib/catalog/seo";
 import { slugify } from "@/lib/catalog/handle";
 import { CURRENCIES, type AppSettings } from "@/lib/catalog/types";
 import { seedDefaults } from "@/lib/catalog/seed";
+import { answerFeedback, feedbackAvailable, withRule, type FeedbackTurn } from "@/lib/catalog/feedback";
 
 export type ActionResult<T = undefined> = { ok: true; data?: T; message?: string } | { ok: false; error: string };
 
@@ -891,4 +892,79 @@ export async function toggleProductTemplateAction(id: string, active: boolean): 
   await prisma.productTemplate.update({ where: { id }, data: { active } });
   revalidatePath("/templates");
   return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Feedback on a finished CSV
+// ---------------------------------------------------------------------------
+
+export interface FeedbackMessage {
+  id: string;
+  role: string;
+  body: string;
+  proposal: string;
+  appliedRule: string;
+  createdAt: string;
+}
+
+function asMessage(row: { id: string; role: string; body: string; proposal: string; appliedRule: string; createdAt: Date }): FeedbackMessage {
+  return { id: row.id, role: row.role, body: row.body, proposal: row.proposal, appliedRule: row.appliedRule, createdAt: row.createdAt.toISOString() };
+}
+
+/**
+ * Say what is wrong with a finished CSV and get an answer — and, where the correction is general,
+ * the standing rule that would stop it happening again. The rule is only proposed here; adding it
+ * is a separate, deliberate act.
+ */
+export async function sendFeedbackAction(batchId: string, message: string): Promise<ActionResult<{ messages: FeedbackMessage[] }>> {
+  const user = await requireUser();
+  const body = message.trim();
+  if (!body) return { ok: false, error: "Say what is wrong and it will be answered." };
+
+  try {
+    await prisma.exportFeedback.create({ data: { batchId, userId: user.id, role: "USER", body } });
+
+    if (feedbackAvailable()) {
+      const [batch, products, settings, thread] = await Promise.all([
+        prisma.importBatch.findUniqueOrThrow({ where: { id: batchId }, select: { name: true } }),
+        prisma.product.findMany({ where: { batchId }, select: { title: true, vendor: true, productType: true, tags: true }, orderBy: { sortOrder: "asc" } }),
+        getSettings(),
+        prisma.exportFeedback.findMany({ where: { batchId }, orderBy: { createdAt: "asc" } }),
+      ]);
+      const turns: FeedbackTurn[] = thread.map((t) => ({ role: t.role === "USER" ? "USER" : "ASSISTANT", body: t.body }));
+      const reply = await answerFeedback({ products, houseRules: settings.houseRules, batchName: batch.name }, turns);
+      if (reply) {
+        await prisma.exportFeedback.create({
+          data: { batchId, role: "ASSISTANT", body: reply.reply, proposal: reply.proposal.trim() },
+        });
+      }
+    }
+
+    const messages = await prisma.exportFeedback.findMany({ where: { batchId }, orderBy: { createdAt: "asc" } });
+    revalidatePath(`/batches/${batchId}/export`);
+    return { ok: true, data: { messages: messages.map(asMessage) } };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/** Accept a proposed rule: it joins the standing instructions every future import is built against. */
+export async function applyFeedbackRuleAction(feedbackId: string): Promise<ActionResult<{ houseRules: string }>> {
+  const user = await requireUser();
+  try {
+    const row = await prisma.exportFeedback.findUniqueOrThrow({ where: { id: feedbackId } });
+    if (!row.proposal.trim()) return { ok: false, error: "There is no rule to add on that message." };
+
+    const settings = await getSettings();
+    const houseRules = withRule(settings.houseRules, row.proposal);
+    await saveSettings({ houseRules });
+    await prisma.exportFeedback.update({ where: { id: feedbackId }, data: { appliedRule: row.proposal.trim() } });
+    await logAudit("feedback.rule", { batchId: row.batchId, userId: user.id, details: { rule: row.proposal.trim() } });
+
+    revalidatePath(`/batches/${row.batchId}/export`);
+    revalidatePath("/templates");
+    return { ok: true, data: { houseRules } };
+  } catch (err) {
+    return fail(err);
+  }
 }

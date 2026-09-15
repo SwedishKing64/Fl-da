@@ -5,7 +5,7 @@ import { applyMapping, type Mapping, type MappingOptions } from "./mapping";
 import { productTitle, seoTitle } from "./titles";
 import { groupLineItems } from "./grouping";
 import type { CategoryRuleLike } from "./categorize";
-import { allocateFreight, exGstCostAud, priceVariant, type PricingRuleLike } from "./pricing";
+import { allocateFreight, exGstCostAud, priceVariant } from "./pricing";
 import { generateCsv, type CsvProduct } from "./csv";
 import { toCsvProducts } from "./pipeline-pure";
 import { SKI_METAFIELDS, metafieldColumn, type AppSettings, type GstTreatment } from "./types";
@@ -35,7 +35,6 @@ export function runOffline(
   mapping: Mapping,
   mappingOptions: MappingOptions,
   batch: OfflineBatch,
-  pricingRules: PricingRuleLike[],
   categoryRules: CategoryRuleLike[],
   settings: Pick<AppSettings, "gstRate" | "pricesIncludeGst" | "minMarginPct">,
 ): OfflineResult {

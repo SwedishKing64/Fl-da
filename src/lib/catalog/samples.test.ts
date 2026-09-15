@@ -42,7 +42,7 @@ describe("sample invoices → expected Shopify CSV", () => {
       expect(prices.every((price) => price === 0)).toBe(true);
       // Blocked, and the reason names the product rather than a rule that should have priced it.
       expect(result.errors.length).toBeGreaterThan(0);
-      expect(result.errors[0]).toContain("No recommended retail on the invoice");
+      expect(result.errors[0]).toContain("No recommended retail yet");
     });
   }
 

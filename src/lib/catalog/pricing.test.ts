@@ -1,26 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   allocateFreight,
-  applyRounding,
   exGstCostAud,
   priceVariant,
-  selectRule,
   summariseBatch,
-  targetExGstPrice,
-  type PricingRuleLike,
 } from "./pricing";
 import { parseMoney, roundCents } from "./money";
 
 const settings = { gstRate: 0.1, pricesIncludeGst: true, minMarginPct: 20 };
 
-const margin40: PricingRuleLike = {
-  id: "r1", name: "Skis 40% margin", scope: "CATEGORY", matchValue: "skis",
-  mode: "MARGIN", percent: 40, roundTo: "NONE", priority: 0, active: true,
-};
-const keystone: PricingRuleLike = {
-  id: "r2", name: "Accessories keystone", scope: "CATEGORY", matchValue: "accessories",
-  mode: "MARKUP", percent: 100, roundTo: "0.99", priority: 0, active: true,
-};
 
 describe("GST back-out", () => {
   it("treats GST-inclusive AUD cost as an input tax credit (ex-GST cost)", () => {
@@ -59,44 +47,6 @@ describe("GST back-out", () => {
     expect(r.gstComponent).toBe(50);
     expect(r.profitPerUnit).toBe(200);
     expect(r.lineRevenueIncGst).toBe(550);
-  });
-});
-
-describe("markup vs margin", () => {
-  it("keystone markup doubles landed cost ex-GST", () => {
-    expect(targetExGstPrice(50, keystone)).toBe(100);
-    expect(targetExGstPrice(60, margin40)).toBe(100);
-  });
-
-  it("rejects margin >= 100%", () => {
-    expect(() => targetExGstPrice(10, { ...margin40, percent: 100 })).toThrow();
-  });
-});
-
-describe("rounding", () => {
-  it("rounds up to price endings so target margin is never undercut", () => {
-    expect(applyRounding(649.23, "0.99")).toBe(649.99);
-    expect(applyRounding(649.99, "0.99")).toBe(649.99);
-    expect(applyRounding(650.0, "0.99")).toBe(650.99);
-    expect(applyRounding(12.3, "0.95")).toBe(12.95);
-    expect(applyRounding(12.96, "0.95")).toBe(13.95);
-    expect(applyRounding(12.01, "1.00")).toBe(13);
-    expect(applyRounding(12.0, "1.00")).toBe(12);
-    expect(applyRounding(101, "5.00")).toBe(105);
-    expect(applyRounding(101.456, "NONE")).toBe(101.46);
-  });
-
-  it("prices a keystone accessory to end in .99", () => {
-    const r = priceVariant(
-      { costPrice: 20, gstTreatment: "EXCLUSIVE", fxRateToAud: 1, freightPerUnitAud: 0, quantity: 3, retailOverride: 44.99 },
-      settings,
-    );
-    // keystone on a $20 cost gives ex-GST 40 => 44.00 inc GST => 44.99
-    expect(r.retailPrice).toBe(44.99);
-    expect(r.exGstRevenue).toBe(40.9);
-    expect(r.profitPerUnit).toBe(20.9);
-    expect(r.lineProfit).toBe(62.7);
-    expect(r.lineRevenueIncGst).toBe(134.97);
   });
 });
 
@@ -142,23 +92,6 @@ describe("override, freight, warnings", () => {
     expect(allocateFreight(40, "PER_UNIT", lines)).toEqual({ a: 10, b: 10 });
     expect(allocateFreight(40, "BY_VALUE", lines)).toEqual({ a: 5, b: 15 });
     expect(allocateFreight(0, "BY_VALUE", lines)).toEqual({ a: 0, b: 0 });
-  });
-});
-
-describe("rule selection", () => {
-  const rules: PricingRuleLike[] = [
-    { ...margin40, id: "d", scope: "DEFAULT", matchValue: "", name: "default" },
-    margin40,
-    { ...margin40, id: "b", scope: "BRAND", matchValue: "Atomic", name: "atomic" },
-    { ...margin40, id: "p", scope: "PRODUCT", matchValue: "AA0029", name: "product" },
-    { ...margin40, id: "off", scope: "PRODUCT", matchValue: "AA0029", name: "inactive", active: false, priority: 99 },
-  ];
-  it("prefers product over brand over category over default", () => {
-    expect(selectRule(rules, { category: "skis", brand: "Atomic", sku: "AA0029-172", modelCode: "AA0029" })?.name).toBe("product");
-    expect(selectRule(rules, { category: "skis", brand: "atomic", sku: "x", modelCode: "y" })?.name).toBe("atomic");
-    expect(selectRule(rules, { category: "Skis", brand: "Volkl", sku: "x", modelCode: "y" })?.name).toBe("Skis 40% margin");
-    expect(selectRule(rules, { category: "boots", brand: "Volkl", sku: "x", modelCode: "y" })?.name).toBe("default");
-    expect(selectRule([], { category: "boots", brand: "", sku: "", modelCode: "" })).toBeNull();
   });
 });
 

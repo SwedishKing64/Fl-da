@@ -64,7 +64,12 @@ type Candidate = {
 
 /** A product wants a lookup when it has no description, no retail price, or no brand. */
 function wants(p: Candidate): boolean {
-  return !p.bodyHtml.trim() || !p.vendor.trim() || p.variants.every((v) => v.retailOverride === null);
+  return !p.bodyHtml.trim() || !p.vendor.trim() || needsPrice(p);
+}
+
+/** No recommended retail on any variant — so no price, and nothing to export. */
+function needsPrice(p: Candidate): boolean {
+  return p.variants.every((v) => v.retailOverride === null);
 }
 
 async function candidates(batchId: string, productIds?: string[]): Promise<Candidate[]> {
@@ -100,7 +105,9 @@ export async function lookupBatch(
   const already = named || opts.retry
     ? new Set<string>()
     : new Set((await prisma.product.findMany({ where: { batchId, lookupStatus: { not: "NONE" } }, select: { id: true } })).map((p) => p.id));
-  const todo = wanting.filter((p) => !already.has(p.id));
+  // A product with no price cannot be exported at all, while one with no description merely reads
+  // poorly — so when a pass cannot finish everything, the ones without a price go first.
+  const todo = wanting.filter((p) => !already.has(p.id)).sort((a, b) => Number(needsPrice(b)) - Number(needsPrice(a)));
 
   const out: LookupOutcome = { ...EMPTY, missing: wanting.length, capped: todo.length > LOOKUP_LIMIT, remaining: todo.length };
   const work = todo.slice(0, LOOKUP_LIMIT);

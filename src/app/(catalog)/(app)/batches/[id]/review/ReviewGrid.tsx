@@ -30,7 +30,7 @@ import type { ReviewProduct, ReviewVariant } from "@/lib/catalog/review-types";
 import { priceVariant } from "@/lib/catalog/pricing";
 import { CATEGORIES, type GstTreatment, type RowFlag } from "@/lib/catalog/types";
 
-type VariantField = "sku" | "barcode" | "option1Value" | "option2Value" | "option3Value" | "quantity" | "costPrice" | "gstTreatment" | "freightPerUnitAud" | "retailOverride" | "compareAtPrice" | "grams" | "pricingRuleId";
+type VariantField = "sku" | "barcode" | "option1Value" | "option2Value" | "option3Value" | "quantity" | "costPrice" | "gstTreatment" | "freightPerUnitAud" | "retailOverride" | "compareAtPrice" | "grams";
 type ProductField = "title" | "handle" | "vendor" | "productType" | "category" | "tags" | "collections" | "status";
 
 interface Col {
@@ -79,7 +79,6 @@ function fmt(v: ReviewVariant, key: Col["key"]): string {
     case "compareAtPrice": return typeof val === "number" && val > 0 ? val.toFixed(2) : "";
     case "marginPct": case "markupPct": return typeof val === "number" ? `${val.toFixed(1)}%` : "";
     case "gstTreatment": return val === "INCLUSIVE" ? "Inc" : val === "NONE" ? "None" : "Ex";
-    case "pricingRuleId": return v.pricingRuleName ?? "";
     default: return val === null || val === undefined ? "" : String(val);
   }
 }
@@ -157,7 +156,7 @@ export function ReviewGrid({ initial, batchId }: { initial: ReviewData; batchId:
             { costPrice: next.costPrice, gstTreatment: next.gstTreatment as GstTreatment, fxRateToAud: next.fxRateToAud, freightPerUnitAud: next.freightPerUnitAud, quantity: next.quantity, retailOverride: next.retailOverride },
             { gstRate: d.settings.gstRate, pricesIncludeGst: d.settings.pricesIncludeGst, minMarginPct: d.settings.minMarginPct },
           );
-          return { ...next, landedCostAud: r.landedCostAud, retailPrice: r.retailPrice, exGstRevenue: r.exGstRevenue, gstComponent: r.gstComponent, profitPerUnit: r.profitPerUnit, marginPct: r.marginPct, markupPct: r.markupPct, pricingRuleName: null };
+          return { ...next, landedCostAud: r.landedCostAud, retailPrice: r.retailPrice, exGstRevenue: r.exGstRevenue, gstComponent: r.gstComponent, profitPerUnit: r.profitPerUnit, marginPct: r.marginPct, markupPct: r.markupPct };
         }),
       })),
     }));
@@ -170,7 +169,6 @@ export function ReviewGrid({ initial, batchId }: { initial: ReviewData; batchId:
       case "quantity": case "grams": patch[field] = Math.max(0, Math.round(num ?? 0)); break;
       case "costPrice": case "freightPerUnitAud": patch[field] = Math.max(0, num ?? 0); break;
       case "retailOverride": case "compareAtPrice": patch[field] = num === null || Number.isNaN(num) ? null : num; break;
-      case "pricingRuleId": patch[field] = raw || null; break;
       case "gstTreatment": patch[field] = raw; break;
       default: patch[field] = raw;
     }
@@ -233,7 +231,7 @@ export function ReviewGrid({ initial, batchId }: { initial: ReviewData; batchId:
       case "Enter": case "F2": e.preventDefault(); startEdit(focus.variantId, focus.col); break;
       case "Delete": case "Backspace": {
         const col = VARIANT_COLS[focus.col];
-        if (col.editable && (col.key === "retailOverride" || col.key === "compareAtPrice" || col.key === "pricingRuleId")) { e.preventDefault(); commitVariant(focus.variantId, col.key, ""); }
+        if (col.editable && (col.key === "retailOverride" || col.key === "compareAtPrice")) { e.preventDefault(); commitVariant(focus.variantId, col.key, ""); }
         break;
       }
       default:
@@ -275,7 +273,6 @@ export function ReviewGrid({ initial, batchId }: { initial: ReviewData; batchId:
       case "dismissWarnings": patch.dismissWarnings = bulk.value ? [bulk.value] : ["NO_IMAGE", "LOW_MARGIN", "MISSING_SKU", "MISSING_VENDOR", "MISSING_TYPE", "INVALID_IMAGE_URL", "NEGATIVE_PROFIT", "DUPLICATE_SKU_SHOPIFY", "UPDATE_EXISTING"]; break;
       case "restoreWarnings": patch.restoreWarnings = true; break;
       case "clearOverride": patch.clearOverride = true; break;
-      case "pricingRuleId": patch.pricingRuleId = bulk.value || null; break;
       default: patch[bulk.field] = bulk.value;
     }
     start(async () => {
@@ -291,6 +288,8 @@ export function ReviewGrid({ initial, batchId }: { initial: ReviewData; batchId:
   // A product with no description exports an empty Body (HTML), which is the one thing nobody
   // notices until the CSV is open in Shopify. Said here, next to the button that fills them.
   const withoutDescription = data.products.filter((p) => !p.bodyHtml.trim()).length;
+  // No recommended retail means no price, which blocks the export outright — so it leads.
+  const withoutPrice = data.products.filter((p) => p.variants.every((v) => v.retailOverride === null)).length;
   const drawerProduct = drawer ? data.products.find((p) => p.id === drawer) ?? null : null;
 
   return (
@@ -314,7 +313,7 @@ export function ReviewGrid({ initial, batchId }: { initial: ReviewData; batchId:
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <Button size="sm" onClick={() => setExpanded(expanded.size ? new Set() : new Set(data.products.map((p) => p.id)))}>{expanded.size ? "Collapse all" : "Expand all"}</Button>
           <Button size="sm" disabled={pending || locked} title="Re-run the tag, collection, type and metafield rules" onClick={() => start(async () => { const r = await applyRulesAction(batchId); setMessage(r.ok ? { tone: "success", text: `Rules applied: ${r.data!.matched} of ${r.data!.products} products matched a rule.` } : { tone: "danger", text: r.error }); await refresh(); })}>Apply rules</Button>
-          <Button size="sm" disabled={pending || locked} title="Search the brand's website for the description and the recommended retail of anything the invoice did not carry" onClick={() => start(async () => { const r = await lookupProductsAction(batchId, { retry: true }); setMessage(r.ok ? lookupMessage(r.data!) : { tone: "danger", text: r.error }); await refresh(); })}>Find descriptions</Button>
+          <Button size="sm" disabled={pending || locked} title="Search the brand's website for the recommended retail and description of anything the invoice did not carry" onClick={() => start(async () => { const r = await lookupProductsAction(batchId, { retry: true }); setMessage(r.ok ? lookupMessage(r.data!) : { tone: "danger", text: r.error }); await refresh(); })}>Look up missing details</Button>
           {data.unassignedImages.length > 0 && !locked && <Button size="sm" disabled={pending} onClick={() => start(async () => { const r = await autoAttachPhotosAction(batchId); setMessage(r.ok ? { tone: "info", text: `${r.data!.attached} photo${r.data!.attached === 1 ? "" : "s"} matched by name/SKU. Open a product's Details to attach the rest.` } : { tone: "danger", text: r.error }); await refresh(); })}>Match photos</Button>}
           <Button size="sm" disabled={pending} onClick={() => start(async () => { const r = await verifyImagesAction(batchId); setMessage(r.ok ? { tone: r.data!.failed ? "warning" : "success", text: `Checked ${r.data!.checked} image URLs, ${r.data!.failed} unreachable.` } : { tone: "danger", text: r.error }); await refresh(); })}>Check images</Button>
           <Button size="sm" disabled={pending || locked} onClick={() => start(async () => { const r = await enrichSeoAction(batchId, true); setMessage(r.ok ? { tone: "success", text: `SEO written for ${r.data!.updated} products (${r.data!.source === "AI" ? "AI" : r.data!.source === "TEMPLATE" ? "template - set ANTHROPIC_API_KEY for AI copy" : "AI + template"}).` } : { tone: "danger", text: r.error }); await refresh(); })}>Write SEO copy</Button>
@@ -323,9 +322,15 @@ export function ReviewGrid({ initial, batchId }: { initial: ReviewData; batchId:
         </div>
       </div>
 
+      {withoutPrice > 0 && !locked && (
+        <Alert tone="danger" className="mb-3">
+          {withoutPrice} of {data.products.length} products have no recommended retail, so they have no price and cannot be exported. Press <strong>Look up missing details</strong> to search the brand&apos;s website, or type prices into the Retail column.
+        </Alert>
+      )}
+
       {withoutDescription > 0 && !locked && (
         <Alert tone="warning" className="mb-3">
-          {withoutDescription} of {data.products.length} products have no description yet. Press <strong>Find descriptions</strong> to pull them from the brand&apos;s website, or write them in a product&apos;s Details.
+          {withoutDescription} of {data.products.length} products have no description yet. Press <strong>Look up missing details</strong> to pull them from the brand&apos;s website, or write them in a product&apos;s Details.
         </Alert>
       )}
 
@@ -344,7 +349,6 @@ export function ReviewGrid({ initial, batchId }: { initial: ReviewData; batchId:
           {bulk.field === "category" && <select value={bulk.value} onChange={(e) => setBulk({ ...bulk, value: e.target.value })} className={`${INPUT_INLINE} w-40`}><option value="">Choose…</option>{CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}</select>}
           {bulk.field === "status" && <select value={bulk.value} onChange={(e) => setBulk({ ...bulk, value: e.target.value })} className={`${INPUT_INLINE} w-40`}><option value="">Choose…</option><option value="draft">Draft</option><option value="active">Active</option></select>}
           {bulk.field === "gstTreatment" && <select value={bulk.value} onChange={(e) => setBulk({ ...bulk, value: e.target.value })} className={`${INPUT_INLINE} w-40`}><option value="">Choose…</option><option value="EXCLUSIVE">Ex GST</option><option value="INCLUSIVE">Inc GST</option><option value="NONE">No GST</option></select>}
-          {bulk.field === "pricingRuleId" && <select value={bulk.value} onChange={(e) => setBulk({ ...bulk, value: e.target.value })} className={`${INPUT_INLINE} w-56`}><option value="">Automatic (by category/brand)</option>{data.rules.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}</select>}
           {bulk.field === "dismissWarnings" && <select value={bulk.value} onChange={(e) => setBulk({ ...bulk, value: e.target.value })} className={`${INPUT_INLINE} w-56`}><option value="">All warnings</option>{["NO_IMAGE", "LOW_MARGIN", "MISSING_SKU", "MISSING_VENDOR", "MISSING_TYPE", "NEGATIVE_PROFIT", "UPDATE_EXISTING", "DUPLICATE_SKU_SHOPIFY"].map((c) => <option key={c} value={c}>{FLAG_LABELS[c]}</option>)}</select>}
           <Button size="sm" variant="primary" onClick={runBulk} disabled={pending}>Apply</Button>
           <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>Clear</Button>
@@ -423,8 +427,6 @@ export function ReviewGrid({ initial, batchId }: { initial: ReviewData; batchId:
                                 {isEdit ? (
                                   c.kind === "select" && c.key === "gstTreatment" ? (
                                     <span className="cell"><select autoFocus value={editing.value} onChange={(e) => { commitVariant(v.id, "gstTreatment", e.target.value); setEditing(null); }} onBlur={() => setEditing(null)}><option value="EXCLUSIVE">Ex GST</option><option value="INCLUSIVE">Inc GST</option><option value="NONE">No GST</option></select></span>
-                                  ) : c.kind === "select" && c.key === "pricingRuleId" ? (
-                                    <span className="cell"><select autoFocus value={editing.value} onChange={(e) => { commitVariant(v.id, "pricingRuleId", e.target.value); setEditing(null); }} onBlur={() => setEditing(null)}><option value="">Automatic</option>{data.rules.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}</select></span>
                                   ) : (
                                     <span className="cell"><input autoFocus type={c.kind === "number" ? "number" : "text"} step="any" value={editing.value} onChange={(e) => setEditing({ ...editing, value: e.target.value })} onBlur={() => { commitVariant(v.id, c.key as VariantField, editing.value); setEditing(null); }} /></span>
                                   )
@@ -433,7 +435,7 @@ export function ReviewGrid({ initial, batchId }: { initial: ReviewData; batchId:
                                     className={cx("cell", c.editable && !locked && !disabledOpt && "editable", c.num && "num", isFocus && "focused", c.key === "retailOverride" && v.retailOverride !== null && "text-[var(--violet)] font-semibold", (c.key === "marginPct" || c.key === "profitPerUnit") && v.flags.some((f) => f.code === "LOW_MARGIN" || f.code === "NEGATIVE_PROFIT") && "text-amber-700 font-semibold", disabledOpt && "text-neutral-300")}
                                     onClick={() => setFocus({ variantId: v.id, col: ci })}
                                     onDoubleClick={() => !disabledOpt && startEdit(v.id, ci)}
-                                    title={c.key === "retailOverride" ? (v.retailOverride !== null ? "Manual override (Delete to clear)" : `Computed by ${v.pricingRuleName}`) : undefined}
+                                    title={c.key === "retailOverride" ? (v.retailOverride !== null ? "The supplier's recommended retail (Delete to clear)" : "No recommended retail yet") : undefined}
                                   >
                                     {disabledOpt ? "–" : fmt(v, c.key)}
                                   </span>

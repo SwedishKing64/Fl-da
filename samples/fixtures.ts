@@ -5,14 +5,9 @@ import { extractHeuristic } from "../src/lib/catalog/extract/heuristic";
 import { suggestMapping } from "../src/lib/catalog/mapping";
 import { DEFAULT_CATEGORY_RULES } from "../src/lib/catalog/categorize";
 import { runOffline, type OfflineResult } from "../src/lib/catalog/offline";
-import { DEFAULT_PRICING_RULES } from "../src/lib/catalog/seed";
-import type { PricingRuleLike } from "../src/lib/catalog/pricing";
 
 export const FIXTURE_SETTINGS = { gstRate: 0.1, pricesIncludeGst: true, minMarginPct: 20 };
 
-export const FIXTURE_RULES: PricingRuleLike[] = DEFAULT_PRICING_RULES.map((r, i) => ({
-  id: `rule-${i}`, name: r.name, scope: r.scope as PricingRuleLike["scope"], matchValue: r.matchValue, mode: r.mode as PricingRuleLike["mode"], percent: r.percent, roundTo: r.roundTo, priority: r.priority, active: true,
-}));
 
 /** 1. Atomic pre-book: AUD, ex-GST, tidy CSV with image URLs and RRP. */
 const ATOMIC_CSV = `Style No,Item Description,Colour,Length (cm),EAN,Qty,WHS Price,RRP,Image URL,Category,Season
@@ -74,7 +69,6 @@ export function buildFixtures(): Fixtures {
     suggestMapping(atomicTable.headers),
     { fixed: { brand: "Atomic" } },
     { currency: "AUD", fxRateToAud: 1, gstTreatment: "EXCLUSIVE", freightTotalAud: 0, freightMode: "PER_UNIT" },
-    FIXTURE_RULES,
     DEFAULT_CATEGORY_RULES,
     FIXTURE_SETTINGS,
   );
@@ -88,7 +82,6 @@ export function buildFixtures(): Fixtures {
     volklMapping,
     { costIsLineTotal: true, fixed: { season: "2026" } },
     { currency: "USD", fxRateToAud: 1.52, gstTreatment: "NONE", freightTotalAud: 220, freightMode: "BY_VALUE" },
-    FIXTURE_RULES,
     DEFAULT_CATEGORY_RULES,
     FIXTURE_SETTINGS,
   );
@@ -99,7 +92,6 @@ export function buildFixtures(): Fixtures {
     suggestMapping(burtonTable.headers),
     { fixed: { brand: "Burton" } },
     { currency: "AUD", fxRateToAud: 1, gstTreatment: "INCLUSIVE", freightTotalAud: 55, freightMode: "PER_UNIT" },
-    FIXTURE_RULES,
     DEFAULT_CATEGORY_RULES,
     FIXTURE_SETTINGS,
   );

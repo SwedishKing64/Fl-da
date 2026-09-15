@@ -2,7 +2,7 @@ import { prisma, parseJson } from "@/lib/catalog/db";
 import { requireUser } from "@/lib/catalog/auth";
 import { DEFAULT_CATEGORY_RULES } from "@/lib/catalog/categorize";
 import { Card, PageHeader } from "@/app/(catalog)/ui";
-import { CategoryRulesEditor } from "../pricing/PricingEditors";
+import { CategoryRulesEditor } from "./CategoryRulesEditor";
 import { TagRulesEditor } from "./TagRulesEditor";
 
 export default async function RulesPage() {

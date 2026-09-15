@@ -22,19 +22,7 @@
 
 import { roundCents } from "./money";
 import { discounted } from "./instructions";
-import type { GstTreatment, PricingMode, RuleScope } from "./types";
-
-export interface PricingRuleLike {
-  id: string;
-  name: string;
-  scope: RuleScope;
-  matchValue: string;
-  mode: PricingMode;
-  percent: number;
-  roundTo: string;
-  priority: number;
-  active: boolean;
-}
+import type { GstTreatment } from "./types";
 
 export interface PricingSettings {
   gstRate: number; // 0.1
@@ -96,55 +84,6 @@ export function exGstCostAud(
 }
 
 /** Target ex-GST sell price for a landed cost under a MARGIN or MARKUP rule. */
-/**
- * What a margin or markup would price something at — the price calculator's question.
- *
- * Deliberately not part of pricing a product. It answers "what would I have to charge for 45%?",
- * which is a useful thing to ask while deciding what to buy, and a terrible way to decide what to
- * sell at when the supplier has already told you their recommended retail.
- */
-export function retailFromRule(landedCostAud: number, rule: PricingRuleLike, settings: PricingSettings): number {
-  const exGst = targetExGstPrice(landedCostAud, rule);
-  const storefront = settings.pricesIncludeGst ? exGst * (1 + settings.gstRate) : exGst;
-  return applyRounding(storefront, rule.roundTo);
-}
-
-export function targetExGstPrice(landedCost: number, rule: PricingRuleLike): number {
-  const pct = rule.percent / 100;
-  if (rule.mode === "MARGIN") {
-    if (pct >= 1) throw new Error("Margin rules must be below 100%");
-    return landedCost / (1 - pct);
-  }
-  return landedCost * (1 + pct);
-}
-
-/**
- * Apply a price-ending rule, always rounding UP so the achieved margin never drops below the
- * rule's target: "0.99" => next x.99, "0.95" => next x.95, "1.00" => next whole dollar,
- * "5.00" => next multiple of $5, "NONE" => nearest cent.
- */
-export function applyRounding(price: number, roundTo: string): number {
-  const p = roundCents(price);
-  if (p <= 0) return 0;
-  switch (roundTo) {
-    case "0.99":
-    case "0.95": {
-      const ending = Number(roundTo);
-      let candidate = Math.floor(p) + ending;
-      if (candidate + 1e-9 < p) candidate += 1;
-      return roundCents(candidate);
-    }
-    case "1.00":
-      return Math.ceil(p - 1e-9);
-    case "5.00":
-      return Math.ceil(p / 5 - 1e-9) * 5;
-    case "10.00":
-      return Math.ceil(p / 10 - 1e-9) * 10;
-    default:
-      return p;
-  }
-}
-
 export function priceVariant(input: PricingInput, settings: PricingSettings): PricingResult {
   const gst = settings.gstRate;
   const qty = Math.max(0, input.quantity || 0);
@@ -196,39 +135,8 @@ function round1(n: number): number {
   return Math.round(n * 10) / 10;
 }
 
-export interface RuleContext {
-  category: string;
-  brand: string;
-  sku: string;
-  modelCode: string;
-}
-
-const SCOPE_RANK: Record<RuleScope, number> = { PRODUCT: 3, BRAND: 2, CATEGORY: 1, DEFAULT: 0 };
 
 /** Most specific active rule wins (PRODUCT > BRAND > CATEGORY > DEFAULT), then highest priority. */
-export function selectRule(rules: PricingRuleLike[], ctx: RuleContext): PricingRuleLike | null {
-  const norm = (s: string) => (s || "").trim().toLowerCase();
-  const candidates = rules.filter((r) => {
-    if (!r.active) return false;
-    const mv = norm(r.matchValue);
-    switch (r.scope) {
-      case "DEFAULT":
-        return true;
-      case "CATEGORY":
-        return mv !== "" && mv === norm(ctx.category);
-      case "BRAND":
-        return mv !== "" && mv === norm(ctx.brand);
-      case "PRODUCT":
-        return mv !== "" && (mv === norm(ctx.sku) || mv === norm(ctx.modelCode));
-      default:
-        return false;
-    }
-  });
-  if (candidates.length === 0) return null;
-  candidates.sort((a, b) => SCOPE_RANK[b.scope] - SCOPE_RANK[a.scope] || b.priority - a.priority);
-  return candidates[0];
-}
-
 // ---------------------------------------------------------------------------
 // Freight allocation
 // ---------------------------------------------------------------------------

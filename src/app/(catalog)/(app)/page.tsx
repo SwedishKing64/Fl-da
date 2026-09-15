@@ -57,7 +57,7 @@ export default async function DashboardPage() {
             <li><strong>Review</strong> the products in the grid: fix anything, add images, check tags.</li>
             <li><strong>Export</strong> one Shopify CSV per brand (or product type), or push straight to the store.</li>
           </ol>
-          <p className="mt-3 text-xs text-[var(--ink-soft)]">Tags, collections and types come from the <Link href="/rules" className="text-[var(--violet)]">Rules</Link> page; prices from <Link href="/pricing" className="text-[var(--violet)]">Pricing</Link>.</p>
+          <p className="mt-3 text-xs text-[var(--ink-soft)]">Tags, collections and types come from the <Link href="/rules" className="text-[var(--violet)]">Rules</Link> page. Prices are the supplier&apos;s recommended retail, less any discount you state for the invoice.</p>
         </Card>}
         <Details summary="Latest activity" className="lg:col-span-3">
           <ul className="divide-y divide-[var(--line-soft)] text-sm">

@@ -12,7 +12,7 @@ import { DEFAULT_CATEGORY_RULES, type CategoryRuleLike } from "./categorize";
 import { repairCategoryRules } from "./seed";
 import { applyTagRules, type TagRuleLike } from "./rules";
 import { applyTemplates, type ProductTemplateLike } from "./templates";
-import { allocateFreight, exGstCostAud, priceVariant, type PricingRuleLike } from "./pricing";
+import { allocateFreight, exGstCostAud, priceVariant } from "./pricing";
 import { getSettings } from "./settings";
 import { checkImageUrl, findLibraryImages, recordLibraryImages } from "./images";
 import { generateCsvParts, validateCsvFile, validateProducts } from "./csv";
@@ -28,11 +28,6 @@ import { AI_HEADERS } from "./extract/ai";
 // ---------------------------------------------------------------------------
 // Rules & settings helpers
 // ---------------------------------------------------------------------------
-
-export async function loadPricingRules(): Promise<PricingRuleLike[]> {
-  const rows = await prisma.pricingRule.findMany({ orderBy: [{ priority: "desc" }, { createdAt: "asc" }] });
-  return rows.map((r) => ({ ...r, scope: r.scope as PricingRuleLike["scope"], mode: r.mode as PricingRuleLike["mode"] }));
-}
 
 export async function loadTagRules(): Promise<TagRuleLike[]> {
   return prisma.tagRule.findMany({ orderBy: { priority: "desc" } });
@@ -528,9 +523,8 @@ export async function allocateBatchFreight(batchId: string): Promise<void> {
 }
 
 export async function repriceBatch(batchId: string): Promise<void> {
-  const [settings, rules, batch] = await Promise.all([
+  const [settings, batch] = await Promise.all([
     getSettings(),
-    loadPricingRules(),
     prisma.importBatch.findUniqueOrThrow({ where: { id: batchId }, select: { directives: true } }),
   ]);
   // A batch-wide markdown is part of what a price is here, so it is applied every time prices are
@@ -540,24 +534,22 @@ export async function repriceBatch(batchId: string): Promise<void> {
   const updates: Prisma.PrismaPromise<unknown>[] = [];
   for (const p of products) {
     for (const v of p.variants) {
-      updates.push(prisma.variant.update({ where: { id: v.id }, data: computePricing(v, p, rules, settings, discountPct) }));
+      updates.push(prisma.variant.update({ where: { id: v.id }, data: computePricing(v, settings, discountPct) }));
     }
   }
   await prisma.$transaction(updates);
 }
 
 export async function repriceVariant(variantId: string): Promise<void> {
-  const [settings, rules] = await Promise.all([getSettings(), loadPricingRules()]);
+  const settings = await getSettings();
   const v = await prisma.variant.findUniqueOrThrow({ where: { id: variantId }, include: { product: { include: { batch: { select: { directives: true } } } } } });
   const { discountPct } = parseDirectives(v.product.batch.directives);
-  await prisma.variant.update({ where: { id: v.id }, data: computePricing(v, v.product, rules, settings, discountPct) });
+  await prisma.variant.update({ where: { id: v.id }, data: computePricing(v, settings, discountPct) });
 }
 
-type VariantRow = { costPrice: number; gstTreatment: string; fxRateToAud: number; freightPerUnitAud: number; quantity: number; retailOverride: number | null; pricingRuleId: string | null; sku: string };
-type ProductRow = { category: string; vendor: string };
+type VariantRow = { costPrice: number; gstTreatment: string; fxRateToAud: number; freightPerUnitAud: number; quantity: number; retailOverride: number | null };
 
-export function computePricing(v: VariantRow, p: ProductRow, rules: PricingRuleLike[], settings: AppSettings, discountPct: number | null = null) {
-  void rules; void p; // kept in the signature while callers are unchanged; nothing prices off a rule
+export function computePricing(v: VariantRow, settings: AppSettings, discountPct: number | null = null) {
   const r = priceVariant(
     { costPrice: v.costPrice, gstTreatment: v.gstTreatment as GstTreatment, fxRateToAud: v.fxRateToAud, freightPerUnitAud: v.freightPerUnitAud, quantity: v.quantity, retailOverride: v.retailOverride, discountPct },
     { gstRate: settings.gstRate, pricesIncludeGst: settings.pricesIncludeGst, minMarginPct: settings.minMarginPct },
@@ -617,15 +609,13 @@ export interface ReviewData {
   products: ReviewProduct[];
   summary: ReviewSummary;
   settings: { gstRate: number; pricesIncludeGst: boolean; minMarginPct: number; shopifyConfigured: boolean; publicBaseUrl: string };
-  rules: Array<{ id: string; name: string; mode: string; percent: number; scope: string; matchValue: string; roundTo: string }>;
   metafieldColumns: string[];
 }
 
 export async function loadReview(batchId: string): Promise<ReviewData> {
-  const [batch, settings, rules] = await Promise.all([
+  const [batch, settings] = await Promise.all([
     prisma.importBatch.findUniqueOrThrow({ where: { id: batchId }, include: { supplier: true, unassignedImages: { orderBy: { createdAt: "asc" } } } }),
     getSettings(),
-    loadPricingRules(),
   ]);
   const products = await prisma.product.findMany({
     where: { batchId },
@@ -720,7 +710,6 @@ export async function loadReview(batchId: string): Promise<ReviewData> {
       shopifyConfigured: Boolean(settings.shopify.storeDomain && settings.shopify.accessToken),
       publicBaseUrl: process.env.BLOB_READ_WRITE_TOKEN ? "blob" : settings.publicBaseUrl || process.env.APP_PUBLIC_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : ""),
     },
-    rules: rules.map((r) => ({ id: r.id, name: r.name, mode: r.mode, percent: r.percent, scope: r.scope, matchValue: r.matchValue, roundTo: r.roundTo })),
     metafieldColumns: SKI_METAFIELDS.map(metafieldColumn),
   };
 }

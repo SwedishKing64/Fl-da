@@ -73,7 +73,7 @@ export function ExportPanel(props: { batchId: string; status: string; errors: st
 
       <Card title="Push directly to Shopify (Admin API)">
         {!props.shopifyConfigured ? (
-          <p className="text-sm text-[var(--ink-soft)]">Connect a store under <a href="/shopify" className="text-[var(--violet)]">Shopify</a> to push products without a CSV.</p>
+          <p className="text-sm text-[var(--ink-soft)]">No store is connected, so products leave here as a CSV to import in Shopify admin.</p>
         ) : (
           <div className="space-y-3 text-sm">
             <p>Reconciled against the live catalog: <strong>{props.reconciled}</strong> of {props.productCount} products — {props.counts.new} new, {props.counts.variantAdd} add variants, {props.counts.update} update existing.</p>

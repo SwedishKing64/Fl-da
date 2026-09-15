@@ -10,7 +10,7 @@ import { allocateBatchFreight, applyMappings, applyRulesToBatch, attachUnassigne
 import { logAudit } from "@/lib/catalog/audit";
 import { getSettings, saveSettings } from "@/lib/catalog/settings";
 import { checkImageUrl, recordLibraryImages } from "@/lib/catalog/images";
-import { pushBatch, reconcileBatch, rollbackBatch, syncCatalog, fetchLocations, ShopifyError } from "@/lib/catalog/shopify";
+import { pushBatch, reconcileBatch, rollbackBatch, syncCatalog, ShopifyError } from "@/lib/catalog/shopify";
 import { enrichBatchSeo } from "@/lib/catalog/seo";
 import { slugify } from "@/lib/catalog/handle";
 import { CURRENCIES, type AppSettings } from "@/lib/catalog/types";
@@ -416,29 +416,6 @@ export async function reconcileAction(batchId: string): Promise<ActionResult<{ n
   }
 }
 
-export async function syncCatalogAction(): Promise<ActionResult<{ products: number; variants: number }>> {
-  const user = await requireUser();
-  try {
-    const data = await syncCatalog(user.id);
-    revalidatePath("/shopify");
-    return { ok: true, data };
-  } catch (err) {
-    return fail(err);
-  }
-}
-
-export async function fetchLocationsAction(): Promise<ActionResult<{ count: number }>> {
-  await requireUser("ADMIN");
-  try {
-    const locations = await fetchLocations();
-    await saveSettings({ locations });
-    revalidatePath("/shopify");
-    return { ok: true, data: { count: locations.length } };
-  } catch (err) {
-    return fail(err);
-  }
-}
-
 export async function pushBatchAction(batchId: string, opts: { confirm: boolean; overrideWarnings: boolean }) {
   const user = await requireUser();
   try {
@@ -475,35 +452,6 @@ export async function enrichSeoAction(batchId: string, onlyMissing: boolean): Pr
 // ---------------------------------------------------------------------------
 // Suppliers, rules, settings, library
 // ---------------------------------------------------------------------------
-
-export async function saveSupplierAction(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
-  await requireUser();
-  const schema = z.object({ id: z.string().optional(), name: z.string().min(1), defaultCurrency: z.string(), defaultGstTreatment: z.enum(["INCLUSIVE", "EXCLUSIVE", "NONE"]), defaultBrand: z.string().optional(), notes: z.string().optional() });
-  try {
-    const d = schema.parse(Object.fromEntries(formData.entries()));
-    const data = { name: d.name.trim(), defaultCurrency: d.defaultCurrency, defaultGstTreatment: d.defaultGstTreatment, defaultBrand: d.defaultBrand || null, notes: d.notes || null };
-    if (d.id) await prisma.supplier.update({ where: { id: d.id }, data });
-    else await prisma.supplier.create({ data });
-    revalidatePath("/suppliers");
-    return { ok: true, message: "Supplier saved" };
-  } catch (err) {
-    return fail(err);
-  }
-}
-
-export async function deleteSupplierAction(id: string): Promise<ActionResult> {
-  await requireUser("ADMIN");
-  await prisma.supplier.delete({ where: { id } });
-  revalidatePath("/suppliers");
-  return { ok: true };
-}
-
-export async function deleteTemplateAction(id: string): Promise<ActionResult> {
-  await requireUser();
-  await prisma.mappingTemplate.delete({ where: { id } });
-  revalidatePath("/suppliers");
-  return { ok: true };
-}
 
 export async function savePricingRuleAction(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
   await requireUser("ADMIN");
@@ -600,27 +548,6 @@ export async function saveSettingsAction(patch: Partial<AppSettings>): Promise<A
   } catch (err) {
     return fail(err);
   }
-}
-
-export async function saveLibraryEntryAction(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
-  await requireUser();
-  const schema = z.object({ brand: z.string().min(1), modelCode: z.string().min(1), colour: z.string().optional().default(""), urls: z.string().min(1) });
-  try {
-    const d = schema.parse(Object.fromEntries(formData.entries()));
-    const urls = d.urls.split(/[\n,|]+/).map((s) => s.trim()).filter(Boolean);
-    await recordLibraryImages(d.brand, d.modelCode, d.colour, urls, "MANUAL");
-    revalidatePath("/images");
-    return { ok: true, message: "Library entry saved" };
-  } catch (err) {
-    return fail(err);
-  }
-}
-
-export async function deleteLibraryEntryAction(id: string): Promise<ActionResult> {
-  await requireUser();
-  await prisma.imageLibraryEntry.delete({ where: { id } });
-  revalidatePath("/images");
-  return { ok: true };
 }
 
 export async function seedDefaultsAction(): Promise<ActionResult<{ pricingRules: number; categoryRules: number }>> {

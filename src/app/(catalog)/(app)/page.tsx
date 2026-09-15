@@ -4,12 +4,11 @@ import { Badge, Card, Empty, LinkButton, PageHeader, fmtDate, statusTone } from 
 import type { ReviewSummary } from "@/lib/catalog/review-types";
 
 export default async function DashboardPage() {
-  const [batches, recent, exported, audit, suppliers] = await Promise.all([
+  const [batches, recent, exported, audit] = await Promise.all([
     prisma.importBatch.count(),
     prisma.importBatch.findMany({ orderBy: { updatedAt: "desc" }, take: 8, include: { supplier: true, _count: { select: { products: true, files: true } } } }),
     prisma.importBatch.findMany({ where: { status: { in: ["EXPORTED", "PUSHED"] } }, select: { summary: true } }),
     prisma.auditLog.findMany({ orderBy: { createdAt: "desc" }, take: 8, include: { user: true, batch: true } }),
-    prisma.supplier.count(),
   ]);
 
   let products = 0, variants = 0, units = 0;
@@ -24,12 +23,11 @@ export default async function DashboardPage() {
   return (
     <>
       <PageHeader title="Dashboard" subtitle="Turn supplier invoices and spec sheets into ready-to-import Shopify products." actions={<LinkButton href="/batches/new" variant="primary">New import</LinkButton>} />
-      <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-5">
+      <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
         <Stat label="Import batches" value={String(batches)} />
         <Stat label="Products exported" value={String(products)} />
         <Stat label="Variants exported" value={String(variants)} />
         <Stat label="Units" value={String(units)} />
-        <Stat label="Suppliers" value={String(suppliers)} />
       </div>
       <div className="grid gap-6 lg:grid-cols-3">
         <Card title="Recent batches" className="lg:col-span-2" actions={<Link href="/batches" className="text-xs text-[var(--violet)]">All batches</Link>}>

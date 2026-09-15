@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState, useTransition } from "react";
-import { deleteCategoryRuleAction, saveCategoryRuleAction, saveSettingsAction } from "@/app/(catalog)/actions";
+import { deleteCategoryRuleAction, saveCategoryRuleAction } from "@/app/(catalog)/actions";
 import { Alert, Button, Field, INPUT } from "@/app/(catalog)/ui";
 import { ActionForm } from "@/app/(catalog)/ActionForm";
 import { CATEGORIES } from "@/lib/catalog/types";
@@ -47,21 +47,6 @@ export function CategoryRulesEditor({ rules, usingDefaults, isAdmin }: { rules: 
           {state && <div className="sm:col-span-4">{state.ok ? <span className="text-xs text-emerald-700">{state.message}</span> : <span className="text-xs text-red-700">{state.error}</span>}</div>}
         </ActionForm>
       )}
-    </div>
-  );
-}
-
-export function PricingSettingsForm({ settings, isAdmin }: { settings: { gstRate: number; pricesIncludeGst: boolean; minMarginPct: number; fxRates: Record<string, number> }; isAdmin: boolean }) {
-  const [form, setForm] = useState({ gstPct: settings.gstRate * 100, pricesIncludeGst: settings.pricesIncludeGst, minMarginPct: settings.minMarginPct, fxRates: { ...settings.fxRates } });
-  const [pending, start] = useTransition();
-  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  return (
-    <div className="space-y-3">
-      <Field label="GST rate (%)"><input type="number" step="0.1" value={form.gstPct} disabled={!isAdmin} onChange={(e) => setForm({ ...form, gstPct: Number(e.target.value) })} className={INPUT} /></Field>
-      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.pricesIncludeGst} disabled={!isAdmin} onChange={(e) => setForm({ ...form, pricesIncludeGst: e.target.checked })} /> Storefront prices include GST (standard for AU)</label>
-      <Field label="Warn when margin is below (%)"><input type="number" step="1" value={form.minMarginPct} disabled={!isAdmin} onChange={(e) => setForm({ ...form, minMarginPct: Number(e.target.value) })} className={INPUT} /></Field>
-      {msg && <Alert tone={msg.ok ? "success" : "danger"}>{msg.text}</Alert>}
-      {isAdmin && <Button variant="primary" disabled={pending} onClick={() => start(async () => { const r = await saveSettingsAction({ gstRate: form.gstPct / 100, pricesIncludeGst: form.pricesIncludeGst, minMarginPct: form.minMarginPct, fxRates: form.fxRates }); setMsg(r.ok ? { ok: true, text: "Saved. Existing batches reprice when next opened or edited." } : { ok: false, text: r.error }); })}>Save</Button>}
     </div>
   );
 }

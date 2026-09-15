@@ -117,6 +117,25 @@ export async function databaseStatus(): Promise<DatabaseStatus> {
   return { state: resolved.ephemeral ? "ephemeral" : "ok", source };
 }
 
+/**
+ * Create the tables, from the DDL shipped with the build.
+ *
+ * The build normally does this with `prisma db push`, which needs the Prisma CLI and a direct
+ * connection. A deployed serverless function has neither, so when the build could not manage it
+ * the same statements are applied from here instead, over the connection the app already has.
+ *
+ * Only ever offered when the tables are genuinely missing: every statement is a bare CREATE, so
+ * running it against a database that already has them fails rather than damaging anything.
+ */
+export async function createTables(): Promise<{ statements: number }> {
+  const { schemaStatements } = await import("./schema-sql");
+  const statements = schemaStatements();
+  for (const statement of statements) {
+    await prisma.$executeRawUnsafe(statement);
+  }
+  return { statements: statements.length };
+}
+
 /** Parse a JSON column, returning `fallback` when the column is empty or malformed. */
 export function parseJson<T>(value: string | null | undefined, fallback: T): T {
   if (!value) return fallback;

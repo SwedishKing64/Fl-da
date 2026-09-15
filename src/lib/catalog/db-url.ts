@@ -93,17 +93,52 @@ export function findDatabaseUrl(env: Env = process.env): { url: string; key: str
   return fromParts(env);
 }
 
+/** Variables that hold an explicitly unpooled connection, under any store prefix. */
+const UNPOOLED_KEY = /(POSTGRES_URL_NON_POOLING|DATABASE_URL_UNPOOLED)$/;
+
 /**
- * A connection Prisma's schema engine can push to. Neon hands out a pooled host for serverless
- * queries, but `prisma db push` needs a direct one, so prefer an explicitly unpooled variable
- * and otherwise undo the pooling markers.
+ * Which database a connection string points at, ignoring whether it names the pooled endpoint.
+ *
+ * Only ever used to choose *between* several candidates. It cannot be a requirement: providers
+ * do not agree on how a pooled host relates to its direct one — Neon inserts `-pooler` into the
+ * same name, Supabase uses an unrelated hostname — so an unpooled URL that fails to look related
+ * is still very likely the right one.
  */
-export function directDatabaseUrl(env: Env = process.env): string | undefined {
-  for (const key of ["POSTGRES_URL_NON_POOLING", "DATABASE_URL_UNPOOLED"]) {
-    const value = env[key];
-    if (value && POSTGRES_URL.test(value)) return value;
+function databaseIdentity(url: string): string | undefined {
+  try {
+    const parsed = new URL(url);
+    return `${parsed.username}@${parsed.hostname.replace("-pooler.", ".")}${parsed.pathname}`;
+  } catch {
+    return undefined;
   }
+}
+
+/** The store prefix a variable was attached under: `Storage_DATABASE_URL` -> `Storage_`. */
+function storePrefix(key: string): string {
+  const match = /^(.*?_)(?:POSTGRES_URL_NON_POOLING|DATABASE_URL_UNPOOLED|DATABASE_URL|POSTGRES_URL|POSTGRES_PRISMA_URL)$/.exec(key);
+  return match ? match[1] : "";
+}
+
+export function directDatabaseUrl(env: Env = process.env): string | undefined {
   const found = findDatabaseUrl(env);
+  // Bare names first, so an unprefixed variable still wins where one exists.
+  const candidates = Object.keys(env)
+    .filter((key) => UNPOOLED_KEY.test(key) && env[key] && POSTGRES_URL.test(env[key]!))
+    .sort((a, b) => a.length - b.length || a.localeCompare(b));
+
+  if (candidates.length === 1) return env[candidates[0]];
+  if (candidates.length > 1 && found) {
+    // Several stores are attached. Pushing a schema into the wrong one reports success and leaves
+    // the app looking at an empty database, so the one that belongs to the connection in use wins:
+    // by the database it names, and failing that by the prefix it was attached under.
+    const wanted = databaseIdentity(found.url);
+    const sameDatabase = candidates.find((key) => databaseIdentity(env[key]!) === wanted);
+    if (sameDatabase) return env[sameDatabase];
+    const prefix = storePrefix(found.key);
+    const samePrefix = candidates.find((key) => storePrefix(key) === prefix);
+    if (samePrefix) return env[samePrefix];
+  }
+
   if (!found || !POSTGRES_URL.test(found.url)) return found?.url;
   try {
     const parsed = new URL(found.url);

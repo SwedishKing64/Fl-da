@@ -1,5 +1,6 @@
 import type { ReactElement } from "react";
 import { accelerateEnvName, databaseEnvNamesPresent, databaseStatus, type DatabaseStatus } from "@/lib/catalog/db";
+import { CreateTablesButton } from "./CreateTablesButton";
 
 /**
  * Every way the database can be wrong, explained on screen. A deployment with no connection
@@ -90,13 +91,17 @@ export async function databaseGate(): Promise<ReactElement | null> {
           The connection works, but the tables this app needs have not been created. That happens when the schema could not be
           synced during the build, usually because the connection string does not allow a direct connection.
         </p>
-        <Steps
-          items={[
-            <>Check that this project&apos;s connection string is a <strong>direct</strong> one, not a pooled or Accelerate URL.</>,
-            <>Redeploy. The build creates the tables when it can reach the database directly.</>,
-            <>Or create them yourself: <code className="rounded bg-neutral-100 px-1">npx prisma db push</code> with that connection string.</>,
-          ]}
-        />
+        <CreateTablesButton />
+        <details className="mt-4 text-sm">
+          <summary className="cursor-pointer text-[var(--ink-soft)]">Or fix it at the source</summary>
+          <Steps
+            items={[
+              <>Check that this project&apos;s connection string is a <strong>direct</strong> one, not a pooled or Accelerate URL.</>,
+              <>Redeploy. The build creates the tables when it can reach the database directly, and the build log&apos;s <code className="rounded bg-neutral-100 px-1">[vercel-build]</code> lines say why it could not.</>,
+              <>Or create them yourself: <code className="rounded bg-neutral-100 px-1">npx prisma db push</code> with that connection string.</>,
+            ]}
+          />
+        </details>
         <Diagnostics status={status} />
       </Wrap>
     );

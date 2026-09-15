@@ -4,7 +4,7 @@ import { analyseShopifyCsv, analyseShopifyCsvGroups, type TemplateAnalysis } fro
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { prisma, parseJson } from "@/lib/catalog/db";
+import { prisma, parseJson, createTables, databaseStatus } from "@/lib/catalog/db";
 import { createSession, destroySession, hashPassword, requireUser, usersExist, verifyPassword } from "@/lib/catalog/auth";
 import { allocateBatchFreight, applyMappings, applyRulesToBatch, attachUnassignedPhotos, loadReview, repriceBatch, repriceVariant, verifyBatchImages, exportBatch, type ApplyMappingInput, type ReviewData } from "@/lib/catalog/pipeline";
 import { logAudit } from "@/lib/catalog/audit";
@@ -20,6 +20,27 @@ import { describeDirectives, instructionsAvailable, parseDirectives, readInstruc
 import { lookupBatch, lookupEnabled, LOOKUP_LIMIT, type LookupOutcome } from "@/lib/catalog/enrich";
 
 export type ActionResult<T = undefined> = { ok: true; data?: T; message?: string } | { ok: false; error: string };
+
+/**
+ * Create the tables when the build could not.
+ *
+ * Deliberately outside the auth check: there is no user table yet to authenticate against, and it
+ * refuses on any database that already has one — so the only database it will act on is one that
+ * cannot hold an account to protect.
+ */
+export async function createTablesAction(): Promise<ActionResult<{ statements: number }>> {
+  const status = await databaseStatus();
+  if (status.state !== "no-tables") {
+    return { ok: false, error: `The database is not in a state that needs this (${status.state}). Reload the page.` };
+  }
+  try {
+    const data = await createTables();
+    await logAudit("database.tables_created", { details: data });
+    return { ok: true, data };
+  } catch (err) {
+    return fail(err);
+  }
+}
 
 function fail(err: unknown): ActionResult<never> {
   if (err instanceof z.ZodError) return { ok: false, error: err.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") };

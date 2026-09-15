@@ -8,55 +8,17 @@
 import { execSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 
-// Keep in sync with src/lib/catalog/db-url.ts. Storage integrations disagree on the variable
-// name (and a custom store prefix renames it again), so we match on the value, not the name.
-const KEYS = ["DATABASE_URL", "POSTGRES_PRISMA_URL", "POSTGRES_URL", "POSTGRES_URL_NON_POOLING", "DATABASE_URL_UNPOOLED", "NEON_DATABASE_URL", "PRISMA_DATABASE_URL"];
-const PG = /^postgres(ql)?:\/\//i;
-const ACCELERATE = /^prisma\+postgres(ql)?:\/\//i;
-const FILE = /^file:/i;
-const ANY_PG = PG; // reported shape; Accelerate is tracked separately below
+// The rules for finding the database live in one place, shared with the running app — see
+// scripts/database-url.mjs. They used to be copied here, and a copy that drifted is how a build
+// pushed the schema somewhere other than where the app reads.
+import { PG, findUrl, directUrl, accelerateName as findAccelerateName, databaseShapedNames } from "./database-url.mjs";
 
-function findUrl() {
-  for (const re of [PG, FILE]) {
-    for (const k of KEYS) if (process.env[k] && re.test(process.env[k])) return { url: process.env[k], key: k };
-  }
-  const scanned = Object.keys(process.env).filter((k) => typeof process.env[k] === "string" && PG.test(process.env[k])).sort()[0];
-  if (scanned) return { url: process.env[scanned], key: scanned };
-  const { PGHOST, PGUSER, PGPASSWORD, PGDATABASE, PGPORT } = process.env;
-  if (PGHOST && PGUSER && PGDATABASE) {
-    const auth = PGPASSWORD ? `${encodeURIComponent(PGUSER)}:${encodeURIComponent(PGPASSWORD)}` : encodeURIComponent(PGUSER);
-    return { url: `postgresql://${auth}@${PGHOST}${PGPORT ? `:${PGPORT}` : ""}/${PGDATABASE}?sslmode=require`, key: "PGHOST + PGUSER + PGDATABASE" };
-  }
-  return undefined;
-}
-
-/** Prisma's schema engine needs a direct connection; Neon's pooled host breaks `db push`. */
-function directUrl(url) {
-  for (const k of ["POSTGRES_URL_NON_POOLING", "DATABASE_URL_UNPOOLED"]) {
-    if (process.env[k] && PG.test(process.env[k])) return process.env[k];
-  }
-  if (!PG.test(url)) return url;
-  try {
-    const parsed = new URL(url);
-    parsed.hostname = parsed.hostname.replace("-pooler.", ".");
-    parsed.searchParams.delete("pgbouncer");
-    parsed.searchParams.delete("connection_limit");
-    return parsed.toString();
-  } catch {
-    return url;
-  }
-}
-
-const accelerateName = Object.keys(process.env)
-  .filter((k) => typeof process.env[k] === "string" && ACCELERATE.test(process.env[k]))
-  .sort()[0];
-const found = findUrl();
+const accelerateName = findAccelerateName(process.env);
+const found = findUrl(process.env);
 const url = found?.url ?? "";
 const schemaPath = "prisma/schema.prisma";
 
-const dbShaped = Object.keys(process.env)
-  .filter((k) => typeof process.env[k] === "string" && process.env[k] !== "" && (ANY_PG.test(process.env[k]) || ACCELERATE.test(process.env[k]) || /(^|_)(DATABASE|POSTGRES|NEON|PRISMA)_|^PG[A-Z]+$/.test(k)))
-  .sort();
+const dbShaped = databaseShapedNames(process.env);
 console.log(`[vercel-build] environment=${process.env.VERCEL_ENV ?? "?"} branch=${process.env.VERCEL_GIT_COMMIT_REF ?? "?"}`);
 console.log(`[vercel-build] database-shaped variables: ${dbShaped.join(", ") || "none"}`);
 console.log(`[vercel-build] using: ${found ? found.key : "none — falling back to an ephemeral SQLite template"}`);
@@ -104,13 +66,36 @@ function prepareDatabase() {
 
   run("npx prisma generate");
 
-  // Sync the schema over a direct connection. A failure here must not take the deployment down:
-  // the tables are often already in place, and a deployed app that can explain itself beats no
-  // deployment at all.
+  // The DDL the app falls back to when it finds itself connected to an empty database. Generated
+  // whatever happens below, because the case it exists for is this step failing.
   try {
-    run("npx prisma db push --skip-generate", { ...process.env, DATABASE_URL: directUrl(process.env.DATABASE_URL) });
-  } catch {
-    console.warn("\n[vercel-build] WARNING: could not sync the schema (prisma db push failed). Continuing with the build — the app will say so on screen. Check that the connection string allows a direct connection.\n");
+    run("node prisma/generate-schema-sql.mjs");
+  } catch (error) {
+    console.warn(`[vercel-build] WARNING: could not generate the fallback schema SQL (${error?.message ?? error}).`);
+  }
+
+  // Sync the schema. A failure here must not take the deployment down: the tables are often
+  // already in place, and a deployed app that can explain itself beats no deployment at all.
+  //
+  // Tried directly first, then over the pooled connection. Prisma prefers a direct one and Neon's
+  // pooler is the usual reason this step fails, but a pooler that accepts DDL beats no tables.
+  const direct = directUrl({ ...process.env, DATABASE_URL: process.env.DATABASE_URL });
+  const attempts = direct === process.env.DATABASE_URL ? [["the connection string", direct]] : [["a direct connection", direct], ["the pooled connection", process.env.DATABASE_URL]];
+  let pushed = false;
+  for (const [describe, candidate] of attempts) {
+    try {
+      console.log(`[vercel-build] syncing the schema over ${describe}`);
+      run("npx prisma db push --skip-generate", { ...process.env, DATABASE_URL: candidate });
+      pushed = true;
+      break;
+    } catch (error) {
+      // Printed rather than swallowed: without it, a failure here is indistinguishable on screen
+      // from a dozen other causes, and the build log is the only place the reason exists.
+      console.warn(`[vercel-build] schema sync over ${describe} failed: ${error?.message ?? error}`);
+    }
+  }
+  if (!pushed) {
+    console.warn("\n[vercel-build] WARNING: could not sync the schema. Continuing with the build — the app will offer to create the tables itself on first load.\n");
   }
 }
 

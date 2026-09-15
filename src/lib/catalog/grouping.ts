@@ -70,23 +70,6 @@ function commonPrefix(values: string[]): string {
   return prefix;
 }
 
-/**
- * Fallback SKU when the supplier only gives a model code: "<model>-<attributes>".
- *
- * Built from the item in a fixed order rather than from the order the options happen to be shown
- * in. A SKU is how a re-import recognises a variant it has seen before, so it must not move when
- * someone decides a jacket reads better as colour-then-size.
- */
-const SKU_ATTRIBUTES: Array<keyof CanonicalLineItem> = ["length", "size", "width", "colour"];
-
-function derivedSku(item: CanonicalLineItem): string {
-  const parts = SKU_ATTRIBUTES
-    .map((key) => String(item[key] ?? "").trim())
-    .filter(Boolean)
-    .map((v) => v.replace(/[^A-Za-z0-9.]+/g, "").toUpperCase());
-  return [item.modelCode.trim().toUpperCase(), ...parts].filter(Boolean).join("-");
-}
-
 export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRuleLike[]): GroupedProduct[] {
   const groups = new Map<string, { rule: CategoryRuleLike | null; entries: Array<{ item: CanonicalLineItem; index: number }> }>();
 
@@ -135,7 +118,6 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
         }
       }
       seenCombos.add(skuKey);
-      if (!e.item.sku && e.item.modelCode) e.item.sku = derivedSku(e.item);
       variants.push({ item: e.item, sourceIndex: e.index, option1Value: values[0] ?? null, option2Value: values[1] ?? null, option3Value: values[2] ?? null });
     }
     const description = items.map((i) => i.description.trim()).find(Boolean) ?? "";

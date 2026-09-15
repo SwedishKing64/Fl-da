@@ -245,3 +245,19 @@ describe("handles", () => {
     expect(buildHandle({ brand: "", title: "Bent 90" })).toBe("bent-90");
   });
 });
+
+describe("the columns the shop leaves to a person", () => {
+  /** 64 of the 2,394 variant rows in the shop's exports carry a SKU: it is not how they work. */
+  it("never writes a SKU, even when one is known", () => {
+    const [columns, first] = parseCsv(generateCsv([{ ...skis, variants: [{ ...skis.variants[0], sku: "AA0029-166" }] }]));
+    expect(first[columns.indexOf("Variant SKU")]).toBe("");
+  });
+
+  /** A barcode comes off the invoice when the supplier gives one, and is typed in when they don't. */
+  it("writes a barcode when there is one and leaves it empty when there is not", () => {
+    const withCode = parseCsv(generateCsv([{ ...skis, variants: [{ ...skis.variants[0], barcode: "887445290001" }] }]));
+    expect(withCode[1][withCode[0].indexOf("Variant Barcode")]).toBe("887445290001");
+    const without = parseCsv(generateCsv([{ ...skis, variants: [{ ...skis.variants[0], barcode: undefined }] }]));
+    expect(without[1][without[0].indexOf("Variant Barcode")]).toBe("");
+  });
+});

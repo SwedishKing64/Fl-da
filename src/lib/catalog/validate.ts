@@ -6,6 +6,13 @@ import { isValidHandle } from "./handle";
 import type { ReviewProduct, ReviewSummary, ReviewVariant } from "./review-types";
 import type { RowFlag } from "./types";
 
+/**
+ * How many photographs a product should carry. The shop's own catalogue is mostly short of this —
+ * 352 of its 705 products have a single image — so it is what to aim at, not what it does today.
+ */
+export const MIN_IMAGES = 6;
+export const MAX_IMAGES = 8;
+
 export interface ValidationContext {
   minMarginPct: number;
   /** Lower-cased SKUs that already exist in the live Shopify catalog, mapped to their handle. */
@@ -34,7 +41,19 @@ export function validateReview(products: ReviewProduct[], ctx: ValidationContext
     if (!p.productType.trim()) flags.push({ code: "MISSING_TYPE", severity: "warning", message: "No product type" });
     const validImages = p.images.filter((i) => isPublicHttpsUrl(i.url));
     if (p.images.length === 0) flags.push({ code: "NO_IMAGE", severity: "warning", message: "No image - add one or export anyway" });
-    else if (validImages.length < p.images.length) flags.push({ code: "INVALID_IMAGE_URL", severity: "warning", message: "An image URL is not a public HTTPS link" });
+    else {
+      if (validImages.length < p.images.length) flags.push({ code: "INVALID_IMAGE_URL", severity: "warning", message: "An image URL is not a public HTTPS link" });
+      // The shop wants six to eight photographs on a product, taken from the supplier's own site.
+      // Where a model is too old or too new to be on there they come out of the supplier's
+      // catalogue by hand, so this is a nudge to go and find the rest rather than a blocker.
+      if (validImages.length < MIN_IMAGES) {
+        flags.push({
+          code: "FEW_IMAGES",
+          severity: "warning",
+          message: `Only ${validImages.length} image${validImages.length === 1 ? "" : "s"} - the shop wants ${MIN_IMAGES}-${MAX_IMAGES} from the supplier's site`,
+        });
+      }
+    }
     if (p.reconcileStatus === "UPDATE" || p.reconcileStatus === "VARIANT_ADD") {
       flags.push({ code: "UPDATE_EXISTING", severity: "warning", message: p.reconcileStatus === "UPDATE" ? "Exists in Shopify - export will update the live product" : "Adds variants to an existing Shopify product" });
     } else if (ctx.shopifyHandles?.has(p.handle) && p.reconcileStatus === "UNKNOWN") {

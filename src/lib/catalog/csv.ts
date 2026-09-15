@@ -180,7 +180,10 @@ export function buildRows(products: CsvProduct[], options: GenerateOptions = {})
         row["Option1 Name"] = NO_VARIANT_OPTION.name;
         row["Option1 Value"] = NO_VARIANT_OPTION.value;
       }
-      row["Variant SKU"] = variant.sku ?? "";
+      // The shop does not use SKUs — 64 of the 2,394 variant rows in its exports carry one — so
+      // the column is left empty rather than filled with an identifier nobody reads. A SKU an
+      // invoice supplied is still kept in the app, where it is useful for matching the invoice.
+      row["Variant SKU"] = "";
       // The shop records a shipping band rather than a measured weight, so a ski is 2 kg and a
       // board 1 kg whatever the invoice says. A weight that came from the supplier is kept.
       // Zero is what an invoice that carries no weight leaves behind, so it means "unset" here.

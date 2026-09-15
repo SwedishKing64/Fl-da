@@ -23,7 +23,8 @@ describe("review validation", () => {
     expect(good.flags).toEqual([{ code: "DUPLICATE_SKU_BATCH", severity: "error", message: expect.any(String) }, { code: "DUPLICATE_OPTIONS", severity: "error", message: expect.any(String) }]);
     expect(noPrice.flags.map((f) => f.code)).toEqual(["MISSING_PRICE"]);
     expect(dupSku.flags.map((f) => f.code)).toEqual(["DUPLICATE_SKU_BATCH", "DUPLICATE_OPTIONS", "LOW_MARGIN"]);
-    expect(p1.flags.map((f) => f.code)).toEqual(["DUPLICATE_HANDLE"]);
+    // One image is short of the six the shop wants, so every product here says so.
+    expect(p1.flags.map((f) => f.code)).toEqual(["DUPLICATE_HANDLE", "FEW_IMAGES"]);
     expect(p2.flags.map((f) => f.code)).toEqual(["MISSING_TITLE", "DUPLICATE_HANDLE", "NO_IMAGE"]);
     expect(p2.variants[0].flags.map((f) => f.code)).toEqual(["MISSING_OPTION_VALUE", "LOW_MARGIN"]);
 
@@ -49,6 +50,6 @@ describe("review validation", () => {
     const p = product({ variants: [v] });
     validateReview([p], { minMarginPct: 20, shopifySkus: new Map([["a-166", "atomic-bent-90"]]), shopifyHandles: new Set(["atomic-bent-90"]) });
     expect(v.flags.map((f) => f.code)).toEqual(["DUPLICATE_SKU_SHOPIFY"]);
-    expect(p.flags.map((f) => f.code)).toEqual(["UPDATE_EXISTING"]);
+    expect(p.flags.map((f) => f.code)).toEqual(["FEW_IMAGES", "UPDATE_EXISTING"]);
   });
 });

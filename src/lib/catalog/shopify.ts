@@ -143,9 +143,15 @@ export async function reconcileBatch(batchId: string): Promise<{ new: number; va
     }
     const shopifyProductId = matches[0].shopifyProductId;
     const bySku = new Map(matches.filter((m) => m.sku).map((m) => [m.sku.toLowerCase(), m]));
+    // The shop does not use SKUs, so on its own a SKU match recognises almost nothing: every
+    // variant already in the store would come back as one to add, and a re-import would read as
+    // duplicating what is there. What identifies a variant on a product is the options it is sold
+    // by, so that is what is matched when there is no SKU to match on.
+    const byOptions = new Map(matches.map((m) => [optionKey([m.option1, m.option2, m.option3]), m]));
     let anyNew = false;
     for (const v of p.variants) {
-      const m = v.sku ? bySku.get(v.sku.trim().toLowerCase()) : undefined;
+      const m = (v.sku ? bySku.get(v.sku.trim().toLowerCase()) : undefined)
+        ?? byOptions.get(optionKey([v.option1Value, v.option2Value, v.option3Value]));
       if (m) await prisma.variant.update({ where: { id: v.id }, data: { reconcileStatus: "UPDATE", shopifyVariantId: m.shopifyVariantId, shopifyInventoryItemId: m.inventoryItemId } });
       else {
         anyNew = true;
@@ -366,3 +372,8 @@ export async function rollbackBatch(batchId: string, userId: string): Promise<{ 
 }
 
 export { toCsvProducts };
+
+/** A variant's identity on a product it is already on: the option values, however they are cased. */
+function optionKey(values: Array<string | null>): string {
+  return values.map((v) => (v ?? "").trim().toLowerCase()).join("\u0000");
+}

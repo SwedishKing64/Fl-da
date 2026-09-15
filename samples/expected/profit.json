@@ -12,11 +12,11 @@
       "averageMarginPct": 51.7,
       "lowMarginVariants": 0,
       "errors": 0,
-      "warnings": 1
+      "warnings": 10
     },
     "variants": [
       {
-        "sku": "AA0029-166-BLUEBLACK",
+        "sku": "",
         "landedCostAud": 450,
         "retailPrice": 999,
         "exGstRevenue": 908.18,
@@ -25,7 +25,7 @@
         "marginPct": 50.5
       },
       {
-        "sku": "AA0029-172-BLUEBLACK",
+        "sku": "",
         "landedCostAud": 450,
         "retailPrice": 999,
         "exGstRevenue": 908.18,
@@ -34,7 +34,7 @@
         "marginPct": 50.5
       },
       {
-        "sku": "AA0029-178-BLUEBLACK",
+        "sku": "",
         "landedCostAud": 450,
         "retailPrice": 999,
         "exGstRevenue": 908.18,
@@ -43,7 +43,7 @@
         "marginPct": 50.5
       },
       {
-        "sku": "AE5031-26.5-BLACKORANGE",
+        "sku": "",
         "landedCostAud": 320,
         "retailPrice": 749,
         "exGstRevenue": 680.91,
@@ -52,7 +52,7 @@
         "marginPct": 53
       },
       {
-        "sku": "AE5031-27.5-BLACKORANGE",
+        "sku": "",
         "landedCostAud": 320,
         "retailPrice": 749,
         "exGstRevenue": 680.91,
@@ -61,7 +61,7 @@
         "marginPct": 53
       },
       {
-        "sku": "AE5031-28.5-BLACKORANGE",
+        "sku": "",
         "landedCostAud": 320,
         "retailPrice": 749,
         "exGstRevenue": 680.91,
@@ -70,7 +70,7 @@
         "marginPct": 53
       },
       {
-        "sku": "AX9000-CHARCOAL",
+        "sku": "",
         "landedCostAud": 9.5,
         "retailPrice": 29.95,
         "exGstRevenue": 27.23,
@@ -81,7 +81,16 @@
     ],
     "errors": [],
     "warnings": [
-      "Atomic Alps Beanie: No image - add one or export anyway"
+      "Atomic Bent 90 Skis: Only 1 image - the shop wants 6-8 from the supplier's site",
+      "Atomic Bent 90 Skis / (no sku): No SKU",
+      "Atomic Bent 90 Skis / (no sku): No SKU",
+      "Atomic Bent 90 Skis / (no sku): No SKU",
+      "Atomic Hawx Ultra 100 Ski Boots: Only 1 image - the shop wants 6-8 from the supplier's site",
+      "Atomic Hawx Ultra 100 Ski Boots / (no sku): No SKU",
+      "Atomic Hawx Ultra 100 Ski Boots / (no sku): No SKU",
+      "Atomic Hawx Ultra 100 Ski Boots / (no sku): No SKU",
+      "Atomic Alps Beanie: No image - add one or export anyway",
+      "Atomic Alps Beanie / (no sku): No SKU"
     ]
   },
   "volkl": {

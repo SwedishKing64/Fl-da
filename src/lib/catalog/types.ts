@@ -220,6 +220,7 @@ export interface RowFlag {
     | "DUPLICATE_OPTIONS"
     | "MISSING_OPTION_VALUE"
     | "NO_IMAGE"
+    | "FEW_IMAGES"
     | "INVALID_IMAGE_URL"
     | "LOW_MARGIN"
     | "NEGATIVE_PROFIT"
@@ -232,6 +233,7 @@ export interface RowFlag {
 
 export const WARNING_CODES: RowFlag["code"][] = [
   "NO_IMAGE",
+  "FEW_IMAGES",
   "INVALID_IMAGE_URL",
   "LOW_MARGIN",
   "NEGATIVE_PROFIT",

@@ -2,6 +2,7 @@
 
 import type { Prisma } from "@prisma/client";
 import { productTitle, seoTitle } from "./titles";
+import { parseDirectives } from "./instructions";
 import { prisma, parseJson } from "./db";
 import { extractFile, type UploadKind } from "./extract";
 import { applyMapping, headerHash, mappingProblems, suggestMapping, suggestOptions, type Mapping, type MappingOptions } from "./mapping";
@@ -312,8 +313,13 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
    */
   const supplierBrand = batch.supplier?.defaultBrand?.trim() || batch.supplier?.name?.trim() || "";
 
+  // What someone said about this invoice in words: the brand it all is, the tag it all needs, the
+  // discount on all of it. A directive applies to every product in the batch by design.
+  const directives = parseDirectives(batch.directives);
+
   const grouped = enrichFromSpecs(groupLineItems(items.map((i) => i.item), categoryRules), specItems).map((raw) => {
-    const g = raw.brand.trim() ? raw : { ...raw, brand: supplierBrand };
+    const told = directives.vendor.trim();
+    const g = raw.brand.trim() ? raw : { ...raw, brand: told || supplierBrand };
     // Learned conventions first, then hand-written rules, which can always override them.
     const viaTemplate = applyTemplates(
       { vendor: g.brand, productType: g.productType, category: g.category, tags: g.tags, collections: g.collections, metafields: g.metafields, optionNames: [g.option1Name, g.option2Name, g.option3Name].filter((n): n is string => Boolean(n)) },
@@ -322,9 +328,9 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
     const out = applyTagRules({ title: g.title, vendor: g.brand, category: g.category, productType: viaTemplate.productType, skus: g.variants.map((v) => v.item.sku), tags: viaTemplate.tags, collections: viaTemplate.collections, metafields: viaTemplate.metafields }, tagRules);
     return {
       ...g,
-      tags: out.tags,
+      productType: directives.productType.trim() || out.productType,
+      tags: [...out.tags, ...directives.addTags.map((t) => t.trim()).filter(Boolean)],
       collections: out.collections,
-      productType: out.productType,
       metafields: out.metafields,
       option1Name: viaTemplate.optionNames[0] ?? g.option1Name,
       option2Name: viaTemplate.optionNames[1] ?? g.option2Name,
@@ -503,12 +509,19 @@ export async function allocateBatchFreight(batchId: string): Promise<void> {
 }
 
 export async function repriceBatch(batchId: string): Promise<void> {
-  const [settings, rules] = await Promise.all([getSettings(), loadPricingRules()]);
+  const [settings, rules, batch] = await Promise.all([
+    getSettings(),
+    loadPricingRules(),
+    prisma.importBatch.findUniqueOrThrow({ where: { id: batchId }, select: { directives: true } }),
+  ]);
+  // A batch-wide markdown is part of what a price is here, so it is applied every time prices are
+  // worked out, not stamped in once and lost the next time something is edited.
+  const { discountPct } = parseDirectives(batch.directives);
   const products = await prisma.product.findMany({ where: { batchId }, include: { variants: true } });
   const updates: Prisma.PrismaPromise<unknown>[] = [];
   for (const p of products) {
     for (const v of p.variants) {
-      updates.push(prisma.variant.update({ where: { id: v.id }, data: computePricing(v, p, rules, settings) }));
+      updates.push(prisma.variant.update({ where: { id: v.id }, data: computePricing(v, p, rules, settings, discountPct) }));
     }
   }
   await prisma.$transaction(updates);
@@ -516,18 +529,19 @@ export async function repriceBatch(batchId: string): Promise<void> {
 
 export async function repriceVariant(variantId: string): Promise<void> {
   const [settings, rules] = await Promise.all([getSettings(), loadPricingRules()]);
-  const v = await prisma.variant.findUniqueOrThrow({ where: { id: variantId }, include: { product: true } });
-  await prisma.variant.update({ where: { id: v.id }, data: computePricing(v, v.product, rules, settings) });
+  const v = await prisma.variant.findUniqueOrThrow({ where: { id: variantId }, include: { product: { include: { batch: { select: { directives: true } } } } } });
+  const { discountPct } = parseDirectives(v.product.batch.directives);
+  await prisma.variant.update({ where: { id: v.id }, data: computePricing(v, v.product, rules, settings, discountPct) });
 }
 
 type VariantRow = { costPrice: number; gstTreatment: string; fxRateToAud: number; freightPerUnitAud: number; quantity: number; retailOverride: number | null; pricingRuleId: string | null; sku: string };
 type ProductRow = { category: string; vendor: string };
 
-export function computePricing(v: VariantRow, p: ProductRow, rules: PricingRuleLike[], settings: AppSettings) {
+export function computePricing(v: VariantRow, p: ProductRow, rules: PricingRuleLike[], settings: AppSettings, discountPct: number | null = null) {
   const pinned = v.pricingRuleId ? rules.find((r) => r.id === v.pricingRuleId) ?? null : null;
   const rule = pinned ?? selectRule(rules, { category: p.category, brand: p.vendor, sku: v.sku, modelCode: "" });
   const r = priceVariant(
-    { costPrice: v.costPrice, gstTreatment: v.gstTreatment as GstTreatment, fxRateToAud: v.fxRateToAud, freightPerUnitAud: v.freightPerUnitAud, quantity: v.quantity, rule, retailOverride: v.retailOverride },
+    { costPrice: v.costPrice, gstTreatment: v.gstTreatment as GstTreatment, fxRateToAud: v.fxRateToAud, freightPerUnitAud: v.freightPerUnitAud, quantity: v.quantity, rule, retailOverride: v.retailOverride, discountPct },
     { gstRate: settings.gstRate, pricesIncludeGst: settings.pricesIncludeGst, minMarginPct: settings.minMarginPct },
   );
   return {

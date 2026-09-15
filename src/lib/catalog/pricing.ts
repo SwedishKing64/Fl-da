@@ -13,6 +13,7 @@
 //   profit         = ex-GST revenue - landed cost      <- the true figure, GST backed out
 
 import { roundCents } from "./money";
+import { discounted } from "./instructions";
 import type { GstTreatment, PricingMode, RuleScope } from "./types";
 
 export interface PricingRuleLike {
@@ -42,6 +43,8 @@ export interface PricingInput {
   quantity: number;
   rule: PricingRuleLike | null;
   retailOverride?: number | null; // storefront price entered by staff (GST-inclusive when pricesIncludeGst)
+  /** A batch-wide markdown, from a written instruction like "this is a closeout, 30% off". */
+  discountPct?: number | null;
 }
 
 export interface PricingResult {
@@ -137,6 +140,11 @@ export function priceVariant(input: PricingInput, settings: PricingSettings): Pr
     const storefront = settings.pricesIncludeGst ? exGst * (1 + gst) : exGst;
     retailPrice = applyRounding(storefront, rule.roundTo);
   }
+
+  // A closeout is a share off whatever the price would have been — off the recommended retail on a
+  // line that has one, off the marked-up price on a line that does not. It is the last thing that
+  // happens to the number, so the profit below is the profit on what the shop will actually take.
+  retailPrice = discounted(retailPrice, input.discountPct);
 
   const exGstRevenue = roundCents(settings.pricesIncludeGst ? retailPrice / (1 + gst) : retailPrice);
   const gstComponent = roundCents(settings.pricesIncludeGst ? retailPrice - exGstRevenue : retailPrice * gst);

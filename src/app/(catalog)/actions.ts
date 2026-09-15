@@ -16,6 +16,7 @@ import { slugify } from "@/lib/catalog/handle";
 import { CURRENCIES, type AppSettings } from "@/lib/catalog/types";
 import { seedDefaults } from "@/lib/catalog/seed";
 import { answerFeedback, feedbackAvailable, withRule, type FeedbackTurn } from "@/lib/catalog/feedback";
+import { describeDirectives, instructionsAvailable, parseDirectives, readInstructions, NO_DIRECTIVES } from "@/lib/catalog/instructions";
 
 export type ActionResult<T = undefined> = { ok: true; data?: T; message?: string } | { ok: false; error: string };
 
@@ -964,6 +965,78 @@ export async function applyFeedbackRuleAction(feedbackId: string): Promise<Actio
     revalidatePath(`/batches/${row.batchId}/export`);
     revalidatePath("/templates");
     return { ok: true, data: { houseRules } };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Instructions about an invoice
+// ---------------------------------------------------------------------------
+
+export interface InstructionMessage {
+  id: string;
+  role: string;
+  body: string;
+  createdAt: string;
+}
+
+/**
+ * Say what is true about this invoice in words — the brand it all is, a tag it all needs, a
+ * closeout discount — and have the build obey it. What was understood is read back, and shown
+ * against the batch, so nobody has to guess what a batch was built under.
+ */
+export async function sendInstructionAction(batchId: string, message: string): Promise<ActionResult<{ messages: InstructionMessage[]; directives: string[] }>> {
+  const user = await requireUser();
+  const body = message.trim();
+  if (!body) return { ok: false, error: "Say what is true about this invoice." };
+
+  try {
+    await prisma.batchInstruction.create({ data: { batchId, userId: user.id, role: "USER", body } });
+
+    const batch = await prisma.importBatch.findUniqueOrThrow({ where: { id: batchId }, select: { directives: true } });
+    let directives = parseDirectives(batch.directives);
+
+    if (instructionsAvailable()) {
+      const thread = await prisma.batchInstruction.findMany({ where: { batchId }, orderBy: { createdAt: "asc" } });
+      const reading = await readInstructions(
+        thread.map((t) => ({ role: t.role === "USER" ? "USER" : "ASSISTANT", body: t.body })),
+        directives,
+      );
+      if (reading) {
+        directives = reading.directives;
+        await prisma.$transaction([
+          prisma.importBatch.update({ where: { id: batchId }, data: { directives: JSON.stringify(reading.directives) } }),
+          prisma.batchInstruction.create({ data: { batchId, role: "ASSISTANT", body: reading.reply } }),
+        ]);
+        await logAudit("batch.instruction", { batchId, userId: user.id, details: reading.directives });
+        // Products already built are rebuilt against what was just said.
+        const built = await prisma.product.count({ where: { batchId } });
+        if (built > 0) await repriceBatch(batchId);
+      }
+    }
+
+    const messages = await prisma.batchInstruction.findMany({ where: { batchId }, orderBy: { createdAt: "asc" } });
+    revalidatePath(`/batches/${batchId}`);
+    return { ok: true, data: { messages: messages.map((m) => ({ id: m.id, role: m.role, body: m.body, createdAt: m.createdAt.toISOString() })), directives: describeDirectives(directives) } };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/** Forget everything said about this invoice and build it on the rules alone. */
+export async function clearInstructionsAction(batchId: string): Promise<ActionResult> {
+  const user = await requireUser();
+  try {
+    await prisma.$transaction([
+      prisma.batchInstruction.deleteMany({ where: { batchId } }),
+      prisma.importBatch.update({ where: { id: batchId }, data: { directives: JSON.stringify(NO_DIRECTIVES) } }),
+    ]);
+    const built = await prisma.product.count({ where: { batchId } });
+    if (built > 0) await repriceBatch(batchId);
+    await logAudit("batch.instruction.cleared", { batchId, userId: user.id });
+    revalidatePath(`/batches/${batchId}`);
+    return { ok: true };
   } catch (err) {
     return fail(err);
   }

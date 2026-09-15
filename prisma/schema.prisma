@@ -94,6 +94,7 @@ model ImportBatch {
   publishOnExport Boolean  @default(false) // unused: every export is a draft, see csv.ts
   splitExportBy   String   @default("BRAND") // NONE | BRAND | PRODUCT_TYPE — one CSV per group
   notes           String?
+  directives      String   @default("") // JSON: what the written instructions told the build to do
   summary         String? // JSON snapshot of last computed batch summary
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -108,6 +109,7 @@ model ImportBatch {
   auditLogs AuditLog[]
   unassignedImages UnassignedImage[]
   feedback  ExportFeedback[]
+  instructions BatchInstruction[]
 
   @@index([createdById])
   @@index([status])
@@ -371,6 +373,25 @@ model AppSetting {
 // ---------------------------------------------------------------------------
 // Exports, Shopify catalog cache, audit
 // ---------------------------------------------------------------------------
+
+/**
+ * What someone said about an invoice before it was built.
+ *
+ * "This is an Oakley closeout, it needs the 2998 tag and everything is 30% off" is not something a
+ * column mapping can express, so it is said in words and read into directives the build obeys.
+ */
+model BatchInstruction {
+  id        String   @id @default(cuid())
+  batchId   String
+  userId    String?
+  role      String // USER | ASSISTANT
+  body      String
+  createdAt DateTime @default(now())
+
+  batch ImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([batchId, createdAt])
+}
 
 /**
  * What someone said after looking at a finished CSV, and what was done about it.

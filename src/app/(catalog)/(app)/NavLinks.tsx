@@ -9,6 +9,7 @@ const LINKS = [
   { href: "/batches", label: "Import batches" },
   { href: "/templates", label: "Templates" },
   { href: "/rules", label: "Rules" },
+  { href: "/pricing", label: "Pricing" },
   { href: "/history", label: "History" },
   { href: "/settings", label: "Settings", admin: true },
 ];

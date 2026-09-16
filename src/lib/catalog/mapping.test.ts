@@ -98,7 +98,7 @@ describe("grouping", () => {
     expect(skis.variants).toHaveLength(2);
     expect(skis.variants[1].item.quantity).toBe(3); // duplicate sku line merged
     expect(skis.metafields.length_cm).toBe("166, 172");
-    expect(skis.tags).toContain("Atomic");
+    expect(skis.tags).toContain("atomic"); // the catalogue writes a vendor in lower case
     expect(products[1].title).toBe("Beanie");
   });
 });

@@ -546,6 +546,23 @@ export function generalTags(input: TagInput, settings: TaggingSettings = DEFAULT
 }
 
 /**
+ * Who a product is for, read from whatever the invoice and the title say.
+ *
+ * Suppliers write it a dozen ways — "Mens", "M", "Men's", "W", "Ladies", "Boys", "Jr" — and it is
+ * as often in the title as in a column. A child's product is kids and nothing else.
+ */
+export function gendersFromText(...parts: (string | undefined)[]): Gender[] {
+  const text = parts.filter(Boolean).join(" ").toLowerCase();
+  if (/\b(kids?|junior|jnr|jr|youth|boys?|girls?|child(ren)?|grom|toddler)\b/.test(text)) return ["kids"];
+  const mens = /\b(mens?|men's|man's|male|m)\b/.test(text);
+  const womens = /\b(womens?|women's|woman's|ladies|ladys|lady|female|w|wmns)\b/.test(text);
+  if (mens && womens) return ["mens", "womens"];
+  if (mens) return ["mens"];
+  if (womens) return ["womens"];
+  return [];
+}
+
+/**
  * The gender tags a product carries, which depends on whether it is a garment.
  *
  * A garment always carries one. All seventy snow garments in the exports do, none carries none,

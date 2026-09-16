@@ -156,11 +156,11 @@
       }
     ],
     "errors": [
-      "M6 Mantra 2026 / V2410170: No recommended retail on the invoice — enter one, or use Find descriptions to look it up",
-      "M6 Mantra 2026 / V2410177: No recommended retail on the invoice — enter one, or use Find descriptions to look it up",
-      "M6 Mantra 2026 / V2410184: No recommended retail on the invoice — enter one, or use Find descriptions to look it up",
-      "Griffon 13 ID Bindings 2026 / M7201100: No recommended retail on the invoice — enter one, or use Find descriptions to look it up",
-      "Griffon 13 ID Bindings 2026 / M7201110: No recommended retail on the invoice — enter one, or use Find descriptions to look it up"
+      "M6 Mantra 2026 / V2410170: No recommended retail yet — Look up missing details searches the brand's site for it, or type one in",
+      "M6 Mantra 2026 / V2410177: No recommended retail yet — Look up missing details searches the brand's site for it, or type one in",
+      "M6 Mantra 2026 / V2410184: No recommended retail yet — Look up missing details searches the brand's site for it, or type one in",
+      "Griffon 13 ID Bindings 2026 / M7201100: No recommended retail yet — Look up missing details searches the brand's site for it, or type one in",
+      "Griffon 13 ID Bindings 2026 / M7201110: No recommended retail yet — Look up missing details searches the brand's site for it, or type one in"
     ],
     "warnings": [
       "M6 Mantra 2026: No image - add one or export anyway",
@@ -230,15 +230,15 @@
       }
     ],
     "errors": [
-      "Custom Snowboard / BUR-CUST-154: No recommended retail on the invoice — enter one, or use Find descriptions to look it up",
-      "Custom Snowboard / BUR-CUST-158: No recommended retail on the invoice — enter one, or use Find descriptions to look it up",
-      "Custom Snowboard / BUR-CUST-162: No recommended retail on the invoice — enter one, or use Find descriptions to look it up",
-      "Cartel Bindings / BUR-CART-M: No recommended retail on the invoice — enter one, or use Find descriptions to look it up",
-      "Cartel Bindings / BUR-CART-L: No recommended retail on the invoice — enter one, or use Find descriptions to look it up"
+      "Custom Snowboard 2027 / BUR-CUST-154: No recommended retail yet — Look up missing details searches the brand's site for it, or type one in",
+      "Custom Snowboard 2027 / BUR-CUST-158: No recommended retail yet — Look up missing details searches the brand's site for it, or type one in",
+      "Custom Snowboard 2027 / BUR-CUST-162: No recommended retail yet — Look up missing details searches the brand's site for it, or type one in",
+      "Cartel Bindings 2026 / BUR-CART-M: No recommended retail yet — Look up missing details searches the brand's site for it, or type one in",
+      "Cartel Bindings 2026 / BUR-CART-L: No recommended retail yet — Look up missing details searches the brand's site for it, or type one in"
     ],
     "warnings": [
-      "Custom Snowboard: No image - add one or export anyway",
-      "Cartel Bindings: No image - add one or export anyway"
+      "Custom Snowboard 2027: No image - add one or export anyway",
+      "Cartel Bindings 2026: No image - add one or export anyway"
     ]
   }
 }

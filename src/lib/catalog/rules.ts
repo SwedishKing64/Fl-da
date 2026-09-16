@@ -98,6 +98,11 @@ export function applyTagRules(target: RuleTarget, rules: TagRuleLike[]): RuleOut
   let typeDecided = false;
   const decided = new Set<string>();
   const matched: RuleOutcome["matched"] = [];
+  // Order has nothing to do with tags. A tag is a yes or a no: every rule that matches adds its
+  // tags, as many as it likes, and no rule's tags ever displace another's — there is no cap and
+  // no contest. Weight decides only the two things a product can hold exactly one of, its Type
+  // and a given metafield, where the heavier rule answers first and keeps the answer. A rule that
+  // adds tags alone is unaffected by where it sits.
   const ordered = [...rules].filter((r) => r.active).sort((a, b) => b.priority - a.priority);
   for (const rule of ordered) {
     if (!ruleMatches(rule, { ...target, productType, tags: Array.from(tags) })) continue;

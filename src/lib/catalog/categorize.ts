@@ -45,19 +45,36 @@ export const CATEGORY_LABELS: Record<Category, string> = {
 export function detectCategory(item: CanonicalLineItem, rules: CategoryRuleLike[]): CategoryRuleLike | null {
   const stated = (item.category || "").trim().toLowerCase();
   const active = rules.filter((r) => r.active).sort((a, b) => b.priority - a.priority);
-  if (stated) {
-    const direct = active.find((r) => r.category === stated) ?? active.find((r) => new RegExp(r.pattern, "i").test(stated));
-    if (direct) return direct;
-  }
   const haystack = [item.productType, item.title, item.description].filter(Boolean).join(" \n ");
-  for (const rule of active) {
-    try {
-      if (new RegExp(rule.pattern, "i").test(haystack)) return rule;
-    } catch {
-      // bad user regex: skip rule
+
+  if (stated) {
+    // Several rules can share a category — clothing is six, one per garment — so a stated category
+    // narrows the field rather than settling it. Without this, every item an extractor called
+    // "apparel" took whichever clothing rule happened to sort first and came out a pair of socks.
+    const sharing = active.filter((r) => r.category === stated);
+    if (sharing.length > 0) {
+      const byPattern = sharing.find((r) => matches(r, haystack));
+      if (byPattern) return byPattern;
+      // Nothing in the text says which garment it is. Only answer when the category has one rule;
+      // otherwise fall through and let the patterns decide on their own merits.
+      if (sharing.length === 1) return sharing[0];
     }
+    const named = active.find((r) => matches(r, stated));
+    if (named) return named;
+  }
+  for (const rule of active) {
+    if (matches(rule, haystack)) return rule;
   }
   return null;
+}
+
+/** A rule's pattern against some text, treating a rule with a bad regex as no match. */
+function matches(rule: CategoryRuleLike, text: string): boolean {
+  try {
+    return new RegExp(rule.pattern, "i").test(text);
+  } catch {
+    return false;
+  }
 }
 
 const LENGTH_IN_TITLE = /\b(1[0-9]{2}|2[01][0-9])\s?(?:cm)?\s*$|\b(1[0-9]{2}|2[01][0-9])\s?cm\b/i;

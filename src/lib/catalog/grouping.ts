@@ -3,6 +3,7 @@
 import { buildHandle } from "./handle";
 import { chooseOptions, collectionsFor, detectCategory, enrichFromTitle, metafieldsFor, OPTION_LABELS, tagsFor, type CategoryRuleLike } from "./categorize";
 import { normaliseOptionName, optionNamesFor } from "./options";
+import { catalogTags } from "./product-tags";
 import { withoutVendor } from "./titles";
 import type { CanonicalLineItem } from "./types";
 
@@ -53,7 +54,15 @@ function normaliseCodes(items: CanonicalLineItem[]): CanonicalLineItem[] {
   for (const group of byTitle.values()) {
     const codes = group.map((i) => i.modelCode.trim()).filter(Boolean);
     if (group.length < 2 || codes.length !== group.length) continue;
-    if (new Set(codes.map((c) => c.toLowerCase())).size !== codes.length) continue; // shared codes => real model codes
+
+    // A code repeating is not evidence it is a real model code. On a size-grid invoice every
+    // colourway repeats once per size ordered — 38SA073514-BLK in L and in XL — and requiring all
+    // codes to be distinct made this bail on exactly the invoices it exists for, splitting one
+    // jacket into one product per colour. What matters is whether the codes differ at all: if
+    // they are all identical it is already a model code and there is nothing to strip.
+    const distinct = new Set(codes.map((c) => c.toLowerCase()));
+    if (distinct.size < 2) continue;
+
     const prefix = commonPrefix(codes).replace(/[-_/.\s]+$/, "");
     for (const item of group) {
       if (!item.sku) item.sku = item.modelCode.trim();
@@ -131,7 +140,7 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
       brand,
       category: group.rule?.category ?? (first.category || "other"),
       productType,
-      tags: tagsFor(group.rule, items, brand),
+      tags: catalogTags({ productType, brand, items, ruleTags: tagsFor(group.rule, items, brand), describedAs: `${title} ${description}` }),
       collections: collectionsFor(group.rule, items),
       description,
       metafields: metafieldsFor(items),

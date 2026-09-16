@@ -23,7 +23,7 @@ const LineItemSchema = z.object({
   quantity: z.number().nullable().describe("Units ordered/invoiced for this line; null when not an order"),
   rrp: z.number().nullable().describe("Recommended retail price if stated"),
   length: z.string().describe("Ski/snowboard length in cm, digits only, else empty"),
-  size: z.string().describe("Boot size (mondopoint) or apparel size, else empty"),
+  size: z.string().describe("Boot size (mondopoint) or apparel size (S, M, L, XL, 8, 10, 12…), else empty. On a size-grid invoice this is the column header the quantity sat under."),
   width: z.string().describe("Boot last width in mm or ski waist width, else empty"),
   colour: z.string().describe("Colourway, else empty"),
   gender: z.string().describe("Mens/Womens/Unisex/Kids if stated, else empty"),
@@ -34,7 +34,7 @@ const LineItemSchema = z.object({
   abilityLevel: z.string().describe("Ability level if stated (Beginner/Intermediate/Advanced/Expert)"),
   dinRange: z.string().describe("Binding DIN range if stated, e.g. '4-13'"),
   terrain: z.string().describe("Terrain/use if stated, e.g. All-Mountain, Freeride, Park"),
-  tags: z.string().describe("Comma-separated tags a shop would use for this product (e.g. 'Freeride, Womens, Twin Tip'), else empty"),
+  tags: z.string().describe("Comma-separated tags a shop would use, only where the document genuinely suggests one (e.g. 'Freeride, Twin Tip'). Never the supplier's own section headings or marketing phrases. Empty is a good answer."),
   imageUrls: z.array(z.string()).describe("Any image URLs printed for this line"),
 });
 
@@ -58,6 +58,22 @@ Document types:
 - SPEC_SHEET / catalogue page / workbook: one item per product (not per size) carrying brand, model, description, specs (flex, ability level, terrain, DIN, widths), the list of available lengths/sizes in the length/size field separated by commas, colourways, RRP if shown, and suggested tags. costPrice and quantity are null.
 - PRODUCT_PHOTO: a photo of a product (skis, boots, apparel…). Return one item with the brand, model name, model code (if printed), colour and category you can see, everything else empty/null.
 - OTHER: nothing useful; return no items.
+
+Size grids (very common on apparel invoices, and the shape most often got wrong):
+- Some invoices do not list one row per variant. Instead the sizes run ACROSS as column headers (S M L XL XXL XXXL, or 0 2 4 6 8 10 12 14 16 18 20, or 36 38 40 42) and each product row carries a quantity in the cell under each size it was ordered in. Empty cells were not ordered.
+- When you see that, emit ONE ITEM PER SIZE THAT HAS A QUANTITY, not one item per row. Each item takes that size, that cell's quantity, and the row's name, code, colour and prices. A row with quantities under M and L is two items, not one.
+- Quantities in those cells are often HANDWRITTEN, and may be circled or ticked. Read them as the quantity. A circle around a number does not change the number.
+- Check your work against the row's printed total quantity ("2 EA", "3 EA") and the stated Total Units: the quantities you emit for a row should add up to it.
+- A page may be photographed sideways or upside down. Read it in whatever orientation it is.
+
+Section headers:
+- A line like "Description: SPYD - Mens - Technical Jackets" or "Womens - Technical Pants" is a heading that applies to EVERY row beneath it until the next such heading, not a product of its own.
+- Take the gender from it (Mens, Womens, Kids) and put it in the gender field of every item under it.
+- Do not copy the heading's wording into tags. "Technical Jackets" is the supplier's own phrase for a section, not a tag this shop uses.
+
+Prices:
+- When a row shows both an RRP column and a wholesale column (W/S, Price net, Your price, Cost), rrp is the RECOMMENDED RETAIL and costPrice is the WHOLESALE one. Getting these the wrong way round is the single most damaging mistake here, so read the column headings rather than assuming the larger number is either one.
+- A discount percentage column (Disc%) describes the wholesale price already shown; it is not a retail discount.
 
 Rules:
 - title is the product name only; put length/size/colour in their own fields. Keep the brand out of the title when it is identifiable separately.

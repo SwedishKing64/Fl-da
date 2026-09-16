@@ -44,11 +44,10 @@ export function TagRulesEditor({ rules, isAdmin }: { rules: RuleRow[]; isAdmin: 
 
       <div className="overflow-auto">
         <table className="w-full text-sm">
-          <thead className="text-left text-xs text-[var(--ink-soft)]"><tr><th className="w-10 py-1">#</th><th>Rule</th><th>Watches for</th><th>Does</th><th /></tr></thead>
+          <thead className="text-left text-xs text-[var(--ink-soft)]"><tr><th>Rule</th><th>Watches for</th><th>Does</th><th /></tr></thead>
           <tbody>
-            {rules.map((r, i) => (
+            {rules.map((r) => (
               <tr key={r.id} className="border-t border-[var(--line-soft)] align-top transition-colors hover:bg-[var(--alp-snow)]">
-                <td className="py-1.5 text-xs font-semibold tabular-nums text-[var(--ink-soft)]" title={`Runs ${i === 0 ? "first" : `${i + 1}${["st", "nd", "rd"][i] ?? "th"}`}. Weight ${r.priority}.`}>{i + 1}</td>
                 <td className="py-1.5">{r.name} {!r.active && <Badge>off</Badge>}</td>
                 <td className="text-xs"><span className="text-[var(--ink-soft)]">{MATCH_FIELDS.find((f) => f.key === r.matchField)?.label.split(" (")[0] ?? r.matchField}</span> matches <code className="rounded bg-neutral-100 px-1">{r.pattern}</code></td>
                 <td className="text-xs">
@@ -75,7 +74,6 @@ export function TagRulesEditor({ rules, isAdmin }: { rules: RuleRow[]; isAdmin: 
           <Field label="Add collections (comma separated)"><input name="addCollections" defaultValue={editing?.addCollections} className={INPUT} /></Field>
           <Field label="Set product type (optional)"><input name="setProductType" defaultValue={editing?.setProductType} className={INPUT} /></Field>
           <Field label="Set metafields" hint={`One per line as key=value. Keys: ${META_KEYS.join(", ")}`}><textarea name="setMetafields" rows={2} defaultValue={editing ? Object.entries(editing.setMetafields).map(([k, v]) => `${k}=${v}`).join("\n") : ""} className={`${INPUT} font-mono text-xs`} placeholder="gender=Womens" /></Field>
-          <Field label="Weight" hint="Higher runs earlier. It only matters when two rules set the same type or metafield — then the heavier one wins."><input name="priority" type="number" defaultValue={editing?.priority ?? 0} className={INPUT} /></Field>
           <label className="flex items-center gap-2 self-end pb-2 text-sm"><input type="checkbox" name="active" defaultChecked={editing?.active ?? true} /> Active</label>
           <div className="flex items-end gap-2 sm:col-span-2">
             <Button type="submit" variant="primary" disabled={pending}>{editing ? "Save rule" : "Add rule"}</Button>

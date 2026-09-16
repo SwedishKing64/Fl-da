@@ -82,7 +82,7 @@ export const CANONICAL_FIELDS: CanonicalFieldDef[] = [
   { key: "rrp", label: "RRP / MSRP", kind: "number", synonyms: ["rrp", "msrp", "retail", "retail price", "srp", "rec retail", "recommended retail", "list price", "map"] },
   { key: "grams", label: "Weight (grams)", kind: "number", synonyms: ["weight", "grams", "weight g", "weight (g)", "unit weight", "mass"] },
   { key: "length", label: "Length (cm)", kind: "text", synonyms: ["length", "len", "ski length", "board length", "size cm", "length cm", "cm"] },
-  { key: "size", label: "Size", kind: "text", synonyms: ["size", "boot size", "mondo", "mondopoint", "mp", "shoe size", "sz", "size us", "us size", "eu size"] },
+  { key: "size", label: "Size", kind: "text", synonyms: ["size", "sizes", "sz", "sz.", "size range", "garment size", "apparel size", "clothing size", "size name", "size code", "size desc", "size description", "boot size", "mondo", "mondopoint", "mp", "shoe size", "size us", "us size", "eu size", "uk size"] },
   { key: "width", label: "Width", kind: "text", synonyms: ["width", "last", "last width", "waist", "waist width", "last mm"] },
   { key: "colour", label: "Colour", kind: "text", synonyms: ["colour", "color", "col", "colourway", "colorway", "farbe"] },
   { key: "gender", label: "Gender", kind: "text", synonyms: ["gender", "sex", "mens/womens", "m/w", "unisex"] },

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Alert, Button, cx } from "@/app/(catalog)/ui";
 
@@ -14,7 +14,7 @@ const KINDS = [
   { value: "PRODUCT_PHOTO", label: "Product photos", hint: "Attached to products by name or SKU in the filename, or via the review grid." },
 ];
 
-export function UploadPanel({ batchId, aiEnabled, hasProducts }: { batchId: string; aiEnabled: boolean; hasProducts: boolean }) {
+export function UploadPanel({ batchId, aiEnabled, hasProducts, reading }: { batchId: string; aiEnabled: boolean; hasProducts: boolean; reading: number }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [active, setActive] = useState(false);
@@ -23,6 +23,17 @@ export function UploadPanel({ batchId, aiEnabled, hasProducts }: { batchId: stri
   const [results, setResults] = useState<UploadResult[] | null>(null);
   const [auto, setAuto] = useState<AutoResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  /**
+   * Files are stored straight away and read afterwards, so the page has to come back and look.
+   * Without this an upload would appear to have done nothing at all until something else happened
+   * to refresh the page.
+   */
+  useEffect(() => {
+    if (reading === 0) return;
+    const timer = setInterval(() => router.refresh(), 3000);
+    return () => clearInterval(timer);
+  }, [reading, router]);
 
   async function upload(files: FileList | File[]) {
     const list = Array.from(files);
@@ -40,10 +51,6 @@ export function UploadPanel({ batchId, aiEnabled, hasProducts }: { batchId: stri
       if (!res.ok) throw new Error(body.error ?? `Upload failed (HTTP ${res.status})`);
       setResults(body.results);
       setAuto(body.auto ?? null);
-      if (body.auto?.applied) {
-        router.push(`/batches/${batchId}/review`);
-        return;
-      }
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -78,6 +85,12 @@ export function UploadPanel({ batchId, aiEnabled, hasProducts }: { batchId: stri
         </div>
       </div>
       {error && <Alert tone="danger">{error}</Alert>}
+      {reading > 0 && (
+        <Alert tone="info">
+          Reading {reading === 1 ? "the file" : `${reading} files`} now. A scanned or photographed invoice takes a minute or two — this page updates itself as each one is read, and you can leave it and come back.
+        </Alert>
+      )}
+
       {results && (
         <Alert tone={results.every((r) => r.rows > 0 || r.kind === "PRODUCT_PHOTO") ? "success" : "warning"}>
           <ul className="space-y-1">

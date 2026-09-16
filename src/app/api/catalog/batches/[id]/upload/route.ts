@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireApiUser } from "@/lib/catalog/auth";
 import { prisma } from "@/lib/catalog/db";
-import { autoApplyMappings, ingestFile } from "@/lib/catalog/pipeline";
+import { after } from "next/server";
+import { autoApplyMappings, extractStoredFile, storeFile } from "@/lib/catalog/pipeline";
 import type { UploadKind } from "@/lib/catalog/extract";
 import { logAudit } from "@/lib/catalog/audit";
 
@@ -27,24 +28,44 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/catalog/bat
   const files = form.getAll("files").filter((f): f is File => f instanceof File && f.size > 0);
   if (files.length === 0) return NextResponse.json({ error: "No files received" }, { status: 400 });
 
+  // Store every file first, and answer as soon as they are safe. Reading them is the slow part —
+  // a scanned invoice is a vision call over a photograph — and doing it here meant a slow read
+  // took the whole upload down with it, so a file that had arrived intact was reported as failed.
+  const stored: Array<{ id: string; filename: string }> = [];
   const results = [];
   for (const file of files) {
     if (file.size > MAX_BYTES) {
       results.push({ filename: file.name, rows: 0, method: null, kind, warnings: [`File is larger than ${Math.round(MAX_BYTES / 1024 / 1024)}MB${process.env.VERCEL ? " (Vercel upload limit)" : ""}; split or compress it.`] });
       continue;
     }
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const r = await ingestFile(id, { filename: file.name, mimeType: file.type, buffer, kind, origin: req.nextUrl.origin });
-    results.push({ filename: file.name, ...r });
-  }
-  await logAudit("batch.files_uploaded", { batchId: id, userId: user.id, details: { files: results.map((r) => ({ filename: r.filename, rows: r.rows, kind: r.kind })) } });
-  let auto: { applied: boolean; products: number; variants: number } = { applied: false, products: 0, variants: 0 };
-  if (autoMap && batch.status !== "REVIEW") {
     try {
-      auto = await autoApplyMappings(id, user.id);
+      const buffer = Buffer.from(await file.arrayBuffer());
+      const { id: fileId } = await storeFile(id, { filename: file.name, mimeType: file.type, buffer, kind });
+      stored.push({ id: fileId, filename: file.name });
+      results.push({ filename: file.name, rows: 0, method: null, kind, warnings: [] });
     } catch (err) {
-      results.push({ filename: "(mapping)", rows: 0, method: null, kind: "AUTO", warnings: [`Automatic mapping failed: ${err instanceof Error ? err.message : String(err)}`] });
+      results.push({ filename: file.name, rows: 0, method: null, kind, warnings: [`Could not store the file: ${err instanceof Error ? err.message : String(err)}`] });
     }
   }
-  return NextResponse.json({ ok: true, results, auto });
+  await logAudit("batch.files_uploaded", { batchId: id, userId: user.id, details: { files: stored.map((f) => f.filename) } });
+
+  const origin = req.nextUrl.origin;
+  const shouldMap = autoMap && batch.status !== "REVIEW";
+  after(async () => {
+    for (const file of stored) {
+      try {
+        await extractStoredFile(file.id, origin);
+      } catch (err) {
+        // The file itself is safe; only the reading failed, and the row says so.
+        await prisma.sourceFile.update({
+          where: { id: file.id },
+          data: { extractionStatus: "FAILED", extractionError: err instanceof Error ? err.message : String(err) },
+        }).catch(() => undefined);
+      }
+    }
+    if (shouldMap) await autoApplyMappings(id, user.id).catch(() => undefined);
+  });
+
+  // `reading` tells the page there is more to come, so it can wait rather than look finished.
+  return NextResponse.json({ ok: true, results, reading: stored.length, auto: { applied: false, products: 0, variants: 0 } });
 }

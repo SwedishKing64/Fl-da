@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma, parseJson, createTables, databaseStatus } from "@/lib/catalog/db";
 import { createSession, destroySession, hashPassword, requireUser, usersExist, verifyPassword } from "@/lib/catalog/auth";
-import { allocateBatchFreight, applyMappings, applyRulesToBatch, attachUnassignedPhotos, loadReview, repriceBatch, repriceVariant, verifyBatchImages, exportBatch, exportFileText, type ApplyMappingInput, type ReviewData } from "@/lib/catalog/pipeline";
+import { allocateBatchFreight, applyMappings, applyRulesToBatch, attachUnassignedPhotos, extractStoredFile, loadReview, repriceBatch, repriceVariant, verifyBatchImages, exportBatch, exportFileText, type ApplyMappingInput, type ReviewData } from "@/lib/catalog/pipeline";
 import { logAudit } from "@/lib/catalog/audit";
 import { getSettings, saveSettings } from "@/lib/catalog/settings";
 import { checkImageUrl, recordLibraryImages } from "@/lib/catalog/images";
@@ -656,6 +656,28 @@ export async function lookupProductsAction(batchId: string, opts: { productIds?:
     revalidatePath(`/batches/${batchId}/review`);
     return { ok: true, data: { ...data, limit: LOOKUP_LIMIT } };
   } catch (err) {
+    return fail(err);
+  }
+}
+
+/**
+ * Read a stored file again.
+ *
+ * Reading happens after the upload has been answered, and it has the same time limit the upload
+ * did — so a large scan can still run out of it. The file is safe either way, so trying again is
+ * the whole of the recovery, and nobody has to find the invoice and upload it twice.
+ */
+export async function retryExtractionAction(fileId: string): Promise<ActionResult<{ rows: number; warnings: string[] }>> {
+  const user = await requireUser();
+  try {
+    await prisma.sourceFile.update({ where: { id: fileId }, data: { extractionStatus: "PENDING", extractionError: null } });
+    const result = await extractStoredFile(fileId);
+    const file = await prisma.sourceFile.findUniqueOrThrow({ where: { id: fileId }, select: { batchId: true } });
+    await logAudit("file.reread", { batchId: file.batchId, userId: user.id, details: { fileId, rows: result.rows } });
+    revalidatePath(`/batches/${file.batchId}`);
+    return { ok: true, data: { rows: result.rows, warnings: result.warnings } };
+  } catch (err) {
+    await prisma.sourceFile.update({ where: { id: fileId }, data: { extractionStatus: "FAILED", extractionError: err instanceof Error ? err.message : String(err) } }).catch(() => undefined);
     return fail(err);
   }
 }

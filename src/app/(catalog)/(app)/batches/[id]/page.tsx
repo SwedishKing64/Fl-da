@@ -7,7 +7,7 @@ import { Steps } from "./Steps";
 import { UploadPanel } from "./UploadPanel";
 import { InstructionChat } from "./InstructionChat";
 import { BatchSettingsForm } from "./BatchSettingsForm";
-import { DeleteFileButton, DeleteBatchButton } from "./BatchButtons";
+import { DeleteFileButton, DeleteBatchButton, RetryExtractionButton } from "./BatchButtons";
 
 export default async function BatchPage(props: PageProps<"/batches/[id]">) {
   const { id } = await props.params;
@@ -39,7 +39,7 @@ export default async function BatchPage(props: PageProps<"/batches/[id]">) {
             initial={batch.instructions.map((m) => ({ id: m.id, role: m.role, body: m.body, createdAt: m.createdAt.toISOString() }))}
           />
           <Card title="Supplier files">
-            {locked ? <Empty>This batch has been exported; files are locked for audit.</Empty> : <UploadPanel batchId={id} aiEnabled={settings ? Boolean(process.env.ANTHROPIC_API_KEY) : false} hasProducts={batch._count.products > 0} />}
+            {locked ? <Empty>This batch has been exported; files are locked for audit.</Empty> : <UploadPanel batchId={id} aiEnabled={settings ? Boolean(process.env.ANTHROPIC_API_KEY) : false} hasProducts={batch._count.products > 0} reading={batch.files.filter((f) => f.extractionStatus === "PENDING").length} />}
             {batch.files.length > 0 && (
               <table className="mt-4 w-full text-sm">
                 <thead className="text-left text-xs text-[var(--ink-soft)]"><tr><th className="py-1">File</th><th>Kind</th><th>Extraction</th><th className="text-right">Rows</th><th /></tr></thead>
@@ -51,11 +51,11 @@ export default async function BatchPage(props: PageProps<"/batches/[id]">) {
                         <td className="py-2"><div className="font-medium">{f.filename}</div><div className="text-xs text-[var(--ink-soft)]">{(f.sizeBytes / 1024).toFixed(0)} KB · {fmtDate(f.createdAt)}</div></td>
                         <td>{f.kind.replace("_", " ").toLowerCase()}</td>
                         <td>
-                          <Badge tone={f.extractionStatus === "DONE" ? "success" : f.extractionStatus === "FAILED" ? "danger" : "neutral"}>{f.extractionMethod ?? f.extractionStatus}</Badge>
+                          <Badge tone={f.extractionStatus === "DONE" ? "success" : f.extractionStatus === "FAILED" ? "danger" : "warning"}>{f.extractionStatus === "PENDING" ? "reading…" : f.extractionMethod ?? f.extractionStatus}</Badge>
                           {f.extractionError && <div className="mt-1 max-w-md whitespace-normal text-xs text-amber-800">{f.extractionError}</div>}
                         </td>
                         <td className="text-right">{rows}</td>
-                        <td className="text-right">{!locked && <DeleteFileButton fileId={f.id} />}</td>
+                        <td className="text-right"><div className="flex items-center justify-end gap-2">{f.extractionStatus === "FAILED" && !locked && <RetryExtractionButton fileId={f.id} />}{!locked && <DeleteFileButton fileId={f.id} />}</div></td>
                       </tr>
                     );
                   })}

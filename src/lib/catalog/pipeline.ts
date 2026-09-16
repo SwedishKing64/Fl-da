@@ -124,12 +124,44 @@ export interface IngestResult {
 
 const PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
 
-export async function ingestFile(batchId: string, file: { filename: string; mimeType: string; buffer: Buffer; kind?: UploadKind; origin?: string }): Promise<IngestResult> {
-  const requested: UploadKind = file.kind ?? "AUTO";
+/**
+ * Put the file somewhere safe and say so. Reading it comes after.
+ *
+ * Reading a scanned invoice is a vision call over a photograph, and on a size grid it is a slow
+ * one — well past the minute a deployed request gets. Doing it inside the upload meant the upload
+ * itself failed, losing the file along with the reading, and telling somebody their upload failed
+ * when it had in fact arrived perfectly.
+ */
+export async function storeFile(batchId: string, file: { filename: string; mimeType: string; buffer: Buffer; kind?: UploadKind }): Promise<{ id: string }> {
   const storagePath = await saveFile("invoices", file.filename, file.buffer);
   const record = await prisma.sourceFile.create({
-    data: { batchId, filename: file.filename, mimeType: file.mimeType || "application/octet-stream", sizeBytes: file.buffer.length, storagePath, kind: requested },
+    data: {
+      batchId,
+      filename: file.filename,
+      mimeType: file.mimeType || "application/octet-stream",
+      sizeBytes: file.buffer.length,
+      storagePath,
+      kind: file.kind ?? "AUTO",
+      extractionStatus: "PENDING",
+    },
   });
+  return { id: record.id };
+}
+
+/** Read a file that is already stored, and record what came of it. */
+export async function extractStoredFile(fileId: string, origin?: string): Promise<IngestResult> {
+  const record = await prisma.sourceFile.findUniqueOrThrow({ where: { id: fileId } });
+  const buffer = await readFile(record.storagePath);
+  return ingestFile(record.batchId, { filename: record.filename, mimeType: record.mimeType, buffer, kind: record.kind as UploadKind, origin, existingFileId: record.id });
+}
+
+export async function ingestFile(batchId: string, file: { filename: string; mimeType: string; buffer: Buffer; kind?: UploadKind; origin?: string; existingFileId?: string }): Promise<IngestResult> {
+  const requested: UploadKind = file.kind ?? "AUTO";
+  const record = file.existingFileId
+    ? await prisma.sourceFile.findUniqueOrThrow({ where: { id: file.existingFileId } })
+    : await prisma.sourceFile.create({
+        data: { batchId, filename: file.filename, mimeType: file.mimeType || "application/octet-stream", sizeBytes: file.buffer.length, storagePath: await saveFile("invoices", file.filename, file.buffer), kind: requested },
+      });
   try {
     const { table, meta } = await extractFile(file.buffer, file.filename, file.mimeType, requested);
     const detected = meta?.documentType ?? null;

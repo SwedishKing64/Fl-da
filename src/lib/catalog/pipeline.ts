@@ -835,22 +835,40 @@ function slugForFile(name: string): string {
  * failed on the one thing the app exists to produce. Rebuilding is safe because a batch is locked
  * once exported: the same products, split the same way, in the same order.
  */
-export async function readExportFile(id: string): Promise<{ filename: string; content: Buffer } | null> {
+export type ExportFileResult =
+  | { ok: true; filename: string; content: Buffer; from: "stored" | "rebuilt" }
+  | { ok: false; reason: string };
+
+export async function readExportFile(id: string): Promise<ExportFileResult> {
   const rec = await prisma.exportFile.findUnique({ where: { id } });
-  if (!rec) return null;
+  if (!rec) return { ok: false, reason: "No record of that export. It may have been replaced by a newer one." };
+
+  let stored = "";
   try {
-    return { filename: rec.filename, content: await readFile(rec.storagePath) };
-  } catch {
-    // Fall through and rebuild it.
+    return { ok: true, filename: rec.filename, content: await readFile(rec.storagePath), from: "stored" };
+  } catch (error) {
+    // Expected without blob storage: the file went to one instance's /tmp and this is another.
+    stored = error instanceof Error ? error.message : String(error);
   }
+
   try {
     const plan = planExport(await loadReview(rec.batchId));
-    const part = plan.ok ? plan.planned[rec.partIndex - 1] : undefined;
-    if (!part) return null;
-    return { filename: rec.filename, content: Buffer.from(part.part.content, "utf8") };
-  } catch {
-    return null;
+    if (!plan.ok) return { ok: false, reason: `The saved file is gone and the batch no longer exports: ${plan.errors[0] ?? "unknown"}` };
+    const part = plan.planned[rec.partIndex - 1];
+    if (!part) return { ok: false, reason: `The saved file is gone and the batch now produces ${plan.planned.length} file(s), not the ${rec.partCount} it did. Export it again.` };
+    return { ok: true, filename: rec.filename, content: Buffer.from(part.part.content, "utf8"), from: "rebuilt" };
+  } catch (error) {
+    // Both routes failed, and until now the reason was thrown away — which is how a download that
+    // does nothing stays a mystery. Both are reported.
+    const rebuilt = error instanceof Error ? error.message : String(error);
+    return { ok: false, reason: `Could not read the saved file (${stored.slice(0, 200)}) and could not rebuild it (${rebuilt.slice(0, 200)})` };
   }
+}
+
+/** The CSV as text, for a download that does not go through the file route. */
+export async function exportFileText(id: string): Promise<{ filename: string; text: string } | { error: string }> {
+  const result = await readExportFile(id);
+  return result.ok ? { filename: result.filename, text: result.content.toString("utf8") } : { error: result.reason };
 }
 
 /** The season a product was tagged with, which is also the year its name carries. */

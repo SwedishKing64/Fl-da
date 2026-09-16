@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma, parseJson, createTables, databaseStatus } from "@/lib/catalog/db";
 import { createSession, destroySession, hashPassword, requireUser, usersExist, verifyPassword } from "@/lib/catalog/auth";
-import { allocateBatchFreight, applyMappings, applyRulesToBatch, attachUnassignedPhotos, loadReview, repriceBatch, repriceVariant, verifyBatchImages, exportBatch, type ApplyMappingInput, type ReviewData } from "@/lib/catalog/pipeline";
+import { allocateBatchFreight, applyMappings, applyRulesToBatch, attachUnassignedPhotos, loadReview, repriceBatch, repriceVariant, verifyBatchImages, exportBatch, exportFileText, type ApplyMappingInput, type ReviewData } from "@/lib/catalog/pipeline";
 import { logAudit } from "@/lib/catalog/audit";
 import { getSettings, saveSettings } from "@/lib/catalog/settings";
 import { checkImageUrl, recordLibraryImages } from "@/lib/catalog/images";
@@ -655,6 +655,24 @@ export async function lookupProductsAction(batchId: string, opts: { productIds?:
     const data = await lookupBatch(batchId, { ...opts, userId: user.id, budgetMs: REQUESTED_BUDGET_MS });
     revalidatePath(`/batches/${batchId}/review`);
     return { ok: true, data: { ...data, limit: LOOKUP_LIMIT } };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/**
+ * The CSV as text, so the browser can save it itself.
+ *
+ * The file route is the normal way down, but when it fails there is nothing to see: a link that
+ * downloads nothing looks identical whether the route 404'd, the session was rejected, or the
+ * browser declined the response. This goes through the same code the route does, over a channel
+ * the page can actually report on.
+ */
+export async function downloadCsvAction(fileId: string): Promise<ActionResult<{ filename: string; text: string }>> {
+  await requireUser();
+  try {
+    const result = await exportFileText(fileId);
+    return "error" in result ? { ok: false, error: result.error } : { ok: true, data: result };
   } catch (err) {
     return fail(err);
   }

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, it, expect } from "vitest";
 import { generateCsvParts, type CsvProduct } from "./csv";
 
@@ -51,5 +52,30 @@ describe("rebuilding an exported CSV", () => {
     expect(split()).toEqual(first);
     // Two brands in, two files out — the thing a rebuilt partIndex indexes into.
     expect(first.map(([group]) => group)).toEqual(["Atomic", "Volkl"]);
+  });
+});
+
+
+/**
+ * A download that does nothing is the worst kind of failure: identical from the outside whether
+ * the file was missing, the batch changed, or the browser declined it. Every path now says which.
+ */
+describe("a failed download explains itself", () => {
+  it("never reports a failure without a reason", async () => {
+    const pipeline = readFileSync(new URL("./pipeline.ts", import.meta.url), "utf8");
+    const body = pipeline.slice(pipeline.indexOf("export async function readExportFile"));
+    const fn = body.slice(0, body.indexOf("\n}\n") + 3);
+    // Every failure carries a reason, and nothing is swallowed into a bare null.
+    expect(fn).not.toMatch(/return null/);
+    for (const match of fn.matchAll(/ok: false[^}]*/g)) expect(match[0]).toContain("reason");
+    // Both the stored read and the rebuild report what went wrong rather than discarding it.
+    expect(fn).toContain("Could not read the saved file");
+    expect(fn).not.toMatch(/\}\s*catch\s*\{\s*\}/);
+  });
+
+  it("is surfaced by the route rather than logged and forgotten", () => {
+    const route = readFileSync(new URL("../../app/api/catalog/exports/[id]/route.ts", import.meta.url), "utf8");
+    expect(route).toContain("file.reason");
+    expect(route).toContain("console.error");
   });
 });

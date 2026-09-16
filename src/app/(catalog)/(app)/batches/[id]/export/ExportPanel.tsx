@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { exportBatchAction, pushBatchAction, reconcileAction, rollbackAction } from "@/app/(catalog)/actions";
+import { downloadCsvAction, exportBatchAction, pushBatchAction, reconcileAction, rollbackAction } from "@/app/(catalog)/actions";
 import { Alert, Button, Card, fmtDate } from "@/app/(catalog)/ui";
 
 interface ExportFileRow { id: string; filename: string; rowCount: number; sizeBytes: number; partIndex: number; partCount: number; createdAt: string }
@@ -16,6 +16,32 @@ export function ExportPanel(props: { batchId: string; status: string; errors: st
   const [result, setResult] = useState<{ tone: "success" | "danger" | "warning" | "info"; text: string; list?: string[] } | null>(null);
   const blocked = errors.length > 0 || props.productCount === 0;
   const needsOverride = warnings.length > 0 && !override;
+
+  /**
+   * Save the CSV from the page rather than by following a link.
+   *
+   * A link to the file route downloads nothing visible when it fails, and says nothing about why.
+   * This asks the server for the text, writes it to a file the browser saves, and puts any failure
+   * on screen where it can be read.
+   */
+  const doDownload = (fileId: string, filename: string) =>
+    start(async () => {
+      const r = await downloadCsvAction(fileId);
+      if (!r.ok) {
+        setResult({ tone: "danger", text: `Could not download ${filename}.`, list: [r.error] });
+        return;
+      }
+      const url = URL.createObjectURL(new Blob([r.data!.text], { type: "text/csv;charset=utf-8" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = r.data!.filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      // Revoked on the next tick: Safari needs the URL to outlive the click.
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+      setResult({ tone: "success", text: `Saved ${r.data!.filename}. Import it in Shopify admin → Products → Import.` });
+    });
 
   const doExport = () =>
     start(async () => {
@@ -62,8 +88,13 @@ export function ExportPanel(props: { batchId: string; status: string; errors: st
           <ul className="divide-y divide-[var(--line-soft)] text-sm">
             {props.files.map((f) => (
               <li key={f.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
-                <div><a href={`/api/catalog/exports/${f.id}`} className="font-medium text-[var(--violet)]">{f.filename}</a><div className="text-xs text-[var(--ink-soft)]">{f.partCount > 1 ? `Part ${f.partIndex} of ${f.partCount} · ` : ""}{f.rowCount} rows · {(f.sizeBytes / 1024).toFixed(0)} KB · {fmtDate(f.createdAt)}</div></div>
-                <a href={`/api/catalog/exports/${f.id}`} className="rounded-lg border border-[var(--line)] px-3 py-1 text-xs">Download</a>
+                <div><span className="font-medium">{f.filename}</span><div className="text-xs text-[var(--ink-soft)]">{f.partCount > 1 ? `Part ${f.partIndex} of ${f.partCount} · ` : ""}{f.rowCount} rows · {(f.sizeBytes / 1024).toFixed(0)} KB · {fmtDate(f.createdAt)}</div></div>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="primary" disabled={pending} onClick={() => doDownload(f.id, f.filename)}>{pending ? "Saving…" : "Download"}</Button>
+                  {/* The direct link stays as a second way down, for a browser that would rather
+                      open the file itself than be handed one. */}
+                  <a href={`/api/catalog/exports/${f.id}`} className="rounded-lg border border-[var(--line)] px-3 py-1 text-xs" title="Open the CSV directly">Open</a>
+                </div>
               </li>
             ))}
           </ul>

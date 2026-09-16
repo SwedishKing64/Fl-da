@@ -8,12 +8,19 @@ export async function GET(_req: NextRequest, ctx: RouteContext<"/api/catalog/exp
   if (!(await requireApiUser())) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
   const { id } = await ctx.params;
   const file = await readExportFile(id);
-  if (!file) {
-    // The saved file is gone and the batch could not produce it again — deleted, or edited into a
-    // state that no longer exports. Say so; a bare 404 on a download button explains nothing.
-    return NextResponse.json({ error: "That CSV is no longer available and could not be rebuilt from the batch. Open the batch and export it again." }, { status: 404 });
+  if (!file.ok) {
+    // Logged as well as returned: a download that does nothing is otherwise unexplainable from
+    // the outside, and the reason only exists here.
+    console.error(`[export-download] ${id}: ${file.reason}`);
+    return NextResponse.json({ error: file.reason }, { status: 404 });
   }
+  // The filename is slugified to lowercase ASCII and hyphens upstream, so it is header-safe.
   return new NextResponse(new Uint8Array(file.content), {
-    headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="${file.filename}"` },
+    headers: {
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": `attachment; filename="${file.filename}"`,
+      "Content-Length": String(file.content.byteLength),
+      "Cache-Control": "no-store",
+    },
   });
 }

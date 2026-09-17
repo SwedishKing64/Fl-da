@@ -367,7 +367,7 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
   // discount on all of it. A directive applies to every product in the batch by design.
   const directives = parseDirectives(batch.directives);
 
-  const grouped = enrichFromSpecs(groupLineItems(items.map((i) => i.item), categoryRules), specItems).map((raw) => {
+  const grouped = enrichFromSpecs(groupLineItems(items.map((i) => i.item), categoryRules, { builtBy: batch.builtBy }), specItems).map((raw) => {
     const told = directives.vendor.trim();
     const g = raw.brand.trim() ? raw : { ...raw, brand: told || supplierBrand };
     // Learned conventions first, then hand-written rules, which can always override them.

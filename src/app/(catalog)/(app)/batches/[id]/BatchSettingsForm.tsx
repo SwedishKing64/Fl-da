@@ -6,7 +6,7 @@ import { updateBatchAction } from "@/app/(catalog)/actions";
 import { Alert, Button, Field, INPUT } from "@/app/(catalog)/ui";
 import { CURRENCIES } from "@/lib/catalog/types";
 
-interface BatchForm { id: string; supplierId: string | null; currency: string; fxRateToAud: number; gstTreatment: string; freightTotalAud: number; freightMode: string; splitExportBy: string; notes: string }
+interface BatchForm { id: string; supplierId: string | null; currency: string; fxRateToAud: number; gstTreatment: string; freightTotalAud: number; freightMode: string; splitExportBy: string; builtBy: string; notes: string }
 
 export function BatchSettingsForm({ batch, suppliers, disabled }: { batch: BatchForm; suppliers: Array<{ id: string; name: string }>; disabled: boolean }) {
   const router = useRouter();
@@ -25,6 +25,7 @@ export function BatchSettingsForm({ batch, suppliers, disabled }: { batch: Batch
         freightTotalAud: form.freightTotalAud,
         freightMode: form.freightMode as "PER_UNIT" | "BY_VALUE",
         splitExportBy: form.splitExportBy as "NONE" | "BRAND" | "PRODUCT_TYPE",
+        builtBy: form.builtBy,
         notes: form.notes,
       });
       setMsg(res.ok ? { ok: true, text: "Saved and repriced." } : { ok: false, text: res.error });
@@ -56,6 +57,9 @@ export function BatchSettingsForm({ batch, suppliers, disabled }: { batch: Batch
         <select value={form.splitExportBy} onChange={(e) => set("splitExportBy", e.target.value)} disabled={disabled} className={INPUT}>
           <option value="BRAND">One CSV per brand</option><option value="PRODUCT_TYPE">One CSV per product type</option><option value="NONE">Single CSV</option>
         </select>
+      </Field>
+      <Field label="Built by" hint="Your initials. They become the suffix on the 123abc- tag, which says who built the listing — the catalogue has eleven of these and every export mixes several, so it cannot be worked out from the product.">
+        <input value={form.builtBy} onChange={(e) => set("builtBy", e.target.value.replace(/[^A-Za-z]/g, "").slice(0, 3))} disabled={disabled} placeholder="js" className={INPUT} />
       </Field>
       <Field label="Notes"><textarea rows={2} value={form.notes} onChange={(e) => set("notes", e.target.value)} disabled={disabled} className={INPUT} /></Field>
       {msg && <Alert tone={msg.ok ? "success" : "danger"}>{msg.text}</Alert>}

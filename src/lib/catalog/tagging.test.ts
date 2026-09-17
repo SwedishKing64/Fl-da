@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BACKCOUNTRY_SHELF_TAGS, isBackcountryShelf, isSkin, skinType, sectionsFor, productTypeFor, headingTags, spellHeading, BACKCOUNTRY_BINDING_TAG, BACKCOUNTRY_BOOT_TAG, BOARD_DISCIPLINES, crossShelfTags, DEFAULT_TAGGING, EVERGREEN_SEASON, SKI_DISCIPLINES, BAG_TAGS, MANUAL_SEASON, TOURING_SKI_TAG, bagTags, clothingContextTags, isSkinAccessory, bindingType, bootTags, disciplinesFor, snowboardBindingTags, needsBindingKind, TAG_SPELLING, generalTags, isHardgood, isManualTag, isNotOurs, isNotLearnable, isRuleGenerated, isShopifyGenerated, needsSectionChoice, normaliseGenders, seasonFor, slugTag, tagsFor, withoutGenerated } from "./tagging";
+import { BACKCOUNTRY_SHELF_TAGS, isBackcountryShelf, isSkin, skinType, sectionsFor, productTypeFor, headingTags, spellHeading, BACKCOUNTRY_BINDING_TAG, BACKCOUNTRY_BOOT_TAG, BOARD_DISCIPLINES, crossShelfTags, DEFAULT_TAGGING, EVERGREEN_SEASON, SKI_DISCIPLINES, BAG_TAGS, MANUAL_SEASON, TOURING_SKI_TAG, bagTags, clothingContextTags, isSkinAccessory, bindingType, bootTags, disciplinesFor, snowboardBindingTags, needsBindingKind, TAG_SPELLING, generalTags, isHardgood, isManualTag, isNotOurs, isNotLearnable, isRuleGenerated, isShopifyGenerated, needsSectionChoice, normaliseGenders, seasonFor, slugTag, tagsFor, withoutGenerated, HOUSE_TAG_PREFIX, houseTagFor, initialsFrom } from "./tagging";
 import { ALPSPORT_TAXONOMY, resolveType } from "./taxonomy";
 
 describe("the six general tags", () => {
@@ -8,7 +8,7 @@ describe("the six general tags", () => {
       "snowboard-boots",
       "snowboard",
       "2026",
-      "123abc-js",
+      "123abc",
       "burton",
       "mens",
     ]);
@@ -38,7 +38,7 @@ describe("the six general tags", () => {
     const tags = generalTags({ type: "Snowboard Accessories", vendor: "Burton", genders: [], section: "Snowboard" });
     expect(tags).not.toContain("mens");
     expect(tags).not.toContain("womens");
-    expect(tags).toEqual(["snowboard-accessories", "snowboard", "2026", "123abc-js", "burton"]);
+    expect(tags).toEqual(["snowboard-accessories", "snowboard", "2026", "123abc", "burton"]);
   });
 
   it("gives a unisex garment both genders, because it belongs on both pages", () => {
@@ -106,10 +106,30 @@ describe("the six general tags", () => {
     expect(generalTags({ type: "Snowboards", vendor: "Burton", genders: [], year: 2025 })).toContain("2025");
   });
 
-  it("keeps the house tag in one editable place", () => {
-    expect(DEFAULT_TAGGING.houseTag).toBe("123abc-js");
-    const tags = generalTags({ type: "Snow Jackets", vendor: "Burton", genders: [] }, { houseTag: "abc123-js", currentYear: 2026 });
-    expect(tags).toContain("abc123-js");
+  /**
+   * The marker names whoever built the listing, and the default names nobody.
+   *
+   * It used to default to "123abc-js" — one real person's initials, stamped on everything. Across
+   * the 967 products in the shop's ten exports the marker takes eleven forms (zb on 453, bj on 229,
+   * js on 120, ay on 98, and seven rarer), mixed together inside every single export, so it is not
+   * derivable from the product and a constant was right 12% of the time.
+   */
+  it("carries whoever built the listing, and defaults to nobody in particular", () => {
+    expect(DEFAULT_TAGGING.houseTag).toBe(HOUSE_TAG_PREFIX);
+    expect(DEFAULT_TAGGING.houseTag).not.toMatch(/-[a-z]{2}$/);
+    expect(houseTagFor("js")).toBe("123abc-js");
+    expect(houseTagFor("ZB")).toBe("123abc-zb");
+    expect(houseTagFor("")).toBe("123abc");
+    const tags = generalTags({ type: "Snow Jackets", vendor: "Burton", genders: [] }, { houseTag: houseTagFor("bj"), currentYear: 2026 });
+    expect(tags).toContain("123abc-bj");
+  });
+
+  it("reads initials from a name the way the shop writes them", () => {
+    expect(initialsFrom("Zoe Bell")).toBe("zb");
+    expect(initialsFrom("justin sam")).toBe("js");
+    expect(initialsFrom("Anna May Wright")).toBe("aw");
+    expect(initialsFrom("Dee")).toBe("de");
+    expect(initialsFrom("  ")).toBe("");
   });
 
   it("never repeats a tag", () => {
@@ -125,7 +145,7 @@ describe("clothing", () => {
       "snow-clothing",
       "clothing",
       "2026",
-      "123abc-js",
+      "123abc",
       "burton",
       "womens",
     ]);
@@ -163,7 +183,7 @@ describe("tags Shopify maintains for itself", () => {
   });
 
   it("leaves the shop's own tags alone", () => {
-    for (const tag of ["snow jackets", "burton", "2026", "123abc-js", "mens", "clearance", "snow-sale"]) {
+    for (const tag of ["snow jackets", "burton", "2026", "123abc", "mens", "clearance", "snow-sale"]) {
       expect(isShopifyGenerated(tag), tag).toBe(false);
     }
   });
@@ -283,7 +303,7 @@ describe("skis and snowboards", () => {
       type: "Snowboards", vendor: "Burton", genders: ["mens"],
       withBindings: true, disciplines: ["Park Boards"],
     })).toEqual([
-      "snowboards", "snowboard", "2027", "123abc-js", "burton", "mens", "snowboard packages", "park boards",
+      "snowboards", "snowboard", "2027", "123abc", "burton", "mens", "snowboard packages", "park boards",
     ]);
   });
 });
@@ -317,14 +337,14 @@ describe("ski bindings", () => {
     // Snowboard bindings split too, but by which boots they take, not by walking uphill.
     expect(needsBindingKind("Snowboard Bindings")).toBe(false);
     expect(generalTags({ type: "Snowboard Bindings", vendor: "Burton", genders: ["womens"], describedAs: "Burton Lexa Re:Flex" }))
-      .toEqual(["snowboard-bindings", "snowboard", "2026", "123abc-js", "burton", "womens", "traditional-bindings"]);
+      .toEqual(["snowboard-bindings", "snowboard", "2026", "123abc", "burton", "womens", "traditional-bindings"]);
   });
 });
 
 describe("boots", () => {
   it("tags a Step On snowboard boot", () => {
     expect(generalTags({ type: "Snowboard Boots", vendor: "Burton", genders: ["mens"], describedAs: "Men's Ruler Step On® Snowboard Boots 2025" }))
-      .toEqual(["snowboard-boots", "snowboard", "2026", "123abc-js", "burton", "mens", "step-on-boots"]);
+      .toEqual(["snowboard-boots", "snowboard", "2026", "123abc", "burton", "mens", "step-on-boots"]);
   });
 
   it("tags a BOA snowboard boot traditional, not BOA", () => {
@@ -874,7 +894,7 @@ describe("backcountry gear", () => {
 
 describe("tags the rules work out for themselves", () => {
   it("recognises every family the rules produce", () => {
-    for (const tag of ["snowboard-boots", "ski", "backcountry", "2026", "mens", "123abc-js", "123abc-zb",
+    for (const tag of ["snowboard-boots", "ski", "backcountry", "2026", "mens", "123abc", "123abc-zb",
       "step-on-boots", "alpine-touring-bindings", "snow-bags", "ski packages", "boa-ski-boots", "skins"]) {
       expect(isRuleGenerated(tag), tag).toBe(true);
     }

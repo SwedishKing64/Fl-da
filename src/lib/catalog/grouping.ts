@@ -80,7 +80,7 @@ function commonPrefix(values: string[]): string {
   return prefix;
 }
 
-export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRuleLike[]): GroupedProduct[] {
+export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRuleLike[], opts: { builtBy?: string } = {}): GroupedProduct[] {
   const groups = new Map<string, { rule: CategoryRuleLike | null; entries: Array<{ item: CanonicalLineItem; index: number }> }>();
 
   const enriched = rawItems.map((raw) => {
@@ -140,7 +140,7 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
       brand,
       category: group.rule?.category ?? (first.category || "other"),
       productType,
-      tags: catalogTags({ productType, brand, items, ruleTags: tagsFor(group.rule, items, brand), describedAs: `${title} ${description}` }),
+      tags: catalogTags({ productType, brand, items, ruleTags: tagsFor(group.rule, items, brand), describedAs: `${title} ${description}`, ...(opts.builtBy ? { builtBy: opts.builtBy } : {}) }),
       collections: collectionsFor(group.rule, items),
       description,
       metafields: metafieldsFor(items),

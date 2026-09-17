@@ -33,9 +33,35 @@ export interface TaggingSettings {
   currentYear: number;
 }
 
+/**
+ * The fixed half of the shop's marker. The other half says who built the product.
+ *
+ * Across the 967 products in their ten exports the marker comes in eleven forms — 123abc-zb on
+ * 453, -bj on 229, -js on 120, -ay on 98, and seven rarer ones — and every single export mixes
+ * several. It is not per brand, per supplier or per file: it is the initials of whoever built the
+ * listing. Hard-coding one of them, as this did, got 12% of the catalogue right.
+ */
+export const HOUSE_TAG_PREFIX = "123abc";
+
+/** The marker for one person's initials. Falls back to the prefix alone when nobody is named. */
+export function houseTagFor(initials: string): string {
+  const suffix = initials.trim().toLowerCase().replace(/[^a-z]/g, "").slice(0, 3);
+  return suffix ? `${HOUSE_TAG_PREFIX}-${suffix}` : HOUSE_TAG_PREFIX;
+}
+
+/**
+ * Two letters from a person's name, the way the shop writes them: "Zoe Bell" -> "zb".
+ * A single name gives its first two letters, which is what "-de" and "-el" look like.
+ */
+export function initialsFrom(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return "";
+  if (words.length === 1) return words[0].slice(0, 2).toLowerCase().replace(/[^a-z]/g, "");
+  return (words[0][0] + words[words.length - 1][0]).toLowerCase().replace(/[^a-z]/g, "");
+}
+
 export const DEFAULT_TAGGING: TaggingSettings = {
-  // The catalogue spells this digits-first on 121 of 122 products.
-  houseTag: "123abc-js",
+  houseTag: HOUSE_TAG_PREFIX,
   currentYear: 2026,
 };
 
@@ -428,7 +454,8 @@ export function isRuleGenerated(tag: string): boolean {
   if (/^(19|20)\d{2}$/.test(value)) return true; // a season
   if (["mens", "womens", "kids"].includes(value)) return true;
   // The house marker by shape, since the suffix varies with whoever built the product.
-  if (/^123abc-/.test(value)) return true;
+  // The marker, with or without whoever built the listing on the end of it.
+  if (/^123abc(-|$)/.test(value)) return true;
   if (["ski", "snowboard", "clothing", "backcountry", "outdoor"].includes(value)) return true;
   if (RULE_TAGS.has(value)) return true;
   return PRODUCT_TYPES.some((t) => slugTag(TAG_SPELLING[t] ?? t) === value);

@@ -12,7 +12,7 @@
  * have is worse than no tag — nobody browsing ever lands on it, and it looks like a typo forever.
  */
 
-import { generalTags, gendersFromText, isShopifyGenerated, slugTag, type Gender } from "./tagging";
+import { DEFAULT_TAGGING, generalTags, gendersFromText, houseTagFor, isShopifyGenerated, slugTag, type Gender } from "./tagging";
 import { isValidType, resolveType } from "./taxonomy";
 import type { CanonicalLineItem } from "./types";
 
@@ -23,6 +23,8 @@ export interface CatalogTagInput {
   items: CanonicalLineItem[];
   /** Tags assembled from the category rule and the invoice, kept only where the shop uses them. */
   ruleTags: string[];
+  /** Whose initials go in the 123abc- marker. Empty leaves the marker without a person on it. */
+  builtBy?: string;
   /** Title and description, for reading gender and what kind of thing it is. */
   describedAs: string;
 }
@@ -37,13 +39,18 @@ export function catalogTags(input: CatalogTagInput): string[] {
   const genders = gendersOf(input);
   const year = seasonOf(input.items);
 
-  const tags = generalTags({
-    type,
-    vendor: input.brand,
-    genders,
-    describedAs: input.describedAs,
-    ...(year ? { year } : {}),
-  });
+  const tags = generalTags(
+    {
+      type,
+      vendor: input.brand,
+      genders,
+      describedAs: input.describedAs,
+      ...(year ? { year } : {}),
+    },
+    // The marker carries whoever built the listing. Nobody named leaves it without a suffix, which
+    // is better than stamping one person's initials on another person's work.
+    { ...DEFAULT_TAGGING, houseTag: houseTagFor(input.builtBy ?? "") },
+  );
 
   // Anything off the invoice that the shop genuinely uses is kept alongside; the rest is dropped.
   const known = new Set(tags.map((t) => t.toLowerCase()));

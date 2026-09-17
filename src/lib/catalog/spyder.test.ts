@@ -55,7 +55,9 @@ describe("a Spyder apparel invoice", () => {
     expect(tags).toContain("snow jackets");
     expect(tags).toContain("snow-clothing");
     expect(tags).toContain("2026");
-    expect(tags).toContain("123abc-js");
+    // The marker with nobody named: this fixture groups line items directly, without a batch to
+    // say who built them. In the app the batch carries the initials — see "Built by".
+    expect(tags).toContain("123abc");
     expect(tags).toContain("spyder");
     expect(tags).toContain("mens");
   });

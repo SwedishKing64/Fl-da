@@ -15,6 +15,7 @@ import { enrichBatchSeo } from "@/lib/catalog/seo";
 import { slugify } from "@/lib/catalog/handle";
 import { CURRENCIES, type AppSettings } from "@/lib/catalog/types";
 import { seedDefaults } from "@/lib/catalog/seed";
+import { initialsFrom } from "@/lib/catalog/tagging";
 import { answerFeedback, feedbackAvailable, withRule, type FeedbackTurn } from "@/lib/catalog/feedback";
 import { describeDirectives, instructionsAvailable, parseDirectives, readInstructions, NO_DIRECTIVES } from "@/lib/catalog/instructions";
 import { lookupBatch, lookupEnabled, LOOKUP_LIMIT, REQUESTED_BUDGET_MS, type LookupOutcome } from "@/lib/catalog/enrich";
@@ -115,6 +116,8 @@ const batchSchema = z.object({
   freightTotalAud: z.coerce.number().min(0).default(0),
   freightMode: z.enum(["PER_UNIT", "BY_VALUE"]).default("PER_UNIT"),
   splitExportBy: z.enum(["NONE", "BRAND", "PRODUCT_TYPE"]).default("BRAND"),
+  // Letters only: it becomes the suffix on the 123abc- tag, and the catalogue writes it lowercase.
+  builtBy: z.string().regex(/^[A-Za-z]{0,3}$/, "Initials only, up to three letters").optional(),
   notes: z.string().optional(),
 });
 
@@ -136,7 +139,9 @@ export async function createBatchAction(_prev: ActionResult | null, formData: Fo
     const settings = await getSettings();
     const fx = data.currency === "AUD" ? 1 : data.fxRateToAud !== 1 ? data.fxRateToAud : settings.fxRates[data.currency] ?? 1;
     const batch = await prisma.importBatch.create({
-      data: { name: data.name, supplierId, createdById: user.id, currency: data.currency, gstTreatment: data.gstTreatment, fxRateToAud: fx, freightTotalAud: data.freightTotalAud, freightMode: data.freightMode, splitExportBy: data.splitExportBy, notes: data.notes || null },
+      // The 123abc- marker names whoever built the listings, so it starts as the person creating the
+      // batch and can be changed in batch settings when someone builds on another's behalf.
+      data: { name: data.name, supplierId, createdById: user.id, builtBy: initialsFrom(user.name || user.email), currency: data.currency, gstTreatment: data.gstTreatment, fxRateToAud: fx, freightTotalAud: data.freightTotalAud, freightMode: data.freightMode, splitExportBy: data.splitExportBy, notes: data.notes || null },
     });
     await logAudit("batch.created", { batchId: batch.id, userId: user.id, details: { name: batch.name } });
     id = batch.id;

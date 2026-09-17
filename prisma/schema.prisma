@@ -95,6 +95,10 @@ model ImportBatch {
   splitExportBy   String   @default("BRAND") // NONE | BRAND | PRODUCT_TYPE — one CSV per group
   notes           String?
   directives      String   @default("") // JSON: what the written instructions told the build to do
+  // The initials that go in the 123abc- tag: whoever built these listings. Eleven different ones
+  // appear across the shop's exports, mixed within every file, so it cannot be derived and must
+  // be carried per batch. Defaults to the person who created it.
+  builtBy         String   @default("")
   summary         String? // JSON snapshot of last computed batch summary
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt

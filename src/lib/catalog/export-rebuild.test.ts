@@ -79,3 +79,60 @@ describe("a failed download explains itself", () => {
     expect(route).toContain("console.error");
   });
 });
+
+
+/**
+ * Nothing but a structural problem stops a CSV being produced.
+ *
+ * This has now been the same complaint twice. The first time a missing price was an error and the
+ * export refused outright. It was downgraded to a warning — and warnings gated the export too, so
+ * the button simply greyed out instead, under a scrolling list of forty warnings with the release
+ * checkbox buried at the bottom. From the operator's side both are the same thing: no CSV.
+ *
+ * A missing price, image or description is something to finish in Shopify. Only what Shopify
+ * itself would reject on import — no title, a bad or duplicate handle, a duplicate SKU, a missing
+ * option value — is allowed to stop the file being built.
+ */
+describe("warnings never stop the export", () => {
+  const pipeline = readFileSync(new URL("./pipeline.ts", import.meta.url), "utf8");
+  const panel = readFileSync(new URL("../../app/(catalog)/(app)/batches/[id]/export/ExportPanel.tsx", import.meta.url), "utf8");
+  const exportFn = (() => {
+    const body = pipeline.slice(pipeline.indexOf("export async function exportBatch"));
+    return body.slice(0, body.indexOf("\n}\n") + 3);
+  })();
+
+  it("does not refuse on the server when a batch has warnings", () => {
+    expect(exportFn).toContain("blockingErrors");
+    // The refusal that used to sit here, in every shape it could be written.
+    expect(exportFn).not.toMatch(/warnings\.length\s*&&\s*!/);
+    expect(exportFn).not.toMatch(/overrideWarnings/);
+    // Errors still stop it. That gate stays.
+    expect(exportFn).toMatch(/if\s*\(errors\.length\)\s*return\s*\{\s*ok:\s*false/);
+  });
+
+  it("does not grey the button out on the client when a batch has warnings", () => {
+    const button = panel.slice(panel.indexOf("Generate Shopify CSV") - 200, panel.indexOf("Generate Shopify CSV"));
+    expect(button).toContain("disabled={pending || blocked}");
+    expect(button).not.toContain("Override");
+    expect(button).not.toContain("warnings");
+  });
+
+  it("keeps the live-store push behind its own confirmation", () => {
+    // The CSV is a file on the operator's machine; the push writes to the real shop. Only one of
+    // those needs a checkbox, and it is not this one.
+    expect(panel).toContain("I understand this writes to the live store");
+    expect(panel).toMatch(/pushNeedsOverride/);
+  });
+
+  it("lets a download fail loudly instead of being disabled by unrelated work", () => {
+    // Sharing one `pending` across the page meant a slow refresh elsewhere left Download greyed
+    // out reading "Saving…" — which looks exactly like a download that does nothing.
+    const row = panel.slice(panel.indexOf("onClick={() => doDownload"));
+    expect(row.slice(0, 400)).not.toContain("disabled={pending}");
+    expect(panel).toContain("downloading === f.id");
+    // And a server action that throws puts the reason on screen rather than stopping silently.
+    const handler = panel.slice(panel.indexOf("const doDownload"), panel.indexOf("const doExport"));
+    expect(handler).toMatch(/catch\s*\(/);
+    expect(handler).toContain("setDownloading(null)");
+  });
+});

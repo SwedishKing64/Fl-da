@@ -420,9 +420,9 @@ export async function verifyImagesAction(batchId: string): Promise<ActionResult<
 // Export / Shopify
 // ---------------------------------------------------------------------------
 
-export async function exportBatchAction(batchId: string, overrideWarnings: boolean) {
+export async function exportBatchAction(batchId: string) {
   const user = await requireUser();
-  const result = await exportBatch(batchId, user.id, { overrideWarnings });
+  const result = await exportBatch(batchId, user.id);
   revalidatePath(`/batches/${batchId}`);
   return result;
 }

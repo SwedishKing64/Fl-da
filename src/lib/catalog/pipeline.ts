@@ -808,14 +808,20 @@ function planExport(review: ReviewData): { ok: true; planned: PlannedPart[] } | 
   return { ok: true, planned };
 }
 
-/** Hard gate: refuses while blocking errors exist; warnings need `overrideWarnings`. */
-export async function exportBatch(batchId: string, userId: string, opts: { overrideWarnings: boolean }): Promise<ExportResult> {
+/**
+ * Build the CSV files for a batch.
+ *
+ * Only a structural problem stops this — something Shopify itself would reject on import, like a
+ * missing title or a duplicate handle. Warnings never do. A missing price, a missing image and a
+ * missing description are all things to finish in Shopify, and making the operator tick a box
+ * before they could have their file at all was the same refusal wearing a different hat.
+ */
+export async function exportBatch(batchId: string, userId: string): Promise<ExportResult> {
   const review = await loadReview(batchId);
   const errors = blockingErrors(review.products);
   const warnings = warningList(review.products);
   if (review.products.length === 0) return { ok: false, errors: ["Nothing to export - map the files first."], warnings, files: [] };
   if (errors.length) return { ok: false, errors, warnings, files: [] };
-  if (warnings.length && !opts.overrideWarnings) return { ok: false, errors: [], warnings, files: [] };
 
   const plan = planExport(review);
   if (!plan.ok) return { ok: false, errors: plan.errors, warnings, files: [] };
@@ -848,7 +854,7 @@ export async function exportBatch(batchId: string, userId: string, opts: { overr
   await logAudit("batch.exported", {
     batchId,
     userId,
-    details: { files: files.map((f) => f.filename), products: review.products.length, variants: review.summary.variants, overrideWarnings: opts.overrideWarnings, warnings: warnings.length, summary: review.summary, snapshot: toCsvProducts(review.products) },
+    details: { files: files.map((f) => f.filename), products: review.products.length, variants: review.summary.variants, warnings: warnings.length, summary: review.summary, snapshot: toCsvProducts(review.products) },
   });
   return { ok: true, errors: [], warnings, files };
 }

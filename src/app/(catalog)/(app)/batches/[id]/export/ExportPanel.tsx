@@ -11,11 +11,16 @@ export function ExportPanel(props: { batchId: string; status: string; errors: st
   const { batchId, errors, warnings } = props;
   const router = useRouter();
   const [pending, start] = useTransition();
+  // The download gets its own flag. Sharing one `pending` meant any other transition on the page
+  // — a reconcile, a refresh that was slow to come back — greyed the Download button out and
+  // left it reading "Saving…", which is indistinguishable from a download that does nothing.
+  const [downloading, setDownloading] = useState<string | null>(null);
   const [override, setOverride] = useState(false);
   const [confirmPush, setConfirmPush] = useState(false);
   const [result, setResult] = useState<{ tone: "success" | "danger" | "warning" | "info"; text: string; list?: string[] } | null>(null);
   const blocked = errors.length > 0 || props.productCount === 0;
-  const needsOverride = warnings.length > 0 && !override;
+  // Warnings do not gate the CSV. They still gate the push, which writes to the live store.
+  const pushNeedsOverride = warnings.length > 0 && !override;
 
   /**
    * Save the CSV from the page rather than by following a link.
@@ -24,11 +29,12 @@ export function ExportPanel(props: { batchId: string; status: string; errors: st
    * This asks the server for the text, writes it to a file the browser saves, and puts any failure
    * on screen where it can be read.
    */
-  const doDownload = (fileId: string, filename: string) =>
-    start(async () => {
+  const doDownload = async (fileId: string, filename: string) => {
+    setDownloading(fileId);
+    try {
       const r = await downloadCsvAction(fileId);
       if (!r.ok) {
-        setResult({ tone: "danger", text: `Could not download ${filename}.`, list: [r.error] });
+        setResult({ tone: "danger", text: `Could not download ${filename}.`, list: [r.error, `If this keeps happening, use Open next to the file — it fetches the same CSV a different way.`] });
         return;
       }
       const url = URL.createObjectURL(new Blob([r.data!.text], { type: "text/csv;charset=utf-8" }));
@@ -41,13 +47,20 @@ export function ExportPanel(props: { batchId: string; status: string; errors: st
       // Revoked on the next tick: Safari needs the URL to outlive the click.
       setTimeout(() => URL.revokeObjectURL(url), 0);
       setResult({ tone: "success", text: `Saved ${r.data!.filename}. Import it in Shopify admin → Products → Import.` });
-    });
+    } catch (err) {
+      // A server action that throws used to reject the promise and stop here with nothing on
+      // screen, which is the "clicking Download does nothing" everyone describes.
+      setResult({ tone: "danger", text: `Could not download ${filename}.`, list: [err instanceof Error ? err.message : String(err), `Use Open next to the file — it fetches the same CSV a different way.`] });
+    } finally {
+      setDownloading(null);
+    }
+  };
 
   const doExport = () =>
     start(async () => {
-      const r = await exportBatchAction(batchId, override);
+      const r = await exportBatchAction(batchId);
       if (r.ok) setResult({ tone: "success", text: `Generated ${r.files.length} CSV file${r.files.length === 1 ? "" : "s"}. Upload each in Shopify admin → Products → Import.` });
-      else setResult({ tone: "danger", text: r.errors.length ? "Export blocked:" : "Warnings need an explicit override before export:", list: r.errors.length ? r.errors : r.warnings });
+      else setResult({ tone: "danger", text: "Export blocked:", list: r.errors });
       router.refresh();
     });
 
@@ -70,15 +83,15 @@ export function ExportPanel(props: { batchId: string; status: string; errors: st
           </Alert>
         ) : props.productCount > 0 && <Alert tone="success">No blocking errors. Products are exported as DRAFT, so each one can be checked before it goes live.</Alert>}
         {warnings.length > 0 && (
-          <Alert tone="warning" className="mt-3">
-            <div className="font-semibold">{warnings.length} warning{warnings.length === 1 ? "" : "s"} (missing images, low margins, etc.)</div>
+          <Alert tone="info" className="mt-3">
+            <div className="font-semibold">{warnings.length} thing{warnings.length === 1 ? "" : "s"} to finish later — the CSV exports regardless</div>
+            <p className="mt-1 text-xs">Missing prices, images and descriptions come out as empty cells. Shopify leaves an empty cell alone on import, so they can be filled in there or here.</p>
             <ul className="mt-2 max-h-40 list-disc space-y-0.5 overflow-auto pl-5 text-xs">{warnings.slice(0, 40).map((w, i) => <li key={i}>{w}</li>)}{warnings.length > 40 && <li>…and {warnings.length - 40} more</li>}</ul>
-            <label className="mt-3 flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={override} onChange={(e) => setOverride(e.target.checked)} /> I have reviewed these warnings and want to export anyway</label>
           </Alert>
         )}
         {result && <Alert tone={result.tone} className="mt-3"><div>{result.text}</div>{result.list && <ul className="mt-1 list-disc pl-5 text-xs">{result.list.slice(0, 30).map((l, i) => <li key={i}>{l}</li>)}</ul>}</Alert>}
         <div className="mt-4 flex flex-wrap items-center gap-2">
-          <Button variant="primary" disabled={pending || blocked || needsOverride} onClick={doExport}>{pending ? "Working…" : "Generate Shopify CSV"}</Button>
+          <Button variant="primary" disabled={pending || blocked} onClick={doExport}>{pending ? "Working…" : "Generate Shopify CSV"}</Button>
           {props.status === "EXPORTED" && <span className="text-xs text-[var(--ink-soft)]">Already exported — generating again replaces the files below.</span>}
         </div>
       </Card>
@@ -90,7 +103,7 @@ export function ExportPanel(props: { batchId: string; status: string; errors: st
               <li key={f.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
                 <div><span className="font-medium">{f.filename}</span><div className="text-xs text-[var(--ink-soft)]">{f.partCount > 1 ? `Part ${f.partIndex} of ${f.partCount} · ` : ""}{f.rowCount} rows · {(f.sizeBytes / 1024).toFixed(0)} KB · {fmtDate(f.createdAt)}</div></div>
                 <div className="flex items-center gap-2">
-                  <Button size="sm" variant="primary" disabled={pending} onClick={() => doDownload(f.id, f.filename)}>{pending ? "Saving…" : "Download"}</Button>
+                  <Button size="sm" variant="primary" disabled={downloading === f.id} onClick={() => doDownload(f.id, f.filename)}>{downloading === f.id ? "Saving…" : "Download"}</Button>
                   {/* The direct link stays as a second way down, for a browser that would rather
                       open the file itself than be handed one. */}
                   <a href={`/api/catalog/exports/${f.id}`} className="rounded-lg border border-[var(--line)] px-3 py-1 text-xs" title="Open the CSV directly">Open</a>
@@ -110,9 +123,10 @@ export function ExportPanel(props: { batchId: string; status: string; errors: st
             <p>Reconciled against the live catalog: <strong>{props.reconciled}</strong> of {props.productCount} products — {props.counts.new} new, {props.counts.variantAdd} add variants, {props.counts.update} update existing.</p>
             {props.reconciled < props.productCount && <Alert tone="warning">Run the Shopify check first so existing products are updated instead of duplicated. <Button size="sm" className="ml-2" disabled={pending} onClick={() => start(async () => { const r = await reconcileAction(batchId); setResult(r.ok ? { tone: "info", text: `Shopify check: ${r.data!.new} new, ${r.data!.variantAdd} add variants, ${r.data!.update} update.` } : { tone: "danger", text: r.error }); router.refresh(); })}>Check now</Button></Alert>}
             {(props.counts.update > 0 || props.counts.variantAdd > 0) && <Alert tone="warning">{props.counts.update + props.counts.variantAdd} products already exist in Shopify. Pushing replaces their variants, prices and details with what is in this batch.</Alert>}
-            <label className="flex items-center gap-2 font-medium"><input type="checkbox" checked={confirmPush} onChange={(e) => setConfirmPush(e.target.checked)} disabled={blocked || needsOverride} /> I understand this writes to the live store</label>
+            {warnings.length > 0 && <label className="flex items-center gap-2 font-medium"><input type="checkbox" checked={override} onChange={(e) => setOverride(e.target.checked)} /> I have reviewed the {warnings.length} warning{warnings.length === 1 ? "" : "s"} above</label>}
+            <label className="flex items-center gap-2 font-medium"><input type="checkbox" checked={confirmPush} onChange={(e) => setConfirmPush(e.target.checked)} disabled={blocked || pushNeedsOverride} /> I understand this writes to the live store</label>
             <div className="flex flex-wrap gap-2">
-              <Button variant="danger" disabled={pending || blocked || needsOverride || !confirmPush || props.status === "PUSHED"} onClick={doPush}>{pending ? "Pushing…" : "Push to Shopify"}</Button>
+              <Button variant="danger" disabled={pending || blocked || pushNeedsOverride || !confirmPush || props.status === "PUSHED"} onClick={doPush}>{pending ? "Pushing…" : "Push to Shopify"}</Button>
               {props.status === "PUSHED" && props.isAdmin && <Button disabled={pending} onClick={() => { if (confirm("Roll back this push? Products it created are deleted and prices it changed are restored.")) start(async () => { const r = await rollbackAction(batchId); setResult(r.ok ? { tone: r.data!.errors.length ? "warning" : "success", text: `Rolled back: ${r.data!.deleted} products deleted, ${r.data!.restored} variants restored.`, list: r.data!.errors } : { tone: "danger", text: r.error }); router.refresh(); }); }}>Roll back push</Button>}
             </div>
           </div>

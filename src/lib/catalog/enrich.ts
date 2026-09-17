@@ -10,7 +10,7 @@
  */
 
 import { prisma } from "./db";
-import { lookupProduct, lookupAvailable, bodyHtmlFrom, type ProductLookup } from "./extract/lookup";
+import { lookupProduct, lookupAvailable, bodyHtmlFrom, isPlaceholderBody, type ProductLookup } from "./extract/lookup";
 import { repriceBatch } from "./pipeline";
 import { logAudit } from "./audit";
 
@@ -62,9 +62,15 @@ type Candidate = {
   variants: { id: string; sku: string; retailOverride: number | null }[];
 };
 
-/** A product wants a lookup when it has no description, no retail price, or no brand. */
+/**
+ * A product wants a lookup when it has no real description, no retail price, or no brand.
+ *
+ * "No real description" rather than "no description": building products writes the invoice's own
+ * line into the column — "Spyder mens technical jacket." — so an empty-only test meant nothing
+ * built from an invoice was ever eligible, and the brand's copy was never fetched for anything.
+ */
 function wants(p: Candidate): boolean {
-  return !p.bodyHtml.trim() || !p.vendor.trim() || needsPrice(p);
+  return isPlaceholderBody(p.bodyHtml) || !p.vendor.trim() || needsPrice(p);
 }
 
 /** No recommended retail on any variant — so no price, and nothing to export. */
@@ -158,7 +164,9 @@ async function lookupOne(p: Candidate): Promise<{ description: boolean; price: b
   }
 
   const body = bodyHtmlFrom(found);
-  const writeBody = !p.bodyHtml.trim() && body.length > 0;
+  // The manufacturer's copy replaces the invoice's one-liner, but never a description someone has
+  // actually written — see isPlaceholderBody for where the line is drawn.
+  const writeBody = isPlaceholderBody(p.bodyHtml) && body.length > 0;
   // A brand or a price is a claim about the product, so an unsure match may not make one.
   const writeVendor = found.confident && !p.vendor.trim() && found.vendor.trim().length > 0;
   const price = typeof found.rrp === "number" && found.rrp > 0 ? found.rrp : null;

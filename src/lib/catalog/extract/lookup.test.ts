@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { bodyHtmlFrom, applyLookup, type ProductLookup } from "./lookup";
+import { bodyHtmlFrom, applyLookup, isPlaceholderBody, type ProductLookup } from "./lookup";
 
 const found = (over: Partial<ProductLookup> = {}): ProductLookup => ({
   vendor: "Giro",
@@ -48,8 +48,11 @@ describe("what a lookup is allowed to overwrite", () => {
     expect(applyLookup(product, found())).toMatchObject({ vendor: "Giro", rrp: 249.95 });
   });
 
-  it("never overwrites what the invoice stated", () => {
-    const priced = { vendor: "Giro Sport Design", bodyHtml: "<p>Ours.</p>", rrp: 219 };
+  it("never overwrites what the invoice stated, or a description someone wrote", () => {
+    // The body here is real prose. A one-line body is the placeholder the build step writes from
+    // the invoice, and the manufacturer's copy is meant to replace that — see the placeholder
+    // tests below, and isPlaceholderBody for where the line sits.
+    const priced = { vendor: "Giro Sport Design", bodyHtml: `<p>${"our own words ".repeat(12).trim()}</p>`, rrp: 219 };
     expect(applyLookup(priced, found())).toEqual(priced);
   });
 
@@ -63,5 +66,43 @@ describe("what a lookup is allowed to overwrite", () => {
 
   it("ignores a price of zero, which is what a page with no price reads as", () => {
     expect(applyLookup(product, found({ rrp: 0 })).rrp).toBeNull();
+  });
+});
+
+/**
+ * The invoice's own line must never be mistaken for the manufacturer's copy.
+ *
+ * Building products writes the invoice line into the description so the column is not blank, and
+ * everything downstream only filled a description that was *empty*. The result was that every
+ * product built from an invoice shipped to Shopify reading "<p>Spyder mens technical jacket.</p>"
+ * and the web lookup — the entire reason for the API key — never ran on any of them.
+ */
+describe("telling the invoice's words from the brand's", () => {
+  it("treats an invoice line as a gap still to fill", () => {
+    expect(isPlaceholderBody("")).toBe(true);
+    expect(isPlaceholderBody("   ")).toBe(true);
+    expect(isPlaceholderBody("<p>Spyder mens technical jacket.</p>")).toBe(true);
+    expect(isPlaceholderBody("<p>SPYD Mens Technical Jackets — Titan GTX</p>")).toBe(true);
+    expect(isPlaceholderBody("<p>Giro Ledge MIPS Helmet</p>")).toBe(true);
+  });
+
+  it("leaves a real description alone", () => {
+    // The house format: manufacturer's prose, then the spec list.
+    expect(isPlaceholderBody(bodyHtmlFrom(found()))).toBe(false);
+    // Prose with no spec list is still prose.
+    const prose = `<p>${"word ".repeat(60).trim()}</p>`;
+    expect(isPlaceholderBody(prose)).toBe(false);
+    // Two paragraphs is someone's writing, however short.
+    expect(isPlaceholderBody("<p>Short one.</p><p>Short two.</p>")).toBe(false);
+    // A spec list on its own is not a placeholder either.
+    expect(isPlaceholderBody("<ul><li>Shell: 20k</li></ul>")).toBe(false);
+  });
+
+  it("lets the manufacturer's copy replace the invoice line, but not a written one", () => {
+    const fromInvoice = { vendor: "", bodyHtml: "<p>Giro Ledge MIPS Helmet</p>", rrp: null as number | null };
+    expect(applyLookup(fromInvoice, found()).bodyHtml).toBe(bodyHtmlFrom(found()));
+
+    const written = { vendor: "", bodyHtml: `<p>${"our own words ".repeat(12).trim()}</p>`, rrp: null as number | null };
+    expect(applyLookup(written, found()).bodyHtml).toBe(written.bodyHtml);
   });
 });

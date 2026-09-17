@@ -8,6 +8,7 @@ import { prisma, parseJson } from "./db";
 import { extractFile, type UploadKind } from "./extract";
 import { applyMapping, headerHash, mappingProblems, suggestMapping, suggestOptions, type Mapping, type MappingOptions } from "./mapping";
 import { groupLineItems } from "./grouping";
+import { houseTags } from "./product-tags";
 import { DEFAULT_CATEGORY_RULES, type CategoryRuleLike } from "./categorize";
 import { repairCategoryRules } from "./seed";
 import { applyTagRules, type TagRuleLike } from "./rules";
@@ -266,18 +267,27 @@ export async function mappingState(batchId: string): Promise<HeaderGroup[]> {
     if (group.sampleRows.length < 3) group.sampleRows.push(...rows.slice(0, 3 - group.sampleRows.length));
   }
   for (const g of groups.values()) {
-    const targets = new Set(Object.values(g.suggestion).filter(Boolean));
-    g.confident = Boolean(g.templateId) || g.isCanonical || (targets.has("title") && targets.has("costPrice"));
+    // Enough to build products from: the name. Everything else is a column the grid can fill in.
+    g.confident = Boolean(g.templateId) || g.isCanonical || mappingProblems(g.suggestion).length === 0;
   }
   return Array.from(groups.values());
 }
 
-/** Apply the suggested mappings automatically when every file layout is recognised. */
-export async function autoApplyMappings(batchId: string, userId: string | null): Promise<{ applied: boolean; products: number; variants: number }> {
+/**
+ * Build the products from the suggested mappings, without anyone being asked.
+ *
+ * Mapping columns was a step of its own, and it should not have been: the suggestion is right
+ * almost every time, and where it is not, the place to fix it is the review grid, which is where
+ * the operator is looking anyway. So every layout the suggestion can build from is built, and only
+ * a layout with no recognisable product name is left for the mapping screen to sort out.
+ */
+export async function autoApplyMappings(batchId: string, userId: string | null): Promise<{ applied: boolean; products: number; variants: number; unmapped: string[] }> {
   const groups = await mappingState(batchId);
-  if (groups.length === 0 || !groups.every((g) => g.confident)) return { applied: false, products: 0, variants: 0 };
-  const result = await applyMappings(batchId, groups.map((g) => ({ hash: g.hash, mapping: g.suggestion, options: g.options, saveTemplate: null })), userId);
-  return { applied: result.problems.length === 0, products: result.products, variants: result.variants };
+  const usable = groups.filter((g) => mappingProblems(g.suggestion).length === 0);
+  const unmapped = groups.filter((g) => !usable.includes(g)).flatMap((g) => g.filenames);
+  if (usable.length === 0) return { applied: false, products: 0, variants: 0, unmapped };
+  const result = await applyMappings(batchId, usable.map((g) => ({ hash: g.hash, mapping: g.suggestion, options: g.options, saveTemplate: null })), userId);
+  return { applied: result.problems.length === 0, products: result.products, variants: result.variants, unmapped };
 }
 
 export interface ApplyMappingInput {
@@ -363,7 +373,9 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
     return {
       ...g,
       productType: directives.productType.trim() || out.productType,
-      tags: [...out.tags, ...directives.addTags.map((t) => t.trim()).filter(Boolean)],
+      // Through the house speller last: tag rules and batch instructions add tags after the
+      // categoriser has been vetted, and theirs used to reach the column unchecked.
+      tags: houseTags([...out.tags, ...directives.addTags]),
       collections: out.collections,
       metafields: out.metafields,
       option1Name: viaTemplate.optionNames[0] ?? g.option1Name,
@@ -477,7 +489,14 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
   // Imported here rather than at the top: enrich reprices the batch, so it imports this module back.
   after(async () => {
     const { lookupBatch, AUTOMATIC_BUDGET_MS } = await import("./enrich");
-    await lookupBatch(batchId, { userId, budgetMs: AUTOMATIC_BUDGET_MS }).catch(() => undefined);
+    try {
+      await lookupBatch(batchId, { userId, budgetMs: AUTOMATIC_BUDGET_MS });
+    } catch (error) {
+      // Not rethrown — the products are already built and the grid should open — but not thrown
+      // away either. A batch that arrives with no descriptions is otherwise unexplainable, and
+      // this line is the only record that the lookup was even attempted.
+      console.error(`[lookup] batch ${batchId}: ${error instanceof Error ? error.message : String(error)}`);
+    }
   });
   return { products: grouped.length, variants: variantCount, problems: [] };
 }

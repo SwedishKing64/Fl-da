@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Alert, Button, cx } from "@/app/(catalog)/ui";
+import { Alert, Button, LinkButton, cx } from "@/app/(catalog)/ui";
 import { readingCountAction } from "@/app/(catalog)/actions";
 
 interface UploadResult { filename: string; rows: number; method: string | null; kind: string; warnings: string[] }
@@ -15,11 +15,15 @@ const KINDS = [
   { value: "PRODUCT_PHOTO", label: "Product photos", hint: "Attached to products by name or SKU in the filename, or via the review grid." },
 ];
 
-export function UploadPanel({ batchId, aiEnabled, hasProducts, reading }: { batchId: string; aiEnabled: boolean; hasProducts: boolean; reading: number }) {
+export function UploadPanel({ batchId, aiEnabled, hasProducts, reading, productCount }: { batchId: string; aiEnabled: boolean; hasProducts: boolean; reading: number; productCount: number }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [active, setActive] = useState(false);
   const [busy, setBusy] = useState(false);
+  // null while nothing is in flight; 0-100 as the bytes go up; 100 once the server has them and is
+  // storing them. A bar that only ever sat at "Uploading…" is why a slow phone photo looked stuck.
+  const [progress, setProgress] = useState<number | null>(null);
+  const [sending, setSending] = useState(0);
   const [kind, setKind] = useState("AUTO");
   const [results, setResults] = useState<UploadResult[] | null>(null);
   const [auto, setAuto] = useState<AutoResult | null>(null);
@@ -55,24 +59,44 @@ export function UploadPanel({ batchId, aiEnabled, hasProducts, reading }: { batc
     setBusy(true);
     setError(null);
     setAuto(null);
+    setProgress(0);
+    setSending(list.reduce((n, f) => n + f.size, 0));
     const form = new FormData();
     form.set("kind", kind);
     form.set("autoMap", hasProducts ? "0" : "1");
     for (const f of list) form.append("files", f);
     try {
-      const res = await fetch(`/api/catalog/batches/${batchId}/upload`, { method: "POST", body: form });
-      const body = await res.json().catch(() => ({ error: `Upload failed (HTTP ${res.status})` }));
-      if (!res.ok) throw new Error(body.error ?? `Upload failed (HTTP ${res.status})`);
-      setResults(body.results);
+      // XHR rather than fetch: fetch reports nothing at all about how far a request body has got,
+      // and on a phone photo over a slow connection that silence is most of the wait.
+      const body = await new Promise<{ results?: UploadResult[]; auto?: AutoResult; error?: string }>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", `/api/catalog/batches/${batchId}/upload`);
+        xhr.upload.onprogress = (e) => { if (e.lengthComputable) setProgress(Math.round((e.loaded / e.total) * 100)); };
+        // The bytes are up; what is left is the server storing them, which has no progress to report.
+        xhr.upload.onload = () => setProgress(100);
+        xhr.onload = () => {
+          let parsed: { results?: UploadResult[]; auto?: AutoResult; error?: string };
+          try { parsed = JSON.parse(xhr.responseText); } catch { parsed = { error: `Upload failed (HTTP ${xhr.status})` }; }
+          if (xhr.status >= 200 && xhr.status < 300) resolve(parsed);
+          else reject(new Error(parsed.error ?? `Upload failed (HTTP ${xhr.status})`));
+        };
+        xhr.onerror = () => reject(new Error("The connection dropped before the files finished uploading."));
+        xhr.ontimeout = () => reject(new Error("The upload timed out."));
+        xhr.send(form);
+      });
+      setResults(body.results ?? []);
       setAuto(body.auto ?? null);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
+      setProgress(null);
       if (inputRef.current) inputRef.current.value = "";
     }
   }
+
+  const mb = (n: number) => `${(n / 1024 / 1024).toFixed(1)} MB`;
 
   const chosen = KINDS.find((k) => k.value === kind)!;
 
@@ -97,12 +121,38 @@ export function UploadPanel({ batchId, aiEnabled, hasProducts, reading }: { batc
           <Button size="sm" onClick={() => inputRef.current?.click()} disabled={busy}>Choose files</Button>
           <input ref={inputRef} type="file" multiple accept=".pdf,.xlsx,.xlsm,.xls,.csv,.txt,image/*" className="hidden" onChange={(e) => e.target.files && upload(e.target.files)} />
         </div>
+        {progress !== null && (
+          <div className="mx-auto mt-4 w-full max-w-sm">
+            <div className="h-2 overflow-hidden rounded-full bg-neutral-200">
+              <div className="alp-gradient h-full rounded-full transition-[width] duration-200 ease-out" style={{ width: `${progress}%` }} />
+            </div>
+            <div className="mt-1.5 flex items-center justify-between text-xs text-[var(--ink-soft)]">
+              <span>{progress < 100 ? `Uploading ${mb(sending)}` : "Uploaded — saving the files"}</span>
+              <span className="tabular-nums font-medium">{progress}%</span>
+            </div>
+          </div>
+        )}
       </div>
       {error && <Alert tone="danger">{error}</Alert>}
       {reading > 0 && (
         <Alert tone="info">
-          Reading {reading === 1 ? "the file" : `${reading} files`} now. A scanned or photographed invoice takes a minute or two — this page updates itself as each one is read, and you can leave it and come back.
+          <div className="flex items-center gap-3">
+            <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-blue-300 border-t-blue-700" aria-hidden />
+            <span>Reading {reading === 1 ? "the file" : `${reading} files`} now, then building the products — columns are matched for you. A scanned or photographed invoice takes a minute or two. This page updates itself as each one is read, and you can leave it and come back.</span>
+          </div>
         </Alert>
+      )}
+
+      {/* The way on. Without it the only route to the grid was the step bar, which reads as a
+          position indicator rather than something to click. */}
+      {productCount > 0 && reading === 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--line)] bg-[var(--alp-snow)] px-4 py-3">
+          <div className="text-sm">
+            <div className="font-semibold">{productCount} product{productCount === 1 ? "" : "s"} built from these files.</div>
+            <div className="text-xs text-[var(--ink-soft)]">Prices, tags and descriptions are all editable in the grid.</div>
+          </div>
+          <LinkButton href={`/batches/${batchId}/review`} variant="primary">Next: Review &amp; price →</LinkButton>
+        </div>
       )}
 
       {results && (
@@ -112,7 +162,7 @@ export function UploadPanel({ batchId, aiEnabled, hasProducts, reading }: { batc
               <li key={`${r.filename}-${i}`}><strong>{r.filename}</strong>: {r.kind === "PRODUCT_PHOTO" ? "product photo" : `${r.rows} rows`}{r.method ? ` via ${r.method.replace("_", " ").toLowerCase()}` : ""}{r.kind && r.kind !== "PRODUCT_PHOTO" && r.kind !== "AUTO" ? ` (${r.kind.replace("_", " ").toLowerCase()})` : ""}{r.warnings.length ? ` — ${r.warnings.join(" ")}` : ""}</li>
             ))}
           </ul>
-          {auto && !auto.applied && results.some((r) => r.rows > 0) && <div className="mt-2 text-xs">Some columns were not recognised automatically. Use <strong>Map columns</strong> to confirm them once; the layout is remembered for this supplier.</div>}
+          {auto && !auto.applied && results.some((r) => r.rows > 0) && <div className="mt-2 text-xs">Some columns were not recognised. Everything that could be built has been; <a href={`/batches/${batchId}/map`} className="font-semibold underline">set the rest by hand</a> and it is remembered for this supplier.</div>}
         </Alert>
       )}
     </div>

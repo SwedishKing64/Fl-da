@@ -40,27 +40,44 @@ interface Col {
   num?: boolean;
   width?: number;
   kind?: "text" | "number" | "select";
+  /** First column of a band. Seventeen columns in a row is unreadable without them. */
+  band?: string;
 }
 
+/**
+ * Seventeen columns, in five bands.
+ *
+ * The bands are the point. Read straight across, the row is a wall of numbers and there is no
+ * telling which of them you are allowed to change. Grouped — what it is, how many, what it cost,
+ * what it sells for, what that leaves — the row reads left to right as a sentence, and the
+ * calculated columns can be tinted as a block so the eye knows where it may type.
+ */
 const VARIANT_COLS: Col[] = [
-  { key: "sku", label: "SKU", editable: true, width: 120 },
-  { key: "barcode", label: "Barcode", editable: true, width: 110 },
-  { key: "option1Value", label: "Option 1", editable: true, width: 80 },
-  { key: "option2Value", label: "Option 2", editable: true, width: 80 },
-  { key: "option3Value", label: "Option 3", editable: true, width: 80 },
-  { key: "quantity", label: "Qty", editable: true, num: true, kind: "number", width: 60 },
-  { key: "grams", label: "Grams", editable: true, num: true, kind: "number", width: 70 },
-  { key: "costPrice", label: "Cost", editable: true, num: true, kind: "number", width: 85 },
-  { key: "gstTreatment", label: "Cost GST", editable: true, kind: "select", width: 90 },
-  { key: "freightPerUnitAud", label: "Freight/u", editable: true, num: true, kind: "number", width: 80 },
-  { key: "landedCostAud", label: "Landed", num: true, width: 85 },
-  { key: "retailOverride", label: "Retail (inc GST)", editable: true, num: true, kind: "number", width: 110 },
-  { key: "compareAtPrice", label: "Compare at", editable: true, num: true, kind: "number", width: 90 },
-  { key: "exGstRevenue", label: "Ex-GST", num: true, width: 80 },
-  { key: "gstComponent", label: "GST", num: true, width: 70 },
-  { key: "profitPerUnit", label: "Profit/u", num: true, width: 80 },
-  { key: "marginPct", label: "Margin", num: true, width: 70 },
+  { key: "sku", label: "SKU", editable: true, width: 130, band: "Identity" },
+  { key: "barcode", label: "Barcode", editable: true, width: 120 },
+  { key: "option1Value", label: "Option 1", editable: true, width: 90 },
+  { key: "option2Value", label: "Option 2", editable: true, width: 90 },
+  { key: "option3Value", label: "Option 3", editable: true, width: 90 },
+  { key: "quantity", label: "Qty", editable: true, num: true, kind: "number", width: 64, band: "Stock" },
+  { key: "grams", label: "Grams", editable: true, num: true, kind: "number", width: 76 },
+  { key: "costPrice", label: "Cost", editable: true, num: true, kind: "number", width: 92, band: "Cost" },
+  { key: "gstTreatment", label: "Cost GST", editable: true, kind: "select", width: 96 },
+  { key: "freightPerUnitAud", label: "Freight/u", editable: true, num: true, kind: "number", width: 88 },
+  { key: "landedCostAud", label: "Landed", num: true, width: 92 },
+  { key: "retailOverride", label: "Retail (inc GST)", editable: true, num: true, kind: "number", width: 120, band: "Price" },
+  { key: "compareAtPrice", label: "Compare at", editable: true, num: true, kind: "number", width: 100 },
+  { key: "exGstRevenue", label: "Ex-GST", num: true, width: 88, band: "Result" },
+  { key: "gstComponent", label: "GST", num: true, width: 78 },
+  { key: "profitPerUnit", label: "Profit/u", num: true, width: 88 },
+  { key: "marginPct", label: "Margin", num: true, width: 78 },
 ];
+
+/** The band headings, derived from the columns so the two can never disagree. */
+const BANDS = VARIANT_COLS.reduce<Array<{ name: string; span: number }>>((acc, c) => {
+  if (c.band) acc.push({ name: c.band, span: 1 });
+  else if (acc.length) acc[acc.length - 1].span += 1;
+  return acc;
+}, []);
 
 const FLAG_LABELS: Record<string, string> = {
   MISSING_TITLE: "Missing title", MISSING_PRICE: "Missing price", MISSING_COST: "Missing cost", MISSING_SKU: "Missing SKU",
@@ -358,12 +375,17 @@ export function ReviewGrid({ initial, batchId }: { initial: ReviewData; batchId:
       <div className="grid-wrap">
         <table className="review-grid" ref={tableRef}>
           <thead>
+            <tr className="band-row">
+              <th colSpan={4} />
+              {BANDS.map((b) => <th key={b.name} colSpan={b.span} className="band-start">{b.name}</th>)}
+              <th />
+            </tr>
             <tr>
               <th style={{ width: 28 }}><input type="checkbox" checked={selected.size > 0 && visible.every((p) => selected.has(p.id))} onChange={(e) => toggleAll(e.target.checked)} /></th>
               <th style={{ width: 24 }} />
               <th style={{ width: 60 }}>Flags</th>
               <th style={{ width: 40 }}>Img</th>
-              {VARIANT_COLS.map((c) => <th key={c.key} style={{ minWidth: c.width }} className={c.num ? "text-right" : ""}>{c.label}</th>)}
+              {VARIANT_COLS.map((c) => <th key={c.key} style={{ minWidth: c.width }} className={cx(c.num && "text-right", c.band && "band-start", !c.editable && "calculated")} title={c.editable ? "Double-click a cell in this column to edit it" : "Calculated — not editable"}>{c.label}</th>)}
               <th />
             </tr>
           </thead>
@@ -422,7 +444,7 @@ export function ReviewGrid({ initial, batchId }: { initial: ReviewData; batchId:
                             const isEdit = editing?.variantId === v.id && editing.col === ci;
                             const disabledOpt = (c.key === "option2Value" && !p.option2Name) || (c.key === "option3Value" && !p.option3Name) || (c.key === "option1Value" && !p.option1Name);
                             return (
-                              <td key={c.key} data-cell={`${v.id}:${ci}`}>
+                              <td key={c.key} data-cell={`${v.id}:${ci}`} className={cx(c.band && "band-start", !c.editable && "calculated")}>
                                 {isEdit ? (
                                   c.kind === "select" && c.key === "gstTreatment" ? (
                                     <span className="cell"><select autoFocus value={editing.value} onChange={(e) => { commitVariant(v.id, "gstTreatment", e.target.value); setEditing(null); }} onBlur={() => setEditing(null)}><option value="EXCLUSIVE">Ex GST</option><option value="INCLUSIVE">Inc GST</option><option value="NONE">No GST</option></select></span>

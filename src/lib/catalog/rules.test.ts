@@ -7,7 +7,13 @@ const base: RuleTarget = { title: "Atomic Bent 90 Skis", vendor: "Atomic", categ
 describe("tag rules", () => {
   it("adds tags, collections and metafields from matching rules, keeping existing ones", () => {
     const out = applyTagRules({ ...base, title: "Atomic Bent 90 W Skis Womens" }, rules);
-    expect(out.tags).toEqual(expect.arrayContaining(["skis", "Atomic", "2026", "Womens", "New Season"]));
+    // The tags the seeded rules add are spelled as the shop's own catalogue spells them: "womens",
+    // not "Womens". No tag across its 827 products has a capital letter, and none says "new season"
+    // — the year tag does that — so the New season rule contributes its collection only.
+    expect(out.tags).toEqual(expect.arrayContaining(["skis", "Atomic", "2026", "womens"]));
+    expect(out.tags).not.toContain("Womens");
+    expect(out.tags).not.toContain("New Season");
+    // Collections are a different column and keep the shop's title case.
     expect(out.collections).toEqual(expect.arrayContaining(["Skis", "Womens", "New Arrivals"]));
     expect(out.metafields.gender).toBe("Womens");
     expect(out.productType).toBe("Skis");
@@ -17,7 +23,8 @@ describe("tag rules", () => {
   it("applies higher priority rules first and lets them set the product type", () => {
     const out = applyTagRules({ ...base, title: "Burton Cartel Bindings", category: "bindings", productType: "Ski Bindings" }, rules);
     expect(out.productType).toBe("Snowboard Bindings");
-    expect(out.tags).toContain("Snowboard Bindings");
+    // The Type is title case; the tag is the shop's hyphenated shelf, on 40 of its products.
+    expect(out.tags).toContain("snowboard-bindings");
   });
 
   it("matches only the chosen field", () => {

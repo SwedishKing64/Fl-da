@@ -23,8 +23,8 @@ export default async function BatchPage(props: PageProps<"/batches/[id]">) {
         title={batch.name}
         subtitle={<>{batch.supplier?.name ?? "No supplier"} · <Badge tone={statusTone(batch.status)}>{batch.status.replace("_", " ")}</Badge></>}
         actions={<>
-          {extracted.length > 0 && <LinkButton href={`/batches/${id}/map`} variant="primary">{batch._count.products ? "Re-map columns" : "Map columns →"}</LinkButton>}
-          {batch._count.products > 0 && <LinkButton href={`/batches/${id}/review`}>Open review grid</LinkButton>}
+          {batch._count.products > 0 && <LinkButton href={`/batches/${id}/review`} variant="primary">Review &amp; price →</LinkButton>}
+          {extracted.length > 0 && <LinkButton href={`/batches/${id}/map`}>Column mapping</LinkButton>}
           <DeleteBatchButton batchId={id} disabled={batch.status === "PUSHED"} />
         </>}
       />
@@ -39,7 +39,7 @@ export default async function BatchPage(props: PageProps<"/batches/[id]">) {
             initial={batch.instructions.map((m) => ({ id: m.id, role: m.role, body: m.body, createdAt: m.createdAt.toISOString() }))}
           />
           <Card title="Supplier files">
-            {locked ? <Empty>This batch has been exported; files are locked for audit.</Empty> : <UploadPanel batchId={id} aiEnabled={settings ? Boolean(process.env.ANTHROPIC_API_KEY) : false} hasProducts={batch._count.products > 0} reading={batch.files.filter((f) => f.extractionStatus === "PENDING").length} />}
+            {locked ? <Empty>This batch has been exported; files are locked for audit.</Empty> : <UploadPanel batchId={id} aiEnabled={settings ? Boolean(process.env.ANTHROPIC_API_KEY) : false} hasProducts={batch._count.products > 0} productCount={batch._count.products} reading={batch.files.filter((f) => f.extractionStatus === "PENDING").length} />}
             {batch.files.length > 0 && (
               <table className="mt-4 w-full text-sm">
                 <thead className="text-left text-xs text-[var(--ink-soft)]"><tr><th className="py-1">File</th><th>Kind</th><th>Extraction</th><th className="text-right">Rows</th><th /></tr></thead>

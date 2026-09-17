@@ -115,10 +115,19 @@ export function applyMapping(row: Record<string, string>, mapping: Mapping, opti
 }
 
 /** Columns the mapping must cover before it can be applied. */
+/**
+ * What stops a layout being used at all.
+ *
+ * Only the product name. A cost price used to be required too, which was wrong for this shop: the
+ * price they sell at is the supplier's recommended retail, and plenty of suppliers quote only that.
+ * Demanding a wholesale column meant those invoices could not be mapped automatically and the
+ * operator was sent to a mapping screen to pick a column that was not on the document.
+ *
+ * Without a cost there is no margin to calculate, which the review grid says as a warning.
+ */
 export function mappingProblems(mapping: Mapping): string[] {
   const targets = new Set(Object.values(mapping).filter(Boolean));
   const problems: string[] = [];
   if (!targets.has("title")) problems.push("Map a column to Product name.");
-  if (!targets.has("costPrice")) problems.push("Map a column to Unit cost price.");
   return problems;
 }

@@ -22,6 +22,7 @@ export async function seedDefaults(): Promise<{ pricingRules: number; categoryRu
   // The rules are seeded once and then owned by whoever edits them, so only the invalid ones are
   // replaced, and only with the defaults for the same category.
   const categoryRulesRepaired = await repairCategoryRules();
+  await repairTagRuleSpelling();
 
   let categoryRules = 0;
   if ((await prisma.categoryRule.count()) === 0) {
@@ -38,6 +39,44 @@ export async function seedDefaults(): Promise<{ pricingRules: number; categoryRu
     }
   }
   return { pricingRules, categoryRules: categoryRules + categoryRulesRepaired, tagRules };
+}
+
+/**
+ * Correct the spelling of tags on rules already sitting in the database.
+ *
+ * The seeded rules used to add "Mens", "Womens" and "New Season". None of those is a tag this shop
+ * uses: across its 827 exported products not one of the 334 distinct tags has a capital letter, and
+ * nothing says "new season" — the four-digit year does that job, and 2026 alone is on 189 of them.
+ * A product therefore went out carrying "mens, womens, Womens, Mens": the same two tags twice.
+ *
+ * Fixing the defaults in code only helps a database seeded afterwards, so the rows already there
+ * are corrected too. Only the tag column is touched, and only where it is one of the known-wrong
+ * values — a tag someone has typed themselves is left exactly as they wrote it.
+ */
+const TAG_SPELLING: Record<string, string> = {
+  mens: "mens", womens: "womens", kids: "kids",
+  "snowboard bindings": "snowboard-bindings",
+  // Tags the shop has never used. The year tag covers the season; the terrain shelves are named
+  // per sport by the taxonomy ("freeride and powder skis"), not by a flat rule.
+  "new season": "", freeride: "", park: "", "all-mountain": "",
+};
+
+export async function repairTagRuleSpelling(): Promise<number> {
+  const rows = await prisma.tagRule.findMany();
+  let repaired = 0;
+  for (const row of rows) {
+    const fixed = row.addTags
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean)
+      .map((t) => (t.toLowerCase() in TAG_SPELLING ? TAG_SPELLING[t.toLowerCase()] : t))
+      .filter(Boolean)
+      .join(", ");
+    if (fixed === row.addTags) continue;
+    await prisma.tagRule.update({ where: { id: row.id }, data: { addTags: fixed } });
+    repaired++;
+  }
+  return repaired;
 }
 
 /**

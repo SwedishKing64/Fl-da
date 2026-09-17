@@ -109,13 +109,15 @@ export async function lookupProduct(request: LookupRequest): Promise<ProductLook
  * What a lookup is allowed to change on a product: only the fields nobody has filled in.
  *
  * The invoice is the authority on everything it states — it is what the shop is actually being
- * charged for — so a lookup fills gaps and never overwrites. An unconfident lookup fills nothing
- * but the description, since a wrong brand or a wrong price is worse than an empty column.
+ * charged for — so a lookup fills gaps and never overwrites anything a person wrote. The one
+ * exception is the description, where the gap is filled with the invoice's own line at build time;
+ * the manufacturer's copy replaces that. An unconfident lookup fills nothing but the description,
+ * since a wrong brand or a wrong price is worse than an empty column.
  */
 export function applyLookup<T extends { vendor: string; bodyHtml: string; rrp: number | null }>(product: T, found: ProductLookup): T {
   const out = { ...product };
   if (found.confident && !out.vendor.trim() && found.vendor.trim()) out.vendor = found.vendor.trim();
-  if (!out.bodyHtml.trim() && found.description.trim()) out.bodyHtml = bodyHtmlFrom(found);
+  if (isPlaceholderBody(out.bodyHtml) && found.description.trim()) out.bodyHtml = bodyHtmlFrom(found);
   if (found.confident && out.rrp === null && typeof found.rrp === "number" && found.rrp > 0) out.rrp = found.rrp;
   return out;
 }
@@ -142,6 +144,29 @@ export function bodyHtmlFrom(found: ProductLookup): string {
     lines.push("<h2>Tech Specs</h2>", "<ul>", ...features.map((f) => `<li>${escapeHtml(f)}</li>`), "</ul>");
   }
   return lines.join("\n");
+}
+
+/**
+ * Whether a body is the invoice's own words rather than the manufacturer's.
+ *
+ * When products are built, the line off the invoice is written into the description so the column
+ * is not blank — "Spyder mens technical jacket." and nothing else. That is a name, not copy, and
+ * it was quietly defeating the whole point of the lookup: enrichment only filled a description
+ * that was *empty*, so every product built from an invoice was ineligible and kept the one-liner
+ * all the way into Shopify.
+ *
+ * A real description from `bodyHtmlFrom` is 50-110 words of the manufacturer's prose and normally
+ * carries a Tech Specs list. Anything that is one short paragraph with no spec list is the
+ * placeholder, and the brand's own copy is allowed to replace it. A description someone has
+ * actually written — longer, or with a list, or more than one paragraph — is left alone.
+ */
+export function isPlaceholderBody(html: string): boolean {
+  const body = html.trim();
+  if (!body) return true;
+  if (/<(ul|ol|h[1-6]|table)\b/i.test(body)) return false;
+  if ((body.match(/<p\b/gi) ?? []).length > 1) return false;
+  const words = body.replace(/<[^>]+>/g, " ").trim().split(/\s+/).filter(Boolean);
+  return words.length < 25;
 }
 
 function escapeHtml(value: string): string {

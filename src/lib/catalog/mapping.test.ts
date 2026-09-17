@@ -41,7 +41,10 @@ describe("mapping suggestions", () => {
     expect(item.brand).toBe("Atomic");
     expect(item.season).toBe("2026");
     expect(item.imageUrls).toEqual(["https://a.com/1.jpg", "https://a.com/2.jpg"]);
-    expect(mappingProblems({ Code: "sku" })).toHaveLength(2);
+    // Only the product name is required. A cost price is not: this shop sells at the supplier's
+    // recommended retail, and plenty of suppliers quote only that.
+    expect(mappingProblems({ Code: "sku" })).toEqual(["Map a column to Product name."]);
+    expect(mappingProblems({ Code: "sku", Name: "title" })).toEqual([]);
   });
 });
 

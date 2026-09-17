@@ -100,3 +100,20 @@ function dedupe(tags: string[]): string[] {
     return true;
   });
 }
+
+/**
+ * The last word on how a tag is spelled, applied after the rules and the batch's own instructions
+ * have added theirs.
+ *
+ * `catalogTags` vets the tags the categoriser produces, but tag rules run later in the pipeline and
+ * their additions went straight to the column unchecked. That is how a Spyder jacket shipped with
+ * "mens, womens, Womens, Mens" — the same two tags twice, once as the catalogue writes them and
+ * once as a seeded rule did.
+ *
+ * Checked against the shop's own nine exports: of the 334 distinct tags across 827 products, not
+ * one contains an uppercase letter. So the house spelling is lower case, and a tag that differs
+ * from another only by case is the same tag.
+ */
+export function houseTags(tags: string[]): string[] {
+  return dedupe(tags.map((t) => t.trim().toLowerCase()).filter(Boolean));
+}

@@ -1,8 +1,27 @@
 // Pure helpers shared by the DB pipeline and the offline/regression pipeline.
 
 import { metafieldColumns } from "./categorize";
+import { headingsFor } from "./taxonomy";
 import type { CsvProduct } from "./csv";
 import type { ReviewProduct } from "./review-types";
+
+/**
+ * The value the Type column takes: the menu heading, never the shelf under it.
+ *
+ * Every one of the 673 typed products in the shop's own exports carries a heading — 46 of the 47
+ * jackets and pants read "Snow Clothing", and "Snow Jackets" appears as a Type nowhere at all. The
+ * categoriser names the shelf, which is right for tags and for reading the grid, but writing that
+ * shelf into Type is how a Spyder jacket came out filed somewhere the shop does not have.
+ *
+ * Where a shelf hangs under two headings — Gloves under both Clothing Accessories and Snowboard
+ * Accessories — the product's own collection decides, and failing that the first one does.
+ */
+export function csvType(productType: string, collections: string[]): string {
+  const headings = headingsFor(productType);
+  if (headings.length === 0) return productType.trim();
+  const named = headings.find((h) => collections.some((c) => c.trim().toLowerCase() === h.toLowerCase()));
+  return named ?? headings[0];
+}
 
 export function toCsvProducts(products: ReviewProduct[]): CsvProduct[] {
   return products.map((p) => {
@@ -13,7 +32,7 @@ export function toCsvProducts(products: ReviewProduct[]): CsvProduct[] {
       title: p.title,
       bodyHtml: p.bodyHtml,
       vendor: p.vendor,
-      productType: p.productType,
+      productType: csvType(p.productType, p.collections.split(",")),
       tags: p.tags.split(",").map((t) => t.trim()).filter(Boolean),
       published: false, // drafts, always — see csv.ts
       status: "draft",

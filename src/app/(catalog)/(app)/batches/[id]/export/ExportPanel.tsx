@@ -105,8 +105,9 @@ export function ExportPanel(props: { batchId: string; status: string; errors: st
                 <div className="flex items-center gap-2">
                   <Button size="sm" variant="primary" disabled={downloading === f.id} onClick={() => doDownload(f.id, f.filename)}>{downloading === f.id ? "Saving…" : "Download"}</Button>
                   {/* The direct link stays as a second way down, for a browser that would rather
-                      open the file itself than be handed one. */}
-                  <a href={`/api/catalog/exports/${f.id}`} className="rounded-lg border border-[var(--line)] px-3 py-1 text-xs" title="Open the CSV directly">Open</a>
+                      open the file itself than be handed one. Styled as a button, because it is
+                      one — a bare bordered link next to a filled button read as decoration. */}
+                  <a href={`/api/catalog/exports/${f.id}`} title="Fetch the CSV directly, if Download will not" className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[var(--line)] bg-white px-2.5 py-1 text-xs font-medium underline decoration-[var(--line)] underline-offset-4 transition-all duration-200 hover:bg-neutral-50 hover:decoration-[var(--ink)]">Open</a>
                 </div>
               </li>
             ))}

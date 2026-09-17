@@ -31,7 +31,7 @@ export function Button({ variant = "secondary", size = "md", className, ...props
     <button
       {...props}
       className={cx(
-        "inline-flex items-center justify-center gap-1.5 rounded-lg font-medium transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-[0.98] disabled:cursor-not-allowed disabled:active:scale-100",
+        "inline-flex items-center justify-center gap-1.5 rounded-lg font-medium underline decoration-transparent underline-offset-4 transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] hover:decoration-current active:scale-[0.98] disabled:cursor-not-allowed disabled:no-underline disabled:active:scale-100",
         size === "sm" ? "px-2.5 py-1 text-xs" : "px-3.5 py-2 text-sm",
         BUTTON[variant],
         className,
@@ -42,7 +42,7 @@ export function Button({ variant = "secondary", size = "md", className, ...props
 
 export function LinkButton({ href, children, variant = "secondary", size = "md", className }: { href: string; children: ReactNode; variant?: keyof typeof BUTTON; size?: "sm" | "md"; className?: string }) {
   return (
-    <Link href={href} style={variant === "primary" ? { color: "#fff" } : undefined} className={cx("inline-flex items-center justify-center gap-1.5 rounded-lg font-medium transition", size === "sm" ? "px-2.5 py-1 text-xs" : "px-3.5 py-2 text-sm", BUTTON[variant], className)}>
+    <Link href={href} style={variant === "primary" ? { color: "#fff" } : undefined} className={cx("inline-flex items-center justify-center gap-1.5 rounded-lg font-medium underline decoration-transparent underline-offset-4 transition-all duration-200 hover:decoration-current", size === "sm" ? "px-2.5 py-1 text-xs" : "px-3.5 py-2 text-sm", BUTTON[variant], className)}>
       {children}
     </Link>
   );

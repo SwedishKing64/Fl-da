@@ -18,7 +18,9 @@ export function ExportPanel(props: { batchId: string; status: string; errors: st
   const [override, setOverride] = useState(false);
   const [confirmPush, setConfirmPush] = useState(false);
   const [result, setResult] = useState<{ tone: "success" | "danger" | "warning" | "info"; text: string; list?: string[] } | null>(null);
-  const blocked = errors.length > 0 || props.productCount === 0;
+  // Nothing about the products blocks the CSV any more — what Shopify would reject is repaired on
+  // the way out (see repair.ts). Only having nothing to export stops the button.
+  const blocked = props.productCount === 0;
   // Warnings do not gate the CSV. They still gate the push, which writes to the live store.
   const pushNeedsOverride = warnings.length > 0 && !override;
 
@@ -59,8 +61,13 @@ export function ExportPanel(props: { batchId: string; status: string; errors: st
   const doExport = () =>
     start(async () => {
       const r = await exportBatchAction(batchId);
-      if (r.ok) setResult({ tone: "success", text: `Generated ${r.files.length} CSV file${r.files.length === 1 ? "" : "s"}. Upload each in Shopify admin → Products → Import.` });
-      else setResult({ tone: "danger", text: "Export blocked:", list: r.errors });
+      if (r.ok) {
+        setResult({
+          tone: "success",
+          text: `Generated ${r.files.length} CSV file${r.files.length === 1 ? "" : "s"}. Upload each in Shopify admin → Products → Import.${r.repairs.length ? ` ${r.repairs.length} thing${r.repairs.length === 1 ? " was" : "s were"} repaired on the way out:` : ""}`,
+          list: r.repairs.slice(0, 30).map((x) => `${x.handle}: ${x.what}`),
+        });
+      } else setResult({ tone: "danger", text: "Export failed:", list: r.errors });
       router.refresh();
     });
 
@@ -76,12 +83,14 @@ export function ExportPanel(props: { batchId: string; status: string; errors: st
     <div className="space-y-6">
       <Card title="Export gate">
         {props.productCount === 0 && <Alert tone="warning">Nothing to export yet.</Alert>}
-        {errors.length > 0 ? (
-          <Alert tone="danger">
-            <div className="font-semibold">{errors.length} blocking error{errors.length === 1 ? "" : "s"} must be fixed in the review grid before export:</div>
-            <ul className="mt-2 max-h-48 list-disc space-y-0.5 overflow-auto pl-5 text-xs">{errors.slice(0, 50).map((e, i) => <li key={i}>{e}</li>)}{errors.length > 50 && <li>…and {errors.length - 50} more</li>}</ul>
+        {props.productCount > 0 && <Alert tone="success">Ready to export. Products are exported as DRAFT, so each one can be checked before it goes live.</Alert>}
+        {errors.length > 0 && (
+          <Alert tone="info" className="mt-3">
+            <div className="font-semibold">{errors.length} thing{errors.length === 1 ? "" : "s"} the export will repair for you</div>
+            <p className="mt-1 text-xs">A supplier codes a colourway, not a size, so one code arrives on every size ordered. The export gives each variant its own SKU, merges rows that describe the same variant, and settles handles and options — then says exactly what it did. None of this stops the CSV.</p>
+            <ul className="mt-2 max-h-40 list-disc space-y-0.5 overflow-auto pl-5 text-xs">{errors.slice(0, 40).map((e, i) => <li key={i}>{e}</li>)}{errors.length > 40 && <li>…and {errors.length - 40} more</li>}</ul>
           </Alert>
-        ) : props.productCount > 0 && <Alert tone="success">No blocking errors. Products are exported as DRAFT, so each one can be checked before it goes live.</Alert>}
+        )}
         {warnings.length > 0 && (
           <Alert tone="info" className="mt-3">
             <div className="font-semibold">{warnings.length} thing{warnings.length === 1 ? "" : "s"} to finish later — the CSV exports regardless</div>

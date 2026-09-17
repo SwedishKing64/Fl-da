@@ -101,13 +101,18 @@ describe("warnings never stop the export", () => {
     return body.slice(0, body.indexOf("\n}\n") + 3);
   })();
 
-  it("does not refuse on the server when a batch has warnings", () => {
-    expect(exportFn).toContain("blockingErrors");
-    // The refusal that used to sit here, in every shape it could be written.
+  it("refuses for nothing except having nothing to export", () => {
+    // The refusals that used to sit here, in every shape they could be written. Warnings went
+    // first; then the errors, once it was clear each one had a single obvious repair — a supplier
+    // codes a colourway, not a size, so one SKU on six sizes is the normal case, not a mistake.
     expect(exportFn).not.toMatch(/warnings\.length\s*&&\s*!/);
     expect(exportFn).not.toMatch(/overrideWarnings/);
-    // Errors still stop it. That gate stays.
-    expect(exportFn).toMatch(/if\s*\(errors\.length\)\s*return\s*\{\s*ok:\s*false/);
+    expect(exportFn).not.toMatch(/blockingErrors/);
+    expect(exportFn).not.toMatch(/if\s*\(errors\.length\)\s*return/);
+    // The one thing that is genuinely not exportable.
+    expect(exportFn).toContain("Nothing to export");
+    // And what replaced the refusal: a repair, reported.
+    expect(exportFn).toContain("plan.repairs");
   });
 
   it("does not grey the button out on the client when a batch has warnings", () => {

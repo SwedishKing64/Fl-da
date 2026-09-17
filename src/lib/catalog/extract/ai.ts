@@ -71,9 +71,12 @@ Section headers:
 - Take the gender from it (Mens, Womens, Kids) and put it in the gender field of every item under it.
 - Do not copy the heading's wording into tags. "Technical Jackets" is the supplier's own phrase for a section, not a tag this shop uses.
 
-Prices:
+Prices — the most important thing on the document:
 - When a row shows both an RRP column and a wholesale column (W/S, Price net, Your price, Cost), rrp is the RECOMMENDED RETAIL and costPrice is the WHOLESALE one. Getting these the wrong way round is the single most damaging mistake here, so read the column headings rather than assuming the larger number is either one.
-- A discount percentage column (Disc%) describes the wholesale price already shown; it is not a retail discount.
+- A wholesale invoice commonly runs: Qty | RRP | W/S (ex. GST) | Disc% | Price net (ex. GST) | Total (ex. GST). Read it as: rrp is the RRP column; costPrice is Price net, the unit amount actually charged after the discount; Total is the line total and is never a unit price. Disc% describes the wholesale side only — it is NOT a retail discount and it does not change the rrp.
+- rrp is the single field this shop cannot do without: it is what the product sells for. If an RRP column exists, EVERY item you return from a row under it carries that row's rrp — including every size of the same colourway on a size grid. Do not put the price on the first size and leave the rest null.
+- If the page is rotated or sideways, read it rotated. The column headings are on the same edge as the numbers and they say which column is which; never guess a column's meaning from the size of the numbers in it.
+- If, having read the headings, no RRP is stated anywhere on the document, leave rrp null. Do not put the wholesale price there — it will be looked up on the brand's website instead, and a wholesale price written into rrp would be sold at.
 
 Rules:
 - title is the product name only; put length/size/colour in their own fields. Keep the brand out of the title when it is identifiable separately.

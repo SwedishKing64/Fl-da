@@ -18,10 +18,11 @@ import { getSettings } from "./settings";
 import { checkImageUrl, findLibraryImages, recordLibraryImages } from "./images";
 import { generateCsvParts, validateCsvFile, validateProducts } from "./csv";
 import { toCsvProducts } from "./pipeline-pure";
+import { repairForExport, type Repair } from "./repair";
 export { toCsvProducts };
 import { SKI_METAFIELDS, metafieldColumn, type AppSettings, type CanonicalLineItem, type GstTreatment } from "./types";
 import type { ReviewProduct, ReviewSummary, ReviewVariant } from "./review-types";
-import { blockingErrors, summarise, validateReview, warningList } from "./validate";
+import { summarise, validateReview, warningList } from "./validate";
 import { readFile, saveFile, publicFileUrl, filePath } from "./storage";
 import { logAudit } from "./audit";
 import { AI_HEADERS } from "./extract/ai";
@@ -791,6 +792,8 @@ export interface ExportResult {
   errors: string[];
   warnings: string[];
   files: Array<{ id: string; filename: string; rowCount: number; sizeBytes: number; partIndex: number; partCount: number }>;
+  /** What the export had to fix on the way out, so the operator can see it rather than be asked. */
+  repairs: Repair[];
 }
 
 type PlannedPart = { group: string; part: ReturnType<typeof generateCsvParts>[number]; partCount: number };
@@ -805,10 +808,13 @@ type PlannedPart = { group: string; part: ReturnType<typeof generateCsvParts>[nu
  * One CSV per brand or product type — the shop imports and manages them separately — each split
  * further only if it would exceed Shopify's size limit.
  */
-function planExport(review: ReviewData): { ok: true; planned: PlannedPart[] } | { ok: false; errors: string[] } {
-  const csvProducts = toCsvProducts(review.products);
+function planExport(review: ReviewData): { ok: true; planned: PlannedPart[]; repairs: Repair[] } | { ok: false; errors: string[] } {
+  // Repaired, not refused. Everything Shopify would reject has one obvious right answer — see
+  // repair.ts — so it is applied and reported rather than handed back as a list of chores.
+  const { products: csvProducts, repairs } = repairForExport(toCsvProducts(review.products));
   const structural = validateProducts(csvProducts).filter((i) => i.level === "error").map((i) => `${i.handle ?? ""}: ${i.message}`);
-  if (structural.length) return { ok: false, errors: structural };
+  // Anything still wrong here is a fault in the repair, not something the operator did.
+  if (structural.length) return { ok: false, errors: structural.map((m) => `${m} (this is a bug — the export should have repaired it)`) };
 
   const groups = new Map<string, typeof csvProducts>();
   for (const p of csvProducts) {
@@ -824,7 +830,7 @@ function planExport(review: ReviewData): { ok: true; planned: PlannedPart[] } | 
       planned.push({ group, part, partCount: parts.length });
     }
   }
-  return { ok: true, planned };
+  return { ok: true, planned, repairs };
 }
 
 /**
@@ -837,13 +843,11 @@ function planExport(review: ReviewData): { ok: true; planned: PlannedPart[] } | 
  */
 export async function exportBatch(batchId: string, userId: string): Promise<ExportResult> {
   const review = await loadReview(batchId);
-  const errors = blockingErrors(review.products);
   const warnings = warningList(review.products);
-  if (review.products.length === 0) return { ok: false, errors: ["Nothing to export - map the files first."], warnings, files: [] };
-  if (errors.length) return { ok: false, errors, warnings, files: [] };
+  if (review.products.length === 0) return { ok: false, errors: ["Nothing to export - map the files first."], warnings, files: [], repairs: [] };
 
   const plan = planExport(review);
-  if (!plan.ok) return { ok: false, errors: plan.errors, warnings, files: [] };
+  if (!plan.ok) return { ok: false, errors: plan.errors, warnings, files: [], repairs: [] };
   const planned = plan.planned;
 
   await prisma.exportFile.deleteMany({ where: { batchId } });
@@ -875,7 +879,7 @@ export async function exportBatch(batchId: string, userId: string): Promise<Expo
     userId,
     details: { files: files.map((f) => f.filename), products: review.products.length, variants: review.summary.variants, warnings: warnings.length, summary: review.summary, snapshot: toCsvProducts(review.products) },
   });
-  return { ok: true, errors: [], warnings, files };
+  return { ok: true, errors: [], warnings, files, repairs: plan.repairs };
 }
 
 function slugForFile(name: string): string {

@@ -22,11 +22,21 @@ interface Props {
   /** Products with no description, no brand, or no price on any variant. */
   outstanding: number;
   enabled: boolean;
+  /** How many products sit in each lookupStatus, so the panel can say what has actually happened. */
+  states: Record<string, number>;
 }
+
+const STATE_LABELS: Array<[string, string]> = [
+  ["NONE", "not looked up yet"],
+  ["FOUND", "found"],
+  ["UNSURE", "found, unsure it is the same product"],
+  ["NOT_FOUND", "nothing found on the web"],
+  ["FAILED", "the search itself failed"],
+];
 
 interface Progress { done: number; prices: number; descriptions: number; remaining: number }
 
-export function LookupPanel({ batchId, outstanding, enabled }: Props) {
+export function LookupPanel({ batchId, outstanding, enabled, states }: Props) {
   const router = useRouter();
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<Progress | null>(null);
@@ -97,6 +107,13 @@ export function LookupPanel({ batchId, outstanding, enabled }: Props) {
           )}
         </div>
         <Button size="sm" disabled={running} onClick={() => void run(true)}>{running ? "Searching…" : finished ? "Search again" : "Find them now"}</Button>
+      </div>
+      {/* Plainly, where every product stands. A lookup that never ran and one that ran and found
+          nothing are different problems, and they used to look the same from here. */}
+      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 border-t border-current/15 pt-2 text-xs">
+        {STATE_LABELS.filter(([code]) => (states[code] ?? 0) > 0).map(([code, label]) => (
+          <span key={code}><strong className="tabular-nums">{states[code]}</strong> {label}</span>
+        ))}
       </div>
     </Alert>
   );

@@ -1,7 +1,6 @@
 // Server-side orchestration: ingest -> extract -> map -> group -> price -> images -> review -> export.
 
 import type { Prisma } from "@prisma/client";
-import { after } from "next/server";
 import { productTitle, seoTitle } from "./titles";
 import { parseDirectives } from "./instructions";
 import { prisma, parseJson } from "./db";
@@ -10,7 +9,7 @@ import { applyMapping, headerHash, mappingProblems, suggestMapping, suggestOptio
 import { groupLineItems } from "./grouping";
 import { houseTags } from "./product-tags";
 import { DEFAULT_CATEGORY_RULES, type CategoryRuleLike } from "./categorize";
-import { repairCategoryRules } from "./seed";
+import { repairCategoryRules, repairTagRuleSpelling } from "./seed";
 import { applyTagRules, type TagRuleLike } from "./rules";
 import { applyTemplates, type ProductTemplateLike } from "./templates";
 import { allocateFreight, exGstCostAud, priceVariant } from "./pricing";
@@ -32,6 +31,12 @@ import { AI_HEADERS } from "./extract/ai";
 // ---------------------------------------------------------------------------
 
 export async function loadTagRules(): Promise<TagRuleLike[]> {
+  // Correct a seeded rule that adds a tag the shop does not write, before it writes it onto
+  // everything it matches. It has to be here, for the same reason the category repair is in
+  // loadCategoryRules two functions down: the only other caller is the seeder, which runs once on
+  // an empty database, so a shop that seeded the old rules had no way to reach the fix. Fixing the
+  // defaults in code was never going to help a database that already had the rows.
+  await repairTagRuleSpelling().catch(() => 0);
   return prisma.tagRule.findMany({ orderBy: { priority: "desc" } });
 }
 
@@ -480,25 +485,16 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
   await prisma.importBatch.update({ where: { id: batchId }, data: { status: "REVIEW" } });
   await logAudit("batch.mapped", { batchId, userId, details: { products: grouped.length, variants: variantCount } });
   void verifyBatchImages(batchId).catch(() => undefined);
-  // What the invoice did not carry is looked up on the brand's site while the grid is being read.
+  // The web lookup deliberately does NOT run here.
   //
-  // Through `after` rather than a loose promise: a deployed function stops the moment it has
-  // replied, so fire-and-forget work simply never ran there — which is how a batch reached the CSV
-  // with no descriptions in it. `after` keeps the function alive until this finishes or its time
-  // runs out, and the lookup stops itself before that so the rest can be picked up by the button.
+  // It used to, through `after`, and it was worse than not running at all. This is the tail of the
+  // upload request, which shares one sixty-second function with a vision call over a photographed
+  // invoice — so the lookup got through a product or two before the function was killed, and every
+  // product it had touched was left stamped with a status that made later passes skip it. A pass
+  // that half-runs and then blocks the pass that would have finished the job is not a head start.
   //
-  // Imported here rather than at the top: enrich reprices the batch, so it imports this module back.
-  after(async () => {
-    const { lookupBatch, AUTOMATIC_BUDGET_MS } = await import("./enrich");
-    try {
-      await lookupBatch(batchId, { userId, budgetMs: AUTOMATIC_BUDGET_MS });
-    } catch (error) {
-      // Not rethrown — the products are already built and the grid should open — but not thrown
-      // away either. A batch that arrives with no descriptions is otherwise unexplainable, and
-      // this line is the only record that the lookup was even attempted.
-      console.error(`[lookup] batch ${batchId}: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  });
+  // The review page runs it instead, where it has a whole request per pass, says how far it has
+  // got, and carries on until there is nothing left. See LookupPanel.
   return { products: grouped.length, variants: variantCount, problems: [] };
 }
 

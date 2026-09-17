@@ -28,8 +28,18 @@ export const LOOKUP_LIMIT = 60;
  * exported with no descriptions in it. So a pass stops starting work before it is stopped, leaves
  * the rest marked as never looked up, and says how many are left; running it again carries on.
  */
-export const AUTOMATIC_BUDGET_MS = 40_000;
-export const REQUESTED_BUDGET_MS = 240_000;
+/**
+ * A pass stops starting lookups at 45 seconds.
+ *
+ * It must sit under the function's own limit, not over it. This was 240 seconds — four times what
+ * any serverless function here lives for — so a pass was killed in flight, the action never
+ * returned, and nothing on the page could say what had happened. The review page declares
+ * `maxDuration = 60` (route segment config; Server Actions on a page inherit the page's value),
+ * and this leaves fifteen seconds of headroom for the pass to finish what it started and reply.
+ *
+ * Short passes are not a limitation: the panel simply asks for another one until the batch is done.
+ */
+export const REQUESTED_BUDGET_MS = 45_000;
 
 export interface LookupOutcome {
   /** Products that were missing a description or a retail price. */
@@ -107,10 +117,17 @@ export async function lookupBatch(
   // Asked for by name means look it up whatever its state; otherwise only what is still missing.
   const wanting = named ? all : all.filter(wants);
 
-  // Skip what a previous pass already answered, unless this is a retry or a named product.
-  const already = named || opts.retry
-    ? new Set<string>()
-    : new Set((await prisma.product.findMany({ where: { batchId, lookupStatus: { not: "NONE" } }, select: { id: true } })).map((p) => p.id));
+  // Skip what a previous pass actually answered — not merely what it touched.
+  //
+  // This used to skip every status except NONE, which meant a pass that was killed part-way left
+  // the products it had reached stamped FAILED, and every later pass then skipped them forever.
+  // The batch settled with no descriptions and nothing anywhere said why. A lookup that failed is
+  // not an answer, so it is tried again; one that genuinely found nothing is an answer, and waits
+  // for someone to ask for it explicitly.
+  const answered = named || opts.retry
+    ? []
+    : await prisma.product.findMany({ where: { batchId, lookupStatus: { in: ["FOUND", "UNSURE", "NOT_FOUND"] } }, select: { id: true } });
+  const already = new Set(answered.map((p) => p.id));
   // A product with no price cannot be exported at all, while one with no description merely reads
   // poorly — so when a pass cannot finish everything, the ones without a price go first.
   const todo = wanting.filter((p) => !already.has(p.id)).sort((a, b) => Number(needsPrice(b)) - Number(needsPrice(a)));

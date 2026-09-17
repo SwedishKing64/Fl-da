@@ -8,6 +8,12 @@ import { ReviewGrid } from "./ReviewGrid";
 import { LookupPanel } from "./LookupPanel";
 import { lookupEnabled } from "@/lib/catalog/enrich";
 
+/**
+ * Server Actions on a page take the page's maxDuration, so this is what the web lookup runs under.
+ * Without it they take the platform default, and a lookup pass was killed before it could reply.
+ */
+export const maxDuration = 60;
+
 export default async function ReviewPage(props: PageProps<"/batches/[id]/review">) {
   const { id } = await props.params;
   const batch = await prisma.importBatch.findUnique({ where: { id } });
@@ -18,6 +24,13 @@ export default async function ReviewPage(props: PageProps<"/batches/[id]/review"
   const outstanding = review.products.filter(
     (p) => isPlaceholderBody(p.bodyHtml) || !p.vendor.trim() || p.variants.every((v) => !(v.retailPrice > 0)),
   ).length;
+  // What the lookup has done so far, per product. Without this on screen, "there are still no
+  // descriptions" cannot be told apart from "it was never run", "it ran and was killed" and "it
+  // ran and the web had nothing" — three different bugs that look identical from the outside.
+  const states = review.products.reduce<Record<string, number>>((acc, p) => {
+    acc[p.lookupStatus] = (acc[p.lookupStatus] ?? 0) + 1;
+    return acc;
+  }, {});
   return (
     <>
       <PageHeader
@@ -30,7 +43,7 @@ export default async function ReviewPage(props: PageProps<"/batches/[id]/review"
         <Alert tone="warning">No products yet — upload a supplier file first.</Alert>
       ) : (
         <>
-          <LookupPanel batchId={id} outstanding={outstanding} enabled={lookupEnabled()} />
+          <LookupPanel batchId={id} outstanding={outstanding} enabled={lookupEnabled()} states={states} />
           <ReviewGrid initial={review} batchId={id} />
         </>
       )}

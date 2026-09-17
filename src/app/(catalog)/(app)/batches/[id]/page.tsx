@@ -8,6 +8,7 @@ import { UploadPanel } from "./UploadPanel";
 import { InstructionChat } from "./InstructionChat";
 import { BatchSettingsForm } from "./BatchSettingsForm";
 import { DeleteFileButton, DeleteBatchButton, RetryExtractionButton } from "./BatchButtons";
+import { ExtractedRows } from "./ExtractedRows";
 
 export default async function BatchPage(props: PageProps<"/batches/[id]">) {
   const { id } = await props.params;
@@ -62,6 +63,14 @@ export default async function BatchPage(props: PageProps<"/batches/[id]">) {
                 </tbody>
               </table>
             )}
+            {batch.files.filter((f) => f.extractionStatus === "DONE").map((f) => (
+              <ExtractedRows
+                key={f.id}
+                filename={f.filename}
+                headers={parseJson<string[]>(f.headers, [])}
+                rows={parseJson<Record<string, string>[]>(f.rawRows, [])}
+              />
+            ))}
           </Card>
         </div>
         <div className="space-y-6">

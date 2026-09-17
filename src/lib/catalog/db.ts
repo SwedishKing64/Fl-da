@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { PrismaClient } from "@prisma/client";
 import { findDatabaseUrl } from "./db-url";
+import { isMissingColumn } from "./schema-repair";
 
 export { DATABASE_ENV_KEYS, accelerateEnvName, databaseEnvNamesPresent, directDatabaseUrl, findDatabaseUrl } from "./db-url";
 
@@ -29,10 +30,37 @@ function createClient(): PrismaClient {
     throw new Error("No database is configured. Set DATABASE_URL, or run `npm run demo` for local development.");
   }
   globalForPrisma.ephemeralDb = resolved.ephemeral;
-  return new PrismaClient({
+  const client = new PrismaClient({
     datasourceUrl: resolved.url,
     log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
   });
+
+  /**
+   * Heal a database that is behind the code, rather than falling over in front of the operator.
+   *
+   * A column added in a release reaches the database through `prisma db push` at build time. That
+   * step is best-effort by design — it must never fail a deployment — so when it does not run, the
+   * tables are all present and one column is not, and every query against that table throws P2022.
+   * The whole app then shows "the page could not be rendered", which reads like a connection
+   * problem and is not one.
+   *
+   * So the first query to hit it adds the missing columns and runs again. Once per process, and
+   * only on that one error: everything else is passed straight through.
+   */
+  return client.$extends({
+    query: {
+      async $allOperations({ args, query }) {
+        try {
+          return await query(args);
+        } catch (error) {
+          if (!isMissingColumn(error)) throw error;
+          console.error(`[schema] the database is missing a column the code expects; adding it and retrying`);
+          await addMissingColumns();
+          return query(args);
+        }
+      },
+    },
+  }) as unknown as PrismaClient;
 }
 
 function getClient(): PrismaClient {
@@ -163,6 +191,34 @@ export async function createTables(): Promise<{ statements: number }> {
   }
   forgetDatabaseStatus();
   return { statements: statements.length };
+}
+
+/**
+ * Add whatever columns this database is missing.
+ *
+ * Unlike createTables this is safe to run at any time against any database: every statement is an
+ * ADD COLUMN IF NOT EXISTS, so a database already in step is left exactly as it is. Run once per
+ * process, the first time a query says a column is missing.
+ */
+let columnRepair: Promise<number> | null = null;
+
+export function addMissingColumns(): Promise<number> {
+  columnRepair ??= (async () => {
+    const { columnStatements } = await import("./schema-repair");
+    let applied = 0;
+    for (const statement of columnStatements()) {
+      try {
+        await prisma.$executeRawUnsafe(statement);
+        applied++;
+      } catch (error) {
+        // One column failing must not stop the rest: the point is to get the app running again.
+        console.error(`[schema] ${statement}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    forgetDatabaseStatus();
+    return applied;
+  })();
+  return columnRepair;
 }
 
 /**

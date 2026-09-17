@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Alert, Button, cx } from "@/app/(catalog)/ui";
+import { readingCountAction } from "@/app/(catalog)/actions";
 
 interface UploadResult { filename: string; rows: number; method: string | null; kind: string; warnings: string[] }
 interface AutoResult { applied: boolean; products: number; variants: number }
@@ -31,9 +32,22 @@ export function UploadPanel({ batchId, aiEnabled, hasProducts, reading }: { batc
    */
   useEffect(() => {
     if (reading === 0) return;
-    const timer = setInterval(() => router.refresh(), 3000);
-    return () => clearInterval(timer);
-  }, [reading, router]);
+    let stop = false;
+    // Ask the cheap question — how many are left — and only re-render the page when the answer
+    // changes. Refreshing on a timer re-ran every query behind this page every few seconds, which
+    // is what made waiting for a scan feel like the whole app had bogged down.
+    const tick = async () => {
+      if (stop) return;
+      try {
+        const left = await readingCountAction(batchId);
+        if (!stop && left !== reading) router.refresh();
+      } catch {
+        // A failed poll is not worth reporting; the next one will do.
+      }
+    };
+    const timer = setInterval(tick, 4000);
+    return () => { stop = true; clearInterval(timer); };
+  }, [reading, batchId, router]);
 
   async function upload(files: FileList | File[]) {
     const list = Array.from(files);

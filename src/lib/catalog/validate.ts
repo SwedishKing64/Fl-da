@@ -69,10 +69,10 @@ export function validateReview(products: ReviewProduct[], ctx: ValidationContext
     for (const v of p.variants) {
       const vf: RowFlag[] = [];
       const dismissed = new Set(v.warningsDismissed);
-      // The price is the supplier's recommended retail and nothing invents one, so a line without
-      // it has no price at all. Blocking, because a product priced at nothing is worse in Shopify
-      // than a product that never got there.
-      if (!(v.retailPrice > 0)) vf.push({ code: "MISSING_PRICE", severity: "error", message: "No recommended retail yet — Look up missing details searches the brand's site for it, or type one in" });
+      // Said, not enforced. Nothing invents a price, but a missing one is not a reason to refuse
+      // the export either: the column goes out empty, which leaves Shopify's own price alone, and
+      // it is quicker to fill a handful in there than to be held up here.
+      if (!(v.retailPrice > 0)) vf.push({ code: "MISSING_PRICE", severity: "warning", message: "No recommended retail — the price column will be empty, to fill in Shopify or here" });
       if (!(v.costPrice > 0)) vf.push({ code: "MISSING_COST", severity: "warning", message: "No cost price - profit cannot be calculated" });
       const sku = v.sku.trim().toLowerCase();
       if (!sku) vf.push({ code: "MISSING_SKU", severity: "warning", message: "No SKU" });

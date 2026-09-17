@@ -180,9 +180,26 @@ describe("validation", () => {
   });
 
   it("file validator catches inconsistent option names, non-contiguous handles, curly quotes", () => {
-    const header = columnsFor().join(",");
-    const line = (h: string, title: string, o1: string, o1v: string, price: string) =>
-      [h, title, "", "", "", "", "FALSE", o1, o1v, "", "", "", "", "", "0", "shopify", "0", "deny", "manual", price, "", "TRUE", "TRUE", "", "", "", "", "FALSE", "", "", "", "g", "", "", "draft"].join(",");
+    const columns = columnsFor();
+    const header = columns.join(",");
+    // Built from the real column list rather than a hand-counted row: the row used to be 35 fields
+    // against a 48-column header, so the price never landed in the price column and the bad value
+    // below was being caught as a missing column instead.
+    const line = (h: string, title: string, o1: string, o1v: string, price: string) => {
+      const cells = columns.map((c) => {
+        switch (c) {
+          case "Handle": return h;
+          case "Title": return title;
+          case "Option1 Name": return o1;
+          case "Option1 Value": return o1v;
+          case "Variant Price": return price;
+          case "Published": return "FALSE";
+          case "Status": return "draft";
+          default: return "";
+        }
+      });
+      return cells.join(",");
+    };
     const csv = [header, line("a", "A", "Length", "160", "10.00"), line("b", "B", "Size", "M", "5.00"), line("a", "", "Size", "170", "10.00"), line("a", "", "Length", "170", "$10")].join("\n");
     const msgs = validateCsvFile(csv + "\n“hi”").map((i) => i.message);
     expect(msgs).toContainEqual(expect.stringContaining("not contiguous"));

@@ -12,7 +12,7 @@ function product(partial: Partial<ReviewProduct>): ReviewProduct {
 }
 
 describe("review validation", () => {
-  it("raises errors for missing price, duplicate skus/handles/options and warnings for images/margin", () => {
+  it("raises errors for duplicate skus/handles/options, and warns rather than blocks on a missing price", () => {
     const good = emptyVariantView({ id: "v1", productId: "p1", sku: "A-166", option1Value: "166", costPrice: 300, retailPrice: 550, exGstRevenue: 500, gstComponent: 50, landedCostAud: 300, profitPerUnit: 200, marginPct: 40, quantity: 2 });
     const noPrice = emptyVariantView({ id: "v2", productId: "p1", sku: "A-172", option1Value: "172", costPrice: 300 });
     const dupSku = emptyVariantView({ id: "v3", productId: "p1", sku: "a-166", option1Value: "166", costPrice: 300, retailPrice: 330, exGstRevenue: 300, profitPerUnit: 0, marginPct: 0 });
@@ -29,7 +29,9 @@ describe("review validation", () => {
     expect(p2.variants[0].flags.map((f) => f.code)).toEqual(["MISSING_OPTION_VALUE", "LOW_MARGIN"]);
 
     const errors = blockingErrors([p1, p2]);
-    expect(errors.length).toBe(9);
+    // One fewer than before: a missing price is a warning now, not a reason to refuse the export.
+    expect(errors.length).toBe(8);
+    expect(errors.join(" ")).not.toContain("recommended retail");
     const s = summarise([p1, p2]);
     expect(s.products).toBe(2);
     expect(s.variants).toBe(4);

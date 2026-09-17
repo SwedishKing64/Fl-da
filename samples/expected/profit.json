@@ -105,8 +105,8 @@
       "totalNetProfit": -5859.19,
       "averageMarginPct": 0,
       "lowMarginVariants": 0,
-      "errors": 5,
-      "warnings": 2
+      "errors": 0,
+      "warnings": 7
     },
     "variants": [
       {
@@ -155,16 +155,15 @@
         "marginPct": 0
       }
     ],
-    "errors": [
-      "M6 Mantra 2026 / V2410170: No recommended retail yet — Look up missing details searches the brand's site for it, or type one in",
-      "M6 Mantra 2026 / V2410177: No recommended retail yet — Look up missing details searches the brand's site for it, or type one in",
-      "M6 Mantra 2026 / V2410184: No recommended retail yet — Look up missing details searches the brand's site for it, or type one in",
-      "Griffon 13 ID Bindings 2026 / M7201100: No recommended retail yet — Look up missing details searches the brand's site for it, or type one in",
-      "Griffon 13 ID Bindings 2026 / M7201110: No recommended retail yet — Look up missing details searches the brand's site for it, or type one in"
-    ],
+    "errors": [],
     "warnings": [
       "M6 Mantra 2026: No image - add one or export anyway",
-      "Griffon 13 ID Bindings 2026: No image - add one or export anyway"
+      "M6 Mantra 2026 / V2410170: No recommended retail — the price column will be empty, to fill in Shopify or here",
+      "M6 Mantra 2026 / V2410177: No recommended retail — the price column will be empty, to fill in Shopify or here",
+      "M6 Mantra 2026 / V2410184: No recommended retail — the price column will be empty, to fill in Shopify or here",
+      "Griffon 13 ID Bindings 2026: No image - add one or export anyway",
+      "Griffon 13 ID Bindings 2026 / M7201100: No recommended retail — the price column will be empty, to fill in Shopify or here",
+      "Griffon 13 ID Bindings 2026 / M7201110: No recommended retail — the price column will be empty, to fill in Shopify or here"
     ]
   },
   "burton": {
@@ -179,8 +178,8 @@
       "totalNetProfit": -3625,
       "averageMarginPct": 0,
       "lowMarginVariants": 0,
-      "errors": 5,
-      "warnings": 2
+      "errors": 0,
+      "warnings": 7
     },
     "variants": [
       {
@@ -229,16 +228,15 @@
         "marginPct": 0
       }
     ],
-    "errors": [
-      "Custom Snowboard 2027 / BUR-CUST-154: No recommended retail yet — Look up missing details searches the brand's site for it, or type one in",
-      "Custom Snowboard 2027 / BUR-CUST-158: No recommended retail yet — Look up missing details searches the brand's site for it, or type one in",
-      "Custom Snowboard 2027 / BUR-CUST-162: No recommended retail yet — Look up missing details searches the brand's site for it, or type one in",
-      "Cartel Bindings 2026 / BUR-CART-M: No recommended retail yet — Look up missing details searches the brand's site for it, or type one in",
-      "Cartel Bindings 2026 / BUR-CART-L: No recommended retail yet — Look up missing details searches the brand's site for it, or type one in"
-    ],
+    "errors": [],
     "warnings": [
       "Custom Snowboard 2027: No image - add one or export anyway",
-      "Cartel Bindings 2026: No image - add one or export anyway"
+      "Custom Snowboard 2027 / BUR-CUST-154: No recommended retail — the price column will be empty, to fill in Shopify or here",
+      "Custom Snowboard 2027 / BUR-CUST-158: No recommended retail — the price column will be empty, to fill in Shopify or here",
+      "Custom Snowboard 2027 / BUR-CUST-162: No recommended retail — the price column will be empty, to fill in Shopify or here",
+      "Cartel Bindings 2026: No image - add one or export anyway",
+      "Cartel Bindings 2026 / BUR-CART-M: No recommended retail — the price column will be empty, to fill in Shopify or here",
+      "Cartel Bindings 2026 / BUR-CART-L: No recommended retail — the price column will be empty, to fill in Shopify or here"
     ]
   }
 }

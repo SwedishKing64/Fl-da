@@ -36,13 +36,17 @@ describe("sample invoices → expected Shopify CSV", () => {
   }
 
   for (const name of ["volkl", "burton"] as const) {
-    it(`${name}: an invoice with no recommended retail gets no price, and cannot be exported`, () => {
+    it(`${name}: an invoice with no recommended retail leaves the price column empty`, () => {
       const result = fixtures.results[name];
       const prices = result.products.flatMap((p) => p.variants.map((v) => v.retailPrice));
       expect(prices.every((price) => price === 0)).toBe(true);
-      // Blocked, and the reason names the product rather than a rule that should have priced it.
-      expect(result.errors.length).toBeGreaterThan(0);
-      expect(result.errors[0]).toContain("No recommended retail yet");
+      // Said, not enforced: nothing invents a price, and nothing refuses the export over one.
+      expect(result.errors).toEqual([]);
+      expect(result.warnings.some((w) => w.includes("No recommended retail"))).toBe(true);
+      // Empty in the CSV rather than 0.00, which Shopify would read as a free product.
+      const priceColumn = result.csv.split("\n")[1].split(",").length;
+      expect(priceColumn).toBeGreaterThan(0);
+      expect(result.csv).not.toContain(",0.00,");
     });
   }
 

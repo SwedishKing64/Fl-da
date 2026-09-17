@@ -661,6 +661,18 @@ export async function lookupProductsAction(batchId: string, opts: { productIds?:
 }
 
 /**
+ * How many of a batch's files are still being read.
+ *
+ * One small query, so a page waiting on a scan can ask often without re-rendering itself and
+ * everything on it each time — which on a database in another region is most of a second, every
+ * few seconds, for as long as the reading takes.
+ */
+export async function readingCountAction(batchId: string): Promise<number> {
+  await requireUser();
+  return prisma.sourceFile.count({ where: { batchId, extractionStatus: "PENDING" } });
+}
+
+/**
  * Read a stored file again.
  *
  * Reading happens after the upload has been answered, and it has the same time limit the upload

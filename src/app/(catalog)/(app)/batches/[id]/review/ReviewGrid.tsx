@@ -322,15 +322,14 @@ export function ReviewGrid({ initial, batchId }: { initial: ReviewData; batchId:
         </div>
       </div>
 
-      {withoutPrice > 0 && !locked && (
-        <Alert tone="danger" className="mb-3">
-          {withoutPrice} of {data.products.length} products have no recommended retail, so they have no price and cannot be exported. Press <strong>Look up missing details</strong> to search the brand&apos;s website, or type prices into the Retail column.
-        </Alert>
-      )}
-
-      {withoutDescription > 0 && !locked && (
-        <Alert tone="warning" className="mb-3">
-          {withoutDescription} of {data.products.length} products have no description yet. Press <strong>Look up missing details</strong> to pull them from the brand&apos;s website, or write them in a product&apos;s Details.
+      {(withoutPrice > 0 || withoutDescription > 0) && !locked && (
+        <Alert tone="info" className="mb-3">
+          {[
+            withoutPrice > 0 ? `${withoutPrice} of ${data.products.length} products have no recommended retail` : "",
+            withoutDescription > 0 ? `${withoutDescription} have no description` : "",
+          ].filter(Boolean).join(", ")}. Neither stops the export — a missing price goes out as an
+          empty column, which leaves Shopify&apos;s own price alone. <strong>Look up missing details</strong> searches
+          the brand&apos;s website for both.
         </Alert>
       )}
 

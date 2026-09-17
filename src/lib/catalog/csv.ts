@@ -223,7 +223,9 @@ export function buildRows(products: CsvProduct[], options: GenerateOptions = {})
       row["Variant Inventory Qty"] = String(Math.max(0, Math.round(variant.quantity ?? 0)));
       row["Variant Inventory Policy"] = variant.inventoryPolicy ?? "deny";
       row["Variant Fulfillment Service"] = "manual";
-      row["Variant Price"] = formatPrice(variant.price);
+      // Empty, not 0.00, when no recommended retail is known. Shopify reads an empty price as
+      // "leave it alone"; 0.00 reads as "this is free", which is the one wrong answer here.
+      row["Variant Price"] = variant.price > 0 ? formatPrice(variant.price) : "";
       row["Variant Compare At Price"] =
         variant.compareAtPrice && variant.compareAtPrice > variant.price ? formatPrice(variant.compareAtPrice) : "";
       row["Variant Requires Shipping"] = bool(variant.requiresShipping, true);
@@ -497,7 +499,9 @@ export function validateCsvFile(content: string): CsvIssue[] {
       if (bucket.combos.has(combo)) issues.push({ level: "error", handle, message: `Duplicate option values for "${handle}" at row ${r + 1}` });
       bucket.combos.add(combo);
       const price = row[iPrice] ?? "";
-      if (!/^\d+(\.\d{1,2})?$/.test(price)) issues.push({ level: "error", handle, message: `Row ${r + 1}: Variant Price "${price}" is not a plain decimal` });
+      // An empty price is allowed: it means no recommended retail is known, and Shopify leaves
+      // its own price alone. Anything else present must still be a plain decimal.
+      if (price !== "" && !/^\d+(\.\d{1,2})?$/.test(price)) issues.push({ level: "error", handle, message: `Row ${r + 1}: Variant Price "${price}" is not a plain decimal` });
     }
     const img = iImg >= 0 ? row[iImg] ?? "" : "";
     if (img && !isPublicHttpsUrl(img)) issues.push({ level: "error", handle, message: `Row ${r + 1}: image URL is not public HTTPS (${img})` });

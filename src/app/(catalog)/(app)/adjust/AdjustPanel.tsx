@@ -87,7 +87,8 @@ export function AdjustPanel({ aiEnabled }: { aiEnabled: boolean }) {
   }
 
   const wholeFile = plan ? isWholeFile(plan.plan.scope) : false;
-  const nothingToDo = preview !== null && preview.changes.length === 0;
+  const refused = preview?.refused === true;
+  const nothingToDo = preview !== null && !refused && preview.changes.length === 0;
 
   return (
     <div className="space-y-6">
@@ -141,14 +142,21 @@ export function AdjustPanel({ aiEnabled }: { aiEnabled: boolean }) {
           </Alert>
 
           {wholeFile && <Alert tone="warning" className="mt-3">This names no brand, type or tag, so it applies to <strong>every one of the {preview.products} products</strong> in the file. If that is not what you meant, say which products and work it out again.</Alert>}
-          {preview.warnings.map((w, i) => <Alert key={i} tone="warning" className="mt-3">{w}</Alert>)}
+          {refused && (
+            <Alert tone="danger" className="mt-3">
+              <div className="font-semibold">Stopped, and nothing was changed.</div>
+              <p className="mt-1 text-sm">Before handing a file back, this page reads it again and proves that nothing moved except what you asked for. That check failed, so you are getting the original file rather than one with edits nobody asked for. This is a fault in the app — please send this to whoever maintains it.</p>
+              <ul className="mt-2 list-disc space-y-0.5 pl-5 font-mono text-[11px]">{preview.warnings.slice(1).map((w, i) => <li key={i}>{w}</li>)}</ul>
+            </Alert>
+          )}
+          {!refused && preview.warnings.map((w, i) => <Alert key={i} tone="warning" className="mt-3">{w}</Alert>)}
 
           <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-sm">
             <span><strong className="tabular-nums">{preview.matched}</strong> of {preview.products} products match</span>
             <span><strong className="tabular-nums">{preview.changes.length}</strong> cell{preview.changes.length === 1 ? "" : "s"} change</span>
           </div>
 
-          {nothingToDo ? (
+          {refused ? null : nothingToDo ? (
             <Alert tone="warning" className="mt-3">Nothing would change. Either no product matches, or they are already as the instruction describes.</Alert>
           ) : (
             <>

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { applyPlan, describeFile, isWholeFile, money, type Plan } from "./adjust";
+import { applyPlan, describeFile, isWholeFile, money, verifyOnlyIntended, type Plan } from "./adjust";
 import { parseCsv } from "./csv";
 
 /**
@@ -182,5 +182,71 @@ describe("adjusting a real Shopify export", () => {
     expect(money(279.99 * 0.8)).toBe(223.99);
     expect(money(229.99 * 0.85)).toBe(195.49);
     expect(money(1.005)).toBe(1.01);
+  });
+});
+
+/**
+ * The promise this page makes, enforced at runtime rather than only in a test.
+ *
+ * A test proves it on the day it is written. This proves it on every file, against every change
+ * anyone makes to this module afterwards — because the way a tool like this goes wrong is not a
+ * visible error, it is a column nobody was watching coming back different across thousands of
+ * rows, found weeks later in the live shop.
+ */
+describe("the guarantee that nothing else moves", () => {
+  it("passes a clean edit through", () => {
+    const out = applyPlan(text, { scope: { vendors: ["Karbon"] }, operations: [{ kind: "addTags", tags: ["clearance"] }] });
+    expect(out.refused).toBeUndefined();
+    expect(out.changes).toHaveLength(50);
+    expect(verifyOnlyIntended(parseCsv(text).filter((r) => r.some((c) => c.trim() !== "")), out.csv, out.changes)).toEqual([]);
+  });
+
+  it("catches a cell that moved without being asked to", () => {
+    const grid = parseCsv(text).filter((r) => r.some((c) => c.trim() !== ""));
+    const header = grid[0];
+    const iBody = header.indexOf("Body (HTML)");
+    // Exactly the fault that shipped in the first version: a description quietly reworded.
+    const tampered = grid.map((row, r) => (r === 5 ? row.map((c, i) => (i === iBody ? c.replace(/’/g, "'") + " " : c)) : row));
+    const csv = tampered.map((row) => header.map((_, i) => {
+      const v = row[i] ?? "";
+      return /[",\r\n]/.test(v) || /^\s|\s$/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+    }).join(",")).join("\r\n");
+    const problems = verifyOnlyIntended(grid, csv, []);
+    expect(problems.length).toBeGreaterThan(0);
+    expect(problems[0]).toContain("Body (HTML)");
+    expect(problems[0]).toContain("without being asked to");
+  });
+
+  it("notices a row going missing, and a header being rewritten", () => {
+    const grid = parseCsv(text).filter((r) => r.some((c) => c.trim() !== ""));
+    const header = grid[0].join(",");
+    const body = grid.slice(1, -1).map((r) => r.map((c) => (/[",\r\n]/.test(c) ? `"${c.replace(/"/g, '""')}"` : c)).join(",")).join("\r\n");
+    expect(verifyOnlyIntended(grid, `${header}\r\n${body}`, [])[0]).toContain("rows instead of");
+    const whole = grid.map((r) => r.map((c) => (/[",\r\n]/.test(c) ? `"${c.replace(/"/g, '""')}"` : c)).join(",")).join("\r\n");
+    expect(verifyOnlyIntended(grid, whole.replace("Handle,", "Handel,"), [])[0]).toContain("header row");
+  });
+
+  it("does not mind a field being quoted differently, only a value changing", () => {
+    const grid = parseCsv("Handle,Title\r\nabc,Plain\r\n").filter((r) => r.some((c) => c.trim() !== ""));
+    // Same values, every field quoted. Nothing about the data moved.
+    expect(verifyOnlyIntended(grid, '"Handle","Title"\r\n"abc","Plain"\r\n', [])).toEqual([]);
+  });
+
+  it("hands back the original file rather than one it cannot vouch for", () => {
+    // Driven for real by reintroducing the old serialiser: 20 unintended cells, file returned
+    // untouched, changes emptied. Here the contract is pinned so it cannot be quietly relaxed.
+    const source = readFileSync(new URL("./adjust.ts", import.meta.url), "utf8");
+    const fn = source.slice(source.indexOf("export function applyPlan"));
+    const body = fn.slice(0, fn.indexOf("\n}\n"));
+    expect(body).toContain("verifyOnlyIntended");
+    expect(body).toMatch(/if \(unintended\.length > 0\)/);
+    expect(body).toMatch(/csv: text/);      // the original, not the edited one
+    expect(body).toMatch(/changes: \[\]/);  // and nothing claimed to have been done
+    expect(body).toContain("refused: true");
+    // The serialiser that caused it must never come back — as code. The comment explaining why it
+    // is not used here is the point, so this looks at what is imported and called, not at prose.
+    const code = source.split("\n").filter((l) => !l.trim().startsWith("*") && !l.trim().startsWith("//")).join("\n");
+    expect(code).not.toContain("escapeCsvField");
+    expect(code).toMatch(/import \{ parseCsv \} from "\.\/csv"/);
   });
 });

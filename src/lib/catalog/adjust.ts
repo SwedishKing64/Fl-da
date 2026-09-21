@@ -76,6 +76,11 @@ export interface AdjustResult {
   variantRows: number;
   /** Anything the caller should see before re-importing. */
   warnings: string[];
+  /**
+   * True when the self-check found a cell moving that nobody asked about, so the original file was
+   * handed back instead. Not a warning to skim past: it means this tool has a fault.
+   */
+  refused?: boolean;
 }
 
 
@@ -275,7 +280,73 @@ export function applyPlan(text: string, plan: Plan): AdjustResult {
   }
 
   const csv = [header, ...rows].map((row) => header.map((_, i) => quote(row[i] ?? "")).join(",")).join("\r\n") + "\r\n";
+
+  // Prove it before handing it over. See verifyOnlyIntended.
+  const unintended = verifyOnlyIntended(grid, csv, changes);
+  if (unintended.length > 0) {
+    return {
+      csv: text,
+      changes: [],
+      matched: 0,
+      products: firstRowOf.size,
+      variantRows: rows.length,
+      refused: true,
+      warnings: [
+        `The file was NOT changed. A check found ${unintended.length} cell${unintended.length === 1 ? "" : "s"} that would have moved without being asked to, which is a fault in this tool rather than anything you did. Please report it.`,
+        ...unintended.slice(0, 5),
+      ],
+    };
+  }
   return { csv, changes, matched: inScope.size, products: firstRowOf.size, variantRows: rows.length, warnings };
+}
+
+/**
+ * Read the file back and prove that nothing moved except what was asked for.
+ *
+ * This is the whole promise of the page. It edits a live catalogue, and the way that goes wrong is
+ * not a visible error — it is a column nobody was looking at quietly coming back different across
+ * thousands of rows, discovered weeks later. It has already happened once here: an early version
+ * serialised through the CSV generator's escaping, which straightens curly quotes, so adding one
+ * tag to fifty products reworded the apostrophe in fifty product descriptions.
+ *
+ * A test catches that on the day it is written. This catches it on every file, for every change
+ * anyone makes to this module afterwards — and when it catches something it hands back the
+ * ORIGINAL file, because a file with edits nobody asked for is worse than no file at all.
+ *
+ * Values are compared as parsed, not as bytes: re-quoting a field that did not need quoting
+ * changes the bytes and changes nothing about the data, and that is not what this is looking for.
+ */
+export function verifyOnlyIntended(before: string[][], after: string, changes: Change[]): string[] {
+  const parsed = parseCsv(after).filter((r) => r.some((c) => c.trim() !== ""));
+  const header = before[0];
+  const problems: string[] = [];
+
+  if (parsed.length !== before.length) {
+    problems.push(`The file came back with ${parsed.length} rows instead of ${before.length}.`);
+    return problems;
+  }
+  if (parsed[0].join("\u0000") !== header.join("\u0000")) {
+    problems.push("The header row came back different.");
+    return problems;
+  }
+
+  const handleColumn = header.indexOf("Handle");
+  // Which cells were meant to move, as handle + column. A product column is written on one row and
+  // a variant column on many, so the pair is the finest grain a change list can name.
+  const intended = new Set(changes.map((c) => `${c.handle}\u0000${c.column}`));
+
+  for (let r = 1; r < before.length; r++) {
+    const handle = handleColumn === -1 ? "" : (before[r][handleColumn] ?? "").trim();
+    for (let c = 0; c < header.length; c++) {
+      const was = before[r][c] ?? "";
+      const now = parsed[r][c] ?? "";
+      if (was === now) continue;
+      if (intended.has(`${handle}\u0000${header[c]}`)) continue;
+      problems.push(`Row ${r} "${header[c]}" changed without being asked to: ${JSON.stringify(was).slice(0, 60)} became ${JSON.stringify(now).slice(0, 60)}`);
+      if (problems.length >= 20) return problems;
+    }
+  }
+  return problems;
 }
 
 /** What the file holds, so a scope can be built from real values rather than guessed at. */

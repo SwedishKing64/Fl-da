@@ -9,7 +9,7 @@ import { applyMapping, headerHash, mappingProblems, suggestMapping, suggestOptio
 import { groupLineItems } from "./grouping";
 import { houseTags } from "./product-tags";
 import { DEFAULT_CATEGORY_RULES, type CategoryRuleLike } from "./categorize";
-import { repairCategoryRules, repairTagRuleSpelling } from "./seed";
+import { repairCategoryRules, repairProductTags, repairTagRuleSpelling } from "./seed";
 import { applyTagRules, type TagRuleLike } from "./rules";
 import { applyTemplates, type ProductTemplateLike } from "./templates";
 import { allocateFreight, exGstCostAud, priceVariant } from "./pricing";
@@ -661,6 +661,10 @@ export interface ReviewData {
 }
 
 export async function loadReview(batchId: string): Promise<ReviewData> {
+  // Take off any tag the shop does not write, before the grid shows it or the CSV carries it.
+  // A product's tags are written once, at build time, so correcting the rule that produced a bad
+  // one does nothing for the batches already built — see repairProductTags.
+  await repairProductTags(batchId).catch(() => 0);
   const [batch, settings] = await Promise.all([
     prisma.importBatch.findUniqueOrThrow({ where: { id: batchId }, include: { supplier: true, unassignedImages: { orderBy: { createdAt: "asc" } } } }),
     getSettings(),

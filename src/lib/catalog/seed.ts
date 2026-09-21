@@ -61,6 +61,42 @@ const TAG_SPELLING: Record<string, string> = {
   "new season": "", freeride: "", park: "", "all-mountain": "",
 };
 
+/**
+ * Tags no product should carry, because the shop has never written one.
+ *
+ * Correcting the rule stops the next product being given it. It does nothing for the products
+ * already built — their tags were written once, at build time, and nothing reads them back. So a
+ * batch built before the fix goes on showing "new season" in the grid and writing it into the CSV,
+ * which is exactly how it looks like the fix never landed.
+ */
+const STRIP_FROM_PRODUCTS = Object.entries(TAG_SPELLING).filter(([, to]) => to === "").map(([from]) => from);
+
+/**
+ * Take those tags off the products of one batch.
+ *
+ * Scoped to a batch and run where the batch is read, so it is a small query that almost always
+ * matches nothing. Only the tags above are removed — anything a person typed is left alone.
+ */
+export async function repairProductTags(batchId: string): Promise<number> {
+  const rows = await prisma.product.findMany({
+    where: { batchId, OR: STRIP_FROM_PRODUCTS.map((tag) => ({ tags: { contains: tag } })) },
+    select: { id: true, tags: true },
+  });
+  let repaired = 0;
+  for (const row of rows) {
+    const kept = row.tags
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean)
+      .filter((t) => !STRIP_FROM_PRODUCTS.includes(t.toLowerCase()));
+    const fixed = kept.join(", ");
+    if (fixed === row.tags) continue;
+    await prisma.product.update({ where: { id: row.id }, data: { tags: fixed } });
+    repaired++;
+  }
+  return repaired;
+}
+
 export async function repairTagRuleSpelling(): Promise<number> {
   const rows = await prisma.tagRule.findMany();
   let repaired = 0;

@@ -106,3 +106,37 @@ describe("where the lookup is called from", () => {
     expect(body).not.toContain('not: "NONE"');
   });
 });
+
+/**
+ * Correcting the rule does nothing for the products already built.
+ *
+ * A product's tags are written once, at build time, and nothing reads them back afterwards. So the
+ * seeded rule was fixed, and the rule rows already in the database were fixed where they are read,
+ * and a batch built before either still showed "new season" in the grid and wrote it into the CSV
+ * — which from outside is indistinguishable from the fix never having landed. It is reported
+ * as still happening because it still was.
+ *
+ * The tags stripped are only the ones the shop has never written. Anything a person typed stays.
+ */
+describe("tags the shop has never written are taken off products too", () => {
+  const seed = readFileSync(new URL("./seed.ts", import.meta.url), "utf8");
+  const pipeline = readFileSync(new URL("./pipeline.ts", import.meta.url), "utf8");
+
+  it("strips exactly the tags the rule repair maps to nothing", () => {
+    // One list, derived from the other, so the two can never disagree about what is not a tag.
+    expect(seed).toContain("const STRIP_FROM_PRODUCTS = Object.entries(TAG_SPELLING).filter(([, to]) => to === \"\")");
+    expect(seed).toMatch(/"new season": ""/);
+  });
+
+  it("runs where a batch is read, so the grid and the CSV both see it", () => {
+    const fn = pipeline.slice(pipeline.indexOf("export async function loadReview"));
+    expect(fn.slice(0, fn.indexOf("\n  const products"))).toContain("repairProductTags");
+  });
+
+  it("only ever removes tags, never renames or adds one", () => {
+    const fn = seed.slice(seed.indexOf("export async function repairProductTags"));
+    const body = fn.slice(0, fn.indexOf("\n}"));
+    expect(body).toContain("filter((t) => !STRIP_FROM_PRODUCTS.includes(t.toLowerCase()))");
+    expect(body).not.toMatch(/TAG_SPELLING\[/); // renaming is the rules' job, not the products'
+  });
+});

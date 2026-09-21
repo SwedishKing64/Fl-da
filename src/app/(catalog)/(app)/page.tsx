@@ -7,7 +7,9 @@ export default async function DashboardPage() {
   const [batches, recent, exported, audit] = await Promise.all([
     prisma.importBatch.count(),
     prisma.importBatch.findMany({ orderBy: { updatedAt: "desc" }, take: 8, include: { supplier: true, _count: { select: { products: true, files: true } } } }),
-    prisma.importBatch.findMany({ where: { status: { in: ["EXPORTED", "PUSHED"] } }, select: { summary: true } }),
+    // Capped: this reads a JSON blob per batch, and a shop two seasons in has hundreds. The
+    // figures below it are a dashboard headline, not an accounting record.
+    prisma.importBatch.findMany({ where: { status: { in: ["EXPORTED", "PUSHED"] } }, select: { summary: true }, orderBy: { exportedAt: "desc" }, take: 200 }),
     prisma.auditLog.findMany({ orderBy: { createdAt: "desc" }, take: 8, include: { user: true, batch: true } }),
   ]);
 

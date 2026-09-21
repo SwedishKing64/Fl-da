@@ -77,7 +77,31 @@ const STRIP_FROM_PRODUCTS = Object.entries(TAG_SPELLING).filter(([, to]) => to =
  * Scoped to a batch and run where the batch is read, so it is a small query that almost always
  * matches nothing. Only the tags above are removed — anything a person typed is left alone.
  */
+/**
+ * Each repair runs once per process, not once per page.
+ *
+ * These exist to correct rows written by an older release, so a second run has nothing to do — but
+ * "nothing to do" still costs a query, and these sit on read paths that every page goes through.
+ * Three of them in front of every render is a page that feels slow for no reason at all.
+ *
+ * A serverless instance is short-lived, so "once per process" still means the fix lands quickly
+ * everywhere, and a database that is already correct is never asked again.
+ */
+const once = new Map<string, Promise<number>>();
+
+function memo(key: string, work: () => Promise<number>): Promise<number> {
+  const existing = once.get(key);
+  if (existing) return existing;
+  const started = work().catch(() => 0);
+  once.set(key, started);
+  return started;
+}
+
 export async function repairProductTags(batchId: string): Promise<number> {
+  return memo(`products:${batchId}`, () => repairProductTagsNow(batchId));
+}
+
+async function repairProductTagsNow(batchId: string): Promise<number> {
   const rows = await prisma.product.findMany({
     where: { batchId, OR: STRIP_FROM_PRODUCTS.map((tag) => ({ tags: { contains: tag } })) },
     select: { id: true, tags: true },
@@ -98,6 +122,10 @@ export async function repairProductTags(batchId: string): Promise<number> {
 }
 
 export async function repairTagRuleSpelling(): Promise<number> {
+  return memo("tag-rules", repairTagRuleSpellingNow);
+}
+
+async function repairTagRuleSpellingNow(): Promise<number> {
   const rows = await prisma.tagRule.findMany();
   let repaired = 0;
   for (const row of rows) {
@@ -122,6 +150,10 @@ export async function repairTagRuleSpelling(): Promise<number> {
  * exactly as it is, including any wording someone has edited by hand.
  */
 export async function repairCategoryRules(): Promise<number> {
+  return memo("category-rules", repairCategoryRulesNow);
+}
+
+async function repairCategoryRulesNow(): Promise<number> {
   const rows = await prisma.categoryRule.findMany();
   const broken = rows.filter((r) => r.productType && !isValidType(r.productType));
   if (broken.length === 0) return 0;

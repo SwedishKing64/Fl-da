@@ -2,6 +2,7 @@
 // sessions live in the database and are referenced by an httpOnly cookie.
 
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "./db";
@@ -48,14 +49,22 @@ export async function destroySession(): Promise<void> {
   store.delete(SESSION_COOKIE);
 }
 
-export async function getCurrentUser(): Promise<CurrentUser | null> {
+/**
+ * Who is signed in, looked up once per render rather than once per caller.
+ *
+ * The layout asks, and then the page inside it asks again, so every single page was paying for two
+ * identical session queries before it rendered anything. React's cache dedupes them for the life of
+ * one request — which is exactly the scope that is safe, since a different request is a different
+ * person.
+ */
+export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   const store = await cookies();
   const id = store.get(SESSION_COOKIE)?.value;
   if (!id) return null;
   const session = await prisma.session.findUnique({ where: { id }, include: { user: true } });
   if (!session || session.expiresAt < new Date()) return null;
   return { id: session.user.id, email: session.user.email, name: session.user.name, role: session.user.role as Role };
-}
+});
 
 /** For pages: redirect to login (or to setup when no users exist yet). */
 export async function requireUser(role?: Role): Promise<CurrentUser> {

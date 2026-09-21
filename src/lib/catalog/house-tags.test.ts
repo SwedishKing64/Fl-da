@@ -128,13 +128,26 @@ describe("tags the shop has never written are taken off products too", () => {
     expect(seed).toMatch(/"new season": ""/);
   });
 
+  it("runs once per process, not once per page", () => {
+    // Three repairs on read paths put three queries in front of every render. They exist to fix
+    // rows written by an older release, so a second run has nothing to do — but nothing to do
+    // still costs a round trip to a database that may be on the other side of the world.
+    expect(seed).toContain("const once = new Map<string, Promise<number>>()");
+    for (const fn of ["repairProductTags", "repairTagRuleSpelling", "repairCategoryRules"]) {
+      const body = seed.slice(seed.indexOf(`export async function ${fn}`));
+      expect(body.slice(0, body.indexOf("\n}")), fn).toContain("memo(");
+    }
+  });
+
   it("runs where a batch is read, so the grid and the CSV both see it", () => {
     const fn = pipeline.slice(pipeline.indexOf("export async function loadReview"));
     expect(fn.slice(0, fn.indexOf("\n  const products"))).toContain("repairProductTags");
   });
 
   it("only ever removes tags, never renames or adds one", () => {
-    const fn = seed.slice(seed.indexOf("export async function repairProductTags"));
+    // The exported name is a thin memo wrapper — each repair runs once per process rather than
+    // once per page — so this reads the function that does the work.
+    const fn = seed.slice(seed.indexOf("async function repairProductTagsNow"));
     const body = fn.slice(0, fn.indexOf("\n}"));
     expect(body).toContain("filter((t) => !STRIP_FROM_PRODUCTS.includes(t.toLowerCase()))");
     expect(body).not.toMatch(/TAG_SPELLING\[/); // renaming is the rules' job, not the products'

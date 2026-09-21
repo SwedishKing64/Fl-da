@@ -122,6 +122,10 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
   const wholeFile = pending ? isWholeFile(pending.plan.scope) : false;
   const refused = pending?.result.refused === true;
   const nothingToDo = pending !== null && !refused && pending.result.changes.length === 0;
+  // "Nothing would change" is three different situations, and saying them as one is useless.
+  // Nothing was understood; nothing matched; or everything that matched is already that way.
+  const noOperations = pending !== null && pending.plan.operations.length === 0;
+  const noMatch = pending !== null && pending.result.matched === 0;
   const totalChanges = feed.reduce((n, f) => n + f.changes, 0);
 
   return (
@@ -234,7 +238,24 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
                 <span><strong className="tabular-nums">{pending.result.changes.length}</strong> cell{pending.result.changes.length === 1 ? "" : "s"} would change</span>
               </div>
               {nothingToDo ? (
-                <Alert tone="warning" className="mt-3">Nothing would change. Either no product matches, or they are already as this describes.</Alert>
+                <Alert tone="warning" className="mt-3">
+                  {noOperations ? (
+                    <>
+                      <div className="font-semibold">No change was worked out from that.</div>
+                      <p className="mt-1 text-sm">The products were found, but nothing was understood as something to <em>do</em> to them. Try naming the change plainly — &ldquo;add the tag clearance&rdquo;, &ldquo;take 30% off&rdquo;, &ldquo;set them to draft&rdquo;.{pending.unclear ? ` It said: ${pending.unclear}` : ""}</p>
+                    </>
+                  ) : noMatch ? (
+                    <>
+                      <div className="font-semibold">No product in this file matches.</div>
+                      <p className="mt-1 text-sm">The change was understood, but nothing here fits the description above. Check the brand, type or tag is spelled as the file spells it.</p>
+                    </>
+                  ) : (
+                    <>
+                      <div className="font-semibold">All {pending.result.matched} matching products are already like this.</div>
+                      <p className="mt-1 text-sm">They were found and checked, and every one of them already carries what you asked for — so there is nothing to change. Applying it would do nothing, which is the right answer to &ldquo;if they are already added do not add again&rdquo;.</p>
+                    </>
+                  )}
+                </Alert>
               ) : (
                 <>
                   <div className="mt-3 max-h-96 overflow-auto rounded-lg border border-[var(--line)]">

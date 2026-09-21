@@ -333,3 +333,55 @@ describe("a list of years, and a year held back", () => {
     expect(isWholeFile({})).toBe(true);
   });
 });
+
+/**
+ * "107 products match, 0 cells would change" is three different situations wearing one sentence.
+ *
+ * Nothing was understood as a change to make; nothing matched; or everything that matched is
+ * already that way. Only the last of those is the tool working correctly, and reported as one
+ * message there is no way to tell which you have. The page says which now; these pin the
+ * behaviour underneath it.
+ */
+const FIFTY = "/root/.claude/uploads/94fb8bfb-35a9-5176-afe9-8fcc0dec9eb3/f26cc03e-products_export-5.csv";
+const mixed = readFileSync(FIFTY, "utf8");
+
+describe("telling apart the reasons nothing changed", () => {
+  const YEARS = ["2999", "2026", "2025", "2024", "2998"];
+  const tagThem: Plan = {
+    scope: { anyTags: YEARS, excludeTags: ["2027"] },
+    operations: [{ kind: "addTags", tags: ["clearance", "snow clearance"] }],
+  };
+
+  it("really does change cells when the matching products lack the tags", () => {
+    // 40 products in this file carry one of the years and none of them has both tags, so a run
+    // that reports zero changes here would be a fault in applyPlan rather than a fact about data.
+    const out = applyPlan(mixed, tagThem);
+    expect(out.matched).toBe(40);
+    expect(out.changes).toHaveLength(40);
+    expect(new Set(out.changes.map((c) => c.column))).toEqual(new Set(["Tags"]));
+    for (const c of out.changes) {
+      expect(c.after.toLowerCase()).toContain("clearance");
+      expect(c.after.toLowerCase()).toContain("snow clearance");
+    }
+  });
+
+  it("matched but nothing to do, once they already carry it", () => {
+    const once = applyPlan(mixed, tagThem);
+    const twice = applyPlan(once.csv, tagThem);
+    // The same products are found — so this is NOT "nothing matched" — and none of them moves.
+    expect(twice.matched).toBe(40);
+    expect(twice.changes).toHaveLength(0);
+  });
+
+  it("nothing matched is a different answer from nothing to do", () => {
+    const out = applyPlan(mixed, { scope: { anyTags: ["1999"] }, operations: [{ kind: "addTags", tags: ["clearance"] }] });
+    expect(out.matched).toBe(0);
+    expect(out.changes).toHaveLength(0);
+  });
+
+  it("no operations at all is a third answer, and never reads as the products being fine", () => {
+    const out = applyPlan(mixed, { scope: { anyTags: YEARS }, operations: [] });
+    expect(out.matched).toBeGreaterThan(0);
+    expect(out.changes).toHaveLength(0);
+  });
+});

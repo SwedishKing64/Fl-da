@@ -35,6 +35,9 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
   const [instruction, setInstruction] = useState("");
   const [pending, setPending] = useState<{ plan: Plan; understood: string; unclear: string; described: string[]; result: AdjustResult } | null>(null);
   const [busy, setBusy] = useState<"reading" | "planning" | null>(null);
+  // Editing every product in the file is occasionally what someone means and never what they mean
+  // by accident. It is the shape a misread instruction takes, so it is the one thing that asks.
+  const [confirmWholeFile, setConfirmWholeFile] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
 
@@ -62,6 +65,7 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
     try {
       const r = await planAdjustmentAction(instruction, { products: facts.products, vendors: facts.vendors, types: facts.types, tags: facts.tags });
       if (!r.ok) { setError(r.error); return; }
+      setConfirmWholeFile(false);
       setPending({ ...r.data!, result: applyPlan(working, r.data!.plan) });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -72,11 +76,13 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
 
   function apply() {
     if (!pending || !working || pending.result.refused) return;
+    if (isWholeFile(pending.plan.scope) && !confirmWholeFile) return;
     setHistory((h) => [...h, working]);
     setWorking(pending.result.csv);
     setFeed((f) => [...f, { instruction, described: pending.described, changes: pending.result.changes.length, matched: pending.result.matched }]);
     setInstruction("");
     setPending(null);
+    setConfirmWholeFile(false);
     setSaved(null);
   }
 
@@ -210,7 +216,15 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
               <ul className="mt-2 list-disc space-y-0.5 pl-5 font-mono text-[11px]">{pending.result.warnings.slice(1).map((w, i) => <li key={i}>{w}</li>)}</ul>
             </Alert>
           )}
-          {!refused && wholeFile && <Alert tone="warning" className="mt-3">This names no brand, type or tag, so it applies to <strong>every one of the {pending.result.products} products</strong> in the file.</Alert>}
+          {!refused && wholeFile && (
+            <Alert tone="danger" className="mt-3">
+              <div className="font-semibold">This would change every one of the {pending.result.products} products in the file.</div>
+              <p className="mt-1 text-sm">Nothing in it narrows to a brand, a type or a tag. That is occasionally what someone means, and it is also the shape a misread instruction takes — so it asks first. If you meant a subset, say which and work it out again.</p>
+              <label className="mt-2 flex items-center gap-2 text-sm font-medium">
+                <input type="checkbox" checked={confirmWholeFile} onChange={(e) => setConfirmWholeFile(e.target.checked)} /> Yes, every product in the file
+              </label>
+            </Alert>
+          )}
           {!refused && pending.result.warnings.map((w, i) => <Alert key={i} tone="warning" className="mt-3">{w}</Alert>)}
 
           {!refused && (
@@ -247,7 +261,7 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
                   </div>
                   {pending.result.changes.length > 200 && <p className="mt-2 text-xs text-[var(--ink-soft)]">Showing the first 200 of {pending.result.changes.length}.</p>}
                   <div className="mt-4 flex flex-wrap items-center gap-3">
-                    <Button variant="primary" onClick={apply}>Apply this</Button>
+                    <Button variant="primary" disabled={wholeFile && !confirmWholeFile} onClick={apply}>Apply this</Button>
                     <Button onClick={() => setPending(null)}>Discard</Button>
                     <span className="text-xs text-[var(--ink-soft)]">Applying adds it to the list above. Nothing leaves this page until you download.</span>
                   </div>

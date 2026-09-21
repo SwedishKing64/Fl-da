@@ -25,8 +25,23 @@ export interface Scope {
   vendors?: string[];
   /** Shopify Type values. Any one matches. */
   types?: string[];
-  /** Tags the product must carry. ALL of them must be present — that is what makes a scope narrow. */
+  /**
+   * Tags the product must carry, ALL of them. "Snow jackets AND mens."
+   */
   tags?: string[];
+  /**
+   * Tags where carrying ANY ONE is enough. "The 2024 or 2025 or 2999 stock."
+   *
+   * This was missing, and its absence was a real fault rather than a gap. An instruction naming
+   * five year tags has no way to be expressed as an AND — no product carries five years — so it
+   * came back either matching nothing or, worse, with an empty scope that took in the whole file.
+   * A rule about the 2024-and-older stock went and edited the 2027 skis.
+   */
+  anyTags?: string[];
+  /** Tags that rule a product OUT however well it matches everything else. "But not the 2027s." */
+  excludeTags?: string[];
+  /** Vendors ruled out the same way. */
+  excludeVendors?: string[];
   /** Exact handles. */
   handles?: string[];
   /** A substring of the product title, case-insensitive. */
@@ -117,16 +132,20 @@ function matches(scope: Scope, row: Record<string, string>): boolean {
   if (scope.types?.length && !scope.types.some((t) => eq(t, row["Type"] ?? ""))) return false;
   if (scope.handles?.length && !scope.handles.some((h) => eq(h, row["Handle"] ?? ""))) return false;
   if (scope.titleContains && !(row["Title"] ?? "").toLowerCase().includes(scope.titleContains.trim().toLowerCase())) return false;
-  if (scope.tags?.length) {
-    const have = new Set(splitTags(row["Tags"] ?? "").map((t) => t.toLowerCase()));
-    if (!scope.tags.every((t) => have.has(t.trim().toLowerCase()))) return false;
-  }
+  const have = new Set(splitTags(row["Tags"] ?? "").map((t) => t.toLowerCase()));
+  if (scope.tags?.length && !scope.tags.every((t) => have.has(t.trim().toLowerCase()))) return false;
+  if (scope.anyTags?.length && !scope.anyTags.some((t) => have.has(t.trim().toLowerCase()))) return false;
+  // Exclusions last, and they win: "not the 2027s" means not the 2027s, whatever else matched.
+  if (scope.excludeTags?.some((t) => have.has(t.trim().toLowerCase()))) return false;
+  if (scope.excludeVendors?.some((v) => eq(v, row["Vendor"] ?? ""))) return false;
   return true;
 }
 
 /** True when a scope names nothing at all, which would take in the whole file. */
 export function isWholeFile(scope: Scope): boolean {
-  return !scope.vendors?.length && !scope.types?.length && !scope.tags?.length && !scope.handles?.length && !scope.titleContains?.trim();
+  return !scope.vendors?.length && !scope.types?.length && !scope.tags?.length && !scope.anyTags?.length
+    && !scope.handles?.length && !scope.titleContains?.trim()
+    && !scope.excludeTags?.length && !scope.excludeVendors?.length;
 }
 
 /**

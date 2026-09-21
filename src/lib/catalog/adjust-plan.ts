@@ -17,7 +17,10 @@ import type { Operation, Plan } from "./adjust";
 const ScopeSchema = z.object({
   vendors: z.array(z.string()).describe("Vendor names exactly as the file spells them. Empty unless the instruction names a brand."),
   types: z.array(z.string()).describe("Shopify Type values exactly as the file spells them. Empty unless the instruction names one."),
-  tags: z.array(z.string()).describe("Tags the product must ALL carry, exactly as the file spells them. Empty unless the instruction names one."),
+  tags: z.array(z.string()).describe("Tags the product must ALL carry at once, exactly as the file spells them. Use this only for 'X and Y'. Empty otherwise."),
+  anyTags: z.array(z.string()).describe("Tags where carrying ANY ONE is enough. This is what a list means: 'items tagged 2024 or 2025 or 2999' goes here, never in tags. Empty otherwise."),
+  excludeTags: z.array(z.string()).describe("Tags that rule a product out however well it matches. 'but not the 2027s', 'except anything tagged clearance'. Empty otherwise."),
+  excludeVendors: z.array(z.string()).describe("Vendors ruled out the same way. Empty otherwise."),
   handles: z.array(z.string()).describe("Exact product handles, when the instruction lists specific products. Otherwise empty."),
   titleContains: z.string().describe("A word from the product title to match on, when nothing else narrows it. Empty otherwise."),
 });
@@ -52,9 +55,13 @@ The shop's rules, which you follow without being told:
 - "Into clearance" or "on clearance" means a discount AND the clearance tag. If the instruction gives no percentage, do the tag only and say in "unclear" that no percentage was given.
 - Tags are lower case. Use the spelling the file already uses when the file has something close.
 
-Only ever name a vendor, type or tag that appears in the list of what the file contains. If the instruction names something the file does not have, leave the scope empty for that field and say so in "unclear" — a scope that matches nothing is much better than one that matches everything.
+How to read a list of values. "Items tagged 2999 or 2026 or 2025" is ANY ONE of them, so it goes in anyTags. The tags field means ALL AT ONCE, and no product carries five different years, so putting a list there matches nothing. Getting this backwards is the single worst thing you can do here.
 
-If the instruction does not narrow the products at all, leave every scope field empty and say so in "unclear". Never invent a scope to make an instruction fit.`;
+How to read an exclusion. "Therefore items tagged 2027 should not be edited", "everything except the Oakleys", "but leave the 2027s alone" — that is excludeTags or excludeVendors. An exclusion is never a reason to widen the scope, and saying which things to leave out does not mean every other thing is in.
+
+Only ever name a vendor, type or tag that appears in the list of what the file contains. If the instruction names something the file does not have, leave that field empty and say so in "unclear" — a scope that matches nothing is much better than one that matches everything.
+
+If the instruction does not narrow the products at all, leave every scope field empty and say so in "unclear". Never invent a scope to make an instruction fit, and NEVER fall back to an empty scope because the right one was hard to express — an empty scope edits the whole shop. If you cannot express what was meant, return no operations at all and say why in "unclear".`;
 
 let client: Anthropic | null = null;
 const getClient = (): Anthropic => (client ??= new Anthropic());
@@ -94,14 +101,35 @@ function groundScope(scope: z.infer<typeof ScopeSchema>, file: { vendors: string
   };
   const vendors = keep(scope.vendors, file.vendors, "vendor");
   const types = keep(scope.types, file.types, "type");
-  const tags = keep(scope.tags, file.tags, "tag");
+  let tags = keep(scope.tags, file.tags, "tag");
+  let anyTags = keep(scope.anyTags, file.tags, "tag");
+  // An exclusion the file has never heard of is harmless — it simply excludes nothing — so it is
+  // kept rather than dropped, and never reported as a problem.
+  const excludeTags = scope.excludeTags.map((t) => t.trim()).filter(Boolean);
+  const excludeVendors = scope.excludeVendors.map((v) => v.trim()).filter(Boolean);
   const handles = scope.handles.map((h) => h.trim()).filter(Boolean);
   const titleContains = scope.titleContains.trim();
+
+  // Two or more tags in the ALL list is almost always a list of alternatives read the wrong way —
+  // no product carries two years or two shelves at once. Rather than match nothing, treat it as
+  // the any-of it meant and say so.
+  if (tags.length > 1 && anyTags.length === 0) {
+    const exclusive = tags.every((t) => /^\d{4}$/.test(t));
+    if (exclusive) {
+      dropped.push(`read "${tags.join(", ")}" as any one of them rather than all at once`);
+      anyTags = tags;
+      tags = [];
+    }
+  }
+
   return {
     scope: {
       ...(vendors.length ? { vendors } : {}),
       ...(types.length ? { types } : {}),
       ...(tags.length ? { tags } : {}),
+      ...(anyTags.length ? { anyTags } : {}),
+      ...(excludeTags.length ? { excludeTags } : {}),
+      ...(excludeVendors.length ? { excludeVendors } : {}),
       ...(handles.length ? { handles } : {}),
       ...(titleContains ? { titleContains } : {}),
     },
@@ -158,9 +186,14 @@ export function describePlan(plan: Plan): string[] {
   if (s.vendors?.length) parts.push(`vendor is ${s.vendors.join(" or ")}`);
   if (s.types?.length) parts.push(`type is ${s.types.join(" or ")}`);
   if (s.tags?.length) parts.push(`tagged ${s.tags.join(" and ")}`);
+  if (s.anyTags?.length) parts.push(`tagged any of ${s.anyTags.join(", ")}`);
   if (s.handles?.length) parts.push(`${s.handles.length} named product${s.handles.length === 1 ? "" : "s"}`);
   if (s.titleContains) parts.push(`the title contains "${s.titleContains}"`);
+  const nots: string[] = [];
+  if (s.excludeTags?.length) nots.push(`tagged ${s.excludeTags.join(" or ")}`);
+  if (s.excludeVendors?.length) nots.push(`from ${s.excludeVendors.join(" or ")}`);
   lines.push(parts.length ? `Products where ${parts.join(", and ")}.` : "EVERY product in the file.");
+  if (nots.length) lines.push(`Except anything ${nots.join(", or ")} — those are left alone.`);
   for (const op of plan.operations) {
     switch (op.kind) {
       case "discount":

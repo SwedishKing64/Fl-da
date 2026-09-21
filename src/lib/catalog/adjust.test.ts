@@ -250,3 +250,86 @@ describe("the guarantee that nothing else moves", () => {
     expect(code).toMatch(/import \{ parseCsv \} from "\.\/csv"/);
   });
 });
+
+/**
+ * The instruction that went wrong, against the export that catches it.
+ *
+ *   "For items with year tag '2999' or '2026' or '2025' or '2024' or '2998' add the 'clearance',
+ *    and 'snow clearance' tag. Therefore items with a 2027 year tag should not be edited. If they
+ *    are already added do not add again."
+ *
+ * Two things in that sentence the scope could not say. A list of five years is ANY ONE of them —
+ * no product carries five years, so as an all-at-once match it finds nothing — and "2027 should
+ * not be edited" is an exclusion. With neither expressible, the plan came back with an empty
+ * scope, which means every product, and it went and tagged the 2027 skis.
+ */
+const WITH_2027 = "/root/.claude/uploads/94fb8bfb-35a9-5176-afe9-8fcc0dec9eb3/8bacf3a9-products_export_1-3.csv";
+const seasons = readFileSync(WITH_2027, "utf8");
+
+describe("a list of years, and a year held back", () => {
+  const YEARS = ["2999", "2026", "2025", "2024", "2998"];
+  const plan: Plan = {
+    scope: { anyTags: YEARS, excludeTags: ["2027"] },
+    operations: [{ kind: "addTags", tags: ["clearance", "snow clearance"] }],
+  };
+
+  function tagsByHandle(csv: string) {
+    const grid = parseCsv(csv).filter((r) => r.some((c) => c.trim() !== ""));
+    const header = grid[0];
+    const iH = header.indexOf("Handle"), iT = header.indexOf("Tags");
+    const out = new Map<string, string[]>();
+    for (const row of grid.slice(1)) {
+      const h = row[iH];
+      if (!h || out.has(h)) continue;
+      out.set(h, (row[iT] ?? "").split(",").map((t) => t.trim()).filter(Boolean));
+    }
+    return out;
+  }
+
+  it("touches every product carrying any one of the years, and no others", () => {
+    const before = tagsByHandle(seasons);
+    const out = applyPlan(seasons, plan);
+    const after = tagsByHandle(out.csv);
+
+    let withYear = 0, with2027 = 0;
+    for (const [handle, tags] of before) {
+      const lower = tags.map((t) => t.toLowerCase());
+      const hasYear = YEARS.some((y) => lower.includes(y));
+      const has2027 = lower.includes("2027");
+      const now = after.get(handle)!.map((t) => t.toLowerCase());
+      if (has2027) {
+        with2027++;
+        // Held back, whatever else it carries — the exclusion wins.
+        expect(now, handle).toEqual(lower);
+      } else if (hasYear) {
+        withYear++;
+        expect(now, handle).toContain("clearance");
+        expect(now, handle).toContain("snow clearance");
+      } else {
+        expect(now, handle).toEqual(lower);
+      }
+    }
+    expect(with2027).toBe(17);
+    expect(withYear).toBeGreaterThan(40);
+    expect(out.matched).toBe(withYear);
+  });
+
+  it("does not add a tag a product already carries", () => {
+    const once = applyPlan(seasons, plan);
+    const twice = applyPlan(once.csv, plan);
+    expect(twice.changes).toHaveLength(0);
+  });
+
+  it("a list of years as an all-at-once match is the bug, and finds nothing", () => {
+    // Kept as the thing to never do: no product carries five years.
+    const wrong = applyPlan(seasons, { scope: { tags: YEARS }, operations: [{ kind: "addTags", tags: ["clearance"] }] });
+    expect(wrong.matched).toBe(0);
+    expect(wrong.changes).toHaveLength(0);
+  });
+
+  it("an empty scope is the whole file, which is why it has to be said out loud", () => {
+    expect(isWholeFile({ anyTags: ["2025"] })).toBe(false);
+    expect(isWholeFile({ excludeTags: ["2027"] })).toBe(false);
+    expect(isWholeFile({})).toBe(true);
+  });
+});

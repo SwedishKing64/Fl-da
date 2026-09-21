@@ -150,14 +150,42 @@ export function isWholeFile(scope: Scope): boolean {
 }
 
 /**
+ * Open a Shopify export, and drop anything sitting above the header row.
+ *
+ * A real one starts with its header. A file that has been through a spreadsheet program on the
+ * way here often does not: opening an export in Numbers and exporting it back writes the table's
+ * own name above the header as a one-cell row, so the file begins
+ *
+ *     products_export_1 (4)-updated
+ *     Handle,Title,Body (HTML),…
+ *
+ * Shopify then reads that first line AS the header, finds no Handle column, and refuses the whole
+ * import — for a file whose 500 rows are otherwise perfect. It is worth handling rather than
+ * rejecting, because the person who hits it has no way to tell from the error what is wrong.
+ *
+ * Only the first few rows are searched. A preamble is a line or two; a Shopify export with its
+ * header fifty rows down is not an export with a preamble, it is a different file.
+ */
+function openExport(text: string): { grid: string[][]; preamble: string[][] } {
+  const all = parseCsv(text).filter((r) => r.some((c) => c.trim() !== ""));
+  const at = all.slice(0, 10).findIndex((row) => row.includes("Handle") && row.includes("Title"));
+  return at > 0 ? { grid: all.slice(at), preamble: all.slice(0, at) } : { grid: all, preamble: [] };
+}
+
+/**
  * Apply a plan to a Shopify product export.
  *
  * Returns the whole file back, changed only where the plan said, plus a list of every cell that
  * moved so a person can read the diff before importing it.
  */
 export function applyPlan(text: string, plan: Plan): AdjustResult {
-  const grid = parseCsv(text).filter((r) => r.some((c) => c.trim() !== ""));
+  const { grid, preamble } = openExport(text);
   const warnings: string[] = [];
+  if (preamble.length > 0) {
+    // Dropped rather than carried through: carrying it would hand back a file Shopify still will
+    // not take. It is named so nobody has to wonder what went missing.
+    warnings.push(`${preamble.length === 1 ? "A line" : `${preamble.length} lines`} above the column headings ${preamble.length === 1 ? "was" : "were"} removed — Shopify reads the first line of the file as the column names, and would have refused the import with ${preamble.length === 1 ? "it" : "them"} there. Removed: ${preamble.map((r) => JSON.stringify(r.join(",").slice(0, 60))).join(", ")}.`);
+  }
   if (grid.length < 2) return { csv: text, changes: [], matched: 0, products: 0, variantRows: 0, warnings: ["That file has no rows in it."] };
 
   const header = grid[0];
@@ -371,7 +399,7 @@ export function verifyOnlyIntended(before: string[][], after: string, changes: C
 
 /** What the file holds, so a scope can be built from real values rather than guessed at. */
 export function describeFile(text: string): { products: number; variantRows: number; vendors: string[]; types: string[]; tags: string[] } {
-  const grid = parseCsv(text).filter((r) => r.some((c) => c.trim() !== ""));
+  const { grid } = openExport(text);
   if (grid.length < 2) return { products: 0, variantRows: 0, vendors: [], types: [], tags: [] };
   const header = grid[0];
   const index = new Map(header.map((h, i) => [h, i]));

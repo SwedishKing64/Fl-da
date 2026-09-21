@@ -482,3 +482,43 @@ describe("what an instruction is grounded in", () => {
     }
   });
 });
+
+/**
+ * A file that has been through a spreadsheet program on the way here.
+ *
+ * Driven against the real one: a goggles export this tool produced, opened in a spreadsheet and
+ * exported back, arrived with its own filename written above the header. Shopify reads that line
+ * as the column names, finds no Handle, and refuses all 500 rows.
+ */
+describe("an export with a line above the header", () => {
+  const REAL = "/root/.claude/uploads/94fb8bfb-35a9-5176-afe9-8fcc0dec9eb3/b321f48f-Goggles_Updated.csv";
+
+  it("is the shape the real file arrived in", () => {
+    const raw = readFileSync(REAL, "utf8");
+    expect(raw.startsWith("products_export_1 (4)-updated\r\nHandle,Title,")).toBe(true);
+  });
+
+  it("reads the products under it instead of seeing an empty file", () => {
+    const f = describeFile(readFileSync(REAL, "utf8"));
+    expect(f.products).toBe(165);
+    expect(f.variantRows).toBe(500);
+    expect(f.tags).toContain("clearance");
+  });
+
+  it("still finds nothing in a file that genuinely is not an export", () => {
+    expect(describeFile("some notes\nand more notes\n").products).toBe(0);
+  });
+
+  it("takes the line out, says so, and hands back something Shopify will read", () => {
+    const out = applyPlan(readFileSync(REAL, "utf8"), { scope: { types: ["Ski Accessories"] }, operations: [{ kind: "addTags", tags: ["test-tag"] }] });
+    expect(out.refused).toBeUndefined();
+    expect(out.csv.startsWith("Handle,Title,")).toBe(true);
+    expect(out.warnings.some((w) => w.includes("above the column headings") && w.includes("products_export_1 (4)-updated"))).toBe(true);
+    expect(out.changes.length).toBeGreaterThan(0);
+  });
+
+  it("leaves a file that already starts with its header exactly as it was", () => {
+    const out = applyPlan(text, { scope: { vendors: ["Karbon"] }, operations: [{ kind: "addTags", tags: ["test-tag"] }] });
+    expect(out.warnings.some((w) => w.includes("above the column headings"))).toBe(false);
+  });
+});

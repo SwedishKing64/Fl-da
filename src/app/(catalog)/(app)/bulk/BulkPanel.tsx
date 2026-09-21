@@ -34,7 +34,7 @@ interface Sheet {
 }
 
 interface Applied { instruction: string; described: string[]; changes: number; matched: number; perFile: Array<{ name: string; changes: number }> }
-interface Preview { instruction: string; plan: Plan; understood: string; unclear: string; described: string[]; results: Array<{ name: string; result: AdjustResult }> }
+interface Preview { instruction: string; plan: Plan; understood: string; unclear: string; blocked: string[]; described: string[]; results: Array<{ name: string; result: AdjustResult }> }
 
 const read = (file: File) => new Promise<string>((resolve, reject) => {
   const r = new FileReader();
@@ -187,7 +187,8 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
   const refused = preview?.results.some((r) => r.result.refused) === true;
   const totalChanges = preview?.results.reduce((n, r) => n + r.result.changes.length, 0) ?? 0;
   const totalMatched = preview?.results.reduce((n, r) => n + r.result.matched, 0) ?? 0;
-  const nothingToDo = preview !== null && !refused && totalChanges === 0;
+  const blocked = preview !== null && preview.blocked.length > 0;
+  const nothingToDo = preview !== null && !refused && !blocked && totalChanges === 0;
   const noOperations = preview !== null && preview.plan.operations.length === 0;
   const changesSoFar = feed.reduce((n, f) => n + f.changes, 0);
 
@@ -254,7 +255,14 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
             {queueNote && (
               <div className="mt-2 text-xs text-[var(--ink-soft)]">
                 <strong>{queueNote.source}</strong> — {queue.length} change{queue.length === 1 ? "" : "s"} left to go through.
-                {queueNote.ignored.length > 0 && <span> Ignored as not-a-change: {queueNote.ignored.slice(0, 4).join("; ")}{queueNote.ignored.length > 4 ? "…" : ""}</span>}
+                {queueNote.ignored.length > 0 && (
+                  <div className="mt-1">
+                    <strong>Left alone ({queueNote.ignored.length})</strong> — a heading, or a row with no year tag stated. Nothing here was changed:
+                    <ul className="mt-1 list-disc pl-5">
+                      {queueNote.ignored.map((line) => <li key={line}>{line}</li>)}
+                    </ul>
+                  </div>
+                )}
                 {queueNote.unclear && <span className="block text-amber-800">Could not turn into a change: {queueNote.unclear}</span>}
               </div>
             )}
@@ -300,7 +308,14 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
               <ul className="mt-2 list-disc space-y-0.5 pl-5 font-mono text-[11px]">{preview.results.flatMap((r) => r.result.warnings.slice(1)).map((w, i) => <li key={i}>{w}</li>)}</ul>
             </Alert>
           )}
-          {!refused && wholeFile && (
+          {blocked && !refused && (
+            <Alert tone="danger" className="mt-3">
+              <div className="font-semibold">Not applied — this would have changed more than it asked for.</div>
+              <ul className="mt-2 list-disc space-y-0.5 pl-5 text-sm">{preview.blocked.map((b, i) => <li key={i}>{b}</li>)}</ul>
+              <p className="mt-2 text-sm">Either the products it names are in an export that is not loaded, or the shop spells that brand or category differently. Load the missing export, or skip this one and do it by hand.</p>
+            </Alert>
+          )}
+          {!refused && !blocked && wholeFile && (
             <Alert tone="danger" className="mt-3">
               <div className="font-semibold">This would change every product in {sheets.length === 1 ? "the file" : "all the files"}.</div>
               <p className="mt-1 text-sm">Nothing in it narrows to a brand, a type or a tag. That is occasionally what someone means, and it is also the shape a misread instruction takes — so it asks first.</p>
@@ -309,9 +324,9 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
               </label>
             </Alert>
           )}
-          {!refused && preview.results.flatMap((r) => r.result.warnings).map((w, i) => <Alert key={i} tone="warning" className="mt-3">{w}</Alert>)}
+          {!refused && !blocked && preview.results.flatMap((r) => r.result.warnings).map((w, i) => <Alert key={i} tone="warning" className="mt-3">{w}</Alert>)}
 
-          {!refused && (
+          {!refused && !blocked && (
             <>
               <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-sm">
                 <span><strong className="tabular-nums">{totalMatched}</strong> products match</span>

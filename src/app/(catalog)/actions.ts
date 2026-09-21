@@ -732,7 +732,7 @@ export async function downloadCsvAction(fileId: string): Promise<ActionResult<{ 
 export async function planAdjustmentAction(
   instruction: string,
   file: { products: number; vendors: string[]; types: string[]; tags: string[] },
-): Promise<ActionResult<{ plan: Plan; understood: string; unclear: string; described: string[] }>> {
+): Promise<ActionResult<{ plan: Plan; understood: string; unclear: string; blocked: string[]; described: string[] }>> {
   await requireUser();
   if (!planningAvailable()) return { ok: false, error: "Set ANTHROPIC_API_KEY to read instructions. Until then this page cannot work out what to change." };
   try {
@@ -758,42 +758,46 @@ export async function planAdjustmentAction(
 export async function readInstructionSheetAction(file: { name: string; type: string; base64: string }): Promise<ActionResult<SplitInstructions & { source: string }>> {
   await requireUser();
   if (!planningAvailable()) return { ok: false, error: "Set ANTHROPIC_API_KEY to read an instruction sheet." };
+
+  const buffer = Buffer.from(file.base64, "base64");
+  // Under the 12mb configured for Server Actions in next.config, with room for base64's overhead.
+  if (buffer.byteLength > 8 * 1024 * 1024) return { ok: false, error: "That file is larger than 8MB. Instruction sheets are normally a page or two — check it is the right file." };
+
+  const isPdf = /pdf$/i.test(file.name) || file.type === "application/pdf";
+  const isImage = /^image\//.test(file.type);
+  let source = isPdf ? "read as a PDF" : isImage ? "read as a picture" : "plain text";
+
+  // Each stage says which one it was. "It could not be read" covers reading the file, understanding
+  // it, and finding anything in it, and as one message it sends people looking in the wrong place.
   try {
-    const buffer = Buffer.from(file.base64, "base64");
-    // Under the 12mb configured for Server Actions in next.config, with room for base64's overhead.
-    if (buffer.byteLength > 8 * 1024 * 1024) return { ok: false, error: "That file is larger than 8MB. Instruction sheets are normally a page or two — check it is the right file." };
-
-    let text = "";
-    let source = "";
-    if (/pdf$/i.test(file.name) || file.type === "application/pdf") {
-      const { extractPdfText } = await import("@/lib/catalog/extract/pdf");
-      const pdf = await extractPdfText(buffer);
-      text = pdf.text;
-      source = `${pdf.pages} page${pdf.pages === 1 ? "" : "s"}`;
-      if (pdf.looksScanned) {
-        // A photographed or scanned sheet has no text layer, so it is read as a picture instead.
-        const { readInstructionImage } = await import("@/lib/catalog/adjust-plan");
-        text = await readInstructionImage(buffer, "application/pdf");
-        source += ", read as a scan";
+    if (isPdf) {
+      // Counted for the operator's benefit only; the PDF itself is what gets read, because these
+      // sheets are tables and a text layer does not survive being one.
+      try {
+        const { extractPdfText } = await import("@/lib/catalog/extract/pdf");
+        const pdf = await extractPdfText(buffer);
+        source = `${pdf.pages} page${pdf.pages === 1 ? "" : "s"}`;
+      } catch {
+        // A PDF whose text layer cannot be parsed still reads perfectly well as a document.
       }
-    } else if (/^image\//.test(file.type)) {
-      const { readInstructionImage } = await import("@/lib/catalog/adjust-plan");
-      text = await readInstructionImage(buffer, file.type);
-      source = "read as a picture";
-    } else {
-      text = buffer.toString("utf8");
-      source = "plain text";
     }
+    const split = isPdf
+      ? await splitInstructions({ pdf: buffer })
+      : isImage
+        ? await splitInstructions({ image: buffer, mediaType: file.type })
+        : await splitInstructions(buffer.toString("utf8"));
 
-    if (!text.trim()) return { ok: false, error: "Nothing could be read out of that file." };
-    const split = await splitInstructions(text);
-    if (!split) return { ok: false, error: "That file was read, but no instructions could be made out of it." };
+    if (!split) return { ok: false, error: `${file.name} was read, but the reply did not come back in a shape that could be used. Try it again; if it keeps happening the sheet may be longer than one pass can handle.` };
     if (split.instructions.length === 0) {
-      return { ok: false, error: `Nothing in that file reads as a change to make.${split.unclear ? ` It said: ${split.unclear}` : ""}` };
+      return { ok: false, error: `${file.name} was read and nothing in it reads as a change to make.${split.unclear ? ` It said: ${split.unclear}` : ""}${split.ignored.length ? ` It treated these as not-a-change: ${split.ignored.slice(0, 5).join("; ")}` : ""}` };
     }
     return { ok: true, data: { ...split, source } };
   } catch (err) {
-    return fail(err);
+    const message = err instanceof Error ? err.message : String(err);
+    if (/timed? ?out|aborted|FUNCTION_INVOCATION_TIMEOUT/i.test(message)) {
+      return { ok: false, error: `Reading ${file.name} took longer than the page allows. A sheet of a few pages should fit — if this one is much longer, split it and add it in parts.` };
+    }
+    return { ok: false, error: `Could not read ${file.name}: ${message}` };
   }
 }
 

@@ -46,13 +46,15 @@ export interface PlannedChange {
   plan: Plan;
   understood: string;
   unclear: string;
+  /** Why this instruction must not run. Non-empty means the plan carries no operations. */
+  blocked: string[];
 }
 
 const SYSTEM = `You turn an instruction from a ski shop's staff into edits to a Shopify product export.
 
 The shop's rules, which you follow without being told:
 - The recommended retail price lives in the Compare At column. Putting something "on sale", "on clearance" or "X% off" means the discount comes off the RECOMMENDED RETAIL, not off whatever the price happens to be today, so a product marked down twice does not compound. Use from: "rrp" unless the instruction plainly says otherwise.
-- "Into clearance" or "on clearance" means a discount AND the clearance tag. If the instruction gives no percentage, do the tag only and say in "unclear" that no percentage was given.
+- "Into clearance" or "on clearance" means a discount AND the clearance tag. If the instruction gives no percentage, do the tag only and say in "unclear" that no percentage was given. An instruction that plainly says which tags to ADD is exactly that and nothing more: do the tags, add no discount, and leave "unclear" empty — it is not missing a percentage.
 - Tags are lower case. Use the spelling the file already uses when the file has something close.
 
 How to read a list of values. "Items tagged 2999 or 2026 or 2025" is ANY ONE of them, so it goes in anyTags. The tags field means ALL AT ONCE, and no product carries five different years, so putting a list there matches nothing. Getting this backwards is the single worst thing you can do here.
@@ -89,22 +91,53 @@ function toOperation(raw: z.infer<typeof OperationSchema>): Operation | null {
   }
 }
 
-/** Keep only the scope values the file really has, so a typo narrows to nothing rather than all. */
-function groundScope(scope: z.infer<typeof ScopeSchema>, file: { vendors: string[]; types: string[]; tags: string[] }): { scope: Plan["scope"]; dropped: string[] } {
+/**
+ * Keep only the scope values the file really has.
+ *
+ * Two rules do the work here. A value the file has never heard of is dropped, so a typo narrows to
+ * nothing rather than to everything. And if dropping it empties a whole field, the scope that comes
+ * back is WIDER than the one asked for — "2999 ski bindings" becomes "everything tagged 2999" —
+ * so the instruction is blocked instead. A scope that quietly grows is how a sheet about bindings
+ * ends up repricing skis.
+ */
+export function groundScope(
+  scope: z.infer<typeof ScopeSchema>,
+  file: { vendors: string[]; types: string[]; tags: string[] },
+): { scope: Plan["scope"]; dropped: string[]; blocked: string[] } {
   const dropped: string[] = [];
+  const blocked: string[] = [];
+  // Spelling drifts between a buyer's sheet and a Shopify export in one predictable way: spaces,
+  // hyphens and underscores. "snowboard bindings" on the page is "snowboard-bindings" in the file
+  // and they are the same shelf, so they are matched as the same word.
+  const norm = (value: string): string => value.toLowerCase().replace(/[-_\s]+/g, " ").trim();
   const keep = (wanted: string[], have: string[], what: string): string[] => {
     const out: string[] = [];
     for (const w of wanted) {
-      const match = have.find((h) => h.toLowerCase() === w.trim().toLowerCase());
+      const match = have.find((h) => norm(h) === norm(w));
       if (match) out.push(match);
       else if (w.trim()) dropped.push(`${what} "${w.trim()}" is not in this file`);
     }
     return out;
   };
+
   const vendors = keep(scope.vendors, file.vendors, "vendor");
-  const types = keep(scope.types, file.types, "type");
   let tags = keep(scope.tags, file.tags, "tag");
   let anyTags = keep(scope.anyTags, file.tags, "tag");
+
+  // The category column of a buyer's sheet names a shelf in the shop's menu, and this shop keeps
+  // some of those shelves in Type and others in tags — "Snowboard Bindings" is a Type, "ski-helmets"
+  // is a tag, and the sheet spells both the same way. So a category that is not a Type is looked
+  // for among the tags before it is given up on.
+  const types: string[] = [];
+  for (const wanted of scope.types) {
+    if (!wanted.trim()) continue;
+    const asType = file.types.find((t) => norm(t) === norm(wanted));
+    if (asType) { types.push(asType); continue; }
+    const asTag = file.tags.find((t) => norm(t) === norm(wanted));
+    if (asTag) { tags.push(asTag); dropped.push(`matched "${wanted.trim()}" on the tag rather than the type`); continue; }
+    dropped.push(`type "${wanted.trim()}" is not in this file`);
+  }
+
   // An exclusion the file has never heard of is harmless — it simply excludes nothing — so it is
   // kept rather than dropped, and never reported as a problem.
   const excludeTags = scope.excludeTags.map((t) => t.trim()).filter(Boolean);
@@ -124,6 +157,17 @@ function groundScope(scope: z.infer<typeof ScopeSchema>, file: { vendors: string
     }
   }
 
+  // Losing one value out of several only narrows the scope, which is safe. Losing the last one
+  // removes the whole condition, which widens it — that is what gets blocked.
+  const emptied = (asked: string[], got: string[], what: string): void => {
+    if (asked.some((v) => v.trim()) && got.length === 0) {
+      blocked.push(`Nothing in the loaded files matches the ${what} it asked for (${asked.filter((v) => v.trim()).map((v) => `"${v.trim()}"`).join(", ")}). Running it without that would have changed far more than the instruction asked for.`);
+    }
+  };
+  emptied(scope.vendors, vendors, "brand");
+  emptied(scope.types, types.length + tags.length > 0 ? [...types, ...tags] : [], "category");
+  emptied(scope.anyTags, anyTags, "tags");
+
   return {
     scope: {
       ...(vendors.length ? { vendors } : {}),
@@ -136,6 +180,7 @@ function groundScope(scope: z.infer<typeof ScopeSchema>, file: { vendors: string
       ...(titleContains ? { titleContains } : {}),
     },
     dropped,
+    blocked,
   };
 }
 
@@ -174,10 +219,10 @@ export async function planAdjustment(
   const parsed = PlanSchema.safeParse(JSON.parse(text));
   if (!parsed.success) return null;
 
-  const { scope, dropped } = groundScope(parsed.data.scope, file);
-  const operations = parsed.data.operations.map(toOperation).filter((op): op is Operation => op !== null);
+  const { scope, dropped, blocked } = groundScope(parsed.data.scope, file);
+  const operations = blocked.length ? [] : parsed.data.operations.map(toOperation).filter((op): op is Operation => op !== null);
   const unclear = [parsed.data.unclear.trim(), ...dropped].filter(Boolean).join(" ");
-  return { plan: { scope, operations }, understood: parsed.data.understood.trim(), unclear };
+  return { plan: { scope, operations }, understood: parsed.data.understood.trim(), unclear, blocked };
 }
 
 /** A plan in words, for the screen — built from the plan itself so it cannot describe something else. */
@@ -240,27 +285,59 @@ export interface SplitInstructions {
   unclear: string;
 }
 
-const SPLIT_SYSTEM = `You are reading a sheet of instructions from a ski shop's buyer. It lists the changes to make to products the shop already sells — what goes on sale and by how much, what moves into clearance, what comes off the site, what gets retagged.
+const SPLIT_SYSTEM = `You are reading a sheet of instructions from a ski shop's buyer. It lists the changes to make to products the shop already sells — what moves into clearance, what goes on sale and by how much, what comes off the site, what gets retagged.
 
 Break it into the separate changes it asks for. One entry per change.
 
-- Rewrite each as a plain imperative sentence that stands on its own, so it makes sense with none of the others: "Put all Spyder jackets 30% off and add the clearance tag."
-- Keep the document's own wording for brands, product names, tags, years and numbers. Never round a number, never rename a brand, never tidy a tag.
-- Two changes to the same products are still two entries. A change that names several brands is one entry if it is one change, and several if the document gives each brand a different number.
-- A heading, a date, a page number, a greeting or a note to the reader is not an instruction. Put those in "ignored" so a person can check nothing was missed.
-- If part of the document asks for something you cannot express as a change to products, say so in "unclear" rather than guessing at it.
+These sheets are a TABLE, one instruction per row, and the columns are always the same. Left to right:
 
-Never invent a change the document does not ask for, and never merge two different discounts into an average.`;
+1. YEAR TAG. The year tags a product must carry for the row to touch it: 2026, 2025, 2999, 2998. This is a hard filter and the most important cell in the row. One year means only that year. Several mean any one of them. Never widen it, never add a year the row does not name, and never let the year from the row above or below leak into this one — putting a 2027 ski into clearance because the row above said 2026 is the worst mistake you can make here.
+2. CATEGORY. The Shopify product Type: "snow skis", "ski boots", "ski bindings", "snowboards", "snowboard boots", "snowboard bindings", "helmets", "gloves", "snow goggles", "ski poles". The cell sometimes adds which part of the category it means — "flat and package", "step on only", "midlayer", "ADULT", "KIDS" — and that stays in the sentence.
+3. BRANDS OR MODELS. The extra narrowing, and the difference between the right hundred products and the wrong thousand. "Nitro", "anon", "POC", "Bent metal, RIDE", "except arcteryx", "Burton Genesis step on only". When it names brands or models the products must carry those ON TOP OF everything else in the row. A\\T, A/T and AT all mean the alpine touring tag, so "selected A\\T +selected look" means products carrying both the alpine touring tag and the look tag. "except X" rules X out and is never a reason to widen anything.
+4. THE TAG COLUMN, headed with the month — "august clearance", "october clearance". It says which tag the row adds. It always reads "clearance", and it always means BOTH tags at once: clearance and snow clearance. Write every one of these as "add the clearance and snow clearance tags".
+5. METAFIELD, a column of yes and no. IGNORE IT COMPLETELY. Never make an instruction out of it, never mention it, and never try to match its values back to rows — if the page's text arrives with that column detached from its rows, that is expected and it is not something to work out.
 
-/** Split a document's text into the separate instructions it contains. */
-export async function splitInstructions(text: string): Promise<SplitInstructions | null> {
-  if (!planningAvailable() || !text.trim()) return null;
+So a row reading "2025 | ski boots | | clearance | yes" is one instruction: "Add the clearance and snow clearance tags to ski boots tagged 2025."
+
+IF A ROW STATES NO YEAR TAG, DO NOT TURN IT INTO AN INSTRUCTION. Put the row's own words in "ignored" followed by " — no year tag stated", so a person sees exactly what was left alone and can decide for themselves.
+
+The rest:
+- Rewrite each row as a plain imperative sentence that stands on its own, so it makes sense with none of the others.
+- Keep the sheet's own wording for brands, product names, tags, years and numbers. Never round a number, never rename a brand, never tidy a tag.
+- A row whose note says the work is already done ("ALREADY DONE", "ex demo skis already have clearance tag") is still an instruction. The page checks whether anything actually needs changing and says so.
+- A heading, a date, a column header, a page number or a note to the reader is not an instruction. Put those in "ignored" so a person can check nothing was missed.
+- Two changes to the same products are still two entries. A row naming several brands is one entry when it is one change, and several when the sheet gives each brand a different number.
+- If part of the sheet asks for something you cannot express as a change to products, say so in "unclear" rather than guessing at it.
+
+Never invent a change the sheet does not ask for, and never merge two different discounts into an average.`;
+
+/**
+ * Split a document into the separate instructions it contains.
+ *
+ * A PDF is passed through as a PDF rather than as the text pulled out of it, because these sheets
+ * are tables and a text layer does not survive being one. The real sheet that exposed this is a
+ * four-page grid — year tag, category, which brands, what to do, and a yes/no metafield column —
+ * and pulling the text out returned all forty-odd rows first and then a loose run of "yes" and
+ * "no" with nothing to attach them to. Read as a document the columns stay with their rows.
+ */
+export async function splitInstructions(input: string | { pdf: Buffer } | { image: Buffer; mediaType: string }): Promise<SplitInstructions | null> {
+  if (!planningAvailable()) return null;
+  let content: Anthropic.ContentBlockParam[];
+  if (typeof input === "string") {
+    if (!input.trim()) return null;
+    content = [{ type: "text", text: input.slice(0, 60_000) }];
+  } else if ("pdf" in input) {
+    content = [{ type: "document", source: { type: "base64", media_type: "application/pdf", data: input.pdf.toString("base64") } }];
+  } else {
+    content = [{ type: "image", source: { type: "base64", media_type: input.mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: input.image.toString("base64") } }];
+  }
+
   const response = await getClient().messages.stream({
     model: EXTRACTION_MODEL,
-    max_tokens: 4000,
+    max_tokens: 8000,
     system: SPLIT_SYSTEM,
     output_config: { format: zodOutputFormat(SplitSchema), effort: "low" },
-    messages: [{ role: "user", content: text.slice(0, 60_000) }],
+    messages: [{ role: "user", content }],
   }).finalMessage();
 
   const body = response.content.find((b): b is Anthropic.TextBlock => b.type === "text")?.text;

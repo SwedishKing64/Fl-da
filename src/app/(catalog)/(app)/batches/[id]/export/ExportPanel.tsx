@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { downloadCsvAction, exportBatchAction, pushBatchAction, reconcileAction, rollbackAction } from "@/app/(catalog)/actions";
 import { Alert, Button, Card, fmtDate } from "@/app/(catalog)/ui";
+import { csvFilename } from "@/lib/catalog/csv";
 
 interface ExportFileRow { id: string; filename: string; rowCount: number; sizeBytes: number; partIndex: number; partCount: number; createdAt: string }
 
@@ -42,7 +43,7 @@ export function ExportPanel(props: { batchId: string; status: string; errors: st
       const url = URL.createObjectURL(new Blob([r.data!.text], { type: "text/csv;charset=utf-8" }));
       const link = document.createElement("a");
       link.href = url;
-      link.download = r.data!.filename;
+      link.download = csvFilename(r.data!.filename);
       document.body.appendChild(link);
       link.click();
       link.remove();

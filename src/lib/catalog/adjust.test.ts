@@ -572,3 +572,44 @@ describe("applying several plans as one step", () => {
     expect(out.applied).toEqual([1]);
   });
 });
+
+/**
+ * The bytes that go in the file, not just the name on it.
+ *
+ * A download named .csv that is not readable as a CSV is the same failure with a better disguise.
+ */
+describe("what comes out is a CSV", () => {
+  const out = applyPlan(text, { scope: { vendors: ["Karbon"] }, operations: [{ kind: "addTags", tags: ["shape-check"] }] });
+
+  it("parses back with the same header and the same number of rows", () => {
+    const before = parseCsv(text).filter((r) => r.some((c) => c.trim() !== ""));
+    const after = parseCsv(out.csv).filter((r) => r.some((c) => c.trim() !== ""));
+    expect(after.length).toBe(before.length);
+    expect(after[0]).toEqual(before[0]);
+  });
+
+  it("gives every row the same number of columns as the header", () => {
+    const after = parseCsv(out.csv).filter((r) => r.some((c) => c.trim() !== ""));
+    expect(after.every((r) => r.length === after[0].length)).toBe(true);
+  });
+
+  it("ends with a newline and uses CRLF, as Shopify's own exports do", () => {
+    expect(out.csv.endsWith("\r\n")).toBe(true);
+    expect(out.csv.split("\r\n").length - 1).toBeGreaterThan(100);
+  });
+
+  it("carries no byte-order mark, because the file it came from had none", () => {
+    expect(out.csv.charCodeAt(0)).not.toBe(0xfeff);
+  });
+
+  it("quotes a field holding a comma or a quote, so it reads back as one field", () => {
+    const tricky = 'Handle,Title,Tags\r\nx,"Jacket, mens","a,b"\r\n';
+    const r = applyPlan(tricky, { scope: {}, operations: [{ kind: "addTags", tags: ["c"] }] });
+    const rows = parseCsv(r.csv).filter((row) => row.some((c) => c.trim() !== ""));
+    expect(rows[1][1]).toBe("Jacket, mens");
+    // The tag list is rebuilt with one space after each comma. That is inside the cell the change
+    // was asked to make; every other cell still has to come back byte for byte, which is what
+    // verifyOnlyIntended proves on every file.
+    expect(rows[1][2]).toBe("a, b, c");
+  });
+});

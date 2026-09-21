@@ -509,3 +509,32 @@ export function validateCsvFile(content: string): CsvIssue[] {
   }
   return issues;
 }
+
+/**
+ * The name to save a CSV under.
+ *
+ * Everything this app hands over is a Shopify product CSV, and the name has to say so — a file
+ * that arrives without the extension gets opened by the wrong thing, and Shopify's importer will
+ * not take it at all.
+ *
+ * On the bulk page the name comes from whatever the person's own export was called, which is the
+ * one name here nobody has checked: it can carry a path separator from a drag, characters Windows
+ * will not write, a trailing dot, or another extension entirely. So it is cleaned in one place
+ * that every download goes through, rather than each one trusting the name it was handed.
+ *
+ * It also makes the server's Content-Disposition header safe by construction instead of by an
+ * assumption about what happened upstream — a quote in a filename would otherwise end the header
+ * early.
+ */
+export function csvFilename(name: string, suffix = ""): string {
+  const leaf = name.split(/[/\\]/).pop() ?? "";
+  const safe = leaf
+    .replace(/\.(csv|tsv|txt|xlsx?)$/i, "")
+    .replace(/[\u0000-\u001f\u007f]/g, "")
+    .replace(/["<>:|?*]/g, "")
+    .replace(/\s+/g, " ")
+    .replace(/^[.\s]+|[.\s]+$/g, "")
+    .slice(0, 100)
+    .trim();
+  return `${safe || "products"}${suffix}.csv`;
+}

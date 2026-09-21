@@ -1,16 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  buildRows,
-  columnsFor,
-  escapeCsvField,
-  generateCsv,
-  generateCsvParts,
-  isPublicHttpsUrl,
-  parseCsv,
-  validateCsvFile,
-  validateProducts,
-  type CsvProduct,
-} from "./csv";
+import { buildRows, columnsFor, csvFilename, escapeCsvField, generateCsv, generateCsvParts, isPublicHttpsUrl, parseCsv, type CsvProduct, validateCsvFile, validateProducts } from "./csv";
 import { buildHandle, isValidHandle, slugify } from "./handle";
 
 const skis: CsvProduct = {
@@ -279,5 +268,59 @@ describe("the columns the shop leaves to a person", () => {
     expect(withCode[1][withCode[0].indexOf("Variant Barcodes")]).toBe("887445290001");
     const without = parseCsv(generateCsv([{ ...skis, variants: [{ ...skis.variants[0], barcode: undefined }] }]));
     expect(without[1][without[0].indexOf("Variant Barcodes")]).toBe("");
+  });
+});
+
+/**
+ * What the browser saves the download as.
+ *
+ * On the bulk page the name comes from the person's own export, which is the one name in this app
+ * nobody has cleaned. A file saved without .csv is one Shopify's importer will not take and the
+ * wrong program opens.
+ */
+describe("csvFilename", () => {
+  it("always ends in .csv", () => {
+    for (const name of ["products", "products.csv", "products.CSV", "products.xlsx", "a.b.c", "", "   ", "."]) {
+      expect(csvFilename(name).endsWith(".csv")).toBe(true);
+    }
+  });
+
+  it("does not double up the extension", () => {
+    expect(csvFilename("products_export_1 (4).csv")).toBe("products_export_1 (4).csv");
+    expect(csvFilename("products_export_1 (4).CSV")).toBe("products_export_1 (4).csv");
+  });
+
+  it("adds the suffix before the extension, not after it", () => {
+    expect(csvFilename("goggles.csv", "-updated")).toBe("goggles-updated.csv");
+    expect(csvFilename("goggles", "-updated")).toBe("goggles-updated.csv");
+  });
+
+  it("keeps only the name when a path comes in from a drag", () => {
+    expect(csvFilename("/Users/sam/Downloads/goggles.csv")).toBe("goggles.csv");
+    expect(csvFilename("C:\\Users\\sam\\goggles.csv")).toBe("goggles.csv");
+  });
+
+  it("drops the characters a filesystem or an HTTP header will not take", () => {
+    expect(csvFilename('go"ggles')).toBe("goggles.csv");
+    expect(csvFilename("go<>:|?*ggles")).toBe("goggles.csv");
+  });
+
+  it("lets nothing through that could end an HTTP header early", () => {
+    // This name goes straight into Content-Disposition on the export download.
+    for (const nasty of ['a"b', "a\r\nContent-Type: text/html", "a\nb", "a\rb", "a\u0000b"]) {
+      const out = csvFilename(nasty);
+      expect(out).not.toMatch(/["\r\n\u0000]/);
+      expect(out.endsWith(".csv")).toBe(true);
+    }
+  });
+
+  it("falls back to a name rather than producing a bare extension", () => {
+    expect(csvFilename("")).toBe("products.csv");
+    expect(csvFilename("...")).toBe("products.csv");
+    expect(csvFilename(".csv")).toBe("products.csv");
+  });
+
+  it("keeps a name someone would recognise", () => {
+    expect(csvFilename("2026 October clearance.csv", "-updated")).toBe("2026 October clearance-updated.csv");
   });
 });

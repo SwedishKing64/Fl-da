@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { logAdjustmentAction, planAdjustmentAction, readInstructionSheetAction, readSheetAgainstFilesAction } from "@/app/(catalog)/actions";
 import { applyPlan, describeFile, foldPlans, isWholeFile, type AdjustResult, type FoldStep, type Plan } from "@/lib/catalog/adjust";
+import { csvFilename } from "@/lib/catalog/csv";
 import { Alert, Button, Card, INPUT, cx } from "@/app/(catalog)/ui";
 
 /**
@@ -276,8 +277,7 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
    * of work that is not in there and only finds out from the shop.
    */
   function download(sheet: Sheet) {
-    const base = sheet.name.replace(/\.csv$/i, "") || "products";
-    const out = appliedTo(sheet.name) > 0 ? `${base}-updated.csv` : `${base}.csv`;
+    const out = csvFilename(sheet.name, appliedTo(sheet.name) > 0 ? "-updated" : "");
     const url = URL.createObjectURL(new Blob([sheet.csv], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a");
     link.href = url; link.download = out;

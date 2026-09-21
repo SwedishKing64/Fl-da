@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireApiUser } from "@/lib/catalog/auth";
 import { readExportFile } from "@/lib/catalog/pipeline";
+import { csvFilename } from "@/lib/catalog/csv";
 
 export const runtime = "nodejs";
 
@@ -14,11 +15,12 @@ export async function GET(_req: NextRequest, ctx: RouteContext<"/api/catalog/exp
     console.error(`[export-download] ${id}: ${file.reason}`);
     return NextResponse.json({ error: file.reason }, { status: 404 });
   }
-  // The filename is slugified to lowercase ASCII and hyphens upstream, so it is header-safe.
+  // Made header-safe here rather than assumed safe from upstream: a quote in a filename would
+  // end the header early, and this also guarantees the browser saves it as a .csv.
   return new NextResponse(new Uint8Array(file.content), {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="${file.filename}"`,
+      "Content-Disposition": `attachment; filename="${csvFilename(file.filename)}"`,
       "Content-Length": String(file.content.byteLength),
       "Cache-Control": "no-store",
     },

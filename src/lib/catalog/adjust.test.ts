@@ -1,6 +1,6 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { applyPlan, describeFile, isWholeFile, money, verifyOnlyIntended, type Plan } from "./adjust";
+import { applyPlan, describeFile, foldPlans, isWholeFile, money, verifyOnlyIntended, type FoldStep, type Plan } from "./adjust";
 import { parseCsv } from "./csv";
 
 /**
@@ -520,5 +520,55 @@ describe("an export with a line above the header", () => {
   it("leaves a file that already starts with its header exactly as it was", () => {
     const out = applyPlan(text, { scope: { vendors: ["Karbon"] }, operations: [{ kind: "addTags", tags: ["test-tag"] }] });
     expect(out.warnings.some((w) => w.includes("above the column headings"))).toBe(false);
+  });
+});
+
+/**
+ * A group of changes applied as one step.
+ *
+ * The failure this guards against has no error message: the changes look applied on screen, and
+ * the file that comes down the wire is the one that went up. So it is asserted on the bytes.
+ */
+describe("applying several plans as one step", () => {
+  const tagStep = (id: number, vendor: string, tag: string): FoldStep =>
+    ({ id, label: `${vendor} → ${tag}`, plan: { scope: { vendors: [vendor] }, operations: [{ kind: "addTags", tags: [tag] }] } });
+
+  it("hands back a file that really is different from the one it went in as", () => {
+    const out = foldPlans([{ name: "a.csv", csv: text }], [tagStep(1, "Karbon", "step-one")]);
+    expect(out.applied).toEqual([1]);
+    expect(out.changes).toBeGreaterThan(0);
+    expect(out.files[0].csv).not.toBe(text);
+    expect(out.files[0].csv).toContain("step-one");
+    expect(out.files[0].changes).toBe(out.changes);
+  });
+
+  it("carries each step onto the result of the one before it", () => {
+    const out = foldPlans([{ name: "a.csv", csv: text }], [tagStep(1, "Karbon", "step-one"), tagStep(2, "Karbon", "step-two")]);
+    expect(out.applied).toEqual([1, 2]);
+    // Both tags on the same products: the second step read the first step's file, not the original.
+    const both = parseCsv(out.files[0].csv).filter((r) => r.some((c) => c.trim() !== ""));
+    const tagsAt = both[0].indexOf("Tags");
+    const rows = both.slice(1).filter((r) => (r[tagsAt] ?? "").includes("step-one"));
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((r) => r[tagsAt].includes("step-two"))).toBe(true);
+  });
+
+  it("leaves a file alone when no step matches anything in it", () => {
+    const out = foldPlans([{ name: "a.csv", csv: text }], [tagStep(1, "Nobody At All", "nope")]);
+    expect(out.files[0].csv).toBe(text);
+    expect(out.files[0].changes).toBe(0);
+  });
+
+  it("counts the changes per file, so the page can say which files to download", () => {
+    const out = foldPlans([{ name: "a.csv", csv: text }, { name: "b.csv", csv: "Handle,Title\r\nx,Y\r\n" }], [tagStep(1, "Karbon", "only-in-a")]);
+    expect(out.files[0].changes).toBeGreaterThan(0);
+    expect(out.files[1].changes).toBe(0);
+    expect(out.files[1].csv).toBe("Handle,Title\r\nx,Y\r\n");
+  });
+
+  it("reports nothing applied when every step is a no-op, rather than a changed file", () => {
+    const out = foldPlans([{ name: "a.csv", csv: text }], [tagStep(1, "Nobody At All", "nope")]);
+    expect(out.changes).toBe(0);
+    expect(out.applied).toEqual([1]);
   });
 });

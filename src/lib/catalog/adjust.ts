@@ -97,6 +97,11 @@ export interface AdjustResult {
    * handed back instead. Not a warning to skim past: it means this tool has a fault.
    */
   refused?: boolean;
+  /**
+   * Rows removed from above the header. The file has to be rewritten for this even when no cell
+   * changed, because leaving them in is the whole reason Shopify would not take it.
+   */
+  preambleRemoved?: number;
 }
 
 
@@ -345,7 +350,7 @@ export function applyPlan(text: string, plan: Plan): AdjustResult {
       ],
     };
   }
-  return { csv, changes, matched: inScope.size, products: firstRowOf.size, variantRows: rows.length, warnings };
+  return { csv, changes, matched: inScope.size, products: firstRowOf.size, variantRows: rows.length, warnings, ...(preamble.length ? { preambleRemoved: preamble.length } : {}) };
 }
 
 /**
@@ -424,4 +429,58 @@ export function describeFile(text: string): { products: number; variantRows: num
   // them, and left in they are nearly half of this shop's vocabulary — enough, in alphabetical
   // order, to push every shelf tag out of what an instruction is read against.
   return { products: seen.size, variantRows, vendors: sorted(vendors), types: sorted(types), tags: withoutGenerated(sorted(tags)) };
+}
+
+export interface FoldStep { id: number; plan: Plan; label: string }
+
+export interface FoldOutcome {
+  /** Every file, changed where the steps said. A file nothing touched comes back as it went in. */
+  files: Array<{ name: string; csv: string; changes: number }>;
+  /** The ids that ran, the ids the guard threw out, and what the ones that ran did. */
+  applied: number[];
+  refused: number[];
+  changes: number;
+  matched: number;
+  lines: string[];
+}
+
+/**
+ * Run several plans over several files, in order, as one step.
+ *
+ * Each plan still runs on its own and is still checked on its own — a plan that fails the guard is
+ * dropped and named, and the ones on either side of it are unaffected, because a group of changes
+ * the person approved together is not a reason to weaken the one thing this tool promises.
+ *
+ * Order matters and is the caller's: a later plan sees what an earlier one did, so "everything 2025
+ * into clearance" followed by "except the Oakleys back out" ends where a person would expect.
+ *
+ * This lives here rather than in the page because it is the part that must be right. The page can
+ * be wrong about a label; this being wrong means someone downloads a file they think carries their
+ * afternoon's work and it carries none of it.
+ */
+export function foldPlans(files: Array<{ name: string; csv: string }>, steps: FoldStep[]): FoldOutcome {
+  const working = files.map((f) => ({ name: f.name, csv: f.csv, changes: 0 }));
+  const applied: number[] = [];
+  const refused: number[] = [];
+  const lines: string[] = [];
+  let changes = 0;
+  let matched = 0;
+
+  for (const step of steps) {
+    const results = working.map((f) => applyPlan(f.csv, step.plan));
+    if (results.some((r) => r.refused)) { refused.push(step.id); continue; }
+    results.forEach((r, i) => {
+      // A file this step did not touch keeps the bytes it arrived with. Taking the rewritten copy
+      // would re-quote fields that never needed it and hand back a file that looks edited and is
+      // not — and re-importing a file nobody changed should be a true no-op.
+      if (r.changes.length > 0 || (r.preambleRemoved ?? 0) > 0) working[i].csv = r.csv;
+      working[i].changes += r.changes.length;
+    });
+    changes += results.reduce((n, r) => n + r.changes.length, 0);
+    matched = Math.max(matched, results.reduce((n, r) => n + r.matched, 0));
+    lines.push(step.label);
+    applied.push(step.id);
+  }
+
+  return { files: working, applied, refused, changes, matched, lines };
 }

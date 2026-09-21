@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { logAdjustmentAction, planAdjustmentAction, readInstructionSheetAction, readSheetAgainstFilesAction } from "@/app/(catalog)/actions";
-import { applyPlan, describeFile, isWholeFile, type AdjustResult, type Plan } from "@/lib/catalog/adjust";
+import { applyPlan, describeFile, foldPlans, isWholeFile, type AdjustResult, type FoldStep, type Plan } from "@/lib/catalog/adjust";
 import { Alert, Button, Card, INPUT, cx } from "@/app/(catalog)/ui";
 
 /**
@@ -187,54 +187,37 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
    * undo, not a weaker check.
    */
   function applyRows(ids: number[], title: string) {
-    const wanted = rows.filter((r) => ids.includes(r.id) && r.state === "ready" && r.plan && r.blocked.length === 0);
-    if (wanted.length === 0) return;
-
-    setBusy("applying"); setError(null); setSaved(null);
-    const before = sheets.map((s) => s.csv);
-    const working = sheets.map((s) => ({ name: s.name, csv: s.csv }));
-    const lines: string[] = [];
-    const refusedRows: string[] = [];
-    const done: number[] = [];
-    let changes = 0;
-    let matched = 0;
-    const perFile = new Map<string, number>(working.map((s) => [s.name, 0]));
-
-    for (const row of wanted) {
-      if (isWholeFile((row.plan as Plan).scope) && !confirmedWhole.includes(row.id)) continue;
-      const results = working.map((s) => ({ name: s.name, result: applyPlan(s.csv, row.plan as Plan) }));
-      if (results.some((r) => r.result.refused)) { refusedRows.push(row.instruction); continue; }
-      for (const r of results) {
-        const at = working.find((s) => s.name === r.name);
-        if (!at) continue;
-        at.csv = r.result.csv;
-        perFile.set(r.name, (perFile.get(r.name) ?? 0) + r.result.changes.length);
-      }
-      changes += countChanges(results);
-      matched = Math.max(matched, countMatched(results));
-      lines.push(row.understood || row.instruction);
-      done.push(row.id);
-    }
-
-    if (done.length === 0) {
-      setBusy(null);
-      setError(refusedRows.length
-        ? `Nothing was applied. ${refusedRows.length} change${refusedRows.length === 1 ? "" : "s"} failed the check that nothing moves except what was asked for.`
-        : "Nothing was applied — every change in that group needs its own confirmation first.");
+    const wanted = rows.filter((r) => ids.includes(r.id) && r.state === "ready" && r.plan && r.blocked.length === 0
+      && (!isWholeFile((r.plan as Plan).scope) || confirmedWhole.includes(r.id)));
+    if (wanted.length === 0) {
+      setError("Nothing was applied — every change in that group still needs its own confirmation.");
       return;
     }
 
-    const nextSheets = sheets.map((s, i) => ({ ...s, history: [...s.history, before[i]], csv: working[i].csv }));
+    setBusy("applying"); setError(null); setSaved(null);
+    const steps: FoldStep[] = wanted.map((r) => ({ id: r.id, plan: r.plan as Plan, label: r.understood || r.instruction }));
+    const out = foldPlans(sheets.map((s) => ({ name: s.name, csv: s.csv })), steps);
+
+    if (out.applied.length === 0) {
+      setBusy(null);
+      setError(`Nothing was applied. ${out.refused.length} change${out.refused.length === 1 ? "" : "s"} failed the check that nothing moves except what was asked for.`);
+      return;
+    }
+
+    const nextSheets = sheets.map((s, i) => ({ ...s, history: [...s.history, s.csv], csv: out.files[i].csv }));
     setSheets(nextSheets);
-    setFeed((f) => [...f, { title, lines, changes, matched, steps: done.length, perFile: [...perFile].map(([name, n]) => ({ name, changes: n })) }]);
+    setFeed((f) => [...f, {
+      title, lines: out.lines, changes: out.changes, matched: out.matched, steps: out.applied.length,
+      perFile: out.files.map((f2) => ({ name: f2.name, changes: f2.changes })),
+    }]);
     // Everything still to come is re-measured against the files as they now stand, so a later row
     // sees what an earlier one did and a row made redundant by it reports nothing left to change.
     setRows((current) => {
-      const marked = current.map((r) => (done.includes(r.id) ? { ...r, state: "applied" as const, results: [] } : r));
+      const marked = current.map((r) => (out.applied.includes(r.id) ? { ...r, state: "applied" as const, results: [] } : r));
       return marked.map((r) => ({ ...r, results: measure(r, nextSheets) }));
     });
-    if (refusedRows.length) {
-      setError(`${refusedRows.length} change${refusedRows.length === 1 ? " was" : "s were"} left out — ${refusedRows.length === 1 ? "it" : "they"} failed the check that nothing moves except what was asked for. Everything else in the group was applied.`);
+    if (out.refused.length) {
+      setError(`${out.refused.length} change${out.refused.length === 1 ? " was" : "s were"} left out — ${out.refused.length === 1 ? "it" : "they"} failed the check that nothing moves except what was asked for. Everything else in the group was applied.`);
     }
     setBusy(null);
     setPreview(null);
@@ -246,7 +229,12 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
     const before = sheets.map((s) => s.csv);
     const nextSheets = sheets.map((s, i) => {
       const hit = preview.results.find((r) => r.name === s.name);
-      return hit ? { ...s, history: [...s.history, before[i]], csv: hit.result.csv } : s;
+      // Same rule as a group apply: a file this change did not touch keeps the bytes it arrived
+      // with, so re-importing a file nobody changed is a true no-op.
+      const touched = hit !== undefined && (hit.result.changes.length > 0 || (hit.result.preambleRemoved ?? 0) > 0);
+      // Every file gets a history entry whether it moved or not, so one undo is one step back for
+      // all of them. Let the lengths drift and undo starts taking files back to different moments.
+      return { ...s, history: [...s.history, before[i]], csv: touched ? hit.result.csv : s.csv };
     });
     setSheets(nextSheets);
     setFeed((f) => [...f, {
@@ -280,9 +268,16 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
     setSaved(null);
   }
 
+  /**
+   * Hand over one file.
+   *
+   * The name tells the truth about the contents. A file nothing was applied to keeps its own name:
+   * calling it "-updated" when it is the file that went in is how someone re-imports an afternoon
+   * of work that is not in there and only finds out from the shop.
+   */
   function download(sheet: Sheet) {
     const base = sheet.name.replace(/\.csv$/i, "") || "products";
-    const out = `${base}-updated.csv`;
+    const out = appliedTo(sheet.name) > 0 ? `${base}-updated.csv` : `${base}.csv`;
     const url = URL.createObjectURL(new Blob([sheet.csv], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a");
     link.href = url; link.download = out;
@@ -292,7 +287,11 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
   }
 
   function downloadAll() {
-    const names = sheets.map(download);
+    const names = sheets.filter((s) => appliedTo(s.name) > 0).map(download);
+    if (names.length === 0) {
+      setError("Nothing has been applied yet, so there is no updated file to download. Every file here is still the one you loaded.");
+      return;
+    }
     setSaved(names.join(", "));
     void logAdjustmentAction({
       instruction: feed.map((f) => f.title).join(" | "),
@@ -303,6 +302,11 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
       filename: names.join(", "),
     });
   }
+
+  // How many cells have actually been written into each file. Derived from the feed rather than
+  // held alongside it, so undo takes it back without a second thing to keep in step.
+  const appliedTo = (name: string) => feed.reduce((n, f) => n + (f.perFile.find((p) => p.name === name)?.changes ?? 0), 0);
+  const edited = sheets.filter((s) => appliedTo(s.name) > 0);
 
   const wholeFile = preview ? isWholeFile(preview.plan.scope) : false;
   const refused = preview?.results.some((r) => r.result.refused) === true;
@@ -331,7 +335,12 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
     <div className="space-y-6">
       {!aiEnabled && <Alert tone="warning">No API key is set, so instructions cannot be read. Add <strong>ANTHROPIC_API_KEY</strong> in Settings.</Alert>}
 
-      <Card title="The files from Shopify" actions={sheets.length > 0 ? <Button size="sm" variant="primary" onClick={downloadAll}>Download {sheets.length === 1 ? "the CSV" : `all ${sheets.length}`}</Button> : undefined}>
+      <Card
+        title="The files from Shopify"
+        actions={edited.length > 0
+          ? <Button size="sm" variant="primary" onClick={downloadAll}>Download the {edited.length === 1 ? "updated file" : `${edited.length} updated files`}</Button>
+          : undefined}
+      >
         <p className="mb-3 text-sm text-[var(--ink-soft)]">
           In Shopify: <strong>Products → Export</strong>. Add as many exports as you like — the sheet is matched against whatever is loaded, and only the changes that can touch these products are put in front of you.
         </p>
@@ -348,10 +357,13 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
               <li key={s.name} className="flex flex-wrap items-center justify-between gap-2 py-2">
                 <div>
                   <span className="font-medium">{s.name}</span>
+                  {appliedTo(s.name) > 0
+                    ? <span className="ml-2 rounded-full bg-[var(--violet)] px-2 py-0.5 text-[11px] font-semibold text-white tabular-nums">{appliedTo(s.name)} cells changed</span>
+                    : <span className="ml-2 text-[11px] text-[var(--ink-soft)]">unchanged</span>}
                   <span className="ml-2 text-xs text-[var(--ink-soft)]">{s.products} products · {s.variantRows} rows · {s.types.slice(0, 4).join(", ") || s.vendors.slice(0, 4).join(", ")}{s.types.length > 4 ? ` +${s.types.length - 4}` : ""}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Button size="sm" onClick={() => setSaved(download(s))}>Download</Button>
+                  <Button size="sm" variant={appliedTo(s.name) > 0 ? "primary" : undefined} onClick={() => setSaved(download(s))}>Download</Button>
                   <Button size="sm" variant="danger" onClick={() => { setSheets((x) => x.filter((y) => y.name !== s.name)); setPreview(null); setRows([]); setSheetNote(null); }}>Remove</Button>
                 </div>
               </li>
@@ -473,6 +485,26 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
               </div>
             );
           })}
+
+          {changesSoFar > 0 && (
+            <div className="mt-4 rounded-xl border-2 border-[var(--violet)] bg-[var(--alp-snow)] px-3 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="text-sm">
+                  <div className="font-semibold">Ready to import — <span className="tabular-nums">{changesSoFar}</span> cell{changesSoFar === 1 ? "" : "s"} changed across {edited.length} file{edited.length === 1 ? "" : "s"}.</div>
+                  <div className="mt-0.5 text-xs text-[var(--ink-soft)]">Only the files something was written into are listed. The rest are still the ones you loaded, so there is nothing to re-import for them.</div>
+                </div>
+                <Button variant="primary" onClick={downloadAll}>Download {edited.length === 1 ? "it" : `all ${edited.length}`}</Button>
+              </div>
+              <ul className="mt-2 divide-y divide-[var(--line-soft)] text-sm">
+                {edited.map((s) => (
+                  <li key={s.name} className="flex flex-wrap items-center justify-between gap-2 py-1.5">
+                    <span>{s.name.replace(/\.csv$/i, "")}<span className="ml-2 text-xs text-[var(--ink-soft)] tabular-nums">{appliedTo(s.name)} cells</span></span>
+                    <Button size="sm" onClick={() => setSaved(download(s))}>Download this one</Button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {setAside.length > 0 && (
             <div className="mt-4 rounded-xl border border-dashed border-[var(--line)] px-3 py-2.5 text-xs text-[var(--ink-soft)]">

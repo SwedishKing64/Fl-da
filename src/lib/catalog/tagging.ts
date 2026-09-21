@@ -388,31 +388,12 @@ export function tagsFor(name: string): string[] {
 }
 
 /**
- * Tags Shopify writes by itself — price bands, sizes, lengths and colours are all derived from the
- * variants once a product is in the store.
- *
- * These matter twice over. The importer must not write them, or it would fight Shopify over the
- * same tag. And the template learner must not *read* them either: a brand export is full of
- * colour-true-black and size-medium, and without this a template would learn those as house
- * conventions and stamp one brand's colours onto every new product.
+ * Tags Shopify writes by itself. The rule lives in its own module because the bulk page needs it
+ * too and must not pull the whole taxonomy into the browser to get it; it is re-exported here so
+ * the rest of the tagging code reads as it always did.
  */
-const SHOPIFY_GENERATED: RegExp[] = [
-  /^\d+-\d+$/, // price band, e.g. 500-600
-  /^under-\d+$/, // e.g. under-50
-  /^size-/i,
-  /^length-/i, // board and ski lengths, e.g. length-156, length-156w
-  /^colou?r-/i,
-];
-
-export function isShopifyGenerated(tag: string): boolean {
-  const value = tag.trim();
-  return SHOPIFY_GENERATED.some((pattern) => pattern.test(value));
-}
-
-/** Drop anything Shopify maintains for itself. */
-export function withoutGenerated(tags: string[]): string[] {
-  return tags.filter((tag) => !isShopifyGenerated(tag));
-}
+import { isShopifyGenerated } from "./generated-tags";
+export { isShopifyGenerated, withoutGenerated } from "./generated-tags";
 
 /**
  * Tags a person puts on by hand: promotions, sale events, and stocktake markers.

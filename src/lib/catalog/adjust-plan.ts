@@ -205,7 +205,7 @@ export async function planAdjustment(
     `The file holds ${file.products} products.`,
     `Vendors in it: ${file.vendors.join(", ") || "(none)"}`,
     `Types in it: ${file.types.join(", ") || "(none)"}`,
-    `Tags in it: ${file.tags.slice(0, 120).join(", ") || "(none)"}`,
+    `Tags in it: ${file.tags.slice(0, 400).join(", ") || "(none)"}`,
     "",
     `Instruction: ${instruction.trim()}`,
   ].join("\n");
@@ -436,7 +436,7 @@ export async function screenInstructions(
   const context = [
     `Types in the loaded files: ${file.types.join(", ") || "(none)"}`,
     `Vendors in them: ${file.vendors.join(", ") || "(none)"}`,
-    `Tags in them: ${file.tags.slice(0, 200).join(", ") || "(none)"}`,
+    `Tags in them: ${file.tags.slice(0, 400).join(", ") || "(none)"}`,
     "",
     "The instructions:",
     ...instructions.map((line, i) => `${i}. ${line}`),

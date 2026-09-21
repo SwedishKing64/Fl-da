@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { applyPlan, describeFile, isWholeFile, money, verifyOnlyIntended, type Plan } from "./adjust";
 import { parseCsv } from "./csv";
@@ -431,6 +431,54 @@ describe("an instruction across several files", () => {
       expect(out.refused).toBeUndefined();
       const grid = parseCsv(text).filter((r) => r.some((c) => c.trim() !== ""));
       expect(verifyOnlyIntended(grid, out.csv, out.changes)).toEqual([]);
+    }
+  });
+});
+
+/**
+ * The vocabulary an instruction is grounded in.
+ *
+ * Everything on the bulk page hangs off this list: a category the file does not appear to have is
+ * refused rather than silently widened, so a shelf tag missing from here is a row that cannot run.
+ * Shopify's own colour, size and length tags are nearly half of what a multi-file load carries,
+ * and in alphabetical order they sit right where the shelf tags do.
+ */
+describe("what an instruction is grounded in", () => {
+  const DIR = "/root/.claude/uploads/94fb8bfb-35a9-5176-afe9-8fcc0dec9eb3";
+
+  it("leaves out the tags Shopify writes for itself", () => {
+    const { tags } = describeFile(text);
+    expect(tags.length).toBeGreaterThan(20);
+    expect(tags.filter((t) => /^(colou?r|size|length)-/i.test(t))).toEqual([]);
+    expect(tags.filter((t) => /^\d+-\d+$/.test(t) || /^under-\d+$/.test(t))).toEqual([]);
+  });
+
+  it("keeps the shelf tags a clearance sheet names", () => {
+    const { tags, types } = describeFile(text);
+    const has = (name: string) => tags.some((t) => t.toLowerCase() === name) || types.some((t) => t.toLowerCase() === name);
+    // Every one of these is a category column in the buyer's October sheet.
+    for (const shelf of ["goggles", "gloves", "ski-helmets", "midlayers", "snow clothing"]) {
+      expect(has(shelf), `${shelf} must survive into the grounding vocabulary`).toBe(true);
+    }
+    expect(tags).toContain("snow clearance");
+    expect(tags).toContain("clearance");
+  });
+
+  it("keeps them even when every export is loaded at once", () => {
+    // The real complaint: several exports open together. Before the generated tags were dropped,
+    // the merged list ran to 399 and the shelf tags all sat past where the prompt was truncated.
+    const files = readdirSync(DIR).filter((f) => f.endsWith(".csv")).sort();
+    expect(files.length).toBeGreaterThan(5);
+    const merged = new Set<string>();
+    for (const f of files) for (const t of describeFile(readFileSync(`${DIR}/${f}`, "utf8")).tags) merged.add(t);
+    const tags = [...merged].sort((a, b) => a.localeCompare(b));
+
+    expect(tags.filter((t) => /^(colou?r|size|length)-/i.test(t))).toEqual([]);
+    // Everything the sheet scopes by has to be inside the 400 the prompt carries.
+    for (const shelf of ["goggles", "gloves", "ski-helmets", "snowboard-bindings", "midlayers", "ski poles", "snow clearance"]) {
+      const at = tags.findIndex((t) => t.toLowerCase() === shelf);
+      expect(at, `${shelf} is missing from the merged vocabulary`).toBeGreaterThanOrEqual(0);
+      expect(at, `${shelf} falls outside the 400 tags the prompt carries`).toBeLessThan(400);
     }
   });
 });

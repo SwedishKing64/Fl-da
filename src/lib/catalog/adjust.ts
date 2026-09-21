@@ -19,6 +19,7 @@
  */
 
 import { parseCsv } from "./csv";
+import { withoutGenerated } from "./generated-tags";
 
 export interface Scope {
   /** Vendor names, matched case-insensitively. Any one of them matches. */
@@ -391,5 +392,8 @@ export function describeFile(text: string): { products: number; variantRows: num
     for (const tag of splitTags(at(row, "Tags"))) tags.add(tag);
   }
   const sorted = (s: Set<string>) => [...s].sort((a, b) => a.localeCompare(b));
-  return { products: seen.size, variantRows, vendors: sorted(vendors), types: sorted(types), tags: sorted(tags) };
+  // Shopify's own colour, size, length and price-band tags are dropped. Nobody scopes a change by
+  // them, and left in they are nearly half of this shop's vocabulary — enough, in alphabetical
+  // order, to push every shelf tag out of what an instruction is read against.
+  return { products: seen.size, variantRows, vendors: sorted(vendors), types: sorted(types), tags: withoutGenerated(sorted(tags)) };
 }

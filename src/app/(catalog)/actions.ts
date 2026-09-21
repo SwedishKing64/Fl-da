@@ -15,7 +15,7 @@ import { enrichBatchSeo } from "@/lib/catalog/seo";
 import { slugify } from "@/lib/catalog/handle";
 import { CURRENCIES, type AppSettings } from "@/lib/catalog/types";
 import { seedDefaults } from "@/lib/catalog/seed";
-import { planAdjustment, planningAvailable, describePlan, splitInstructions, type SplitInstructions } from "@/lib/catalog/adjust-plan";
+import { planAdjustment, planAdjustments, screenInstructions, planningAvailable, describePlan, splitInstructions, type SplitInstructions } from "@/lib/catalog/adjust-plan";
 import type { Plan } from "@/lib/catalog/adjust";
 import { initialsFrom } from "@/lib/catalog/tagging";
 import { answerFeedback, feedbackAvailable, withRule, type FeedbackTurn } from "@/lib/catalog/feedback";
@@ -739,6 +739,73 @@ export async function planAdjustmentAction(
     const result = await planAdjustment(instruction, file);
     if (!result) return { ok: false, error: "Could not make sense of that instruction. Try naming the brand or tag and the change." };
     return { ok: true, data: { ...result, described: describePlan(result.plan) } };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/**
+ * Read a whole sheet of instructions against the loaded files, in one go.
+ *
+ * Two things make a sheet slow to work through a row at a time, and both are fixed here rather
+ * than in the browser. Next dispatches server actions one at a time per client, so forty rows
+ * planned from the browser is forty round trips end to end however quick each one is — they are
+ * read several at a time inside this single action instead.
+ *
+ * And most of a season's sheet is about products that are not in the export you happen to have
+ * open. The sheet and the files are matched against each other first, in one call, so the rows
+ * that cannot touch anything loaded are set aside with their reason rather than walked through.
+ * Loading the missing export brings them straight back.
+ */
+export async function readSheetAgainstFilesAction(
+  instructions: string[],
+  file: { products: number; vendors: string[]; types: string[]; tags: string[] },
+): Promise<ActionResult<{
+  rows: Array<{
+    instruction: string;
+    group: string;
+    relevant: boolean;
+    why: string;
+    plan: Plan | null;
+    understood: string;
+    unclear: string;
+    blocked: string[];
+    described: string[];
+    failed: string;
+  }>;
+}>> {
+  await requireUser();
+  if (!planningAvailable()) return { ok: false, error: "Set ANTHROPIC_API_KEY to read instructions. Until then this page cannot work out what to change." };
+  try {
+    const screened = await screenInstructions(instructions, file);
+    const wanted = screened.filter((r) => r.relevant);
+    const planned = await planAdjustments(wanted.map((r) => r.instruction), file);
+
+    const byInstruction = new Map<string, (typeof planned)[number]>();
+    wanted.forEach((r, i) => byInstruction.set(`${r.index}`, planned[i]));
+
+    return {
+      ok: true,
+      data: {
+        rows: screened.map((r) => {
+          const got = byInstruction.get(`${r.index}`);
+          const p = got?.planned ?? null;
+          return {
+            instruction: r.instruction,
+            // The screen names the group; where it could not, the grounded plan usually can.
+            group: r.group || p?.category || "",
+            relevant: r.relevant,
+            why: r.why,
+            plan: p?.plan ?? null,
+            understood: p?.understood ?? "",
+            unclear: p?.unclear ?? "",
+            blocked: p?.blocked ?? [],
+            described: p ? describePlan(p.plan) : [],
+            failed: got?.failed ?? "",
+          };
+        }),
+      },
+    };
   } catch (err) {
     return fail(err);
   }

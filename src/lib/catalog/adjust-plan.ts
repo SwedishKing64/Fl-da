@@ -48,6 +48,8 @@ export interface PlannedChange {
   unclear: string;
   /** Why this instruction must not run. Non-empty means the plan carries no operations. */
   blocked: string[];
+  /** The product group this change belongs to, as the loaded files spell it. Empty when it names none. */
+  category: string;
 }
 
 const SYSTEM = `You turn an instruction from a ski shop's staff into edits to a Shopify product export.
@@ -103,7 +105,7 @@ function toOperation(raw: z.infer<typeof OperationSchema>): Operation | null {
 export function groundScope(
   scope: z.infer<typeof ScopeSchema>,
   file: { vendors: string[]; types: string[]; tags: string[] },
-): { scope: Plan["scope"]; dropped: string[]; blocked: string[] } {
+): { scope: Plan["scope"]; dropped: string[]; blocked: string[]; category: string } {
   const dropped: string[] = [];
   const blocked: string[] = [];
   // Spelling drifts between a buyer's sheet and a Shopify export in one predictable way: spaces,
@@ -129,12 +131,13 @@ export function groundScope(
   // is a tag, and the sheet spells both the same way. So a category that is not a Type is looked
   // for among the tags before it is given up on.
   const types: string[] = [];
+  let category = "";
   for (const wanted of scope.types) {
     if (!wanted.trim()) continue;
     const asType = file.types.find((t) => norm(t) === norm(wanted));
-    if (asType) { types.push(asType); continue; }
+    if (asType) { types.push(asType); category ||= asType; continue; }
     const asTag = file.tags.find((t) => norm(t) === norm(wanted));
-    if (asTag) { tags.push(asTag); dropped.push(`matched "${wanted.trim()}" on the tag rather than the type`); continue; }
+    if (asTag) { tags.push(asTag); category ||= asTag; dropped.push(`matched "${wanted.trim()}" on the tag rather than the type`); continue; }
     dropped.push(`type "${wanted.trim()}" is not in this file`);
   }
 
@@ -181,6 +184,7 @@ export function groundScope(
     },
     dropped,
     blocked,
+    category,
   };
 }
 
@@ -219,10 +223,10 @@ export async function planAdjustment(
   const parsed = PlanSchema.safeParse(JSON.parse(text));
   if (!parsed.success) return null;
 
-  const { scope, dropped, blocked } = groundScope(parsed.data.scope, file);
+  const { scope, dropped, blocked, category } = groundScope(parsed.data.scope, file);
   const operations = blocked.length ? [] : parsed.data.operations.map(toOperation).filter((op): op is Operation => op !== null);
   const unclear = [parsed.data.unclear.trim(), ...dropped].filter(Boolean).join(" ");
-  return { plan: { scope, operations }, understood: parsed.data.understood.trim(), unclear, blocked };
+  return { plan: { scope, operations }, understood: parsed.data.understood.trim(), unclear, blocked, category };
 }
 
 /** A plan in words, for the screen — built from the plan itself so it cannot describe something else. */
@@ -375,4 +379,152 @@ export async function readInstructionImage(buffer: Buffer, mimeType: string): Pr
     }],
   }).finalMessage();
   return response.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("\n").trim();
+}
+
+/**
+ * Which of a sheet's instructions could touch the files that are actually loaded.
+ *
+ * A season's sheet covers the whole shop — skis, boots, bindings, helmets, goggles — and a Shopify
+ * export is usually one corner of it. Loading the goggles export and being walked through the ski
+ * rows one at a time is most of the work of doing it by hand, so the sheet and the files are read
+ * against each other first and the rows that cannot match are set aside.
+ *
+ * This is one call for the whole sheet rather than one per row, because it is a matching question,
+ * not a planning question: the answer for every row comes out of the same two lists.
+ *
+ * Nothing is thrown away. A row set aside is shown with the reason, so loading the missing export
+ * brings it straight back.
+ */
+const ScreenSchema = z.object({
+  items: z.array(z.object({
+    index: z.number().describe("The number of the instruction, exactly as it was given."),
+    group: z.string().describe("The product group this instruction is about, in the words the loaded files use: a Type or a tag from the lists. Empty if it names none."),
+    relevant: z.boolean().describe("True if any product in the loaded files could possibly match this instruction."),
+    why: z.string().describe("For an instruction that cannot match, the one thing that is missing: 'no ski bindings in the loaded files'. Empty when it is relevant."),
+  })),
+});
+
+export interface Screened {
+  instruction: string;
+  index: number;
+  group: string;
+  relevant: boolean;
+  why: string;
+}
+
+const SCREEN_SYSTEM = `You are matching a ski shop's sheet of seasonal changes against the Shopify exports they have actually loaded.
+
+For each numbered instruction, say whether any product in those exports could possibly match it.
+
+Judge it on the product group and the brand, and nothing else:
+- The group an instruction names must exist in the loaded files, either as a Type or as a tag. This shop keeps some shelves in Type ("Snowboard Bindings") and others in tags ("ski-helmets", "goggles", "ski poles"), and spells them with spaces where a tag uses hyphens — "snow goggles" and "goggles", "ski helmets" and "ski-helmets", "snowboard bindings" and "snowboard-bindings" are the same shelf. Match across that.
+- If the group is nowhere in either list, the instruction is not relevant. Say so in "why" naming the group: "no ski bindings in the loaded files".
+- If the instruction names a brand and that brand is in neither the vendor list nor the tags, it is not relevant either.
+- Always fill in "group" with the word the loaded files use, so rows about the same shelf can be worked through together. Where the files have both a Type and a tag for it, use the Type.
+
+Two things are NOT reasons to call something irrelevant. Whether the products are already tagged the way the instruction asks — that is worked out later against the file itself, and a row that turns out to be already done is still a row that matched. And a year tag: a year that is not in the file simply matches no products, which is a normal, safe outcome, so judge only the group and the brand.
+
+When you cannot tell, say relevant. A row shown and skipped costs a moment; a row hidden is work that silently does not happen.`;
+
+export async function screenInstructions(
+  instructions: string[],
+  file: { vendors: string[]; types: string[]; tags: string[] },
+): Promise<Screened[]> {
+  const all = instructions.map((instruction, index) => ({ instruction, index, group: "", relevant: true, why: "" }));
+  if (!planningAvailable() || all.length === 0) return all;
+
+  const context = [
+    `Types in the loaded files: ${file.types.join(", ") || "(none)"}`,
+    `Vendors in them: ${file.vendors.join(", ") || "(none)"}`,
+    `Tags in them: ${file.tags.slice(0, 200).join(", ") || "(none)"}`,
+    "",
+    "The instructions:",
+    ...instructions.map((line, i) => `${i}. ${line}`),
+  ].join("\n");
+
+  const response = await getClient().messages.stream({
+    model: EXTRACTION_MODEL,
+    max_tokens: 8000,
+    system: SCREEN_SYSTEM,
+    output_config: { format: zodOutputFormat(ScreenSchema), effort: "low" },
+    messages: [{ role: "user", content: context }],
+  }).finalMessage();
+
+  const text = response.content.find((b): b is Anthropic.TextBlock => b.type === "text")?.text;
+  if (!text) return all;
+  const parsed = ScreenSchema.safeParse(JSON.parse(text));
+  if (!parsed.success) return all;
+
+  // A row the screen forgot to mention stays in. Silence is not a decision to leave work out.
+  for (const item of parsed.data.items) {
+    const row = all[item.index];
+    if (!row) continue;
+    row.group = item.group.trim();
+    row.relevant = item.relevant;
+    row.why = item.why.trim();
+  }
+  return all;
+}
+
+/**
+ * Read many instructions at once.
+ *
+ * Next dispatches server actions one at a time per client, so a sheet planned a row at a time from
+ * the browser is a queue of round trips however fast each one is — forty of them is most of an
+ * afternoon. The whole sheet is read in one action instead, several at a time inside it, which is
+ * the difference between forty waits and one.
+ */
+/**
+ * Run a job per item, a few at a time, keeping the order of the answers.
+ *
+ * A failure belongs to its own item. One row of a forty-row sheet that cannot be read is one row
+ * reported on its own line, not a sheet that failed.
+ */
+export async function mapWithConcurrency<In, Out>(
+  items: In[],
+  limit: number,
+  job: (item: In, index: number) => Promise<Out>,
+  onError: (err: unknown, item: In, index: number) => Out,
+): Promise<Out[]> {
+  const out = new Array<Out>(items.length);
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    for (;;) {
+      const i = next++;
+      if (i >= items.length) return;
+      try {
+        out[i] = await job(items[i], i);
+      } catch (err) {
+        out[i] = onError(err, items[i], i);
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, worker));
+  return out;
+}
+
+/**
+ * Read many instructions at once.
+ *
+ * Next dispatches server actions one at a time per client, so a sheet planned a row at a time from
+ * the browser is a queue of round trips however fast each one is — forty of them is most of an
+ * afternoon, which is the whole of the time this page was meant to save. The sheet is read inside
+ * one action instead, several rows at a time, which is the difference between forty waits and one.
+ */
+export async function planAdjustments(
+  instructions: string[],
+  file: { products: number; vendors: string[]; types: string[]; tags: string[] },
+  concurrency = 8,
+): Promise<Array<{ instruction: string; planned: PlannedChange | null; failed: string }>> {
+  return mapWithConcurrency(
+    instructions,
+    concurrency,
+    async (instruction) => {
+      const planned = await planAdjustment(instruction, file);
+      return planned
+        ? { instruction, planned, failed: "" }
+        : { instruction, planned: null, failed: "Could not make sense of this one." };
+    },
+    (err, instruction) => ({ instruction, planned: null, failed: err instanceof Error ? err.message : String(err) }),
+  );
 }

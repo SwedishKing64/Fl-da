@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { groundScope } from "./adjust-plan";
+import { groundScope, mapWithConcurrency } from "./adjust-plan";
 
 const FILE = {
   vendors: ["Burton", "Nitro", "Arc'teryx", "Anon", "POC", "Ride"],
@@ -21,8 +21,12 @@ const FILE = {
   ],
 };
 
-const EMPTY = { vendors: [], types: [], tags: [], anyTags: [], excludeTags: [], excludeVendors: [], handles: [], titleContains: "" };
-const scopeOf = (over: Partial<typeof EMPTY>) => ({ ...EMPTY, ...over });
+interface RawScope {
+  vendors: string[]; types: string[]; tags: string[]; anyTags: string[];
+  excludeTags: string[]; excludeVendors: string[]; handles: string[]; titleContains: string;
+}
+const EMPTY: RawScope = { vendors: [], types: [], tags: [], anyTags: [], excludeTags: [], excludeVendors: [], handles: [], titleContains: "" };
+const scopeOf = (over: Partial<RawScope>): RawScope => ({ ...EMPTY, ...over });
 
 describe("groundScope", () => {
   it("keeps a category that really is a Type", () => {
@@ -83,5 +87,68 @@ describe("groundScope", () => {
     expect(blocked).toEqual([]);
     expect(scope.tags).toEqual(["alpine touring", "look"]);
     expect(scope.anyTags).toEqual(["2999"]);
+  });
+});
+
+/**
+ * Reading a sheet several rows at a time.
+ *
+ * Next dispatches server actions one at a time per client, so the whole point of reading a sheet
+ * inside one action is that the rows inside it do not queue. These are the three things that has
+ * to be true of it: the answers stay with their rows, no more than the limit run at once, and one
+ * row that fails is one row that fails.
+ */
+describe("mapWithConcurrency", () => {
+  const settle = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  it("keeps every answer with the row it came from, however they finish", async () => {
+    const out = await mapWithConcurrency(
+      [40, 5, 30, 1, 20],
+      3,
+      async (ms, i) => { await settle(ms); return `${i}:${ms}`; },
+      () => "error",
+    );
+    expect(out).toEqual(["0:40", "1:5", "2:30", "3:1", "4:20"]);
+  });
+
+  it("never runs more than the limit at once", async () => {
+    let running = 0;
+    let peak = 0;
+    await mapWithConcurrency(
+      Array.from({ length: 20 }, (_, i) => i),
+      4,
+      async (i) => { running++; peak = Math.max(peak, running); await settle(2); running--; return i; },
+      () => -1,
+    );
+    expect(peak).toBe(4);
+  });
+
+  it("starts the next row as soon as one frees up, rather than in blocks", async () => {
+    // Nineteen quick rows behind one slow one. Waiting for whole blocks would take as long as the
+    // slow row times the number of blocks; a pool overlaps them and finishes in about one.
+    const started: number[] = [];
+    const t0 = Date.now();
+    await mapWithConcurrency(
+      Array.from({ length: 20 }, (_, i) => i),
+      4,
+      async (i) => { started.push(i); await settle(i === 0 ? 60 : 1); return i; },
+      () => -1,
+    );
+    expect(Date.now() - t0).toBeLessThan(120);
+    expect(started).toHaveLength(20);
+  });
+
+  it("keeps one failing row to itself and finishes the rest", async () => {
+    const out = await mapWithConcurrency(
+      ["a", "boom", "c"],
+      2,
+      async (v) => { if (v === "boom") throw new Error("could not read this one"); return `ok:${v}`; },
+      (err, v) => `failed:${v}:${(err as Error).message}`,
+    );
+    expect(out).toEqual(["ok:a", "failed:boom:could not read this one", "ok:c"]);
+  });
+
+  it("does nothing, and does not hang, on an empty sheet", async () => {
+    expect(await mapWithConcurrency([], 8, async () => 1, () => 0)).toEqual([]);
   });
 });

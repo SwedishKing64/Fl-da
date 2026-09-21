@@ -15,7 +15,7 @@ import { enrichBatchSeo } from "@/lib/catalog/seo";
 import { slugify } from "@/lib/catalog/handle";
 import { CURRENCIES, type AppSettings } from "@/lib/catalog/types";
 import { seedDefaults } from "@/lib/catalog/seed";
-import { planAdjustment, planningAvailable, describePlan } from "@/lib/catalog/adjust-plan";
+import { planAdjustment, planningAvailable, describePlan, splitInstructions, type SplitInstructions } from "@/lib/catalog/adjust-plan";
 import type { Plan } from "@/lib/catalog/adjust";
 import { initialsFrom } from "@/lib/catalog/tagging";
 import { answerFeedback, feedbackAvailable, withRule, type FeedbackTurn } from "@/lib/catalog/feedback";
@@ -739,6 +739,59 @@ export async function planAdjustmentAction(
     const result = await planAdjustment(instruction, file);
     if (!result) return { ok: false, error: "Could not make sense of that instruction. Try naming the brand or tag and the change." };
     return { ok: true, data: { ...result, described: describePlan(result.plan) } };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/**
+ * Read a sheet of instructions and break it into the separate changes it asks for.
+ *
+ * The buyer's list for a season is a document, not a sentence: many rules about many products.
+ * Read as one instruction it would produce one scope and one change, which is wrong for all of
+ * them, so it is split and each piece goes through the same reading, preview and apply as
+ * something typed by hand.
+ *
+ * The file comes as base64 because a sheet of instructions is kilobytes — unlike the catalogue
+ * exports on this page, which never leave the browser.
+ */
+export async function readInstructionSheetAction(file: { name: string; type: string; base64: string }): Promise<ActionResult<SplitInstructions & { source: string }>> {
+  await requireUser();
+  if (!planningAvailable()) return { ok: false, error: "Set ANTHROPIC_API_KEY to read an instruction sheet." };
+  try {
+    const buffer = Buffer.from(file.base64, "base64");
+    // Under the 12mb configured for Server Actions in next.config, with room for base64's overhead.
+    if (buffer.byteLength > 8 * 1024 * 1024) return { ok: false, error: "That file is larger than 8MB. Instruction sheets are normally a page or two — check it is the right file." };
+
+    let text = "";
+    let source = "";
+    if (/pdf$/i.test(file.name) || file.type === "application/pdf") {
+      const { extractPdfText } = await import("@/lib/catalog/extract/pdf");
+      const pdf = await extractPdfText(buffer);
+      text = pdf.text;
+      source = `${pdf.pages} page${pdf.pages === 1 ? "" : "s"}`;
+      if (pdf.looksScanned) {
+        // A photographed or scanned sheet has no text layer, so it is read as a picture instead.
+        const { readInstructionImage } = await import("@/lib/catalog/adjust-plan");
+        text = await readInstructionImage(buffer, "application/pdf");
+        source += ", read as a scan";
+      }
+    } else if (/^image\//.test(file.type)) {
+      const { readInstructionImage } = await import("@/lib/catalog/adjust-plan");
+      text = await readInstructionImage(buffer, file.type);
+      source = "read as a picture";
+    } else {
+      text = buffer.toString("utf8");
+      source = "plain text";
+    }
+
+    if (!text.trim()) return { ok: false, error: "Nothing could be read out of that file." };
+    const split = await splitInstructions(text);
+    if (!split) return { ok: false, error: "That file was read, but no instructions could be made out of it." };
+    if (split.instructions.length === 0) {
+      return { ok: false, error: `Nothing in that file reads as a change to make.${split.unclear ? ` It said: ${split.unclear}` : ""}` };
+    }
+    return { ok: true, data: { ...split, source } };
   } catch (err) {
     return fail(err);
   }

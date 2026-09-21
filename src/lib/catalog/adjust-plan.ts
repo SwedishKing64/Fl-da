@@ -214,3 +214,88 @@ export function describePlan(plan: Plan): string[] {
   }
   return lines;
 }
+
+/**
+ * Breaking a sheet of instructions into the separate changes it asks for.
+ *
+ * The changes for a season arrive as a document — a page from the buyer listing what goes on sale,
+ * what moves to clearance, what comes off the site. That is many rules about many products, and
+ * reading it as one instruction would produce one scope and one change, which is wrong for all of
+ * them. So it is split first, and each piece goes through the same reading, preview and apply as
+ * something typed by hand.
+ *
+ * Splitting is deliberately conservative: a line that is a heading, a date or a note to the reader
+ * is not an instruction, and two changes to the same products are still two instructions, because
+ * being able to see and undo them separately is the point.
+ */
+const SplitSchema = z.object({
+  instructions: z.array(z.string()).describe("Each separate change the document asks for, one per entry, rewritten as a plain imperative sentence that stands on its own. Keep the document's own product names, brands, tags and numbers exactly."),
+  ignored: z.array(z.string()).describe("Lines that are headings, dates, notes or anything else that is not a change to make. Short quotes, for the reader to check nothing was missed."),
+  unclear: z.string().describe("Anything in the document you could not turn into a change. Empty when there was nothing."),
+});
+
+export interface SplitInstructions {
+  instructions: string[];
+  ignored: string[];
+  unclear: string;
+}
+
+const SPLIT_SYSTEM = `You are reading a sheet of instructions from a ski shop's buyer. It lists the changes to make to products the shop already sells — what goes on sale and by how much, what moves into clearance, what comes off the site, what gets retagged.
+
+Break it into the separate changes it asks for. One entry per change.
+
+- Rewrite each as a plain imperative sentence that stands on its own, so it makes sense with none of the others: "Put all Spyder jackets 30% off and add the clearance tag."
+- Keep the document's own wording for brands, product names, tags, years and numbers. Never round a number, never rename a brand, never tidy a tag.
+- Two changes to the same products are still two entries. A change that names several brands is one entry if it is one change, and several if the document gives each brand a different number.
+- A heading, a date, a page number, a greeting or a note to the reader is not an instruction. Put those in "ignored" so a person can check nothing was missed.
+- If part of the document asks for something you cannot express as a change to products, say so in "unclear" rather than guessing at it.
+
+Never invent a change the document does not ask for, and never merge two different discounts into an average.`;
+
+/** Split a document's text into the separate instructions it contains. */
+export async function splitInstructions(text: string): Promise<SplitInstructions | null> {
+  if (!planningAvailable() || !text.trim()) return null;
+  const response = await getClient().messages.stream({
+    model: EXTRACTION_MODEL,
+    max_tokens: 4000,
+    system: SPLIT_SYSTEM,
+    output_config: { format: zodOutputFormat(SplitSchema), effort: "low" },
+    messages: [{ role: "user", content: text.slice(0, 60_000) }],
+  }).finalMessage();
+
+  const body = response.content.find((b): b is Anthropic.TextBlock => b.type === "text")?.text;
+  if (!body) return null;
+  const parsed = SplitSchema.safeParse(JSON.parse(body));
+  if (!parsed.success) return null;
+  return {
+    instructions: parsed.data.instructions.map((i) => i.trim()).filter(Boolean),
+    ignored: parsed.data.ignored.map((i) => i.trim()).filter(Boolean),
+    unclear: parsed.data.unclear.trim(),
+  };
+}
+
+/**
+ * Read a photographed or scanned instruction sheet.
+ *
+ * A buyer's list is as likely to arrive as a phone photo of a printed page as it is a proper PDF.
+ * A scan has no text layer, so it is read as a picture and turned back into the words on it —
+ * transcribed rather than interpreted, because the splitting that follows is where the meaning is
+ * worked out, and two passes of interpretation compound their mistakes.
+ */
+export async function readInstructionImage(buffer: Buffer, mimeType: string): Promise<string> {
+  if (!planningAvailable()) return "";
+  const isPdf = mimeType === "application/pdf";
+  const response = await getClient().messages.stream({
+    model: EXTRACTION_MODEL,
+    max_tokens: 4000,
+    system: "Transcribe this document. Write out the text on it, in order, keeping every brand, product name, tag, year, percentage and price exactly as printed. Keep the line and list structure. Do not summarise, explain or reorder, and do not add anything that is not on the page. If part of it is handwritten, transcribe that too and mark it (handwritten).",
+    messages: [{
+      role: "user",
+      content: [{
+        type: isPdf ? "document" : "image",
+        source: { type: "base64", media_type: isPdf ? "application/pdf" : (mimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp"), data: buffer.toString("base64") },
+      } as Anthropic.ContentBlockParam],
+    }],
+  }).finalMessage();
+  return response.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("\n").trim();
+}

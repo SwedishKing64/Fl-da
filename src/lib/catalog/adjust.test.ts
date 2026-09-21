@@ -385,3 +385,52 @@ describe("telling apart the reasons nothing changed", () => {
     expect(out.changes).toHaveLength(0);
   });
 });
+
+/**
+ * Several exports at once.
+ *
+ * The catalogue comes out of Shopify in pieces — a file per collection, or per search — and a
+ * season's changes cut across them. One instruction is read once and applied to every file. A rule
+ * about a brand that is not in a given file must find nothing there and leave it exactly alone,
+ * which is the right answer rather than an error.
+ */
+describe("an instruction across several files", () => {
+  const clothing = readFileSync(EXPORT, "utf8");   // Karbon / Oakley / Quiksilver
+  const other = readFileSync(WITH_2027, "utf8");   // a different export entirely
+
+  it("changes the file that has the brand and leaves the other untouched", () => {
+    const plan: Plan = { scope: { vendors: ["Karbon"] }, operations: [{ kind: "addTags", tags: ["clearance"] }] };
+    const a = applyPlan(clothing, plan);
+    const b = applyPlan(other, plan);
+    expect(a.matched).toBe(50);
+    expect(a.changes.length).toBeGreaterThan(0);
+    // Not an error, just nothing to do here.
+    expect(b.matched).toBe(0);
+    expect(b.changes).toHaveLength(0);
+    expect(b.csv).toBe(applyPlan(other, { scope: { vendors: ["Karbon"] }, operations: [] }).csv);
+    expect(b.warnings).toEqual([]);
+  });
+
+  it("totals across files the way the page reports them", () => {
+    const plan: Plan = { scope: { anyTags: ["2025", "2026"] }, operations: [{ kind: "addTags", tags: ["snow sale"] }] };
+    const results = [clothing, other].map((text) => applyPlan(text, plan));
+    const matched = results.reduce((n, r) => n + r.matched, 0);
+    const changes = results.reduce((n, r) => n + r.changes.length, 0);
+    expect(matched).toBe(results[0].matched + results[1].matched);
+    expect(matched).toBeGreaterThan(0);
+    // Each file is independent: neither total is either file's alone.
+    expect(results[0].matched).toBeGreaterThan(0);
+    expect(results[1].matched).toBeGreaterThan(0);
+    expect(changes).toBeGreaterThan(0);
+  });
+
+  it("keeps each file's own guarantee — nothing moves that was not asked for", () => {
+    const plan: Plan = { scope: { anyTags: ["2025"] }, operations: [{ kind: "discount", percent: 10 }] };
+    for (const text of [clothing, other]) {
+      const out = applyPlan(text, plan);
+      expect(out.refused).toBeUndefined();
+      const grid = parseCsv(text).filter((r) => r.some((c) => c.trim() !== ""));
+      expect(verifyOnlyIntended(grid, out.csv, out.changes)).toEqual([]);
+    }
+  });
+});

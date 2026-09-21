@@ -15,6 +15,8 @@ import { enrichBatchSeo } from "@/lib/catalog/seo";
 import { slugify } from "@/lib/catalog/handle";
 import { CURRENCIES, type AppSettings } from "@/lib/catalog/types";
 import { seedDefaults } from "@/lib/catalog/seed";
+import { planAdjustment, planningAvailable, describePlan } from "@/lib/catalog/adjust-plan";
+import type { Plan } from "@/lib/catalog/adjust";
 import { initialsFrom } from "@/lib/catalog/tagging";
 import { answerFeedback, feedbackAvailable, withRule, type FeedbackTurn } from "@/lib/catalog/feedback";
 import { describeDirectives, instructionsAvailable, parseDirectives, readInstructions, NO_DIRECTIVES } from "@/lib/catalog/instructions";
@@ -712,6 +714,47 @@ export async function downloadCsvAction(fileId: string): Promise<ActionResult<{ 
   try {
     const result = await exportFileText(fileId);
     return "error" in result ? { ok: false, error: result.error } : { ok: true, data: result };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Price and clearance changes to products already in the shop
+// ---------------------------------------------------------------------------
+
+/**
+ * Read an instruction against what the uploaded file holds.
+ *
+ * The file itself never leaves the browser until the moment it is applied — only the vendors,
+ * types and tags in it are sent, which is all the instruction needs to be grounded in.
+ */
+export async function planAdjustmentAction(
+  instruction: string,
+  file: { products: number; vendors: string[]; types: string[]; tags: string[] },
+): Promise<ActionResult<{ plan: Plan; understood: string; unclear: string; described: string[] }>> {
+  await requireUser();
+  if (!planningAvailable()) return { ok: false, error: "Set ANTHROPIC_API_KEY to read instructions. Until then this page cannot work out what to change." };
+  try {
+    const result = await planAdjustment(instruction, file);
+    if (!result) return { ok: false, error: "Could not make sense of that instruction. Try naming the brand or tag and the change." };
+    return { ok: true, data: { ...result, described: describePlan(result.plan) } };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/**
+ * Write the change down, so a price change to the live shop is not an untraceable event.
+ *
+ * The file is applied in the browser — it never needs to reach the server, and a Shopify export of
+ * a whole catalogue is bigger than an upload limit anyway — so this records what was done.
+ */
+export async function logAdjustmentAction(details: { instruction: string; described: string[]; matched: number; products: number; changes: number; filename: string }): Promise<ActionResult> {
+  const user = await requireUser();
+  try {
+    await logAudit("catalog.adjusted", { userId: user.id, details });
+    return { ok: true };
   } catch (err) {
     return fail(err);
   }

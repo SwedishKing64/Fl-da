@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { logAdjustmentAction, planAdjustmentAction, readInstructionSheetAction, readInvoiceAction, readSheetAgainstFilesAction } from "@/app/(catalog)/actions";
-import { applyPlan, describeFile, foldPlans, isWholeFile, type AdjustResult, type FoldStep, type Plan } from "@/lib/catalog/adjust";
+import { applyPlan, describeFile, foldPlans, isWholeFile, whyNoMatch, type AdjustResult, type FoldStep, type Plan } from "@/lib/catalog/adjust";
 import { csvFilename } from "@/lib/catalog/csv";
 import { applyInvoice, reconcile, type InvoiceFields, type Reconciliation } from "@/lib/catalog/reconcile";
 import type { InvoiceRead } from "@/lib/catalog/invoice";
@@ -896,6 +896,9 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
                     <>
                       <div className="font-semibold">No product in {sheets.length === 1 ? "this file" : "any of these files"} matches.</div>
                       <p className="mt-1 text-sm">The change was understood; nothing loaded fits the description above.</p>
+                      {sheets.flatMap((sheet) => whyNoMatch(sheet.csv, preview.plan.scope).map((why) => `${sheets.length > 1 ? `${sheet.name}: ` : ""}${why}`)).map((why, i) => (
+                        <p key={i} className="mt-1 text-sm">{why}</p>
+                      ))}
                     </>
                   ) : (
                     <>

@@ -1,6 +1,6 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { applyPlan, describeFile, foldPlans, isWholeFile, money, renamedTitle, titleWithYear, verifyOnlyIntended, type FoldStep, type Plan } from "./adjust";
+import { applyPlan, describeFile, foldPlans, isWholeFile, money, renamedTitle, titleWithYear, verifyOnlyIntended, whyNoMatch, type FoldStep, type Plan } from "./adjust";
 import { parseCsv } from "./csv";
 
 /**
@@ -725,5 +725,73 @@ describe("renaming and restocking", () => {
     const thin = "Handle,Title\r\nx,A ski\r\n";
     expect(applyPlan(thin, { scope: {}, operations: [{ kind: "setQuantity", value: 1 }] }).warnings.join(" "))
       .toContain("Variant Inventory Qty");
+  });
+});
+
+/**
+ * The two things the Swany run could not do.
+ *
+ * Both were real gaps rather than misreadings: there was no way to touch the SEO title at all,
+ * and a scope that matched nothing said so without saying why.
+ */
+const SWANY = readFileSync("/root/.claude/uploads/94fb8bfb-35a9-5176-afe9-8fcc0dec9eb3/1f150258-Swany_CSV_OLD.csv", "utf8");
+
+describe("the SEO title", () => {
+  it("takes the same year as the title, when the instruction asked for both", () => {
+    const plan: Plan = { scope: { tags: ["2026"] }, operations: [{ kind: "setTitleYear", year: "2027", seo: true }] };
+    const out = applyPlan(SWANY, plan);
+    expect(out.refused).toBeUndefined();
+    expect(out.matched).toBe(15);
+    expect(new Set(out.changes.map((c) => c.column))).toEqual(new Set(["Title", "SEO Title"]));
+
+    // Their SEO title is the product's title with the brand in front — 1,327 of the 1,433 that
+    // have one carry the title verbatim — so the same edit reads correctly on both.
+    const glove = out.changes.filter((c) => c.handle === "falcon-glove-ladies-sx-34l");
+    expect(glove.find((c) => c.column === "Title")?.after).toBe("Falcon Glove Ladies SX-34L 2027");
+    expect(glove.find((c) => c.column === "SEO Title")?.after).toContain("2027");
+  });
+
+  it("leaves the SEO title alone when it was not asked for", () => {
+    const out = applyPlan(SWANY, { scope: { tags: ["2026"] }, operations: [{ kind: "setTitleYear", year: "2027" }] });
+    expect(new Set(out.changes.map((c) => c.column))).toEqual(new Set(["Title"]));
+  });
+
+  it("says so when the file has no SEO Title column to write to", () => {
+    const thin = "Handle,Title\r\nx,A glove\r\n";
+    const out = applyPlan(thin, { scope: {}, operations: [{ kind: "renameTitle", find: "glove", replace: "mitt", seo: true }] });
+    expect(out.warnings.join(" ")).toContain("SEO Title");
+    expect(out.changes.map((c) => c.column)).toEqual(["Title"]);
+  });
+});
+
+describe("pricing back up to the recommended retail", () => {
+  it("puts the price back to Compare At and clears it, across the products asked for", () => {
+    // "Bring them back to RRP" after a reorder: what the shop means by taking something off sale.
+    const out = applyPlan(SWANY, { scope: { tags: ["2026"] }, operations: [{ kind: "endSale" }] });
+    expect(out.refused).toBeUndefined();
+    expect(out.matched).toBe(15);
+    const priced = out.changes.filter((c) => c.column === "Variant Price");
+    expect(priced.length).toBeGreaterThan(30);
+    expect(priced.every((c) => Number(c.after) > Number(c.before))).toBe(true);
+    expect(out.changes.filter((c) => c.column === "Variant Compare At Price").every((c) => c.after === "")).toBe(true);
+  });
+});
+
+describe("why nothing matched", () => {
+  it("names the part of the scope that ruled everything out", () => {
+    // The commonest misreading: two tags in `tags` means BOTH on one product, and no Swany glove
+    // is tagged 2026 and 2999 at once.
+    const why = whyNoMatch(SWANY, { tags: ["2026", "2999"] });
+    expect(why.join(" ")).toContain("fit everything except the tags it wanted ALL of");
+    expect(why.join(" ")).toContain('tagged X or Y');
+  });
+
+  it("names a brand the file does not have", () => {
+    const why = whyNoMatch(SWANY, { vendors: ["Hestra"], tags: ["2026"] });
+    expect(why.join(" ")).toContain("15 products fit everything except the brand (Hestra)");
+  });
+
+  it("says nothing when the scope does match", () => {
+    expect(whyNoMatch(SWANY, { tags: ["2026"] })).toEqual([]);
   });
 });

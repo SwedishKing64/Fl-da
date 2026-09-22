@@ -83,9 +83,9 @@ export type Operation =
    *
    * See titleWithYear for where it goes and why.
    */
-  | { kind: "setTitleYear"; year: string }
+  | { kind: "setTitleYear"; year: string; seo?: boolean }
   /** Swap one piece of wording in the title for another, wherever it appears. */
-  | { kind: "renameTitle"; find: string; replace: string };
+  | { kind: "renameTitle"; find: string; replace: string; seo?: boolean };
 
 export interface Plan {
   scope: Scope;
@@ -135,6 +135,16 @@ export function quote(value: string): string {
   if (value === "") return "";
   return /[",\r\n]/.test(value) || /^\s|\s$/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
+
+/**
+ * Which columns a title edit touches.
+ *
+ * The SEO title is a separate column and the shop keeps it in step by hand: across their exports
+ * 1,327 of the 1,433 products that have one carry the product's title inside it verbatim, usually
+ * as "Swany " plus the title. So the same edit belongs on both — but only when it was asked for,
+ * because the standing rule on this page is that nothing moves that was not named.
+ */
+const titleColumns = (seo?: boolean): string[] => (seo ? ["Title", "SEO Title"] : ["Title"]);
 
 /** Round half-up to cents, without the floating-point surprise at .005. */
 export function money(value: number): number {
@@ -297,7 +307,7 @@ export function applyPlan(text: string, plan: Plan): AdjustResult {
     if (op.kind === "setStatus") return index.has("Status") ? [] : ["Status"];
     if (op.kind === "setType") return index.has("Type") ? [] : ["Type"];
     if (op.kind === "setVendor") return index.has("Vendor") ? [] : ["Vendor"];
-    if (op.kind === "setTitleYear" || op.kind === "renameTitle") return index.has("Title") ? [] : ["Title"];
+    if (op.kind === "setTitleYear" || op.kind === "renameTitle") return titleColumns(op.seo).filter((c) => !index.has(c));
     if (op.kind === "setQuantity") return index.has("Variant Inventory Qty") ? [] : ["Variant Inventory Qty"];
     return index.has("Variant Price") ? [] : ["Variant Price"];
   }))];
@@ -408,18 +418,22 @@ export function applyPlan(text: string, plan: Plan): AdjustResult {
         }
         case "setTitleYear": {
           if (!isFirst) break;
-          const before = at(row, "Title");
-          if (!before.trim()) break;
-          const after = titleWithYear(before, op.year);
-          if (set(row, "Title", after)) record("Title", before, after);
+          for (const column of titleColumns(op.seo)) {
+            const before = at(row, column);
+            if (!before.trim()) continue;
+            const after = titleWithYear(before, op.year);
+            if (set(row, column, after)) record(column, before, after);
+          }
           break;
         }
         case "renameTitle": {
           if (!isFirst) break;
-          const before = at(row, "Title");
-          if (!before.trim()) break;
-          const after = renamedTitle(before, op.find, op.replace);
-          if (set(row, "Title", after)) record("Title", before, after);
+          for (const column of titleColumns(op.seo)) {
+            const before = at(row, column);
+            if (!before.trim()) continue;
+            const after = renamedTitle(before, op.find, op.replace);
+            if (set(row, column, after)) record(column, before, after);
+          }
           break;
         }
       }
@@ -501,6 +515,54 @@ export function verifyOnlyIntended(before: string[][], after: string, changes: C
     }
   }
   return problems;
+}
+
+/**
+ * Why a scope matched nothing, said in terms of the scope itself.
+ *
+ * "0 products match" is true and useless. Every field is dropped in turn and the file re-counted,
+ * so the answer is the field that was doing the excluding — nearly always one of two things: a
+ * pair of tags put in `tags`, which means BOTH at once and no product carries both, or a scope
+ * that is right about the shop but about an export that is not loaded.
+ */
+export function whyNoMatch(text: string, scope: Scope): string[] {
+  const { grid } = openExport(text);
+  if (grid.length < 2) return [];
+  const header = grid[0];
+  const firstRows: Array<Record<string, string>> = [];
+  const seen = new Set<string>();
+  for (const row of grid.slice(1)) {
+    const record = Object.fromEntries(header.map((h, i) => [h, row[i] ?? ""]));
+    const handle = (record["Handle"] ?? "").trim();
+    if (!handle || seen.has(handle)) continue;
+    seen.add(handle);
+    firstRows.push(record);
+  }
+  const count = (s: Scope) => firstRows.filter((r) => matches(s, r)).length;
+  if (count(scope) > 0) return [];
+
+  const fields: Array<[keyof Scope, string]> = [
+    ["vendors", "the brand"], ["types", "the type"], ["tags", "the tags it wanted ALL of"],
+    ["anyTags", "the tags"], ["handles", "the named products"], ["titleContains", "the words in the title"],
+    ["excludeTags", "what it was told to leave out"], ["excludeVendors", "the brands it was told to leave out"],
+  ];
+  const reasons: string[] = [];
+  for (const [field, what] of fields) {
+    const value = scope[field];
+    if (value === undefined || (Array.isArray(value) ? value.length === 0 : !String(value).trim())) continue;
+    const without: Scope = { ...scope };
+    delete without[field];
+    const n = count(without);
+    if (n > 0) {
+      const shown = Array.isArray(value) ? value.join(", ") : String(value);
+      reasons.push(`${n} product${n === 1 ? "" : "s"} fit everything except ${what} (${shown}).`);
+    }
+  }
+  if (reasons.length === 0) return ["No single part of it is to blame — several together rule out every product in the file."];
+  if (scope.tags && scope.tags.length > 1 && reasons.some((r) => r.includes("ALL of"))) {
+    reasons.push(`"${scope.tags.join('" and "')}" was read as needing all of them on the one product. If any one of them was meant, say "tagged X or Y".`);
+  }
+  return reasons;
 }
 
 /** What the file holds, so a scope can be built from real values rather than guessed at. */

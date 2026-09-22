@@ -26,13 +26,14 @@ const ScopeSchema = z.object({
 });
 
 const OperationSchema = z.object({
-  kind: z.enum(["discount", "endSale", "setPrice", "addTags", "removeTags", "setStatus", "setType", "setVendor"]),
+  kind: z.enum(["discount", "endSale", "setPrice", "addTags", "removeTags", "setStatus", "setType", "setVendor", "setQuantity", "setTitleYear", "renameTitle"]),
   percent: z.number().nullable().describe("For discount: the percentage off, 1-95. Null otherwise."),
   from: z.enum(["rrp", "current"]).nullable().describe("For discount: 'rrp' (the default, off the recommended retail in Compare At) or 'current' only when the instruction plainly means off today's price."),
-  value: z.number().nullable().describe("For setPrice: the new price. Null otherwise."),
+  value: z.number().nullable().describe("For setPrice: the new price. For setQuantity: the stock on hand. Null otherwise."),
   tags: z.array(z.string()).describe("For addTags/removeTags: the tags, spelled as this shop spells them. Empty otherwise."),
   status: z.enum(["active", "draft", "archived"]).nullable().describe("For setStatus. Null otherwise."),
-  text: z.string().describe("For setType/setVendor: the new value. Empty otherwise."),
+  text: z.string().describe("For setType/setVendor: the new value. For setTitleYear: the four-digit season, e.g. \"2027\". For renameTitle: the wording to put IN. Empty otherwise."),
+  find: z.string().describe("For renameTitle only: the wording in the title to replace. Empty otherwise."),
 });
 
 const PlanSchema = z.object({
@@ -58,6 +59,8 @@ The shop's rules, which you follow without being told:
 - The recommended retail price lives in the Compare At column. Putting something "on sale", "on clearance" or "X% off" means the discount comes off the RECOMMENDED RETAIL, not off whatever the price happens to be today, so a product marked down twice does not compound. Use from: "rrp" unless the instruction plainly says otherwise.
 - "Into clearance" or "on clearance" means a discount AND the clearance tag. If the instruction gives no percentage, do the tag only and say in "unclear" that no percentage was given. An instruction that plainly says which tags to ADD is exactly that and nothing more: do the tags, add no discount, and leave "unclear" empty — it is not missing a percentage.
 - Tags are lower case. Use the spelling the file already uses when the file has something close.
+- A season in the product title is setTitleYear: put the four digits in "text" and nothing else. The page works out where in the title it goes. Use renameTitle only for wording that is not a year. Neither one changes a product's URL, and nothing here ever edits a Handle.
+- "Set the stock to 0", "mark them out of stock", "we have 12 left" is setQuantity. Stock is per variant, so it applies to every length or size the scope matched.
 
 How to read a list of values. "Items tagged 2999 or 2026 or 2025" is ANY ONE of them, so it goes in anyTags. The tags field means ALL AT ONCE, and no product carries five different years, so putting a list there matches nothing. Getting this backwards is the single worst thing you can do here.
 
@@ -90,6 +93,11 @@ function toOperation(raw: z.infer<typeof OperationSchema>): Operation | null {
     case "setStatus": return raw.status ? { kind: "setStatus", status: raw.status } : null;
     case "setType": return raw.text.trim() ? { kind: "setType", value: raw.text.trim() } : null;
     case "setVendor": return raw.text.trim() ? { kind: "setVendor", value: raw.text.trim() } : null;
+    case "setQuantity": return typeof raw.value === "number" && raw.value >= 0 ? { kind: "setQuantity", value: raw.value } : null;
+    // A year is four digits or it is nothing. A title edit is the one change here that a person
+    // cannot check at a glance across 500 products, so a half-read instruction is dropped.
+    case "setTitleYear": return /^\d{4}$/.test(raw.text.trim()) ? { kind: "setTitleYear", year: raw.text.trim() } : null;
+    case "renameTitle": return raw.find.trim() ? { kind: "renameTitle", find: raw.find.trim(), replace: raw.text } : null;
   }
 }
 
@@ -259,6 +267,9 @@ export function describePlan(plan: Plan): string[] {
       case "setStatus": lines.push(`Set the status to ${op.status}.`); break;
       case "setType": lines.push(`Set the type to ${op.value}.`); break;
       case "setVendor": lines.push(`Set the vendor to ${op.value}.`); break;
+      case "setQuantity": lines.push(`Set the stock on hand to ${Math.round(op.value)}.`); break;
+      case "setTitleYear": lines.push(`Put ${op.year} in the product title — replacing the season already there, or in front of the length and binding wording where there is none. The URL does not change.`); break;
+      case "renameTitle": lines.push(op.replace.trim() ? `In the product title, replace "${op.find}" with "${op.replace}". The URL does not change.` : `Remove "${op.find}" from the product title. The URL does not change.`); break;
     }
   }
   return lines;

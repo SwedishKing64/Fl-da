@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { groundScope, mapWithConcurrency } from "./adjust-plan";
+import { describePlan, groundScope, mapWithConcurrency } from "./adjust-plan";
 
 const FILE = {
   vendors: ["Burton", "Nitro", "Arc'teryx", "Anon", "POC", "Ride"],
@@ -150,5 +150,26 @@ describe("mapWithConcurrency", () => {
 
   it("does nothing, and does not hang, on an empty sheet", async () => {
     expect(await mapWithConcurrency([], 8, async () => 1, () => 0)).toEqual([]);
+  });
+});
+
+
+describe("describePlan", () => {
+  it("says in plain words what a title or stock change will do, and what it will not", () => {
+    const lines = describePlan({
+      scope: { vendors: ["Burton"] },
+      operations: [
+        { kind: "setTitleYear", year: "2027" },
+        { kind: "renameTitle", find: "Griffon Demo", replace: "Griffon 13" },
+        { kind: "renameTitle", find: " EX DEMO", replace: "" },
+        { kind: "setQuantity", value: 0 },
+      ],
+    });
+    expect(lines[0]).toContain("vendor is Burton");
+    expect(lines[1]).toContain("2027");
+    // The URL is the thing a person will assume moved with the title. Every title line says it.
+    expect(lines.filter((l) => l.includes("The URL does not change."))).toHaveLength(3);
+    expect(lines[3]).toBe('Remove " EX DEMO" from the product title. The URL does not change.');
+    expect(lines[4]).toBe("Set the stock on hand to 0.");
   });
 });

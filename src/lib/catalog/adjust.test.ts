@@ -1,6 +1,6 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { applyPlan, describeFile, foldPlans, isWholeFile, money, verifyOnlyIntended, type FoldStep, type Plan } from "./adjust";
+import { applyPlan, describeFile, foldPlans, isWholeFile, money, renamedTitle, titleWithYear, verifyOnlyIntended, type FoldStep, type Plan } from "./adjust";
 import { parseCsv } from "./csv";
 
 /**
@@ -611,5 +611,119 @@ describe("what comes out is a CSV", () => {
     // was asked to make; every other cell still has to come back byte for byte, which is what
     // verifyOnlyIntended proves on every file.
     expect(rows[1][2]).toBe("a, b, c");
+  });
+});
+
+
+/**
+ * Editing what a product is called, and how many of it there are.
+ *
+ * The buyer asked for these alongside price: a season reorder changes the year in the title, the
+ * invoice says how many came in. Both are read off the shop's own export rather than assumed.
+ */
+const SKIS = "/root/.claude/uploads/94fb8bfb-35a9-5176-afe9-8fcc0dec9eb3/48bf1557-products_export_1_5.csv";
+const skis = readFileSync(SKIS, "utf8");
+
+describe("putting a season in the title", () => {
+  it("replaces the year a title already carries, and leaves the rest of the wording alone", () => {
+    expect(titleWithYear("Mindbender 88 2027 inc Marker Griffon Demo Binding Package EX DEMO", "2028"))
+      .toBe("Mindbender 88 2028 inc Marker Griffon Demo Binding Package EX DEMO");
+    expect(titleWithYear("Rustler 10 2025", "2026")).toBe("Rustler 10 2026");
+  });
+
+  it("puts a new year in front of the length and the binding wording, not on the end", () => {
+    // The thing appending would have got wrong, on 252 of their products.
+    expect(titleWithYear("Wingman 78 Ti inc EL 10.0 Shift Binding Package", "2027"))
+      .toBe("Wingman 78 Ti 2027 inc EL 10.0 Shift Binding Package");
+    expect(titleWithYear("Mr J 140cm inc Marker M7.0 Binding Package", "2027"))
+      .toBe("Mr J 2027 140cm inc Marker M7.0 Binding Package");
+    expect(titleWithYear("Blacklight 95 inc Binding Crampon and Skins Package", "2027"))
+      .toBe("Blacklight 95 2027 inc Binding Crampon and Skins Package");
+  });
+
+  it("appends only when the title has no tail to sit in front of", () => {
+    expect(titleWithYear("Vertis Birdie", "2027")).toBe("Vertis Birdie 2027");
+  });
+
+  it("leaves the title alone when the year is not a year", () => {
+    expect(titleWithYear("Rustler 10", "next season")).toBe("Rustler 10");
+    expect(titleWithYear("Rustler 10", "26")).toBe("Rustler 10");
+  });
+
+  it("rebuilds their own titles: strip the year out and put it back", () => {
+    // The measurement the rule is built on, kept as a test so it cannot quietly rot: every title
+    // in their ski export that names a season, with the season removed and reinserted.
+    const { rows, ix } = table(skis);
+    const iT = ix("Title");
+    const titles = [...new Set(rows.map((r) => (r[iT] ?? "").trim()).filter((t) => /\b20\d\d\b/.test(t)))];
+    expect(titles.length).toBeGreaterThan(200);
+    const rebuilt = titles.filter((t) => {
+      const year = t.match(/\b20\d\d\b/)![0];
+      const stripped = t.replace(/\s*\b20\d\d\b\s*/, " ").replace(/\s{2,}/g, " ").trim();
+      return titleWithYear(stripped, year) === t;
+    });
+    expect(rebuilt.length / titles.length).toBeGreaterThan(0.95);
+  });
+
+  it("writes the title once per product and says the URL has not moved", () => {
+    const plan: Plan = { scope: { vendors: ["Volkl"] }, operations: [{ kind: "setTitleYear", year: "2028" }] };
+    const out = applyPlan(skis, plan);
+    expect(out.refused).toBeUndefined();
+    expect(out.matched).toBe(70);
+    // 70 Volkl products, 70 title cells — never one per variant row, of which they have far more.
+    expect(out.changes).toHaveLength(70);
+    expect(new Set(out.changes.map((c) => c.column))).toEqual(new Set(["Title"]));
+    expect(out.changes.every((c) => c.after.includes("2028"))).toBe(true);
+    expect(out.changes.some((c) => c.before.includes("2026"))).toBe(true);
+    expect(out.warnings.join(" ")).toContain("matches an import on Handle");
+
+    // And the handles themselves are untouched, which is the whole point of that warning.
+    const before = table(skis), after = table(out.csv);
+    const iH = after.ix("Handle");
+    expect(after.rows.map((r) => r[iH])).toEqual(before.rows.map((r) => r[iH]));
+  });
+});
+
+describe("renaming and restocking", () => {
+  it("swaps wording in the title wherever it appears, however it is capitalised", () => {
+    expect(renamedTitle("Mindbender 88 inc Marker Griffon Demo Binding Package", "griffon demo", "Griffon 13"))
+      .toBe("Mindbender 88 inc Marker Griffon 13 Binding Package");
+    expect(renamedTitle("Rustler 10 EX DEMO", " EX DEMO", "")).toBe("Rustler 10");
+    expect(renamedTitle("Rustler 10", "", "x")).toBe("Rustler 10");
+    // A replacement is wording, not a pattern: $& in it stays $&.
+    expect(renamedTitle("Rustler 10", "Rustler", "$&A")).toBe("$&A 10");
+  });
+
+  it("sets the stock on every variant row and on none of the image rows", () => {
+    // A number none of them is on already, so every product really moves. Their Volkl stock is
+    // mostly zero, and asking for zero would have quietly tested almost nothing.
+    const plan: Plan = { scope: { vendors: ["Volkl"] }, operations: [{ kind: "setQuantity", value: 42 }] };
+    const out = applyPlan(skis, plan);
+    expect(out.refused).toBeUndefined();
+    const before = table(skis), after = table(out.csv);
+    const iQ = after.ix("Variant Inventory Qty"), iH = after.ix("Handle");
+    const touched = new Set(out.changes.map((c) => c.handle));
+    expect(touched.size).toBe(70);
+    let variants = 0, images = 0;
+    for (let r = 0; r < before.rows.length; r++) {
+      if (!touched.has(before.rows[r][iH])) continue;
+      if ((before.rows[r][iQ] ?? "").trim() === "") { images++; expect(after.rows[r][iQ] ?? "").toBe(""); }
+      else { variants++; expect(after.rows[r][iQ]).toBe("42"); }
+    }
+    expect(variants).toBeGreaterThan(70);
+    expect(images).toBeGreaterThan(0);
+    expect(out.changes).toHaveLength(variants);
+  });
+
+  it("rounds a quantity to a whole number, because half a ski is not a thing", () => {
+    const one = "Handle,Title,Variant Price,Variant Inventory Qty\r\nx,A ski,100.00,4\r\n";
+    const out = applyPlan(one, { scope: {}, operations: [{ kind: "setQuantity", value: 2.6 }] });
+    expect(out.changes[0].after).toBe("3");
+  });
+
+  it("says so when the file has no column to put it in", () => {
+    const thin = "Handle,Title\r\nx,A ski\r\n";
+    expect(applyPlan(thin, { scope: {}, operations: [{ kind: "setQuantity", value: 1 }] }).warnings.join(" "))
+      .toContain("Variant Inventory Qty");
   });
 });

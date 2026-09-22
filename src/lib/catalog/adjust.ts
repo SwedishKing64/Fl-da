@@ -67,7 +67,25 @@ export type Operation =
   | { kind: "removeTags"; tags: string[] }
   | { kind: "setStatus"; status: "active" | "draft" | "archived" }
   | { kind: "setType"; value: string }
-  | { kind: "setVendor"; value: string };
+  | { kind: "setVendor"; value: string }
+  /**
+   * Stock on hand, per variant row.
+   *
+   * Only a row that already carries a quantity gets one, the same way setPrice only touches a row
+   * that already has a price. That is not caution for its own sake: a Shopify export puts a
+   * product's extra images on rows of their own, which carry a handle and nothing else. Across
+   * their ten exports, 994 of 5,653 rows are those, not one of them carries a quantity, and all
+   * 4,659 real variant rows do — so "has a quantity" separates the two exactly.
+   */
+  | { kind: "setQuantity"; value: number }
+  /**
+   * Put a season into the product title — the one title edit this shop actually makes in bulk.
+   *
+   * See titleWithYear for where it goes and why.
+   */
+  | { kind: "setTitleYear"; year: string }
+  /** Swap one piece of wording in the title for another, wherever it appears. */
+  | { kind: "renameTitle"; find: string; replace: string };
 
 export interface Plan {
   scope: Scope;
@@ -121,6 +139,56 @@ export function quote(value: string): string {
 /** Round half-up to cents, without the floating-point surprise at .005. */
 export function money(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+/**
+ * Where the season goes in a title.
+ *
+ * Their titles are not "Brand Model" — a ski sold with a binding is "Mindbender 88 2027 inc Marker
+ * Griffon Demo Binding Package EX DEMO", and the year sits after the model and before everything
+ * that describes the deal. Appending it would have written "…Binding Package EX DEMO 2027" on the
+ * 252 products whose year is mid-title today.
+ *
+ * So: a title that already names a year has that year REPLACED (the 2026s becoming the 2027s is
+ * the change they actually make). Otherwise the year goes in front of the first thing that reads
+ * as part of the tail — a length, "inc", "EX DEMO", "Superseded" — and only a title with no tail
+ * at all gets it on the end.
+ *
+ * Measured against their own catalogue: strip the year out of each of the 547 titles that carry
+ * one and put it back with this rule, and 539 come back character for character. The eight that do
+ * not are all one house style — "Redster J2 70-90 2024 inc …", a length range written before the
+ * year rather than after it — and they come back readable, with the year one word early.
+ */
+const TITLE_TAIL = [/\b\d{2,3}\s*-\s*\d{2,3}\s*cm\b/i, /\b\d{2,3}\s*cm\b/i, /\binc\b/i, /\bex\s+demo\b/i, /\bsuperseded\b/i];
+
+export function titleWithYear(title: string, year: string): string {
+  const text = title.trim();
+  const season = year.trim();
+  if (!text || !/^\d{4}$/.test(season)) return title;
+  if (/\b20\d\d\b/.test(text)) return text.replace(/\b20\d\d\b/, season);
+  let at = text.length;
+  for (const re of TITLE_TAIL) {
+    const m = text.match(re);
+    if (m && m.index !== undefined && m.index < at) at = m.index;
+  }
+  if (at >= text.length) return `${text} ${season}`;
+  return `${text.slice(0, at).trimEnd()} ${season} ${text.slice(at).trimStart()}`;
+}
+
+/**
+ * Replace every occurrence of a phrase, matched without regard to case, spelled as given.
+ *
+ * The replacement is wording, not a pattern — a `$&` in it stays a `$&`. Whatever is left is
+ * tidied: taking "EX DEMO" out of "Rustler 10 EX DEMO" must not leave the title ending in a space,
+ * and the gap a removal leaves in the middle must not stay a double space. That tidying is safe to
+ * do unconditionally — across their ten exports exactly one of 1,217 titles has a double space in
+ * it, and none has an untrimmed end.
+ */
+export function renamedTitle(title: string, find: string, replace: string): string {
+  if (find === "") return title;
+  const escaped = find.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const next = title.replace(new RegExp(escaped, "gi"), () => replace);
+  return next === title ? title : next.replace(/[^\S\r\n]{2,}/g, " ").trim();
 }
 
 const price = (raw: string): number | null => {
@@ -229,6 +297,8 @@ export function applyPlan(text: string, plan: Plan): AdjustResult {
     if (op.kind === "setStatus") return index.has("Status") ? [] : ["Status"];
     if (op.kind === "setType") return index.has("Type") ? [] : ["Type"];
     if (op.kind === "setVendor") return index.has("Vendor") ? [] : ["Vendor"];
+    if (op.kind === "setTitleYear" || op.kind === "renameTitle") return index.has("Title") ? [] : ["Title"];
+    if (op.kind === "setQuantity") return index.has("Variant Inventory Qty") ? [] : ["Variant Inventory Qty"];
     return index.has("Variant Price") ? [] : ["Variant Price"];
   }))];
   for (const column of missing) warnings.push(`The file has no "${column}" column, so that part of the instruction could not be applied.`);
@@ -328,8 +398,39 @@ export function applyPlan(text: string, plan: Plan): AdjustResult {
           if (set(row, "Vendor", op.value)) record("Vendor", before, op.value);
           break;
         }
+        case "setQuantity": {
+          // A row with no quantity is an image row, not a variant. See the operation.
+          if (at(row, "Variant Inventory Qty").trim() === "") break;
+          const after = String(Math.round(op.value));
+          const before = at(row, "Variant Inventory Qty");
+          if (set(row, "Variant Inventory Qty", after)) record("Variant Inventory Qty", before, after);
+          break;
+        }
+        case "setTitleYear": {
+          if (!isFirst) break;
+          const before = at(row, "Title");
+          if (!before.trim()) break;
+          const after = titleWithYear(before, op.year);
+          if (set(row, "Title", after)) record("Title", before, after);
+          break;
+        }
+        case "renameTitle": {
+          if (!isFirst) break;
+          const before = at(row, "Title");
+          if (!before.trim()) break;
+          const after = renamedTitle(before, op.find, op.replace);
+          if (set(row, "Title", after)) record("Title", before, after);
+          break;
+        }
       }
     }
+  }
+
+  // Worth saying every time, because it is the one thing about a title change that surprises
+  // people: Shopify matches an import on Handle. The URL keeps the old wording, and editing the
+  // Handle to match would not rename the product — it would import a second copy of it.
+  if (changes.some((c) => c.column === "Title")) {
+    warnings.push("The product URLs are unchanged. Shopify matches an import on Handle, so a title can be edited here but the handle cannot — changing it would create a second copy of the product rather than renaming the one you have. A URL has to be changed in Shopify itself, which leaves a redirect behind.");
   }
 
   const csv = [header, ...rows].map((row) => header.map((_, i) => quote(row[i] ?? "")).join(",")).join("\r\n") + "\r\n";

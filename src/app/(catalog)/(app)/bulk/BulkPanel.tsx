@@ -540,7 +540,7 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
           <label className="block text-sm">
             <span className="mb-1 block font-medium text-[var(--ink-2)]">{feed.length > 0 ? "And then…" : "Say it the way you would say it to someone"}</span>
             <textarea rows={2} value={instruction} onChange={(e) => { setInstruction(e.target.value); setPreview(null); }} className={INPUT} placeholder="Put all the Karbon jackets 30% off and into clearance" />
-            <span className="mt-1 block text-xs text-[var(--ink-soft)]">Each one applies on top of the last, across every file, and any of them can be undone.</span>
+            <span className="mt-1 block text-xs text-[var(--ink-soft)]">Each one applies on top of the last, across every file, and any of them can be undone. Prices and tags, and also titles ({"\u201c"}make the Volkl skis 2027{"\u201d"}) and stock on hand. A title change never moves the product{"\u2019"}s URL.</span>
           </label>
           <div className="mt-3 flex flex-wrap gap-2">
             <Button variant="primary" disabled={!aiEnabled || busy !== null || !instruction.trim()} onClick={() => void workOut()}>

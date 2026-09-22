@@ -14,7 +14,7 @@ export type DocumentType = "INVOICE" | "SPEC_SHEET" | "PRICE_LIST" | "PRODUCT_PH
 
 const LineItemSchema = z.object({
   title: z.string().describe("Product name without size/length/colour suffixes, e.g. 'Bent 90'"),
-  brand: z.string().describe("Brand or vendor if stated, else empty"),
+  brand: z.string().describe("The brand ON the product — Volkl, Atomic, Marker. NEVER the distributor, agent or wholesaler the document came from."),
   modelCode: z.string().describe("Model/style code shared across sizes of the same product, else empty"),
   sku: z.string().describe("Supplier SKU / item code for this exact variant, else empty"),
   barcode: z.string().describe("EAN/UPC if present, digits only, else empty"),
@@ -65,6 +65,12 @@ Size grids (very common on apparel invoices, and the shape most often got wrong)
 - Quantities in those cells are often HANDWRITTEN, and may be circled or ticked. Read them as the quantity. A circle around a number does not change the number.
 - Check your work against the row's printed total quantity ("2 EA", "3 EA") and the stated Total Units: the quantities you emit for a row should add up to it.
 - A page may be photographed sideways or upside down. Read it in whatever orientation it is.
+
+The brand is the brand on the product, never the company that sent the document:
+- An order form, an invoice and a price list all carry a letterhead: a name, an address, a phone number, an email, usually top-right. That company is the DISTRIBUTOR — the agent this shop buys through. "Sportrade Australia" is who sells them Volkl; it is not the brand of a single ski, and it must never be the brand on an item.
+- The brand is what is printed on the goods, and it is what the range is called: RACETIGER, BLAZE and MANTRA are Volkl; SQUIRE and GRIFFON are Marker. It is usually in the document's title, in a logo, in the sheet's name, or in the model codes — and it is the same for most or all of the rows.
+- One workbook can hold two brands, most often a ski brand and the binding brand on the same order. Give each item the brand of the thing that item IS.
+- If the document names no brand at all, leave it empty. An empty brand is fixed in one click on the batch; a distributor's name is fixed by someone noticing it first, and nobody does.
 
 Section headers:
 - A line like "Description: SPYD - Mens - Technical Jackets" or "Womens - Technical Pants" is a heading that applies to EVERY row beneath it until the next such heading, not a product of its own.

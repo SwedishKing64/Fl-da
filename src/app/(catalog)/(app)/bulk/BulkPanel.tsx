@@ -385,10 +385,10 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="text-sm">
               <span className="font-medium">Have the changes written down?</span>
-              <span className="ml-2 text-xs text-[var(--ink-soft)]">A PDF, a photo of a printed page, or a text file. It is read against the files above, grouped by shelf, and you approve a shelf at a time.</span>
+              <span className="ml-2 text-xs text-[var(--ink-soft)]">The shop&rsquo;s sale template as a spreadsheet, or a PDF or photo of a written page. A template is read column by column and exactly — no interpreting. Either way it is matched against the files above, grouped by shelf, and you approve a shelf at a time.</span>
             </div>
-            <Button size="sm" disabled={!aiEnabled || busy !== null} onClick={() => sheetRef.current?.click()}>{busy === "sheet" ? "Reading…" : rows.length > 0 ? "Use a different sheet" : "Add an instruction sheet"}</Button>
-            <input ref={sheetRef} type="file" accept=".pdf,.txt,.md,image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void takeSheet(f); e.target.value = ""; }} />
+            <Button size="sm" disabled={busy !== null} onClick={() => sheetRef.current?.click()}>{busy === "sheet" ? "Reading…" : rows.length > 0 ? "Use a different sheet" : "Add the sale sheet"}</Button>
+            <input ref={sheetRef} type="file" accept=".xlsx,.xls,.csv,.pdf,.txt,.md,image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void takeSheet(f); e.target.value = ""; }} />
           </div>
 
           {busy === "sheet" && progress && (

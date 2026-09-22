@@ -78,3 +78,56 @@ export async function extractXlsx(buffer: Buffer, sheetName?: string): Promise<E
   const warnings = wb.worksheets.length > 1 ? [`Workbook has ${wb.worksheets.length} sheets; used "${sheet.name}".`] : [];
   return gridToTable(compact, "XLSX", warnings);
 }
+
+/**
+ * Every sheet of a workbook, as a grid.
+ *
+ * extractXlsx picks one sheet and reads it as a table of products. A template is not that: it has
+ * its instructions on one tab and its notes and vocabulary on others, and which tab is which is
+ * only decided by looking at the headings on each. So this hands back all of them, untouched.
+ */
+export async function sheetGrids(buffer: Buffer): Promise<Array<{ name: string; grid: string[][] }>> {
+  const wb = new ExcelJS.Workbook();
+  try {
+    await wb.xlsx.load(buffer as unknown as ExcelJS.Buffer);
+  } catch (err) {
+    // A workbook that has been round the office picks up cell comments, and the reader throws on
+    // some of them rather than ignoring them — a note somebody left on a heading is not a reason
+    // to refuse the sheet. They hold nothing this needs, so they are taken out and it is read
+    // again. Anything else still throws.
+    if (!/comments/i.test(err instanceof Error ? err.message : String(err))) throw err;
+    await wb.xlsx.load(await withoutComments(buffer) as unknown as ExcelJS.Buffer);
+  }
+  return wb.worksheets.map((sheet) => {
+    const grid: string[][] = [];
+    sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+      const cells: string[] = [];
+      row.eachCell({ includeEmpty: true }, (cell, col) => {
+        cells[col - 1] = cellToString(cell.value);
+      });
+      grid[rowNumber - 1] = Array.from({ length: cells.length }, (_, i) => cells[i] ?? "");
+    });
+    return { name: sheet.name, grid: grid.map((r) => r ?? []) };
+  });
+}
+
+/** The same workbook with its cell comments removed, for a reader that will not tolerate them. */
+async function withoutComments(buffer: Buffer): Promise<Buffer> {
+  const JSZip = (await import("jszip")).default;
+  const zip = await JSZip.loadAsync(buffer);
+  const drop = Object.keys(zip.files).filter((n) => /xl\/(comments|threadedComments)|commentsDrawing|vmlDrawing/i.test(n));
+  for (const name of drop) zip.remove(name);
+  // The relationships pointing at them have to go too, or the reader looks for a part that is now
+  // missing and fails in a different place.
+  for (const name of Object.keys(zip.files).filter((n) => /_rels\/.*\.rels$/.test(n))) {
+    const xml = await zip.file(name)!.async("string");
+    const cleaned = xml.replace(/<Relationship\b[^>]*?(?:comments|vmlDrawing)[^>]*?\/>/gi, "");
+    if (cleaned !== xml) zip.file(name, cleaned);
+  }
+  const types = zip.file("[Content_Types].xml");
+  if (types) {
+    const xml = await types.async("string");
+    zip.file("[Content_Types].xml", xml.replace(/<Override\b[^>]*?(?:comments|vmlDrawing)[^>]*?\/>/gi, ""));
+  }
+  return zip.generateAsync({ type: "nodebuffer" });
+}

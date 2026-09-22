@@ -824,7 +824,6 @@ export async function readSheetAgainstFilesAction(
  */
 export async function readInstructionSheetAction(file: { name: string; type: string; base64: string }): Promise<ActionResult<SplitInstructions & { source: string }>> {
   await requireUser();
-  if (!planningAvailable()) return { ok: false, error: "Set ANTHROPIC_API_KEY to read an instruction sheet." };
 
   const buffer = Buffer.from(file.base64, "base64");
   // Under the 12mb configured for Server Actions in next.config, with room for base64's overhead.
@@ -832,7 +831,51 @@ export async function readInstructionSheetAction(file: { name: string; type: str
 
   const isPdf = /pdf$/i.test(file.name) || file.type === "application/pdf";
   const isImage = /^image\//.test(file.type);
+  const isWorkbook = /\.xlsx?$/i.test(file.name) || /spreadsheet|excel/i.test(file.type);
+  const isCsv = /\.csv$/i.test(file.name) || file.type === "text/csv";
   let source = isPdf ? "read as a PDF" : isImage ? "read as a picture" : "plain text";
+
+  // A spreadsheet is read here rather than sent away to be interpreted. The template's columns are
+  // fixed, so what every cell means is settled before the file is opened — which is faster, costs
+  // nothing, and cannot read the same file two different ways on two different days. A workbook
+  // that is NOT the template still goes to the model, with its rows laid out as a table.
+  if (isWorkbook || isCsv) {
+    try {
+      const grids = isWorkbook
+        ? await (await import("@/lib/catalog/extract/tabular")).sheetGrids(buffer)
+        : [{ name: file.name, grid: (await import("@/lib/catalog/csv")).parseCsv(buffer.toString("utf8")) }];
+      const { readSaleSheet, looksLikeProductExport } = await import("@/lib/catalog/sale-sheet");
+
+      if (grids.some((g) => looksLikeProductExport((g.grid[0] ?? []).map(String)))) {
+        return { ok: false, error: `${file.name} is a Shopify product export, not a sheet of instructions. Add it under "The files from Shopify" above instead.` };
+      }
+
+      const read = readSaleSheet(grids);
+      if (read) {
+        if (read.instructions.length === 0) {
+          return { ok: false, error: `${file.name} was read from the "${read.sheet}" tab and none of its rows turned into a change.${read.ignored.length ? ` ${read.ignored.length} were left alone — the commonest reason is a row with no year tag.` : ""}` };
+        }
+        return { ok: true, data: { instructions: read.instructions, ignored: read.ignored, unclear: read.unclear, source: `the "${read.sheet}" tab, read column by column` } };
+      }
+
+      // Not the template. Lay the rows out as a table for the model rather than as loose text —
+      // the columns are the whole meaning, and a flattened sheet loses them.
+      const lines = grids.flatMap(({ name, grid }) => [
+        `--- sheet: ${name} ---`,
+        ...grid.map((row) => row.map((c) => (c ?? "").toString().trim()).join(" | ")).filter((l) => l.replace(/[|\s]/g, "")),
+      ]);
+      if (!planningAvailable()) return { ok: false, error: `${file.name} is not the shop's sale template, so it has to be read by the API — set ANTHROPIC_API_KEY, or use the template.` };
+      const split = await splitInstructions(lines.join("\n"));
+      if (!split || split.instructions.length === 0) {
+        return { ok: false, error: `${file.name} was read and nothing in it reads as a change to make. If it is the shop's template, check the headings on the first row.` };
+      }
+      return { ok: true, data: { ...split, source: `${grids.length} sheet${grids.length === 1 ? "" : "s"}, read as a table` } };
+    } catch (err) {
+      return { ok: false, error: `Could not open ${file.name}: ${err instanceof Error ? err.message : String(err)}` };
+    }
+  }
+
+  if (!planningAvailable()) return { ok: false, error: "Set ANTHROPIC_API_KEY to read an instruction sheet." };
 
   // Each stage says which one it was. "It could not be read" covers reading the file, understanding
   // it, and finding anything in it, and as one message it sends people looking in the wrong place.

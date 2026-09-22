@@ -115,18 +115,21 @@ describe("choosing columns by what is under them", () => {
 describe("an invoice against the shop's own export", () => {
   const SKIS = `${UP}48bf1557-products_export_1_5.csv`;
 
-  it("says why nothing matched, rather than reporting a zero", { timeout: 30_000 }, async () => {
-    // Their December order form and their ski export, both real, and they cannot meet: the order
-    // form identifies 375 lines by Marker/Volkl item code and carries no EAN at all, while the
-    // export keeps barcodes and almost no SKUs. Worth a test because it is not a bug and it is
-    // the first thing that will happen — "0 matched" needs to say which of the two documents to
-    // go back for.
+  it("falls back to the name, because the two documents share no code at all", { timeout: 30_000 }, async () => {
+    // Their December order form identifies 375 lines by Volkl/Marker item code and carries no EAN;
+    // the ski export keeps barcodes and almost no SKUs. On barcode and SKU alone this pair matches
+    // nothing, which is why the name is the third key — it is the only thing they have in common.
     const invoice = readInvoiceGrids(await sheetGrids(readFileSync(ORDER)))!;
     const r = reconcile(readFileSync(SKIS, "utf8"), invoice.lines);
-    expect(r.matched).toHaveLength(0);
     expect(r.keys.invoiceBarcodes).toBe(0);
     expect(r.keys.invoiceSkus).toBeGreaterThan(300);
     expect(r.keys.fileBarcodes).toBeGreaterThan(400);
+
+    expect(r.matched.every((m) => m.key === "name")).toBe(true);
+    expect(r.matched.map((m) => m.on).sort()).toEqual(["RACETIGER SC BLACK", "RACETIGER SRC", "SHINE 76", "SHINE MT"]);
+    // The rest is mostly the shop keeping three seasons of one model: "PEREGRINE MT" is the 2025,
+    // the 2026 and the ex-demo, and no line of an order form says which. Refused, and named.
+    expect(r.ambiguous.some((a) => a.reason.includes("PEREGRINE MT") && a.reason.includes("matches 3 products"))).toBe(true);
   });
 
   it("places an invoice built from the export's own barcodes, and writes only what was ticked", () => {

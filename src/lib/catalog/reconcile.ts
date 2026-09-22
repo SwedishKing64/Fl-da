@@ -30,16 +30,25 @@ export interface InvoiceLine {
   costPrice: number | null;
   rrp: number | null;
   quantity: number | null;
+  /** The size or length this line is for, where the document gives one per line. */
+  size?: string;
 }
 
-export type MatchKey = "barcode" | "sku";
+export type MatchKey = "barcode" | "sku" | "name";
 
 export interface Match {
   line: InvoiceLine;
-  /** Index into the parsed grid, header row included, so a caller can write straight to it. */
-  row: number;
+  /**
+   * Indexes into the parsed grid, header row included, so a caller can write straight to them.
+   *
+   * A barcode or a SKU names one variant, so this is one row. A NAME names a product, which is
+   * every size of it — and that difference decides what may be written. See applyInvoice.
+   */
+  rows: number[];
   handle: string;
   key: MatchKey;
+  /** What on the line was matched, for the screen: the barcode, the code, or the wording. */
+  on: string;
 }
 
 export interface Reconciliation {
@@ -101,6 +110,129 @@ function reasonFor(
     : `${clash.key} ${clash.value} is on ${clash.rows.length} rows across ${handles.size} different products`;
 }
 
+
+/**
+ * Matching on the product's NAME, for the invoices that carry no barcode.
+ *
+ * Their Volkl order form has 375 lines and not one EAN on it, and a Swany invoice names its
+ * goods the way the shop does — "SX-2M" against the SX-2M gloves. So a third key, after the two
+ * that identify a variant exactly.
+ *
+ * It is the loose one, so it is the strictest. A name match must be a WHOLE token or a run of
+ * whole tokens, never a substring: "CH8 Wax" and "CH10 Wax" are two products on their shelf and a
+ * substring match would put one's price on the other. Punctuation and spacing inside a code are
+ * ignored, because "SX-2M", "SX 2M" and "SX2M" are one code written three ways. And as with the
+ * other keys, a name that finds more than one product is refused rather than resolved.
+ *
+ * What it identifies is a PRODUCT, not a variant — every size of the glove — which is why what
+ * may be written to it is limited. See applyInvoice.
+ */
+
+/** Uppercase, punctuation to spaces, spaces collapsed. "Men's SX-2M!" -> "MEN S SX 2M". */
+const normName = (value: string): string => value.toUpperCase().replace(/[^A-Z0-9]+/g, " ").trim();
+
+/**
+ * The part of a title that is the product's own name.
+ *
+ * Their package listings are "Peregrine 82 2026 inc Lowride 13 FR Binding Package": a ski, then
+ * the binding it is sold with. Both are products the supplier invoices separately, so matching a
+ * name against the whole title would put the BINDING's price onto the SKI that mentions it — and
+ * silently, on the one ski that happened to be the only one with that binding. Everything from
+ * "inc" onwards describes the other product, so nothing there is matched against.
+ */
+function ownName(title: string): string {
+  const words = normName(title).split(" ").filter(Boolean);
+  const inc = words.indexOf("INC");
+  return (inc > 0 ? words.slice(0, inc) : words).join(" ");
+}
+
+/** A model code: letters then digits, run together however it was spaced. "SX 2M" -> "SX2M". */
+function codesIn(title: string): Set<string> {
+  const words = normName(title).split(" ").filter(Boolean);
+  const out = new Set<string>();
+  const take = (token: string) => {
+    if (token.length >= 3 && token.length <= 12 && /^[A-Z]{1,4}\d/.test(token)) out.add(token);
+  };
+  for (let i = 0; i < words.length; i++) {
+    take(words[i]);
+    // "SX 2M" and "TA 0520" arrive split, because the shop writes the code with a space in it.
+    if (i + 1 < words.length) take(words[i] + words[i + 1]);
+  }
+  return out;
+}
+
+/** True when `needle`'s tokens appear in `hay` as a run, whole tokens only. */
+function hasRun(hay: string[], needle: string[]): boolean {
+  if (needle.length === 0 || needle.length > hay.length) return false;
+  for (let i = 0; i + needle.length <= hay.length; i++) {
+    if (needle.every((w, j) => hay[i + j] === w)) return true;
+  }
+  return false;
+}
+
+/**
+ * What a line offers to be matched on by name, best first.
+ *
+ * The item code is tried before the wording. An invoice's description is written for a human and
+ * drifts — "SX-2M Glove", "SX-2M Mens" — while its code is the thing both documents agree on.
+ */
+function nameKeysOf(line: InvoiceLine): string[] {
+  const keys: string[] = [];
+  const fromSku = codesIn(line.sku);
+  for (const code of fromSku) keys.push(code);
+  for (const code of codesIn(line.title)) if (!keys.includes(code)) keys.push(code);
+  const words = normName(line.title).split(" ").filter(Boolean);
+  // Wording is a last resort and only when there is enough of it to mean something. One common
+  // word would match half the shelf, and be refused — but slowly, and for every line.
+  if (words.length >= 2) keys.push(words.join(" "));
+  return keys;
+}
+
+/**
+ * Place one line by name, or say why it could not be.
+ *
+ * Codes first, then the wording, and at each step the answer has to be ONE product from the file
+ * and ONE line from the invoice. Two candidates is not a near miss to be resolved by picking the
+ * closest — it is a question for a person, and it is returned as one.
+ */
+function placeByName(
+  line: InvoiceLine,
+  index: { byCode: Map<string, string[]>; wordsOf: Map<string, string[]>; nameCounts: Map<string, number> },
+): { handle: string; on: string; reason: string } {
+  const miss = { handle: "", on: "", reason: "" };
+  for (const key of nameKeysOf(line)) {
+    const repeated = (index.nameCounts.get(key) ?? 0) > 1;
+    const words = key.split(" ");
+    const handles = words.length === 1
+      ? index.byCode.get(key) ?? []
+      : [...index.wordsOf].filter(([, title]) => hasRun(title, words) || hasRun(words, title)).map(([handle]) => handle);
+    if (handles.length === 0) continue;
+    if (repeated) {
+      return { ...miss, reason: `"${key}" is on ${index.nameCounts.get(key)} lines of the invoice, so it cannot say which product is which` };
+    }
+    if (handles.length > 1) {
+      return { ...miss, reason: `"${key}" matches ${handles.length} products — ${handles.slice(0, 3).join(", ")}${handles.length > 3 ? ", …" : ""}` };
+    }
+    return { handle: handles[0], on: key, reason: "" };
+  }
+  return miss;
+}
+
+/**
+ * Narrow a product's rows to the one the line is about, when the line says which.
+ *
+ * An invoice for gloves is a line per size. Where it gives one and the product has a variant with
+ * that option value, the line belongs to that variant alone; where it does not, it belongs to the
+ * product, all sizes of it, and applyInvoice limits what that may write.
+ */
+function narrowToSize(rows: number[], line: InvoiceLine, grid: string[][], index: Map<string, number>): number[] {
+  const want = (line.size ?? "").trim().toUpperCase().replace(/\s+/g, "");
+  if (!want || rows.length <= 1) return rows;
+  const options = ["Option1 Value", "Option2 Value", "Option3 Value"].map((c) => index.get(c)).filter((i): i is number => i !== undefined);
+  const hit = rows.filter((r) => options.some((i) => (grid[r]?.[i] ?? "").trim().toUpperCase().replace(/\s+/g, "") === want));
+  return hit.length === 1 ? hit : rows;
+}
+
 /**
  * Match every line of an invoice to a variant row of a Shopify export.
  *
@@ -132,6 +264,25 @@ export function reconcile(csv: string, lines: InvoiceLine[]): Reconciliation {
     if (sku) bySku.set(sku, [...(bySku.get(sku) ?? []), r]);
   }
 
+  // The name index is by PRODUCT, not by row: a title is written once, on the handle's first row,
+  // and what it names is every size of the thing.
+  const rowsOf = new Map<string, number[]>();
+  const titleOf = new Map<string, string>();
+  for (let r = 1; r < grid.length; r++) {
+    const handle = handleOf.get(r) ?? "";
+    if (!handle) continue;
+    rowsOf.set(handle, [...(rowsOf.get(handle) ?? []), r]);
+    const title = at(grid[r], "Title");
+    if (title && !titleOf.has(handle)) titleOf.set(handle, title);
+  }
+  const byCode = new Map<string, string[]>();
+  const wordsOf = new Map<string, string[]>();
+  for (const [handle, title] of titleOf) {
+    const own = ownName(title);
+    for (const code of codesIn(own)) byCode.set(code, [...(byCode.get(code) ?? []), handle]);
+    wordsOf.set(handle, own.split(" ").filter(Boolean));
+  }
+
   // A key the invoice itself repeats is ambiguous before the export is even consulted.
   const lineBarcodes = new Map<string, number>();
   const lineSkus = new Map<string, number>();
@@ -140,6 +291,12 @@ export function reconcile(csv: string, lines: InvoiceLine[]): Reconciliation {
     if (b) lineBarcodes.set(b, (lineBarcodes.get(b) ?? 0) + 1);
     const s = normSku(line.sku);
     if (s) lineSkus.set(s, (lineSkus.get(s) ?? 0) + 1);
+  }
+  // A name key two lines both offer cannot place either of them, for the same reason a repeated
+  // barcode cannot: two prices, one product, and no way to tell which.
+  const nameCounts = new Map<string, number>();
+  for (const line of lines) {
+    for (const key of nameKeysOf(line)) nameCounts.set(key, (nameCounts.get(key) ?? 0) + 1);
   }
 
   const matched: Match[] = [];
@@ -155,12 +312,27 @@ export function reconcile(csv: string, lines: InvoiceLine[]): Reconciliation {
 
     const hit = tries.find((t) => t.rows.length === 1 && t.onInvoice === 1);
     if (hit) {
-      matched.push({ line, row: hit.rows[0], handle: handleOf.get(hit.rows[0]) ?? "", key: hit.key });
+      matched.push({ line, rows: [hit.rows[0]], handle: handleOf.get(hit.rows[0]) ?? "", key: hit.key, on: hit.value });
       continue;
     }
     const clash = tries.find((t) => t.rows.length > 1 || (t.rows.length === 1 && t.onInvoice > 1));
     if (clash) {
       ambiguous.push({ line, reason: reasonFor(clash, handleOf), rows: clash.rows });
+      continue;
+    }
+
+    // Nothing identified it exactly. Try the name — the only key a Swany invoice or a Volkl order
+    // form offers, and the loose one, so it has to be unique on both sides like the others.
+    const byName = placeByName(line, { byCode, wordsOf, nameCounts });
+    if (byName.handle) {
+      const rows = narrowToSize(rowsOf.get(byName.handle) ?? [], line, grid, index);
+      if (rows.length > 0) {
+        matched.push({ line, rows, handle: byName.handle, key: "name", on: byName.on });
+        continue;
+      }
+    }
+    if (byName.reason) {
+      ambiguous.push({ line, reason: byName.reason, rows: [] });
       continue;
     }
     unmatched.push(line);
@@ -215,27 +387,45 @@ export function applyInvoice(csv: string, matched: Match[], fields: InvoiceField
   }
 
   const touched = new Set<number>();
+  let spreadQuantities = 0;
   for (const m of matched) {
-    const r = m.row - 1;                       // matched.row indexes the grid; rows drops the header
-    const row = rows[r];
-    if (!row) continue;
-    touched.add(m.row);
-    const title = (row[index.get("Title") ?? -1] ?? "").trim();
-    const write = (column: string, value: string) => {
-      const i = index.get(column);
-      if (i === undefined || value === "") return;
-      const before = (row[i] ?? "").trim();
-      if (before === value) return;
-      while (row.length <= i) row.push("");
-      row[i] = value;
-      changes.push({ handle: m.handle, title, column, before, after: value });
-    };
     // Never a zero. An empty price cell means "leave it alone" to Shopify and a zero means free,
     // and a supplier document prints 0 for anything it does not price separately.
     const rrp = m.line.rrp !== null && m.line.rrp > 0 ? m.line.rrp : null;
-    if (fields.rrp && rrp !== null) write("Variant Compare At Price", rrp.toFixed(2));
-    if (fields.price && rrp !== null) write("Variant Price", rrp.toFixed(2));
-    if (fields.quantity && m.line.quantity !== null) write("Variant Inventory Qty", String(Math.round(m.line.quantity)));
+
+    /**
+     * A count belongs to one variant, a price belongs to the product.
+     *
+     * A line matched by barcode or SKU is one variant and both are safe. A line matched by NAME is
+     * the whole product — every size of the glove — and the two numbers part company there. One
+     * recommended retail across the sizes is how the shop already prices them, so it is written to
+     * all of them. One stock count is not: writing "6 in stock" onto each of four sizes invents
+     * twenty-four gloves. So a spread count is skipped and said out loud.
+     */
+    const spread = m.rows.length > 1;
+    if (spread && fields.quantity && m.line.quantity !== null) spreadQuantities++;
+
+    for (const at of m.rows) {
+      const row = rows[at - 1];                // a match indexes the grid; rows drops the header
+      if (!row) continue;
+      touched.add(at);
+      const title = (row[index.get("Title") ?? -1] ?? "").trim();
+      const write = (column: string, value: string) => {
+        const i = index.get(column);
+        if (i === undefined || value === "") return;
+        const before = (row[i] ?? "").trim();
+        if (before === value) return;
+        while (row.length <= i) row.push("");
+        row[i] = value;
+        changes.push({ handle: m.handle, title, column, before, after: value });
+      };
+      if (fields.rrp && rrp !== null) write("Variant Compare At Price", rrp.toFixed(2));
+      if (fields.price && rrp !== null) write("Variant Price", rrp.toFixed(2));
+      if (!spread && fields.quantity && m.line.quantity !== null) write("Variant Inventory Qty", String(Math.round(m.line.quantity)));
+    }
+  }
+  if (spreadQuantities > 0) {
+    warnings.push(`${spreadQuantities} line${spreadQuantities === 1 ? "" : "s"} matched a product by name rather than a barcode, so ${spreadQuantities === 1 ? "its count was" : "their counts were"} left alone — a name says which product, not which size, and one count written onto every size invents stock. The prices went on. For counts, the invoice needs barcodes or a size per line.`);
   }
 
   const out = [header, ...rows].map((row) => header.map((_, i) => quote(row[i] ?? "")).join(",")).join("\r\n") + "\r\n";

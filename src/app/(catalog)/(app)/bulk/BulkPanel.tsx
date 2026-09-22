@@ -168,6 +168,9 @@ function whyNothing(invoice: Invoice, against: Against): string {
   return `Both documents carry codes — ${keys.invoiceBarcodes} barcodes and ${keys.invoiceSkus} item codes on the invoice, ${keys.fileBarcodes} and ${keys.fileSkus} on the exports — and none of them are the same. This is usually next season's goods, which the shop does not list yet.`;
 }
 
+/** The matches made on wording rather than a code — the ones worth a person's eye. */
+const byName = (r: Reconciliation) => r.matched.filter((m) => m.key === "name");
+
 const countChanges = (results: Array<{ result: AdjustResult }>) => results.reduce((n, r) => n + r.result.changes.length, 0);
 const countMatched = (results: Array<{ result: AdjustResult }>) => results.reduce((n, r) => n + r.result.matched, 0);
 
@@ -716,7 +719,7 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="text-sm">
               <span className="font-medium">Reordering, and the prices or the counts have changed?</span>
-              <span className="ml-2 text-xs text-[var(--ink-soft)]">Add the invoice and each line is matched to the variant it belongs to by barcode, or by item code where there is no barcode. A spreadsheet or CSV is read by its columns; a PDF or a photo of one goes to the API to be read.</span>
+              <span className="ml-2 text-xs text-[var(--ink-soft)]">Add the invoice and each line is matched by barcode, then by item code, then by the product&rsquo;s name — so an invoice that says SX-2M finds the SX-2M. A line that fits two products is never guessed at. A spreadsheet or CSV is read by its columns; a PDF or a photo of one goes to the API to be read.</span>
             </div>
             <Button size="sm" disabled={busy !== null} onClick={() => invoiceRef.current?.click()}>{busy === "invoice" ? "Reading…" : invoice ? "Use a different invoice" : "Add the invoice"}</Button>
             <input ref={invoiceRef} type="file" accept=".xlsx,.xls,.csv,.pdf,.png,.jpg,.jpeg,.webp,.heic,image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void takeInvoice(f); e.target.value = ""; }} />
@@ -751,6 +754,15 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
                       <span className="ml-2 tabular-nums text-xs text-[var(--ink-soft)]">
                         {r.matched.length} matched · {r.unmatched.length} not in this file · {r.ambiguous.length} too ambiguous to place
                       </span>
+                      {byName(r).length > 0 && (
+                        <div className="mt-1 rounded-lg border border-dashed border-[var(--line)] px-2.5 py-2 text-xs text-[var(--ink-soft)]">
+                          <strong>{byName(r).length} matched on the name</strong>, not a barcode — worth a look, since a name is the one key that can be read two ways. A price goes on every size; a count needs a barcode or a size per line.
+                          <ul className="mt-1 list-disc pl-5">
+                            {byName(r).slice(0, 4).map((m, i) => <li key={i}>&ldquo;{m.on}&rdquo; → {m.handle}{m.rows.length > 1 ? ` (${m.rows.length} sizes)` : ""}</li>)}
+                            {byName(r).length > 4 && <li>…and {byName(r).length - 4} more</li>}
+                          </ul>
+                        </div>
+                      )}
                       {r.ambiguous.length > 0 && (
                         <ul className="mt-1 list-disc pl-5 text-xs text-[var(--ink-soft)]">
                           {r.ambiguous.slice(0, 3).map((x, i) => <li key={i}>{x.line.title || x.line.sku || x.line.barcode} — {x.reason}, so it is left alone</li>)}

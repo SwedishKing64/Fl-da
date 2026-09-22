@@ -885,6 +885,7 @@ export async function readInvoiceAction(file: { name: string; type: string; base
         // Same rule as the column reader: a zero is not a price, it is a line with none.
         rrp: item.rrp !== null && item.rrp > 0 ? item.rrp : null,
         quantity: item.quantity,
+        size: (item.size || item.length || "").trim(),
       }))
       .filter((l) => (l.barcode.trim() || l.sku.trim()) && (l.rrp !== null || l.quantity !== null));
 
@@ -895,7 +896,7 @@ export async function readInvoiceAction(file: { name: string; type: string; base
       ok: true,
       data: {
         lines, sheet: file.name, warnings: [],
-        columns: { barcode: "", sku: "", rrp: "", quantity: "", title: "" },
+        columns: { barcode: "", sku: "", rrp: "", quantity: "", title: "", size: "" },
         source: `read as ${isPdf ? "a PDF" : "a picture"}${extracted.supplier ? `, from ${extracted.supplier}` : ""}`,
       },
     };

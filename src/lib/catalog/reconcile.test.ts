@@ -13,6 +13,8 @@ import { applyInvoice, normaliseBarcode, reconcile, type InvoiceLine } from "./r
 import { parseCsv } from "./csv";
 
 const EXPORT = "/root/.claude/uploads/94fb8bfb-35a9-5176-afe9-8fcc0dec9eb3/48bf1557-products_export_1_5.csv";
+/** Their snow-clothing export: Karbon, Oakley and Quiksilver, 140 products in 648 variant rows. */
+const EXPORT_TEXT = readFileSync("/root/.claude/uploads/94fb8bfb-35a9-5176-afe9-8fcc0dec9eb3/a2c0583c-products_export-6.csv", "utf8");
 
 const line = (over: Partial<InvoiceLine> = {}): InvoiceLine =>
   ({ sku: "", barcode: "", title: "", costPrice: null, rrp: null, quantity: null, ...over });
@@ -144,5 +146,124 @@ describe("against the shop's real ski export", () => {
     expect(out.refused).toBeUndefined();
     expect(out.changes).toHaveLength(3);
     expect(out.changes.every((c) => c.after === "1234.56")).toBe(true);
+  });
+});
+
+/**
+ * Matching on the name, for the invoices that carry no barcode.
+ *
+ * Their Volkl order form has 375 lines and not one EAN, and a Swany invoice names its goods the
+ * way the shop does. This is the loose key, so these are mostly tests of what it REFUSES.
+ */
+describe("matching by name", () => {
+  const GLOVES = [
+    "Handle,Title,Option1 Value,Variant SKU,Variant Barcode,Variant Price,Variant Compare At Price,Variant Inventory Qty",
+    "swany-sx-2m,SX-2M Gore-Tex Glove,S,,,199.00,,4",
+    "swany-sx-2m,,M,,,199.00,,6",
+    "swany-sx-2m,,L,,,199.00,,2",
+    "swany-x-cell,X-Cell Mitt,M,,,249.00,,3",
+  ].join("\r\n") + "\r\n";
+  const named = (title: string, over: Partial<InvoiceLine> = {}): InvoiceLine =>
+    ({ sku: "", barcode: "", title, costPrice: null, rrp: 229, quantity: 12, ...over });
+
+  it("places a model code on the product whose name carries it", () => {
+    const r = reconcile(GLOVES, [named("SX-2M")]);
+    expect(r.matched).toHaveLength(1);
+    expect(r.matched[0].key).toBe("name");
+    expect(r.matched[0].handle).toBe("swany-sx-2m");
+    // The name is the product, so it is every size of it.
+    expect(r.matched[0].rows).toHaveLength(3);
+  });
+
+  it("does not care how the code is punctuated, because the two documents will not agree", () => {
+    for (const written of ["SX-2M", "sx 2m", "SX2M", "Swany SX-2M Glove"]) {
+      expect(reconcile(GLOVES, [named(written)]).matched[0]?.handle).toBe("swany-sx-2m");
+    }
+  });
+
+  it("matches whole tokens only, never a substring", () => {
+    // The trap this exists for: CH8 and CH10 are two waxes on their shelf.
+    const r = reconcile(GLOVES, [named("SX-2")]);
+    expect(r.matched).toHaveLength(0);
+  });
+
+  it("refuses a name that fits two products rather than picking one", () => {
+    const twice = GLOVES.replace("swany-x-cell,X-Cell Mitt", "swany-sx-2m-w,SX-2M Womens");
+    const r = reconcile(twice, [named("SX-2M")]);
+    expect(r.matched).toHaveLength(0);
+    expect(r.ambiguous[0].reason).toContain("matches 2 products");
+  });
+
+  it("refuses a name two lines of the invoice both give", () => {
+    const r = reconcile(GLOVES, [named("SX-2M", { rrp: 199 }), named("SX-2M", { rrp: 249 })]);
+    expect(r.matched).toHaveLength(0);
+    expect(r.ambiguous[0].reason).toContain("2 lines of the invoice");
+  });
+
+  it("never matches the binding a package is sold with", () => {
+    // "Peregrine 82 2026 inc Lowride 13 FR Binding Package" is a SKI. An invoice line for the
+    // Lowride binding must not land on it, and would have on whichever ski was the only one
+    // naming that binding.
+    const skis = [
+      "Handle,Title,Variant Price",
+      "peregrine-82-2026-inc-lowride-13-fr-binding-package,Peregrine 82 2026 inc Lowride 13 FR Binding Package,1499.00",
+    ].join("\r\n") + "\r\n";
+    expect(reconcile(skis, [named("LOWRIDE 13 FR")]).matched).toHaveLength(0);
+    expect(reconcile(skis, [named("Peregrine 82")]).matched).toHaveLength(1);
+  });
+
+  it("writes the price to every size and leaves the count alone, saying why", () => {
+    const r = reconcile(GLOVES, [named("SX-2M", { rrp: 229, quantity: 12 })]);
+    const out = applyInvoice(GLOVES, r.matched, { rrp: true, quantity: true });
+    expect(out.refused).toBeUndefined();
+    // One recommended retail across the sizes is how they already price them.
+    expect(out.changes.filter((c) => c.column === "Variant Compare At Price")).toHaveLength(3);
+    // One count across three sizes would invent 36 gloves out of 12.
+    expect(out.changes.filter((c) => c.column === "Variant Inventory Qty")).toHaveLength(0);
+    expect(out.warnings.join(" ")).toContain("invents stock");
+  });
+
+  it("writes the count when the line says which size it is for", () => {
+    const r = reconcile(GLOVES, [named("SX-2M", { size: "M", quantity: 12 })]);
+    expect(r.matched[0].rows).toHaveLength(1);
+    const out = applyInvoice(GLOVES, r.matched, { quantity: true });
+    expect(out.changes).toHaveLength(1);
+    expect(out.changes[0].after).toBe("12");
+  });
+
+  it("falls back to the whole product when the size is not one the shop stocks", () => {
+    const r = reconcile(GLOVES, [named("SX-2M", { size: "XXL" })]);
+    expect(r.matched[0].rows).toHaveLength(3);
+  });
+
+  it("prefers an exact barcode over a name, when the line has both", () => {
+    const withCode = GLOVES.replace("swany-x-cell,X-Cell Mitt,M,,,", "swany-x-cell,X-Cell Mitt,M,,9351234500019,");
+    const r = reconcile(withCode, [named("SX-2M", { barcode: "9351234500019" })]);
+    expect(r.matched[0].key).toBe("barcode");
+    expect(r.matched[0].handle).toBe("swany-x-cell");
+  });
+});
+
+describe("matching by name against their real catalogue", () => {
+  it("places 115 of 140 snow-clothing products with nothing on the wrong one", () => {
+    // Their Karbon/Oakley/Quiksilver export, the closest thing loaded to a Swany glove invoice:
+    // an invoice line per product, named the way the shop names it and carrying no code at all.
+    // What matters is not the 115 — it is that none of them landed on a different product.
+    const grid = parseCsv(EXPORT_TEXT).filter((r) => r.some((c) => c.trim() !== ""));
+    const header = grid[0];
+    const iT = header.indexOf("Title"), iH = header.indexOf("Handle");
+    const handleOfTitle = new Map<string, string>();
+    for (const row of grid.slice(1)) {
+      const handle = (row[iH] ?? "").trim(), title = (row[iT] ?? "").trim();
+      if (handle && title && !handleOfTitle.has(title)) handleOfTitle.set(title, handle);
+    }
+    const lines: InvoiceLine[] = [...handleOfTitle.keys()].map((title) => ({ sku: "", barcode: "", title, costPrice: null, rrp: 199, quantity: 5 }));
+    expect(lines.length).toBe(140);
+
+    const r = reconcile(EXPORT_TEXT, lines);
+    expect(r.matched.length).toBeGreaterThan(110);
+    expect(r.matched.filter((m) => handleOfTitle.get(m.line.title) !== m.handle)).toEqual([]);
+    // The rest are refused, never guessed: the same model in two colours or two seasons.
+    expect(r.matched.length + r.ambiguous.length + r.unmatched.length).toBe(140);
   });
 });

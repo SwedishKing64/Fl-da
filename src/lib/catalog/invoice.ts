@@ -26,7 +26,7 @@ export interface InvoiceRead {
   lines: InvoiceLine[];
   /** The sheet it was read from, and the heading it used for each thing, to show on screen. */
   sheet: string;
-  columns: { barcode: string; sku: string; rrp: string; quantity: string; title: string };
+  columns: { barcode: string; sku: string; rrp: string; quantity: string; title: string; size: string };
   warnings: string[];
 }
 
@@ -82,6 +82,10 @@ const SKU = /\bsku\b|item no|item code|item number|article no|article code|suppl
 const RRP = /\brrp\b|recommended|retail|\bmsrp\b|\bsrp\b/;
 const NOT_RRP = /\bw s\b|wholesale|cost|indent|total|margin|gst/;
 const QTY = /^qty|quantity|units|ordered|order qty/;
+// Their order forms head it "Sizes", "size (ski length)" or "Size". Not "sizes" as a LIST of the
+// lengths a ski comes in, which is a different column with the same name — that is why the values
+// have to look like one size rather than five.
+const SIZE = /^size|^sizes$|length|mondo/;
 const TITLE = /descri|product|title|\bname\b|model|style/;
 
 /** Read one sheet as an invoice, or decide it is not one. */
@@ -105,6 +109,10 @@ function readGrid(name: string, grid: string[][]): InvoiceRead | null {
   // RACE", "PLATES", "UNIVERSAL Line" — so there is nothing to match on and the column beside the
   // item code is taken instead. It is named that way on screen rather than by its heading, which
   // would otherwise be shown as if it meant something.
+  // One size per line, not the list of sizes a model comes in: "168/173/178/183" is the second,
+  // and a line that says all four is not a line about one of them.
+  const size = pick(headings, rows, SIZE, null, (v) => v.length <= 12 && !v.includes("/") && !v.includes(","));
+
   const title = pick(headings, rows, TITLE, null, (v) => v.length >= 3 && !/^\d+$/.test(v))
     ?? (sku ? { index: sku.index + 1, heading: `the column beside "${sku.heading}"` } : null);
 
@@ -114,6 +122,7 @@ function readGrid(name: string, grid: string[][]): InvoiceRead | null {
       sku: sku ? text(row[sku.index]) : "",
       barcode: barcode ? text(row[barcode.index]) : "",
       title: title ? text(row[title.index]) : "",
+      ...(size ? { size: text(row[size.index]) } : {}),
       costPrice: null,
       // A zero is not a price. Their order form prints 0 against the system bindings that come with
       // a ski, and writing that through would put "free" in front of a customer — which is exactly
@@ -132,7 +141,7 @@ function readGrid(name: string, grid: string[][]): InvoiceRead | null {
   return {
     lines,
     sheet: name,
-    columns: { barcode: heading(barcode), sku: heading(sku), rrp: heading(rrp), quantity: heading(quantity), title: heading(title) },
+    columns: { barcode: heading(barcode), sku: heading(sku), rrp: heading(rrp), quantity: heading(quantity), title: heading(title), size: heading(size) },
     warnings: [],
   };
 }

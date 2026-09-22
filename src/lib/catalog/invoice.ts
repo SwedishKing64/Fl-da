@@ -89,6 +89,124 @@ const SIZE = /^size|^sizes$|length|mondo/;
 const COLOUR = /colou?r|^options?$/;
 const TITLE = /descri|product|title|\bname\b|model|style/;
 
+/**
+ * A supplier's ORDER FORM, where the order is the cells somebody filled in.
+ *
+ * This is the shape that was being read wrong, and read wrong in the worst direction. Their Volkl
+ * December workbook is a price list of the entire range — 375 models — laid out as a size grid:
+ *
+ *     RACETIGER | Item No.      | RACETIGER        | Sizes  | RRP  | TOTAL QTY | 148 | 150 | 153 …
+ *     Flat      | V2610001.000  | RACETIGER GS MAS | 168/…  | 2249 |           |     |     |
+ *     …
+ *     System    | V2610112.000  | M7 MANTRA        | …      | 1649 |           |     |  1  |
+ *
+ * Every row is a product the supplier sells; only the rows with a number under a length are
+ * products the shop BOUGHT. Reading every row as an order line turned a nine-line order into 375,
+ * which is not a near miss — it is the whole catalogue presented as this month's delivery.
+ *
+ * Three things about the layout have to be honoured or the wrong cells are read:
+ *
+ *  - The sheet has a header PER SECTION, not one at the top, and each section has its own lengths.
+ *    Racetigers run 148-183 and Peregrines 151-182, so the column that means "170" in one section
+ *    means something else twelve rows down.
+ *  - A filled cell is a line of its own. "M7 Mantra, 170: 1, 177: 2" is two lines, one per length,
+ *    which is exactly what the reconciler wants: a length identifies the variant.
+ *  - A row with no item code is not an order however many numbers are on it. Their Race Ski tab
+ *    has a bare "ADUILT RACE" row of lengths that reads as fourteen quantities otherwise, and
+ *    their footers put the indent discount and the GST under the QTY heading.
+ */
+const ITEM_HEADING = /^(item|article|style|product)\s*(no\.?|number|code)$/;
+
+/** A quantity somebody wrote in a box: a small whole number, not a price, a rate or a length. */
+function orderedQuantity(raw: string): number | null {
+  const value = readNumber(raw);
+  if (value === null || !Number.isInteger(value) || value <= 0 || value > 999) return null;
+  return value;
+}
+
+/**
+ * An item code, as against a sentence that happens to be in the item-code column.
+ *
+ * Theirs are V2610112.000, 7522A1.BB, 2020Y1.SS — short, no spaces, starting on a letter or a
+ * digit. A footnote is none of those things.
+ */
+function looksLikeItemCode(value: string): boolean {
+  return value.length >= 3 && value.length <= 40 && (value.match(/\s/g) ?? []).length <= 1 && /^[A-Za-z0-9]/.test(value);
+}
+
+interface Section { at: number; end: number; sku: number; title: number; rrp: number; qty: number; sizes: Array<[number, string]> }
+
+function sectionsOf(grid: string[][]): Section[] {
+  const heads: number[] = [];
+  grid.forEach((row, i) => {
+    if ((row ?? []).some((c) => ITEM_HEADING.test(norm(text(c))))) heads.push(i);
+  });
+  return heads.map((at, n) => {
+    const headings = (grid[at] ?? []).map(text);
+    const find = (re: RegExp) => headings.findIndex((c) => re.test(norm(c)));
+    const qty = find(/^(total )?qty$|^quantity$/);
+    // The lengths and sizes: numeric headings, and only past the quantity column so that a price
+    // or an item number in the heading row cannot be mistaken for one.
+    const sizes = headings
+      .map((c, i) => [i, c] as [number, string])
+      .filter(([i, c]) => qty >= 0 && i > qty && /^\d{2,3}(\.\d)?$/.test(c.trim()));
+    const sku = headings.findIndex((c) => ITEM_HEADING.test(norm(c)));
+    return { at, end: n + 1 < heads.length ? heads[n + 1] : grid.length, sku, title: sku + 1, rrp: find(RRP), qty, sizes };
+  });
+}
+
+/** Read a sheet as an order form, or return null when nobody has written a quantity on it. */
+function readOrder(name: string, grid: string[][]): InvoiceRead | null {
+  const sections = sectionsOf(grid).filter((s) => s.sku >= 0 && (s.qty >= 0 || s.sizes.length > 0));
+  if (sections.length === 0) return null;
+
+  const lines: InvoiceLine[] = [];
+  let sizeGrid = false;
+  for (const section of sections) {
+    for (let r = section.at + 1; r < section.end; r++) {
+      const row = grid[r] ?? [];
+      const sku = text(row[section.sku]);
+      // No item code, no order — whatever numbers are on the row. See the "ADUILT RACE" row. And
+      // an item code is a code: their footnote "** Indent Orders to be placed by 25th October 24"
+      // sits in that column with a 5 beside it and would otherwise be a line of the delivery.
+      if (!looksLikeItemCode(sku)) continue;
+      // Their order form's first column says Flat, System or Binding — the difference between the
+      // ski and the ski-with-binding, which the shop lists as two products at two prices.
+      const kind = norm(text(row[0]));
+      const form = kind === "flat" ? ("flat" as const) : kind === "system" ? ("package" as const) : undefined;
+      const base = {
+        sku,
+        barcode: "",
+        title: text(row[section.title]),
+        ...(form ? { form } : {}),
+        costPrice: null,
+        rrp: section.rrp >= 0 ? ((readNumber(text(row[section.rrp])) ?? 0) > 0 ? readNumber(text(row[section.rrp])) : null) : null,
+      };
+      let onThisRow = 0;
+      for (const [at, heading] of section.sizes) {
+        const quantity = orderedQuantity(text(row[at]));
+        if (quantity === null) continue;
+        lines.push({ ...base, quantity, size: heading.trim() });
+        onThisRow++;
+        sizeGrid = true;
+      }
+      // A plain quantity column, for the tabs that have no size grid — one binding, five of them.
+      // Skipped when the row already gave its lengths, where it is their sum.
+      if (onThisRow === 0 && section.qty >= 0) {
+        const quantity = orderedQuantity(text(row[section.qty]));
+        if (quantity !== null) lines.push({ ...base, quantity });
+      }
+    }
+  }
+  if (lines.length === 0) return null;
+  return {
+    lines,
+    sheet: name,
+    columns: { barcode: "", sku: "Item No.", rrp: "RRP", quantity: sizeGrid ? "the length columns" : "QTY", title: 'the column beside "Item No."', size: sizeGrid ? "the column heading" : "", colour: "" },
+    warnings: [],
+  };
+}
+
 /** Read one sheet as an invoice, or decide it is not one. */
 function readGrid(name: string, grid: string[][]): InvoiceRead | null {
   if (grid.length < 2) return null;
@@ -164,6 +282,25 @@ function readGrid(name: string, grid: string[][]): InvoiceRead | null {
  * the four upload tabs dropped for overlapping them.
  */
 export function readInvoiceGrids(grids: Array<{ name: string; grid: string[][] }>): InvoiceRead | null {
+  /**
+   * An order form that somebody has filled in beats the same form read as a list.
+   *
+   * Both readings work on the same workbook and they answer different questions. If a single cell
+   * anywhere has a quantity written in it, this is a delivery and its lines are those cells — nine
+   * of them, not the 375 models the form also happens to price. With nothing written in, it is a
+   * price list and every row of it is a line, which is what a price update wants.
+   */
+  const ordered = grids.map((g) => readOrder(g.name, g.grid)).filter((r): r is InvoiceRead => r !== null);
+  if (ordered.length > 0) {
+    const lines = ordered.flatMap((o) => o.lines);
+    return {
+      lines,
+      sheet: ordered.map((o) => o.sheet).join(", "),
+      columns: ordered[0].columns,
+      warnings: [`Read as an order: ${lines.length} line${lines.length === 1 ? "" : "s"} from the quantities written on ${ordered.length === 1 ? `the "${ordered[0].sheet}" tab` : `${ordered.length} tabs`}. The rest of the form is the supplier's price list, not this delivery, so it was left alone.`],
+    };
+  }
+
   const read = grids.map((g) => readGrid(g.name, g.grid)).filter((r): r is InvoiceRead => r !== null)
     .sort((a, b) => b.lines.length - a.lines.length);
   if (read.length === 0) return null;

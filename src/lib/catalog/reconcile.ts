@@ -34,6 +34,14 @@ export interface InvoiceLine {
   size?: string;
   /** The colourway this line is for, where the product comes in more than one. */
   colour?: string;
+  /**
+   * Whether the line is the ski on its own or the ski with a binding on it.
+   *
+   * Their order form says so in its own first column — Flat, System or Binding — and the shop
+   * lists the two separately, "M7 Mantra 2027" beside "M7 Mantra 2027 inc Marker Griffon Binding
+   * Package", at different prices. Without it a line is two products and neither can be picked.
+   */
+  form?: "flat" | "package";
 }
 
 export type MatchKey = "barcode" | "sku" | "name";
@@ -203,17 +211,21 @@ function nameKeysOf(line: InvoiceLine): string[] {
  */
 function placeByName(
   line: InvoiceLine,
-  index: { byCode: Map<string, string[]>; wordsOf: Map<string, string[]>; nameCounts: Map<string, number>; variant: string },
+  index: {
+    byCode: Map<string, string[]>; wordsOf: Map<string, string[]>; nameCounts: Map<string, number>; variant: string;
+    seasonOf: Map<string, string>; season: string; titleOf: Map<string, string>;
+  },
 ): { handle: string; on: string; reason: string } {
   const miss = { handle: "", on: "", reason: "" };
   for (const key of nameKeysOf(line)) {
     const seen = index.nameCounts.get(`${key}\u0000${index.variant}`) ?? 0;
     const repeated = seen > 1;
     const words = key.split(" ");
-    const handles = words.length === 1
+    let handles = words.length === 1
       ? index.byCode.get(key) ?? []
       : [...index.wordsOf].filter(([, title]) => hasRun(title, words) || hasRun(words, title)).map(([handle]) => handle);
     if (handles.length === 0) continue;
+    handles = sift(handles, line, index);
     if (repeated) {
       return { ...miss, reason: `"${key}" is on ${seen} lines of the invoice for the same size, so it cannot say which is which` };
     }
@@ -223,6 +235,49 @@ function placeByName(
     return { handle: handles[0], on: key, reason: "" };
   }
   return miss;
+}
+
+/**
+ * Cut a list of candidate products down using what the line and the operator already told us.
+ *
+ * Two filters, both from evidence rather than preference, and each only applied when it leaves
+ * something behind:
+ *
+ *  - The SEASON, when one was given. "M7 Mantra" is eight listings across three years; "2027"
+ *    leaves two.
+ *  - FLAT against a package. Their order form marks a ski Flat, System or Binding, and a line
+ *    reading "BLAZE 94 BLACK FLAT" is the ski on its own — which is a different product from
+ *    "Blaze 94 2027 inc Marker Griffon Binding Package" and priced differently. Those last two
+ *    are what remains after the season filter, so this is usually what settles it.
+ */
+/** A product's own name with any season taken out: "M7 Mantra 2027" becomes "M7 MANTRA". */
+const withoutYear = (title: string): string =>
+  ownName(title).split(" ").filter((w) => !/^20\d\d$/.test(w)).join(" ");
+
+function sift(handles: string[], line: InvoiceLine, index: { seasonOf: Map<string, string>; season: string; titleOf: Map<string, string> }): string[] {
+  let kept = handles;
+  if (index.season) {
+    const inSeason = kept.filter((h) => (index.seasonOf.get(h) ?? "").includes(index.season.toUpperCase()));
+    if (inSeason.length > 0) kept = inSeason;
+  }
+  if (kept.length > 1) {
+    const isPackage = (h: string) => /\binc\b/i.test(index.titleOf.get(h) ?? "");
+    const wantsFlat = line.form === "flat" || /\bflat\b/i.test(line.title);
+    const wantsPackage = line.form === "package";
+    if (wantsFlat || wantsPackage) {
+      const sorted = kept.filter((h) => (wantsFlat ? !isPackage(h) : isPackage(h)));
+      if (sorted.length > 0) kept = sorted;
+    }
+  }
+  if (kept.length > 1) {
+    // Last: the product actually CALLED this, rather than one whose name merely contains it.
+    // "M7 Mantra" and "M7 Mantra W" are two skis, and a code reads the same for both — so the
+    // name is compared token for token with the year taken out, and an exact answer wins.
+    const wanted = normName(line.title).split(" ").filter(Boolean).join(" ");
+    const exact = kept.filter((h) => withoutYear(index.titleOf.get(h) ?? "") === wanted);
+    if (exact.length > 0) kept = exact;
+  }
+  return kept;
 }
 
 /**
@@ -304,7 +359,20 @@ function sameColour(want: string, optionValue: string): boolean {
  * the same barcode twice, or an export that carries it on two rows, means somebody has to look —
  * and a tool that picks one silently is worse than one that says so.
  */
-export function reconcile(csv: string, lines: InvoiceLine[]): Reconciliation {
+export interface ReconcileOptions {
+  /**
+   * The season this delivery is for, as the shop writes it in a title or a tag: "2027".
+   *
+   * A supplier's order form does not say which season it is — it is this season's form, and
+   * everyone signing it knows. The shop's catalogue, though, carries three of them side by side:
+   * "M7 Mantra" is eight listings, 2025, 2026 and 2027 each as a flat ski and as a package. So a
+   * name match that would otherwise be hopelessly ambiguous becomes exact once somebody says which
+   * year, and that is a thing to be told rather than guessed from the filename.
+   */
+  season?: string;
+}
+
+export function reconcile(csv: string, lines: InvoiceLine[], options: ReconcileOptions = {}): Reconciliation {
   const grid = parseCsv(csv).filter((r) => r.some((c) => c.trim() !== ""));
   const header = grid[0] ?? [];
   const index = new Map(header.map((h, i) => [h, i]));
@@ -339,6 +407,14 @@ export function reconcile(csv: string, lines: InvoiceLine[]): Reconciliation {
     const title = at(grid[r], "Title");
     if (title && !titleOf.has(handle)) titleOf.set(handle, title);
   }
+  // What each product says about its season, title and tags together, so a year can pick between
+  // three listings of one model.
+  const seasonOf = new Map<string, string>();
+  for (const [handle, rowsAt] of rowsOf) {
+    const first = grid[rowsAt[0]] ?? [];
+    seasonOf.set(handle, `${at(first, "Title")} ${at(first, "Tags")}`.toUpperCase());
+  }
+
   const byCode = new Map<string, string[]>();
   const wordsOf = new Map<string, string[]>();
   for (const [handle, title] of titleOf) {
@@ -403,7 +479,7 @@ export function reconcile(csv: string, lines: InvoiceLine[]): Reconciliation {
 
     // Nothing identified it exactly. Try the name — the only key a Swany invoice or a Volkl order
     // form offers, and the loose one, so it has to be unique on both sides like the others.
-    const byName = placeByName(line, { byCode, wordsOf, nameCounts, variant: variantOf(line) });
+    const byName = placeByName(line, { byCode, wordsOf, nameCounts, variant: variantOf(line), seasonOf, season: (options.season ?? "").trim(), titleOf });
     if (byName.handle) {
       const productRows = rowsOf.get(byName.handle) ?? [];
       const rows = narrowToSize(productRows, line, grid, index);

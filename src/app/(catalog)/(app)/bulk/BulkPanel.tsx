@@ -196,6 +196,14 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
    * the invoice touched. So it is a tick someone makes, not a default they discover afterwards.
    */
   const [fields, setFields] = useState<InvoiceFields>({ rrp: true, price: false, quantity: true });
+  /**
+   * Which season the delivery is for.
+   *
+   * An order form never says. The catalogue carries three at once — "M7 Mantra" is eight listings,
+   * 2025, 2026 and 2027 each as a flat ski and as a package — so without this a line that is
+   * perfectly clear to the person who signed the order matches eight products and is refused.
+   */
+  const [season, setSeason] = useState("");
 
   const [instruction, setInstruction] = useState("");
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -507,7 +515,7 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
   // the one time it was missed it would show yesterday's match count over today's file.
   // No useMemo: the compiler memoizes this, and writing it by hand only stops it doing so.
   const against: Against = invoice
-    ? sheets.map((s) => ({ name: s.name, reconciliation: reconcile(s.csv, invoice.lines) }))
+    ? sheets.map((s) => ({ name: s.name, reconciliation: reconcile(s.csv, invoice.lines, { season }) }))
     : [];
   const placed = placedLines(against);
 
@@ -754,6 +762,15 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
                       <span className="ml-2 tabular-nums text-xs text-[var(--ink-soft)]">
                         {r.matched.length} matched · {r.unmatched.length} not in this file · {r.ambiguous.length} too ambiguous to place
                       </span>
+                      {r.unmatched.length > 0 && (
+                        <div className="mt-1 text-xs text-[var(--ink-soft)]">
+                          <strong>{r.unmatched.length} {r.unmatched.length === 1 ? "line is" : "lines are"} not in the shop yet</strong> — a delivery of something new. Build {r.unmatched.length === 1 ? "it" : "them"} in <strong>Import batches</strong>; this page only changes products that already exist.
+                          <ul className="mt-1 list-disc pl-5">
+                            {r.unmatched.slice(0, 4).map((u, i) => <li key={i}>{u.title || u.sku}{u.size ? ` — ${u.size}` : ""}</li>)}
+                            {r.unmatched.length > 4 && <li>…and {r.unmatched.length - 4} more</li>}
+                          </ul>
+                        </div>
+                      )}
                       {byName(r).length > 0 && (
                         <div className="mt-1 rounded-lg border border-dashed border-[var(--line)] px-2.5 py-2 text-xs text-[var(--ink-soft)]">
                           <strong>{byName(r).length} matched on the name</strong>, not a barcode — worth a look, since a name is the one key that can be read two ways. A price goes on every size; a count needs a barcode or a size per line.
@@ -773,6 +790,15 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
                   );
                 })}
               </ul>
+
+              <label className="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--line-soft)] px-3 py-2.5 text-sm">
+                <span className="font-medium">Season this delivery is for</span>
+                <input
+                  id="invoice-season" value={season} onChange={(e) => setSeason(e.target.value.trim())}
+                  placeholder="2027" inputMode="numeric" className={cx(INPUT, "w-24 tabular-nums")}
+                />
+                <span className="text-xs text-[var(--ink-soft)]">An order form never says which, and the shop lists three at once — without it, &ldquo;M7 Mantra&rdquo; is eight products and gets refused.</span>
+              </label>
 
               <fieldset className="rounded-xl border border-[var(--line-soft)] px-3 py-2.5">
                 <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-[var(--ink-soft)]">What to write</legend>

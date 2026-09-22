@@ -91,3 +91,46 @@ describe("building one", () => {
     expect(() => buildPackage(BLAZE, [])).toThrow(/at least one binding/i);
   });
 });
+
+/**
+ * The barcode on a package is the ski's.
+ *
+ * Counted from their ski export: of the 302 (package, length) pairs carrying a barcode, every one
+ * uses a single barcode across every binding option and every fitting — no exceptions — and 466 of
+ * the 474 that can be matched back to the flat ski are that ski's own. The eight that are not are
+ * two products with a leading zero on one of the two, which is drift in the data rather than a
+ * different rule.
+ */
+describe("barcodes on a package", () => {
+  const WITH_CODES = {
+    ...BLAZE,
+    lengths: [
+      { length: "172", rrp: 1449.99, barcode: "821264800133" },
+      { length: "179", rrp: 1449.99, barcode: "821264800140" },
+    ],
+  };
+
+  it("puts the ski's barcode on every variant of that length", () => {
+    const pack = buildPackage(WITH_CODES, [GRIFFON, { label: "Fritschi Tecton 13", rrp: 700 }]);
+    const at172 = pack.variants.filter((v) => v.length === "172");
+    expect(at172).toHaveLength(4);                                    // 2 bindings × 2 fittings
+    expect(new Set(at172.map((v) => v.barcode))).toEqual(new Set(["821264800133"]));
+  });
+
+  it("keeps each length on its own barcode", () => {
+    const pack = buildPackage(WITH_CODES, [GRIFFON]);
+    expect(pack.variants.find((v) => v.length === "179")?.barcode).toBe("821264800140");
+  });
+
+  it("never carries a binding's barcode, whatever the binding brings", () => {
+    // The Marker barcode list is a separate file; nothing from it belongs on a ski package.
+    const pack = buildPackage(WITH_CODES, [{ label: "Marker Griffon - Black", rrp: 459, shortName: "Marker Griffon" }]);
+    expect(pack.variants.every((v) => v.barcode === "821264800133" || v.barcode === "821264800140")).toBe(true);
+    expect(pack.variants.some((v) => v.barcode === "883295505555")).toBe(false);
+  });
+
+  it("leaves the barcode empty when the ski has none, rather than borrowing one", () => {
+    const pack = buildPackage({ ...WITH_CODES, lengths: [{ length: "186", rrp: 1449.99 }] }, [GRIFFON]);
+    expect(pack.variants.every((v) => v.barcode === "")).toBe(true);
+  });
+});

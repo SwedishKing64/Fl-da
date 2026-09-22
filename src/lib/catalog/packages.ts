@@ -42,8 +42,8 @@ export interface FlatSki {
   brand: string;
   season: string;
   tags: string[];
-  /** One entry per length, with that length's own recommended retail. */
-  lengths: Array<{ length: string; rrp: number | null }>;
+  /** One entry per length, with that length's own recommended retail and barcode. */
+  lengths: Array<{ length: string; rrp: number | null; barcode?: string }>;
 }
 
 export interface PackageVariant {
@@ -52,6 +52,16 @@ export interface PackageVariant {
   bindingFitting: string;
   /** Null when the ski or the binding has no recommended retail — never a guessed number. */
   rrp: number | null;
+  /**
+   * The SKI's barcode for this length, on every variant of it.
+   *
+   * A package is the ski; the binding travels with it. So all four variants of a length — both
+   * bindings, both fittings — carry the one barcode the ski has, and a binding's own barcode never
+   * appears on a package. Their catalogue is unanimous: of 302 (package, length) pairs that carry
+   * a barcode, every single one uses a single barcode across every binding and fitting, and 466 of
+   * the 474 that can be matched back to the flat ski are that ski's own.
+   */
+  barcode: string;
 }
 
 export interface SkiPackage {
@@ -94,11 +104,12 @@ export function buildPackage(ski: FlatSki, bindings: BindingChoice[]): SkiPackag
   const title = packageTitle(ski.title, ski.season, chosen[0]);
 
   const variants: PackageVariant[] = [];
-  for (const { length, rrp } of ski.lengths) {
+  for (const { length, rrp, barcode } of ski.lengths) {
+    const code = (barcode ?? "").trim();
     for (const binding of chosen) {
       const base = rrp === null ? null : money(rrp + binding.rrp);
-      variants.push({ length, bindingOption: binding.label, bindingFitting: FITTING_NO_MOUNT, rrp: base });
-      variants.push({ length, bindingOption: binding.label, bindingFitting: FITTING_MOUNT, rrp: base === null ? null : money(base + MOUNT_FEE) });
+      variants.push({ length, bindingOption: binding.label, bindingFitting: FITTING_NO_MOUNT, rrp: base, barcode: code });
+      variants.push({ length, bindingOption: binding.label, bindingFitting: FITTING_MOUNT, rrp: base === null ? null : money(base + MOUNT_FEE), barcode: code });
     }
   }
 

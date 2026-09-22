@@ -47,7 +47,10 @@ export const ALPSPORT_TAXONOMY: TaxonomySection[] = [
       { heading: "Ski Categories", leaves: ["Frontside & All-Mountain Skis", "Carving Skis", "Freeride & Powder Skis", "Park & Twin Tip Skis", "Race Skis", "Mogul Skis", "Touring Skis"] },
       { heading: "Ski Boots", leaves: ["Mens Boots", "Womens Boots", "Kids Boots", "Alpine Boots", "Race Boots", "Touring Boots"] },
       { heading: "Ski Bindings", leaves: ["Alpine Bindings", "Touring Bindings"] },
-      { heading: "Ski Accessories", leaves: ["Goggles", "Ski Helmets", "Ski Gloves", "Ski Poles", "Ski & Boot Bags", "Ski Tuning", "Other Ski Accessories"] },
+      // "Helmets", "Gloves" and "Mitts" are here as well as under Snowboard Accessories because
+      // that is where the shop files them: every snow helmet, all 27 goggles and 127 of 129 pairs
+      // of gloves in their exports are typed Ski Accessories. See PREFERS_SKI in headingsFor.
+      { heading: "Ski Accessories", leaves: ["Goggles", "Ski Helmets", "Helmets", "Ski Gloves", "Gloves", "Mitts", "Ski Poles", "Ski & Boot Bags", "Ski Tuning", "Other Ski Accessories"] },
     ],
   },
   {
@@ -203,7 +206,32 @@ export const TYPE_LEAVES: Record<string, string[]> = Object.fromEntries(
 export function headingsFor(type: string): string[] {
   const resolved = resolveType(type) ?? type.trim();
   if (TYPE_LEAVES[resolved]) return [resolved]; // it is already a heading
-  return (TYPE_PARENTS[resolved] ?? []).filter((h) => !AUDIENCE_HEADINGS.has(h));
+  const parents = (TYPE_PARENTS[resolved] ?? []).filter((h) => !AUDIENCE_HEADINGS.has(h));
+  return order(parents);
+}
+
+/**
+ * Where a shelf that hangs in two places is actually filed.
+ *
+ * The menu lists Goggles, Helmets and Gloves under both Ski Accessories and Snowboard Accessories,
+ * and the shop does not use it that way. In their own exports:
+ *
+ *   goggles        27 of 27 typed Ski Accessories
+ *   snow helmets   10 of 10 typed Ski Accessories (the others are climbing helmets)
+ *   gloves        127 of 129 typed Ski Accessories
+ *
+ * Snowboard Accessories is a real heading with 37 products on it, but they are snowboard hardware
+ * — stomp pads, leashes, tuning — not the things anyone wears on their head or hands. An Oakley
+ * helmet went out typed Snowboard Accessories because "Helmets" hangs only under that heading in
+ * the menu, while the shop's own word for it is "Ski Helmets". So where a shelf sits under both,
+ * the one the shop uses wins, and a person can still change it on the review page.
+ */
+function order(headings: string[]): string[] {
+  if (headings.length < 2) return headings;
+  const ski = headings.indexOf("Ski Accessories");
+  const board = headings.indexOf("Snowboard Accessories");
+  if (ski === -1 || board === -1) return headings;
+  return [headings[ski], ...headings.filter((_, i) => i !== ski)];
 }
 
 /**

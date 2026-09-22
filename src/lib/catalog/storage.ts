@@ -10,13 +10,19 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { findBlobToken } from "./blob-token";
 
 export const STORAGE_DIR = path.resolve(process.env.STORAGE_DIR || (process.env.VERCEL ? "/tmp/storage" : "./storage"));
 
 export type StorageKind = "invoices" | "exports" | "images";
 
 export function usingBlob(): boolean {
-  return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+  return findBlobToken() !== null;
+}
+
+/** Which variable the Blob token was found in, for the status panel. Never the token itself. */
+export function blobTokenSource(): string | null {
+  return findBlobToken()?.key ?? null;
 }
 
 function safeName(name: string): string {
@@ -41,9 +47,12 @@ export function contentTypeFor(name: string): string {
 /** Persist a buffer; returns a storage ref (relative path on disk, or a public URL on Blob). */
 export async function saveFile(kind: StorageKind, filename: string, data: Buffer): Promise<string> {
   const key = keyFor(kind, filename);
-  if (usingBlob()) {
+  const blobToken = findBlobToken();
+  if (blobToken) {
     const { put } = await import("@vercel/blob");
-    const blob = await put(`catalog/${key}`, data, { access: "public", contentType: contentTypeFor(filename), addRandomSuffix: false });
+    // Passed explicitly. The SDK falls back to BLOB_READ_WRITE_TOKEN by name, which is the very
+    // variable a prefixed store does not set.
+    const blob = await put(`catalog/${key}`, data, { access: "public", contentType: contentTypeFor(filename), addRandomSuffix: false, token: blobToken.token });
     return blob.url;
   }
   const abs = path.join(STORAGE_DIR, key);

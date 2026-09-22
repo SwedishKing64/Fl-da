@@ -2,7 +2,8 @@ import { prisma, databaseLatency } from "@/lib/catalog/db";
 import { requireUser } from "@/lib/catalog/auth";
 import { Card, PageHeader, fmtDate } from "@/app/(catalog)/ui";
 import { UserForm, DeleteUserButton, Status } from "./SettingsForms";
-import { usingBlob } from "@/lib/catalog/storage";
+import { usingBlob, blobTokenSource } from "@/lib/catalog/storage";
+import { blobEnvNamesPresent } from "@/lib/catalog/blob-token";
 
 /**
  * Who can sign in, and whether the app is standing on solid ground.
@@ -36,6 +37,8 @@ export default async function SettingsPage() {
           <Status
             aiConfigured={Boolean(process.env.ANTHROPIC_API_KEY)}
             storage={usingBlob() ? "blob" : process.env.VERCEL ? "ephemeral" : "disk"}
+            blobFrom={blobTokenSource()}
+            blobNames={blobEnvNamesPresent()}
             latency={latency}
           />
         </Card>

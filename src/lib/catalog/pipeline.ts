@@ -22,7 +22,7 @@ export { toCsvProducts };
 import { SKI_METAFIELDS, metafieldColumn, type AppSettings, type CanonicalLineItem, type GstTreatment } from "./types";
 import type { ReviewProduct, ReviewSummary, ReviewVariant } from "./review-types";
 import { summarise, validateReview, warningList } from "./validate";
-import { readFile, saveFile, publicFileUrl, filePath } from "./storage";
+import { filePath, publicFileUrl, readFile, saveFile, usingBlob } from "./storage";
 import { logAudit } from "./audit";
 import { AI_HEADERS } from "./extract/ai";
 
@@ -760,7 +760,7 @@ export async function loadReview(batchId: string): Promise<ReviewData> {
       pricesIncludeGst: settings.pricesIncludeGst,
       minMarginPct: settings.minMarginPct,
       shopifyConfigured: Boolean(settings.shopify.storeDomain && settings.shopify.accessToken),
-      publicBaseUrl: process.env.BLOB_READ_WRITE_TOKEN ? "blob" : settings.publicBaseUrl || process.env.APP_PUBLIC_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : ""),
+      publicBaseUrl: usingBlob() ? "blob" : settings.publicBaseUrl || process.env.APP_PUBLIC_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : ""),
     },
     metafieldColumns: SKI_METAFIELDS.map(metafieldColumn),
   };

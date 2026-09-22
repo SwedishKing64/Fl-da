@@ -12,11 +12,19 @@ import { ActionForm } from "@/app/(catalog)/ActionForm";
  * otherwise costs someone an afternoon before anybody notices it — uploads quietly discarded, or
  * every page waiting on a database on the other side of the world.
  */
-export function Status({ aiConfigured, storage, latency }: { aiConfigured: boolean; storage: "blob" | "disk" | "ephemeral"; latency: { ms: number; region: string | null } | null }) {
+export function Status({ aiConfigured, storage, latency, blobFrom, blobNames }: { aiConfigured: boolean; storage: "blob" | "disk" | "ephemeral"; latency: { ms: number; region: string | null } | null; blobFrom?: string | null; blobNames?: string[] }) {
   return (
     <div className="space-y-3">
-      {storage === "blob" && <Alert tone="success">Files are stored in Vercel Blob; uploaded images get public URLs automatically.</Alert>}
-      {storage === "ephemeral" && <Alert tone="danger">Running on Vercel without a Blob store: uploads will be lost between requests. Add Storage → Blob to the Vercel project.</Alert>}
+      {storage === "blob" && <Alert tone="success">Files are stored in Vercel Blob; uploaded images get public URLs automatically.{blobFrom && blobFrom !== "BLOB_READ_WRITE_TOKEN" ? <> The token came from <strong>{blobFrom}</strong>, which is how Vercel names a store attached under a prefix.</> : null}</Alert>}
+      {storage === "ephemeral" && (
+        <Alert tone="danger">
+          <div className="font-semibold">Running on Vercel with no Blob store it can see — uploads will be lost between requests.</div>
+          <p className="mt-1">A token is recognised by its value, so the variable can be named anything. It has to look like <span className="mono">vercel_blob_rw_…</span>.</p>
+          {blobNames && blobNames.length > 0
+            ? <p className="mt-1">These variables mention Blob but none of them holds a token of that shape: <strong>{blobNames.join(", ")}</strong>. If the store is connected, the project may need a redeploy for the variable to reach the running app.</p>
+            : <p className="mt-1">No variable here mentions Blob at all. In Vercel: Storage → connect a Blob store to this project, then redeploy.</p>}
+        </Alert>
+      )}
       {storage === "disk" && <Alert tone="info">Files are stored on this machine&apos;s disk. Set APP_PUBLIC_URL so Shopify can fetch uploaded images.</Alert>}
       <Alert tone={aiConfigured ? "success" : "warning"}>{aiConfigured ? "ANTHROPIC_API_KEY is set: PDFs, photos and the web lookup all work." : "ANTHROPIC_API_KEY is not set. Spreadsheets and CSVs still work — the shop's sale template is read without it — but PDFs, photos and the web lookup cannot run."}</Alert>
       {latency && <Alert tone={latency.ms < 40 ? "success" : latency.ms < 120 ? "info" : "warning"}>

@@ -52,14 +52,14 @@ describe("sample invoices → expected Shopify CSV", () => {
 
   it("atomic: the recommended retail is the price, and the profit follows from it", () => {
     const { products, summary } = fixtures.results.atomic;
-    const skis = products.find((p) => p.handle === "atomic-bent-90-skis")!;
+    const skis = products.find((p) => p.handle === "atomic-bent-90-skis-2026")!;
     expect(skis.option1Name).toBe("Length");
     expect(skis.variants.map((v) => v.option1Value)).toEqual(["166", "172", "178"]);
     // The supplier's recommended retail is the price. Nothing adjusts it.
     expect(skis.variants[0].retailPrice).toBe(999);
     expect(skis.variants[0].compareAtPrice).toBeNull(); // nothing to strike through at full price
     expect(skis.variants[0].profitPerUnit).toBe(458.18); // 908.18 ex-GST revenue − 450 landed
-    const beanie = products.find((p) => p.handle === "atomic-alps-beanie")!;
+    const beanie = products.find((p) => p.handle === "atomic-alps-beanie-2026")!;
     expect(beanie.variants[0].retailPrice).toBe(29.95);
     expect(summary.totalNetProfit).toBe(4863.66);
     expect(summary.totalGst).toBe(940.74);
@@ -67,12 +67,12 @@ describe("sample invoices → expected Shopify CSV", () => {
 
   it("volkl: USD invoice with line totals, no GST, freight by value", () => {
     const { products } = fixtures.results.volkl;
-    const mantra = products.find((p) => p.handle === "volkl-m6-mantra")!;
+    const mantra = products.find((p) => p.handle === "volkl-m6-mantra-2026")!;
     expect(mantra.variants).toHaveLength(3);
     expect(mantra.variants[0].sku).toBe("V2410170");
     expect(mantra.variants[0].costPrice).toBe(550); // 1100 line total / 2 pieces
     expect(mantra.variants[0].landedCostAud).toBeGreaterThan(550 * 1.52); // FX plus freight share
-    const griffon = products.find((p) => p.handle === "marker-griffon-13-id-bindings")!;
+    const griffon = products.find((p) => p.handle === "marker-griffon-13-id-bindings-2026")!;
     // Colour leads on a binding, as it does on all twenty in the catalogue.
     expect(griffon.option1Name).toBe("Colour");
     expect(griffon.option2Name).toBe("Size");
@@ -81,7 +81,7 @@ describe("sample invoices → expected Shopify CSV", () => {
 
   it("burton: GST-inclusive text invoice backs GST out of the cost", () => {
     const { products } = fixtures.results.burton;
-    const board = products.find((p) => p.handle === "burton-custom-snowboard")!;
+    const board = products.find((p) => p.handle === "burton-custom-snowboard-2027")!;
     expect(board.variants[0].landedCostAud).toBe(425); // 462 inc GST => 420 ex + 5 freight
     // The cost is understood; the price is not, because this invoice never stated one.
     expect(board.variants[0].retailPrice).toBe(0);

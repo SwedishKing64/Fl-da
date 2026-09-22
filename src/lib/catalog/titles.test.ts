@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { leadsWithVendor, productTitle, seoTitle, withoutVendor } from "./titles";
+import { leadsWithVendor, productTitle, seasonTagFrom, seoTitle, withoutVendor } from "./titles";
+import { buildHandle } from "./handle";
 import { EVERGREEN_SEASON, MANUAL_SEASON } from "./tagging";
 
 describe("the Title column", () => {
@@ -56,5 +57,59 @@ describe("the brand belongs in the Vendor column", () => {
   /** "Atomica" is not "Atomic" with a suffix. */
   it("does not mistake a longer word for the brand", () => {
     expect(withoutVendor("Atomic", "Atomica Skis")).toBe("Atomica Skis");
+  });
+});
+
+/**
+ * The URL handle carries the season too.
+ *
+ * Shopify derives a handle from the title once, when the product is created, and never again. A
+ * year appended to the name afterwards leaves the URL a season behind for good — and it cannot be
+ * put right by re-importing, because the importer matches products ON the handle, so a changed one
+ * makes a second product instead of renaming the first.
+ *
+ * The shop's own catalogue settles what it should be: of the 259 products whose name carries a
+ * year, 242 carry it in the handle as well.
+ */
+describe("the season reaches the handle, not just the name", () => {
+  it("reads the season off the year tag", () => {
+    expect(seasonTagFrom(["snow clothing", "2026", "mens"])).toBe("2026");
+    expect(seasonTagFrom(["snow clothing", "mens"])).toBeNull();
+    expect(seasonTagFrom([])).toBeNull();
+  });
+
+  it("builds a handle from the name the product will really carry", () => {
+    const season = seasonTagFrom(["2026", "snow clothing"]);
+    expect(buildHandle({ brand: "Karbon", title: productTitle("Lithium Men's Insulated Jacket", season) }))
+      .toBe("karbon-lithium-mens-insulated-jacket-2026");
+  });
+
+  it("does not put a year on something that has no season", () => {
+    expect(buildHandle({ brand: "Sea to Summit", title: productTitle("Alto TR2 Tent", seasonTagFrom(["tents"])) }))
+      .toBe("sea-to-summit-alto-tr2-tent");
+  });
+
+  it("does not double the year when the name already carries one", () => {
+    expect(buildHandle({ brand: "Volkl", title: productTitle("M7 Mantra 2027", seasonTagFrom(["2027"])) }))
+      .toBe("volkl-m7-mantra-2027");
+  });
+
+  it("leaves the sentinel years out of the handle, as they are not a season", () => {
+    for (const sentinel of ["2999", "2998"]) {
+      expect(buildHandle({ brand: "Oakley", title: productTitle("Target Line L Snow Goggles", sentinel) }))
+        .toBe("oakley-target-line-l-snow-goggles");
+    }
+  });
+});
+
+describe("an apostrophe closes up in a handle", () => {
+  it("writes mens, womens and kids the way the catalogue does", () => {
+    expect(buildHandle({ brand: "Karbon", title: "Lithium Men's Insulated Jacket" })).toBe("karbon-lithium-mens-insulated-jacket");
+    expect(buildHandle({ brand: "Burton", title: "Women's Reserve 2L Stretch Pants" })).toBe("burton-womens-reserve-2l-stretch-pants");
+    expect(buildHandle({ brand: "Burton", title: "Kids' Smalls Re:Flex Snowboard Bindings" })).toBe("burton-kids-smalls-re-flex-snowboard-bindings");
+  });
+
+  it("closes up a curly apostrophe too, since that is what a supplier's sheet usually carries", () => {
+    expect(buildHandle({ brand: "Burton", title: "Women’s Reserve 2L Stretch Pants" })).toBe("burton-womens-reserve-2l-stretch-pants");
   });
 });

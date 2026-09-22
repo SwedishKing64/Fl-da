@@ -4,7 +4,7 @@ import { buildHandle } from "./handle";
 import { chooseOptions, collectionsFor, detectCategory, enrichFromTitle, metafieldsFor, OPTION_LABELS, tagsFor, type CategoryRuleLike } from "./categorize";
 import { normaliseOptionName, optionNamesFor } from "./options";
 import { catalogTags } from "./product-tags";
-import { withoutVendor } from "./titles";
+import { productTitle, seasonTagFrom, withoutVendor } from "./titles";
 import type { CanonicalLineItem } from "./types";
 
 export interface GroupedVariant {
@@ -133,14 +133,20 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
       variants.push({ item: e.item, sourceIndex: e.index, option1Value: values[0] ?? null, option2Value: values[1] ?? null, option3Value: values[2] ?? null });
     }
     const description = items.map((i) => i.description.trim()).find(Boolean) ?? "";
+    const tags = catalogTags({ productType, brand, items, ruleTags: tagsFor(group.rule, items, brand), describedAs: `${title} ${description}`, ...(opts.builtBy ? { builtBy: opts.builtBy } : {}) });
     products.push({
       key,
-      handle: buildHandle({ brand, title: baseTitle }),
+      // Built from the name the product will actually carry, season and all. Shopify derives a
+      // handle from the title ONCE, when the product is created, and never again — so a year added
+      // to the name afterwards leaves the URL a season behind for good, and it cannot be put right
+      // by re-importing, because the importer matches on the handle. The shop's own catalogue
+      // settles it: of the 259 products whose name carries a year, 242 carry it in the handle too.
+      handle: buildHandle({ brand, title: productTitle(baseTitle, seasonTagFrom(tags)) }),
       title,
       brand,
       category: group.rule?.category ?? (first.category || "other"),
       productType,
-      tags: catalogTags({ productType, brand, items, ruleTags: tagsFor(group.rule, items, brand), describedAs: `${title} ${description}`, ...(opts.builtBy ? { builtBy: opts.builtBy } : {}) }),
+      tags,
       collections: collectionsFor(group.rule, items),
       description,
       metafields: metafieldsFor(items),

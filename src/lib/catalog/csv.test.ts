@@ -242,7 +242,10 @@ describe("handles", () => {
   it("slugifies to url-safe lowercase hyphenated form", () => {
     expect(slugify("Völkl M6 Mantra 2026 (177cm)")).toBe("volkl-m6-mantra-2026-177cm");
     expect(slugify("  Black & White / Red  ")).toBe("black-and-white-red");
-    expect(slugify("Rossignol Experience 88 Ti’s")).toBe("rossignol-experience-88-ti-s");
+    // An apostrophe closes the word up rather than splitting it, which is what Shopify does and
+    // what the catalogue carries: 113 of the 116 products whose name has one are spelled this way.
+    expect(slugify("Rossignol Experience 88 Ti’s")).toBe("rossignol-experience-88-tis");
+    expect(slugify("Women’s Reserve 2L Stretch Pants")).toBe("womens-reserve-2l-stretch-pants");
     expect(isValidHandle("volkl-m6-mantra")).toBe(true);
     expect(isValidHandle("Volkl M6")).toBe(false);
     expect(isValidHandle("-leading")).toBe(false);

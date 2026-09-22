@@ -60,3 +60,13 @@ export function withoutVendor(vendor: string, title: string): string {
   if (!leadsWithVendor(vendor, title)) return title.trim();
   return title.trim().slice(vendor.trim().length).trim().replace(/^[-–—:,]\s*/, "");
 }
+
+/**
+ * The season a product belongs to, read off its tags.
+ *
+ * The year tag is where the season is decided, so both the name and the URL handle are built from
+ * this one answer rather than each working it out for itself.
+ */
+export function seasonTagFrom(tags: string[]): string | null {
+  return tags.find((t) => /^20\d{2}$/.test(t.trim())) ?? null;
+}

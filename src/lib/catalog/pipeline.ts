@@ -1,7 +1,7 @@
 // Server-side orchestration: ingest -> extract -> map -> group -> price -> images -> review -> export.
 
 import type { Prisma } from "@prisma/client";
-import { productTitle, seoTitle } from "./titles";
+import { productTitle, seasonTagFrom, seoTitle } from "./titles";
 import { parseDirectives } from "./instructions";
 import { prisma, parseJson } from "./db";
 import { extractFile, type UploadKind } from "./extract";
@@ -933,6 +933,3 @@ export async function exportFileText(id: string): Promise<{ filename: string; te
 }
 
 /** The season a product was tagged with, which is also the year its name carries. */
-function seasonTagFrom(tags: string[]): string | null {
-  return tags.find((t) => /^20\d{2}$/.test(t.trim())) ?? null;
-}

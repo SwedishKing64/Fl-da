@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyMapping, headerHash, mappingProblems, suggestMapping } from "./mapping";
+import { applyMapping, headerHash, looksLikeReference, mappingProblems, suggestMapping } from "./mapping";
 import { DEFAULT_CATEGORY_RULES, chooseOptions, detectCategory, enrichFromTitle } from "./categorize";
 import { groupLineItems } from "./grouping";
 import { emptyLineItem } from "./types";
@@ -104,5 +104,31 @@ describe("grouping", () => {
     expect(skis.metafields.length_cm).toBe("166, 172");
     expect(skis.tags).toContain("atomic"); // the catalogue writes a vendor in lower case
     expect(products[1].title).toBe("Beanie");
+  });
+});
+
+/**
+ * Telling a delivery from something to look things up in.
+ *
+ * Nothing classified a spreadsheet at all: the document type came only from the model, which
+ * reads PDFs and photographs, so every workbook fell through to "invoice". A Volkl spec export
+ * and a Marker barcode list therefore built 1,608 products between them and matched none of them
+ * to the nine that were ordered.
+ */
+describe("what a table is for", () => {
+  it("reads a table with prices and quantities as an order", () => {
+    expect(looksLikeReference(["Item No.", "SKU", "Description", "Length", "RRP", "Qty"])).toBe(false);
+    expect(looksLikeReference(["item no.", "description", "colour", "DIN", "QTY", "RRP", "W/S"])).toBe(false);
+  });
+
+  it("reads a barcode list and a spec export as references", () => {
+    // Their two, header for header.
+    expect(looksLikeReference(["article no.", "description", "CTN", "net weight", "country of origin", "EAN No."])).toBe(true);
+    expect(looksLikeReference(["basic article no.", "description", "season", "category", "GTIN", "size (ski length)", "waist width", "SKU no. // LENGTH"])).toBe(true);
+  });
+
+  it("does not call a table a reference when there is nothing on it to look up", () => {
+    expect(looksLikeReference(["notes", "comments"])).toBe(false);
+    expect(looksLikeReference([])).toBe(false);
   });
 });

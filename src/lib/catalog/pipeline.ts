@@ -5,7 +5,7 @@ import { productTitle, seasonTagFrom, seoTitle } from "./titles";
 import { parseDirectives } from "./instructions";
 import { prisma, parseJson } from "./db";
 import { extractFile, type UploadKind } from "./extract";
-import { applyMapping, headerHash, mappingProblems, suggestMapping, suggestOptions, type Mapping, type MappingOptions } from "./mapping";
+import { applyMapping, headerHash, looksLikeReference, mappingProblems, suggestMapping, suggestOptions, type Mapping, type MappingOptions } from "./mapping";
 import { groupLineItems } from "./grouping";
 import { houseTags } from "./product-tags";
 import { DEFAULT_CATEGORY_RULES, type CategoryRuleLike } from "./categorize";
@@ -173,8 +173,18 @@ export async function ingestFile(batchId: string, file: { filename: string; mime
   try {
     const { table, meta } = await extractFile(file.buffer, file.filename, file.mimeType, requested);
     const detected = meta?.documentType ?? null;
-    const effective = requested !== "AUTO" ? requested : detected === "SPEC_SHEET" ? "SPEC_SHEET" : detected === "PRODUCT_PHOTO" ? "PRODUCT_PHOTO" : "INVOICE";
+    // A spreadsheet never reached the model, so nothing classified it and everything came through
+    // as a delivery. Its columns say what it is: see looksLikeReference.
+    const reference = detected === null && looksLikeReference(table.headers);
+    const effective: UploadKind = requested !== "AUTO"
+      ? requested
+      : detected === "SPEC_SHEET" || reference ? "SPEC_SHEET"
+      : detected === "PRODUCT_PHOTO" ? "PRODUCT_PHOTO"
+      : "INVOICE";
     const warnings = [...table.warnings];
+    if (reference) {
+      warnings.push(`Read as a reference sheet: ${table.rows.length} rows with no price or quantity on them, so nothing here is a delivery. It is searched for the products the order builds — barcodes, specs, descriptions — and adds none of its own.`);
+    }
 
     if (effective === "PRODUCT_PHOTO" && PHOTO_TYPES.has(file.mimeType)) {
       // A photo of a product: keep it as an image, not as line items.

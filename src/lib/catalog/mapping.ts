@@ -156,3 +156,29 @@ export function mappingProblems(mapping: Mapping): string[] {
   if (!targets.has("title")) problems.push("Map a column to Product name.");
   return problems;
 }
+
+
+/**
+ * Whether a table is a delivery or something to look things up in.
+ *
+ * Nothing classified a spreadsheet before this. The document type came only from the model, which
+ * reads PDFs and photographs, so every workbook fell through to "invoice" — and a Volkl spec
+ * export and a Marker barcode list therefore built 1,608 products between them, burying the nine
+ * that were actually ordered and matching none of them to anything.
+ *
+ * The test is what the columns are for, not what the file is called. An order says what was
+ * bought and what it costs; a reference sheet says what things ARE. So a table with no price, no
+ * recommended retail and no quantity anywhere in it cannot be a delivery — there is nothing on it
+ * to buy — and it is there to be searched rather than imported.
+ *
+ * Their three files split on this exactly: the order form carries RRP and QTY, the PIM export and
+ * the barcode list carry neither and both carry a barcode.
+ */
+export function looksLikeReference(headers: string[]): boolean {
+  if (headers.length === 0) return false;
+  const fields = new Set(Object.values(suggestMapping(headers)).filter(Boolean));
+  const sellable = fields.has("costPrice") || fields.has("rrp") || fields.has("quantity");
+  if (sellable) return false;
+  // And it has to identify what it is describing, or it is not a reference for anything.
+  return fields.has("barcode") || fields.has("modelCode") || fields.has("sku");
+}

@@ -10,9 +10,9 @@ interface UploadResult { filename: string; rows: number; method: string | null; 
 interface AutoResult { applied: boolean; products: number; variants: number }
 
 const KINDS = [
-  { value: "AUTO", label: "Let the AI decide", hint: "Invoice, spec sheet, catalogue page or product photo: the file is read and classified for you." },
-  { value: "INVOICE", label: "Invoice / order confirmation", hint: "Line items with cost and quantity." },
-  { value: "SPEC_SHEET", label: "Spec sheet / catalogue", hint: "Descriptions, specs, sizes and tags are merged into matching products." },
+  { value: "AUTO", label: "Work it out", hint: "A spreadsheet is judged by its columns — one with prices and quantities is an order, one without is a reference sheet. A PDF or a photo is read and classified." },
+  { value: "INVOICE", label: "Invoice / order confirmation", hint: "What was bought: line items with a cost or a quantity. These become the products." },
+  { value: "SPEC_SHEET", label: "Barcodes, specs or descriptions", hint: "Looked up against the products the order built — barcodes by SKU, specs and descriptions by model code. Adds no products of its own." },
   { value: "PRODUCT_PHOTO", label: "Product photos", hint: "Attached to products by name or SKU in the filename, or via the review grid." },
 ];
 

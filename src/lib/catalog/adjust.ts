@@ -113,7 +113,7 @@ export interface AdjustResult {
  * function rewrote the apostrophe in every description it passed through: a bulk price change
  * would have quietly reworded 140 products. A cell nobody asked about comes back byte for byte.
  */
-function quote(value: string): string {
+export function quote(value: string): string {
   if (value === "") return "";
   return /[",\r\n]/.test(value) || /^\s|\s$/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }

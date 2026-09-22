@@ -17,6 +17,7 @@ import { seedDefaults } from "@/lib/catalog/seed";
 import { planAdjustment, planAdjustments, screenInstructions, planningAvailable, describePlan, splitInstructions, type SplitInstructions } from "@/lib/catalog/adjust-plan";
 import type { Plan } from "@/lib/catalog/adjust";
 import { readInvoiceGrids, type InvoiceRead } from "@/lib/catalog/invoice";
+import { MAX_UPLOAD, readableSize } from "@/lib/catalog/image-size";
 import { aiAvailable } from "@/lib/catalog/extract/ai";
 import { initialsFrom } from "@/lib/catalog/tagging";
 import { answerFeedback, feedbackAvailable, withRule, type FeedbackTurn } from "@/lib/catalog/feedback";
@@ -737,8 +738,10 @@ export async function readInstructionSheetAction(file: { name: string; type: str
   await requireUser();
 
   const buffer = Buffer.from(file.base64, "base64");
-  // Under the 12mb configured for Server Actions in next.config, with room for base64's overhead.
-  if (buffer.byteLength > 8 * 1024 * 1024) return { ok: false, error: "That file is larger than 8MB. Instruction sheets are normally a page or two — check it is the right file." };
+  // See MAX_UPLOAD: past this the request never arrives, whatever next.config permits.
+  if (buffer.byteLength > MAX_UPLOAD) {
+    return { ok: false, error: `That file is ${readableSize(buffer.byteLength)}, and an upload has to stay under ${readableSize(MAX_UPLOAD)}. Instruction sheets are normally a page or two — a photo is shrunk before it is sent, so this is either a very large PDF or a picture this browser could not open.` };
+  }
 
   const isPdf = /pdf$/i.test(file.name) || file.type === "application/pdf";
   const isImage = /^image\//.test(file.type);
@@ -835,7 +838,12 @@ export async function readInvoiceAction(file: { name: string; type: string; base
   await requireUser();
 
   const buffer = Buffer.from(file.base64, "base64");
-  if (buffer.byteLength > 8 * 1024 * 1024) return { ok: false, error: "That file is larger than 8MB. An invoice is normally well under that — check it is the right file." };
+  // A serverless request body tops out around 4.5MB and this arrives base64 encoded, a third
+  // bigger again — so anything past this never reaches here at all. The page shrinks pictures
+  // before sending for exactly that reason; this is the backstop, and it says what to do.
+  if (buffer.byteLength > MAX_UPLOAD) {
+    return { ok: false, error: `That file is ${readableSize(buffer.byteLength)}, and an upload has to stay under ${readableSize(MAX_UPLOAD)}. A photo is shrunk automatically before it is sent, so this is either a very large PDF — split it — or a picture this browser could not open.` };
+  }
 
   const isPdf = /\.pdf$/i.test(file.name) || file.type === "application/pdf";
   const isImage = /^image\//.test(file.type) || /\.(png|jpe?g|webp|gif|heic)$/i.test(file.name);
@@ -858,9 +866,15 @@ export async function readInvoiceAction(file: { name: string; type: string; base
     if (!aiAvailable()) return { ok: false, error: `${file.name} has no columns to read, so it has to go to the API — set ANTHROPIC_API_KEY, or upload the order as a spreadsheet.` };
 
     const { extractFromPdf, extractFromImage } = await import("@/lib/catalog/extract/ai");
+    // The four the API takes. An iPhone HEIC reaches here only when the browser could not decode
+    // it to shrink it, and "unsupported media type" from three layers down says nothing useful.
+    const READABLE = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+    if (!isPdf && !READABLE.includes(file.type)) {
+      return { ok: false, error: `${file.name} is a ${file.type || "picture in a format"} that cannot be read — this is nearly always an iPhone HEIC. Open it and save it as a PNG or JPEG, or screenshot it, and add that.` };
+    }
     const extracted = isPdf
       ? await extractFromPdf(buffer, "INVOICE")
-      : await extractFromImage(buffer, file.type || "image/png", "INVOICE");
+      : await extractFromImage(buffer, file.type, "INVOICE");
 
     const lines = extracted.items
       .map((item) => ({

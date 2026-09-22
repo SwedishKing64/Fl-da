@@ -6,6 +6,7 @@ import { applyPlan, describeFile, foldPlans, isWholeFile, type AdjustResult, typ
 import { csvFilename } from "@/lib/catalog/csv";
 import { applyInvoice, reconcile, type InvoiceFields, type Reconciliation } from "@/lib/catalog/reconcile";
 import type { InvoiceRead } from "@/lib/catalog/invoice";
+import { fitWithin, fitsUpload, readableSize } from "@/lib/catalog/image-size";
 import { Alert, Button, Card, INPUT, cx } from "@/app/(catalog)/ui";
 
 /**
@@ -68,12 +69,69 @@ interface Invoice extends InvoiceRead {
 type Against = Array<{ name: string; reconciliation: Reconciliation }>;
 interface Preview { instruction: string; plan: Plan; understood: string; unclear: string; blocked: string[]; described: string[]; results: Array<{ name: string; result: AdjustResult }> }
 
-const read = (file: File) => new Promise<string>((resolve, reject) => {
+const read = (file: File | Blob, name = "that file") => new Promise<string>((resolve, reject) => {
   const r = new FileReader();
   r.onload = () => resolve(String(r.result).split(",", 2)[1] ?? "");
-  r.onerror = () => reject(new Error(`Could not read ${file.name}`));
+  r.onerror = () => reject(new Error(`Could not read ${name}`));
   r.readAsDataURL(file);
 });
+
+/**
+ * Shrink a photo or screenshot before it is sent.
+ *
+ * A picture of an invoice off a phone is several megabytes, and a Server Action sends it base64
+ * encoded into a request body that tops out at about 4.5MB — so it is refused at the edge before
+ * any of this app runs, with no error to show and nothing in the logs. On screen that is a
+ * spinner that never stops, which is exactly what it looked like.
+ *
+ * Nothing is lost by shrinking it: the API scales anything over 1568px on its long edge down to
+ * 1568px before reading it anyway, so the megabytes were never going to be looked at.
+ *
+ * If the browser cannot decode the file — an iPhone HEIC in a browser that has no decoder for it —
+ * the original is sent and the server says what it is.
+ */
+async function shrinkImage(file: File): Promise<{ blob: Blob; type: string; note: string }> {
+  const asIs = { blob: file, type: file.type || "image/png", note: "" };
+  if (typeof createImageBitmap !== "function") return asIs;
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(file);
+  } catch {
+    return asIs;
+  }
+  try {
+    const { width, height } = fitWithin(bitmap.width, bitmap.height);
+    if (width === bitmap.width && height === bitmap.height && fitsUpload(file.size)) return asIs;
+    const canvas = document.createElement("canvas");
+    canvas.width = width; canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return asIs;
+    ctx.drawImage(bitmap, 0, 0, width, height);
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.92));
+    if (!blob) return asIs;
+    return {
+      blob,
+      type: "image/jpeg",
+      note: `${bitmap.width}×${bitmap.height} at ${readableSize(file.size)}, sent at ${width}×${height} and ${readableSize(blob.size)} — the size it is read at.`,
+    };
+  } finally {
+    bitmap.close();
+  }
+}
+
+/**
+ * What to say about a file that still will not fit after shrinking.
+ *
+ * Named rather than generic, because the fix differs: a picture that could not be decoded here
+ * needs converting, and a 30MB PDF needs splitting. Both used to be a spinner that never stopped.
+ */
+function tooBig(file: File, sent: number): string {
+  return looksLikeImage(file)
+    ? `${file.name} is ${readableSize(sent)}, and this browser could not shrink it — which usually means it is an iPhone HEIC. Open it and save it as a PNG or JPEG, or take a screenshot of it, and add that instead.`
+    : `${file.name} is ${readableSize(sent)}. An upload has to stay under ${readableSize(3 * 1024 * 1024)}, so split it or send the pages that matter.`;
+}
+
+const looksLikeImage = (file: File): boolean => /^image\//.test(file.type) || /\.(png|jpe?g|webp|gif|heic|heif)$/i.test(file.name);
 
 /** What a row would do to the files as they stand right now. */
 const measure = (row: Row, csvs: Array<{ name: string; csv: string }>): Array<{ name: string; result: AdjustResult }> =>
@@ -149,16 +207,24 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
     const added: Sheet[] = [];
     const rejected: string[] = [];
     try {
+      // A file that is plainly not a CSV is not "no products found" — it is in the wrong box, and
+      // saying which box is the whole of the fix. A photo of an invoice landing here was the most
+      // likely way to hit that.
+      const misplaced: string[] = [];
       for (const file of Array.from(files)) {
+        if (looksLikeImage(file) || /\.(pdf|xlsx?)$/i.test(file.name)) { misplaced.push(file.name); continue; }
         const csv = await file.text();
         const f = describeFile(csv);
         if (f.products === 0) { rejected.push(file.name); continue; }
         added.push({ name: file.name, csv, history: [], ...f });
       }
       if (added.length === 0) {
-        setError(`No products found in ${rejected.join(", ") || "that file"}. These should be Shopify product exports — Products → Export in Shopify admin.`);
+        setError(misplaced.length
+          ? `${misplaced.join(", ")} ${misplaced.length === 1 ? "is not a Shopify export" : "are not Shopify exports"}. This box takes the CSVs from Products → Export. An invoice or a photo of one goes under "A supplier's invoice" below; the buyer's sale sheet goes under "The buyer's sheet".`
+          : `No products found in ${rejected.join(", ") || "that file"}. These should be Shopify product exports — Products → Export in Shopify admin.`);
         return;
       }
+      if (misplaced.length) setError(`Skipped ${misplaced.join(", ")} — this box takes Shopify export CSVs. An invoice goes under "A supplier's invoice" below.`);
       if (rejected.length) setError(`Skipped ${rejected.join(", ")} — no products in ${rejected.length === 1 ? "it" : "them"}.`);
       // Replacing a file already loaded rather than holding two copies of it.
       setSheets((s) => [...s.filter((x) => !added.some((a) => a.name === x.name)), ...added]);
@@ -183,8 +249,10 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
   async function takeSheet(file: File) {
     setBusy("sheet"); setError(null); setPreview(null); setRows([]); setSheetNote(null); setOpen(null); setConfirmedWhole([]);
     try {
-      setProgress("Reading the sheet…");
-      const r = await readInstructionSheetAction({ name: file.name, type: file.type, base64: await read(file) });
+      const sent = looksLikeImage(file) ? await shrinkImage(file) : { blob: file as Blob, type: file.type, note: "" };
+      if (!fitsUpload(sent.blob.size)) { setError(tooBig(file, sent.blob.size)); return; }
+      setProgress(sent.note ? `Reading the sheet — ${sent.note}` : "Reading the sheet…");
+      const r = await readInstructionSheetAction({ name: file.name, type: sent.type, base64: await read(sent.blob, file.name) });
       if (!r.ok) { setError(r.error); return; }
       const instructions = r.data!.instructions;
       setSheetNote({ source: `${file.name} · ${r.data!.source}`, ignored: r.data!.ignored, unclear: r.data!.unclear });
@@ -218,8 +286,10 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
   async function takeInvoice(file: File) {
     setBusy("invoice"); setError(null); setPreview(null); setSaved(null);
     try {
-      setProgress(`Reading ${file.name}…`);
-      const r = await readInvoiceAction({ name: file.name, type: file.type, base64: await read(file) });
+      const sent = looksLikeImage(file) ? await shrinkImage(file) : { blob: file as Blob, type: file.type, note: "" };
+      if (!fitsUpload(sent.blob.size)) { setError(tooBig(file, sent.blob.size)); return; }
+      setProgress(sent.note ? `Reading ${file.name} — ${sent.note}` : `Reading ${file.name}…`);
+      const r = await readInvoiceAction({ name: file.name, type: sent.type, base64: await read(sent.blob, file.name) });
       if (!r.ok) { setError(r.error); setInvoice(null); return; }
       const data = r.data!;
       setInvoice({ ...data, filename: file.name });

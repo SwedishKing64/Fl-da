@@ -26,7 +26,7 @@ export interface InvoiceRead {
   lines: InvoiceLine[];
   /** The sheet it was read from, and the heading it used for each thing, to show on screen. */
   sheet: string;
-  columns: { barcode: string; sku: string; rrp: string; quantity: string; title: string; size: string };
+  columns: { barcode: string; sku: string; rrp: string; quantity: string; title: string; size: string; colour: string };
   warnings: string[];
 }
 
@@ -86,6 +86,7 @@ const QTY = /^qty|quantity|units|ordered|order qty/;
 // lengths a ski comes in, which is a different column with the same name — that is why the values
 // have to look like one size rather than five.
 const SIZE = /^size|^sizes$|length|mondo/;
+const COLOUR = /colou?r|^options?$/;
 const TITLE = /descri|product|title|\bname\b|model|style/;
 
 /** Read one sheet as an invoice, or decide it is not one. */
@@ -113,6 +114,8 @@ function readGrid(name: string, grid: string[][]): InvoiceRead | null {
   // and a line that says all four is not a line about one of them.
   const size = pick(headings, rows, SIZE, null, (v) => v.length <= 12 && !v.includes("/") && !v.includes(","));
 
+  const colour = pick(headings, rows, COLOUR, null, (v) => v.length <= 30 && !/^\d+$/.test(v));
+
   const title = pick(headings, rows, TITLE, null, (v) => v.length >= 3 && !/^\d+$/.test(v))
     ?? (sku ? { index: sku.index + 1, heading: `the column beside "${sku.heading}"` } : null);
 
@@ -123,6 +126,7 @@ function readGrid(name: string, grid: string[][]): InvoiceRead | null {
       barcode: barcode ? text(row[barcode.index]) : "",
       title: title ? text(row[title.index]) : "",
       ...(size ? { size: text(row[size.index]) } : {}),
+      ...(colour ? { colour: text(row[colour.index]) } : {}),
       costPrice: null,
       // A zero is not a price. Their order form prints 0 against the system bindings that come with
       // a ski, and writing that through would put "free" in front of a customer — which is exactly
@@ -141,7 +145,7 @@ function readGrid(name: string, grid: string[][]): InvoiceRead | null {
   return {
     lines,
     sheet: name,
-    columns: { barcode: heading(barcode), sku: heading(sku), rrp: heading(rrp), quantity: heading(quantity), title: heading(title), size: heading(size) },
+    columns: { barcode: heading(barcode), sku: heading(sku), rrp: heading(rrp), quantity: heading(quantity), title: heading(title), size: heading(size), colour: heading(colour) },
     warnings: [],
   };
 }

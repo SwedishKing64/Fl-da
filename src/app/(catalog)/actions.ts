@@ -886,6 +886,7 @@ export async function readInvoiceAction(file: { name: string; type: string; base
         rrp: item.rrp !== null && item.rrp > 0 ? item.rrp : null,
         quantity: item.quantity,
         size: (item.size || item.length || "").trim(),
+        colour: (item.colour || "").trim(),
       }))
       .filter((l) => (l.barcode.trim() || l.sku.trim()) && (l.rrp !== null || l.quantity !== null));
 
@@ -896,7 +897,7 @@ export async function readInvoiceAction(file: { name: string; type: string; base
       ok: true,
       data: {
         lines, sheet: file.name, warnings: [],
-        columns: { barcode: "", sku: "", rrp: "", quantity: "", title: "", size: "" },
+        columns: { barcode: "", sku: "", rrp: "", quantity: "", title: "", size: "", colour: "" },
         source: `read as ${isPdf ? "a PDF" : "a picture"}${extracted.supplier ? `, from ${extracted.supplier}` : ""}`,
       },
     };

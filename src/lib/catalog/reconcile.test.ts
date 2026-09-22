@@ -267,3 +267,97 @@ describe("matching by name against their real catalogue", () => {
     expect(r.matched.length + r.ambiguous.length + r.unmatched.length).toBe(140);
   });
 });
+
+/**
+ * The Swany reorder, which is the invoice this was built for.
+ *
+ * Rush Distribution invoice 11372 against their Swany export, both real. It is a SIZE GRID: five
+ * products, each with a row of sizes and a count under each, which arrives as twelve lines where
+ * five share a code with another. Reading a shared code as a clash refused the whole invoice and
+ * reported that each product appeared twice, which it does not.
+ */
+describe("a size-grid invoice", () => {
+  const SWANY = readFileSync("/root/.claude/uploads/94fb8bfb-35a9-5176-afe9-8fcc0dec9eb3/1f150258-Swany_CSV_OLD.csv", "utf8");
+  const grid = (sku: string, title: string, rrp: number, sizes: Array<[string, number]>): InvoiceLine[] =>
+    sizes.map(([size, quantity]) => ({ sku, barcode: "", title, costPrice: null, rrp, quantity, size, colour: "BK" }));
+  const INVOICE: InvoiceLine[] = [
+    ...grid("SX-1M-BK", "X-Cell Glove Men's", 229.99, [["8.0-M", 1], ["9.0-L", 2]]),
+    ...grid("SX-2M-BK", "X-Cell Mitt Men's", 229.99, [["8.0-M", 1], ["9.0-L", 1]]),
+    ...grid("SX-44AM-BK", "X-Cell Mitt Men's 10% Off", 229.99, [["9.5-XL", 1]]),
+    ...grid("SX-20M-BK", "X-Change Glove Men's", 179.99, [["8.0-M", 1], ["9.0-L", 2], ["9.5-XL", 1], ["8.5-ML", 1]]),
+    ...grid("SX-34L-BK", "Falcon Glove Ladies", 149.99, [["6.5-S", 2], ["7.0-M", 2], ["7.5-L", 1]]),
+  ];
+
+  it("places every line, and a code on two lines of different sizes is not a clash", () => {
+    const r = reconcile(SWANY, INVOICE);
+    expect(r.ambiguous).toEqual([]);
+    expect(r.unmatched).toEqual([]);
+    expect(r.matched).toHaveLength(12);
+    // Each code found the product whose title carries it — the codes live in their titles.
+    const where = new Map(r.matched.map((m) => [`${m.line.sku} ${m.line.size}`, m.handle]));
+    expect(where.get("SX-1M-BK 8.0-M")).toBe("x-cell-glove-mens");
+    expect(where.get("SX-2M-BK 9.0-L")).toBe("x-cell-mitt-mens");
+    expect(where.get("SX-44AM-BK 9.5-XL")).toBe("sx-44am-x-cell-mitt-mens");
+    expect(where.get("SX-20M-BK 9.5-XL")).toBe("x-change-glove-mens");
+    expect(where.get("SX-34L-BK 7.0-M")).toBe("falcon-glove-ladies-sx-34l");
+  });
+
+  it("reads the invoice's sizes against the shop's, which are written the other way round", () => {
+    // "8.0-M" on the invoice is "M (8)" in Shopify, and the SX-44AM mitt has no mondopoint at all
+    // — it is S, M, ML, L, XL, 2XL — so "9.5-XL" has to land on it by the letter.
+    const r = reconcile(SWANY, INVOICE);
+    const narrowed = r.matched.filter((m) => m.rows.length === 1);
+    expect(narrowed).toHaveLength(11);
+    // The one that is not: the invoice orders an 8.5-ML of a glove listed only in S, M, L and XL.
+    const wide = r.matched.find((m) => m.rows.length > 1)!;
+    expect(wide.line.size).toBe("8.5-ML");
+    expect(wide.sizeMissing).toBe(true);
+  });
+
+  it("picks the colourway out of a product that comes in two", () => {
+    // The Falcon glove is Black and Washed Voilet, three sizes each. "SX-34L-BK" is the black one,
+    // and their own options spell the abbreviation out elsewhere as "Black (BK)".
+    const r = reconcile(SWANY, INVOICE);
+    const falcon = r.matched.filter((m) => m.handle === "falcon-glove-ladies-sx-34l");
+    expect(falcon).toHaveLength(3);
+    expect(falcon.every((m) => m.rows.length === 1)).toBe(true);
+    expect(new Set(falcon.flatMap((m) => m.rows)).size).toBe(3);
+  });
+
+  it("writes each count to its own size, and the corrected retail across the product", () => {
+    const r = reconcile(SWANY, INVOICE);
+    const out = applyInvoice(SWANY, r.matched, { rrp: true, quantity: true });
+    expect(out.refused).toBeUndefined();
+
+    // Ten counts for eleven narrowed lines: the X-Change glove in M (8) already says 1 in the
+    // shop and the invoice says 1, and a cell that already holds the value is not a change.
+    const counts = out.changes.filter((c) => c.column === "Variant Inventory Qty");
+    expect(counts).toHaveLength(10);
+
+    // One price is wrong in the shop: the SX-44AM mitt is at 219.99 and the invoice says 229.99.
+    // All seven of its rows carry the same old price, so the correction moves as one — leaving six
+    // sizes on the old number because the line happened to be for the XL would be a mess to find.
+    const prices = out.changes.filter((c) => c.column === "Variant Compare At Price");
+    expect(new Set(prices.map((c) => c.handle))).toEqual(new Set(["sx-44am-x-cell-mitt-mens"]));
+    expect(prices).toHaveLength(7);
+    expect(prices.every((c) => c.before === "219.99" && c.after === "229.99")).toBe(true);
+
+    // And the size the listing does not have is named rather than passed over.
+    expect(out.warnings.join(" ")).toContain("8.5-ML");
+  });
+
+  it("leaves a price alone where the product's sizes are priced differently", () => {
+    // Their wax is 26.99 for the small tin and 35.99 for the large. A line for one size must not
+    // hand its price to the other, which is why the widening above is conditional.
+    const wax = [
+      "Handle,Title,Option1 Value,Variant Price,Variant Compare At Price",
+      "ch8-wax,CH8 Wax,60g,26.99,32.99",
+      "ch8-wax,,180g,35.99,41.99",
+    ].join("\r\n") + "\r\n";
+    const r = reconcile(wax, [{ sku: "", barcode: "", title: "CH8 Wax", costPrice: null, rrp: 34.99, quantity: null, size: "60g" }]);
+    expect(r.matched[0].rows).toHaveLength(1);
+    const out = applyInvoice(wax, r.matched, { rrp: true });
+    expect(out.changes).toHaveLength(1);
+    expect(out.changes[0].before).toBe("32.99");
+  });
+});

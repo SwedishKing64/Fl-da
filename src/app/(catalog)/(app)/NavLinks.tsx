@@ -8,8 +8,6 @@ const LINKS = [
   { href: "/", label: "Dashboard", exact: true },
   { href: "/batches", label: "Import batches" },
   { href: "/bulk", label: "Bulk uploads" },
-  { href: "/templates", label: "Templates" },
-  { href: "/rules", label: "Rules" },
   { href: "/pricing", label: "Pricing" },
   { href: "/history", label: "History" },
   { href: "/settings", label: "Settings", admin: true },

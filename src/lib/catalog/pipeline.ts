@@ -25,6 +25,7 @@ import { summarise, validateReview, warningList } from "./validate";
 import { filePath, publicFileUrl, readFile, saveFile, usingBlob } from "./storage";
 import { logAudit } from "./audit";
 import { AI_HEADERS } from "./extract/ai";
+import { houseBody, isPlaceholderBody } from "./extract/lookup";
 
 // ---------------------------------------------------------------------------
 // Rules & settings helpers
@@ -504,6 +505,27 @@ function escapeHtml(s: string): string {
 
 const normKey = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 
+/**
+ * The Tech Specs lines for a product, from the columns a supplier's spec sheet carries.
+ *
+ * Written `LABEL: value` in capitals, which is how the shop's own products read — "SIZE:  158,
+ * 165, 172", "MATERIAL:  70% Mohair / 30% Nylon". Until now these columns reached the metafields
+ * and stopped there, so nothing a supplier stated about a ski ever appeared where a customer
+ * reads it.
+ */
+function specLines(spec: CanonicalLineItem): string[] {
+  const fields: Array<[string, string]> = [
+    ["LENGTH", spec.length],
+    ["WAIST WIDTH", spec.width],
+    ["FLEX", spec.flex],
+    ["DIN RANGE", spec.dinRange],
+    ["ABILITY", spec.abilityLevel],
+    ["TERRAIN", spec.terrain],
+    ["GENDER", spec.gender],
+  ];
+  return fields.filter(([, v]) => v && v.trim()).map(([k, v]) => `${k}: ${v.trim()}`);
+}
+
 /** Merge spec-sheet rows into matching products: descriptions, specs, tags, images, RRP. */
 export function enrichFromSpecs<T extends { title: string; brand: string; description: string; tags: string[]; imageUrls: string[]; metafields: Record<string, string>; variants: Array<{ item: CanonicalLineItem }> }>(products: T[], specs: CanonicalLineItem[]): T[] {
   if (specs.length === 0) return products;
@@ -519,7 +541,16 @@ export function enrichFromSpecs<T extends { title: string; brand: string; descri
       return Boolean(title) && (pt.includes(title) || title.includes(pt.replace(brand, "").trim()));
     });
     if (!target) continue;
-    if (spec.description && !target.description) target.description = spec.description;
+    // The invoice writes its own line into the description so the column is not blank, so the
+    // test cannot be "is it empty" — it never is, and every description on a spec sheet was being
+    // dropped on the floor. Same fault, and the same test, as the web lookup.
+    // Only when the sheet actually carries prose. A body built from spec lines alone would have
+    // no description in it and would still read as "already written" to the web lookup — because
+    // it carries a list — so the product could never be filled in later. Specs with no prose go
+    // to the metafields below and wait.
+    if (spec.description.trim() && isPlaceholderBody(target.description)) {
+      target.description = houseBody(spec.description, specLines(spec));
+    }
     for (const t of spec.tags.split(",").map((x) => x.trim()).filter(Boolean)) if (!target.tags.includes(t)) target.tags.push(t);
     for (const u of spec.imageUrls) if (!target.imageUrls.includes(u)) target.imageUrls.push(u);
     const fill: Array<[string, string]> = [["flex", spec.flex], ["ability_level", spec.abilityLevel], ["din_range", spec.dinRange], ["terrain", spec.terrain], ["waist_width", spec.width], ["gender", spec.gender], ["season", spec.season]];
@@ -527,7 +558,7 @@ export function enrichFromSpecs<T extends { title: string; brand: string; descri
     for (const v of target.variants) {
       if (spec.rrp && !v.item.rrp) v.item.rrp = spec.rrp;
       if (spec.flex && !v.item.flex) v.item.flex = spec.flex;
-      if (spec.description && !v.item.description) v.item.description = spec.description;
+      if (spec.description && isPlaceholderBody(v.item.description)) v.item.description = spec.description;
     }
   }
   return products;

@@ -14,7 +14,11 @@ describe("spec sheet enrichment", () => {
       { ...emptyLineItem(), brand: "Volkl", title: "Mantra", description: "should not match" },
     ];
     enrichFromSpecs(products, specs);
-    expect(products[0].description).toBe("Playful all-mountain freestyle ski.");
+    // In the shop's own shape now: 733 of their 845 bodies carry a Tech Specs list, and a
+    // description written raw matched none of them.
+    expect(products[0].description).toBe(
+      ["<p>Playful all-mountain freestyle ski.</p>", "<h2>Tech Specs</h2>", "<ul>", "<li>FLEX: Medium</li>", "<li>TERRAIN: All-Mountain</li>", "</ul>"].join("\n"),
+    );
     expect(products[0].tags).toEqual(["skis", "Freestyle", "Twin Tip"]);
     expect(products[0].imageUrls).toEqual(["https://cdn.x.com/bent90.jpg"]);
     expect(products[0].metafields).toMatchObject({ flex: "Medium", terrain: "All-Mountain" });

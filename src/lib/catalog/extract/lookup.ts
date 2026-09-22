@@ -136,12 +136,24 @@ export function applyLookup<T extends { vendor: string; bodyHtml: string; rrp: n
  * are the same with two or three. Nothing follows the list.
  */
 export function bodyHtmlFrom(found: ProductLookup): string {
-  const paragraphs = found.description.split(/\n\s*\n/).map((p) => p.replace(/\s+/g, " ").trim()).filter(Boolean);
-  const features = found.features.map((f) => f.replace(/\s+/g, " ").trim()).filter(Boolean);
-  if (paragraphs.length === 0 && features.length === 0) return "";
+  return houseBody(found.description, found.features);
+}
+
+/**
+ * The shop's body, from prose and a list of spec lines, wherever they came from.
+ *
+ * Split out because a description does not only arrive from the web: a supplier's spec sheet
+ * carries one too, and it was being written into the column raw — no paragraph, no Tech Specs,
+ * nothing that matched the other 733 products. One place builds the body now, so a description
+ * lands in the same shape however it got here.
+ */
+export function houseBody(description: string, features: string[]): string {
+  const paragraphs = description.split(/\n\s*\n/).map((p) => p.replace(/\s+/g, " ").trim()).filter(Boolean);
+  const specs = features.map((f) => f.replace(/\s+/g, " ").trim()).filter(Boolean);
+  if (paragraphs.length === 0 && specs.length === 0) return "";
   const lines = paragraphs.map((p) => `<p>${escapeHtml(p)}</p>`);
-  if (features.length > 0) {
-    lines.push("<h2>Tech Specs</h2>", "<ul>", ...features.map((f) => `<li>${escapeHtml(f)}</li>`), "</ul>");
+  if (specs.length > 0) {
+    lines.push("<h2>Tech Specs</h2>", "<ul>", ...specs.map((f) => `<li>${escapeHtml(f)}</li>`), "</ul>");
   }
   return lines.join("\n");
 }

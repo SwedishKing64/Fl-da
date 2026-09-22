@@ -10,6 +10,16 @@ import { extractXlsx } from "./extract/tabular";
 import { extractPdfText } from "./extract/pdf";
 import { extractHeuristic } from "./extract/heuristic";
 import { validateCsvFile } from "./csv";
+import { enrichFromSpecs } from "./pipeline";
+import type { CanonicalLineItem } from "./types";
+
+/** An empty canonical row, so each test states only the columns it is about. */
+const BLANK: CanonicalLineItem = {
+  title: "", brand: "", modelCode: "", sku: "", barcode: "", costPrice: null, quantity: null,
+  rrp: null, grams: null, length: "", size: "", width: "", colour: "", gender: "", season: "",
+  category: "", productType: "", description: "", flex: "", abilityLevel: "", dinRange: "",
+  terrain: "", imageUrls: [], collections: "", tags: "",
+};
 
 const SAMPLES = path.resolve(__dirname, "../../../samples");
 const fixtures = buildFixtures();
@@ -104,5 +114,61 @@ describe("sample files parse with the real extractors", () => {
     expect(pdf.looksScanned).toBe(false);
     const table = extractHeuristic(pdf.text);
     expect(table.rows.map((r) => r.SKU)).toEqual(["BUR-CUST-154", "BUR-CUST-158", "BUR-CUST-162", "BUR-CART-M", "BUR-CART-L"]);
+  });
+});
+
+/**
+ * A description that arrives on a supplier's spec sheet.
+ *
+ * Two faults, both found building a Volkl range. The description was written into the column raw,
+ * so it matched none of the 733 products that carry a Tech Specs list. And it was only written at
+ * all when the column was empty — which it never is, because building a product puts the invoice's
+ * own line there first. Every description on every spec sheet was being dropped.
+ */
+describe("merging a supplier's spec sheet", () => {
+  const product = () => ({
+    title: "Mantra M7",
+    brand: "Volkl",
+    description: "<p>Volkl Mantra M7 ski.</p>",       // what the invoice line leaves behind
+    tags: [] as string[],
+    imageUrls: [] as string[],
+    metafields: {} as Record<string, string>,
+    variants: [{ item: { ...BLANK, modelCode: "V2410170", description: "" } }],
+  });
+
+  const BLANK_SPEC = { ...BLANK, modelCode: "V2410170", brand: "Volkl", title: "Mantra M7" };
+
+  it("replaces the invoice's one-liner instead of leaving it there", () => {
+    const [out] = enrichFromSpecs([product()], [{ ...BLANK_SPEC, description: "A ski that holds an edge on hardpack and floats in soft snow, with enough shape to be turned at any speed." }]);
+    expect(out.description).toContain("holds an edge");
+    expect(out.description).not.toContain("Volkl Mantra M7 ski.");
+  });
+
+  it("writes it in the shop's own shape: a paragraph, then Tech Specs, then the list", () => {
+    const [out] = enrichFromSpecs([product()], [{ ...BLANK_SPEC, description: "A ski that holds an edge.", width: "96mm", flex: "Stiff", terrain: "All-mountain" }]);
+    expect(out.description).toBe(
+      ["<p>A ski that holds an edge.</p>", "<h2>Tech Specs</h2>", "<ul>", "<li>WAIST WIDTH: 96mm</li>", "<li>FLEX: Stiff</li>", "<li>TERRAIN: All-mountain</li>", "</ul>"].join("\n"),
+    );
+  });
+
+  it("turns the sheet's own columns into the spec list, not just metafields", () => {
+    const [out] = enrichFromSpecs([product()], [{ ...BLANK_SPEC, description: "Copy.", length: "177", dinRange: "3-12", abilityLevel: "Advanced", gender: "Mens" }]);
+    expect(out.description).toContain("<li>LENGTH: 177</li>");
+    expect(out.description).toContain("<li>DIN RANGE: 3-12</li>");
+    expect(out.description).toContain("<li>ABILITY: Advanced</li>");
+    expect(out.description).toContain("<li>GENDER: Mens</li>");
+    expect(out.metafields.din_range).toBe("3-12");   // still reaches the metafield as well
+  });
+
+  it("leaves a description somebody actually wrote alone", () => {
+    const written = { ...product(), description: "<p>Long copy that a person wrote, well past the length of an invoice line, describing how the ski behaves through a turn and who it suits.</p><h2>Tech Specs</h2><ul><li>WAIST WIDTH: 96mm</li></ul>" };
+    const [out] = enrichFromSpecs([written], [{ ...BLANK_SPEC, description: "Supplier copy that should not win." }]);
+    expect(out.description).toBe(written.description);
+  });
+
+  it("writes no Tech Specs heading when the sheet states no specs", () => {
+    const [out] = enrichFromSpecs([product()], [{ ...BLANK_SPEC, description: "Just the copy." }]);
+    expect(out.description).toBe("<p>Just the copy.</p>");
+    expect(out.description).not.toContain("Tech Specs");
   });
 });

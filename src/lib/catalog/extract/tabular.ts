@@ -2,15 +2,33 @@ import Papa from "papaparse";
 import ExcelJS from "exceljs";
 import type { ExtractedTable } from "./types";
 
-/** Heuristic: the header row is the first row with >= 3 non-empty cells that are mostly non-numeric. */
+/**
+ * Which row the column names are on.
+ *
+ * It used to take the first row with three text cells in it, which is fine for a file that starts
+ * with its header and wrong for every supplier order sheet, because those open with a letterhead:
+ * "Customer:", "Address:", "Suburb:", "email:" — three text cells apiece, rows above the real
+ * header, and each one of them won. The whole sheet was then read one column wide.
+ *
+ * The header is instead the WIDEST plausible row near the top. A letterhead line is two or three
+ * cells; a header names every column there is, so on a real sheet it is several times wider than
+ * anything above it. Ties go to the earliest row, and a row of numbers is never a header.
+ */
 export function detectHeaderRow(grid: string[][]): number {
+  let best = -1;
+  let width = 0;
   for (let i = 0; i < Math.min(grid.length, 30); i++) {
     const cells = grid[i].map((c) => (c ?? "").trim()).filter(Boolean);
     if (cells.length < 3) continue;
     const textual = cells.filter((c) => !/^[-+$€£]?\d[\d,.]*%?$/.test(c)).length;
-    if (textual / cells.length >= 0.7) return i;
+    if (textual / cells.length < 0.7) continue;
+    // Distinct values, not cells. A title merged across the sheet — "2025/26 Ski Price-List" —
+    // arrives as that one phrase repeated in all thirty-three columns, which is wider than the
+    // header underneath it and is not a header at all. Column names do not repeat.
+    const distinct = new Set(cells.map((c) => c.toLowerCase())).size;
+    if (distinct > width) { width = distinct; best = i; }
   }
-  return 0;
+  return best === -1 ? 0 : best;
 }
 
 function uniqueHeaders(raw: string[]): string[] {
@@ -61,23 +79,45 @@ function cellToString(value: ExcelJS.CellValue): string {
   return String(value);
 }
 
+/**
+ * Read the sheet of a workbook that actually holds the products.
+ *
+ * It used to take the first sheet with any rows on it. A supplier's order workbook opens with a
+ * cover sheet — "Order Total", a letterhead and a few totals — and puts the goods on the sheets
+ * after it: Volkl Ski, Race Ski, Marker Inline, Poles. So the one sheet that was read was the one
+ * with no products on it, and 700-odd order lines were never seen. That is not a file that failed
+ * to read; it is a file that read perfectly and returned the wrong page.
+ *
+ * Each sheet is scored on how much of a table it is — rows under a header, times columns in that
+ * header — and the best one wins. The others are named in the warnings with their sizes, because a
+ * workbook whose goods are split across sheets needs a person to say which, and being told "there
+ * are 4 more sheets and here is what is on them" is the whole of that decision.
+ */
 export async function extractXlsx(buffer: Buffer, sheetName?: string): Promise<ExtractedTable> {
-  const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(buffer as unknown as ExcelJS.Buffer);
-  const sheet = (sheetName && wb.getWorksheet(sheetName)) || wb.worksheets.find((s) => s.rowCount > 0) || wb.worksheets[0];
-  if (!sheet) return { headers: [], rows: [], method: "XLSX", warnings: ["Workbook has no sheets"] };
-  const grid: string[][] = [];
-  sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-    const cells: string[] = [];
-    row.eachCell({ includeEmpty: true }, (cell, col) => {
-      cells[col - 1] = cellToString(cell.value);
-    });
-    grid[rowNumber - 1] = Array.from({ length: cells.length }, (_, i) => cells[i] ?? "");
+  const sheets = await sheetGrids(buffer);
+  if (sheets.length === 0) return { headers: [], rows: [], method: "XLSX", warnings: ["Workbook has no sheets"] };
+
+  const scored = sheets.map(({ name, grid }) => {
+    const compact = grid.filter((r) => r && r.some((c) => (c ?? "").trim()));
+    const header = detectHeaderRow(compact);
+    const columns = (compact[header] ?? []).filter((c) => (c ?? "").trim()).length;
+    const dataRows = Math.max(0, compact.length - header - 1);
+    return { name, grid: compact, columns, dataRows, score: columns >= 2 ? columns * dataRows : 0 };
   });
-  const compact = grid.filter(Boolean);
-  const warnings = wb.worksheets.length > 1 ? [`Workbook has ${wb.worksheets.length} sheets; used "${sheet.name}".`] : [];
-  return gridToTable(compact, "XLSX", warnings);
+
+  const wanted = sheetName ? scored.find((s) => s.name === sheetName) : undefined;
+  const chosen = wanted ?? scored.reduce((a, b) => (b.score > a.score ? b : a));
+
+  const warnings: string[] = [];
+  const others = scored.filter((s) => s.name !== chosen.name && s.dataRows > 0);
+  if (others.length > 0) {
+    warnings.push(
+      `This workbook has ${scored.length} sheets and only one can be read at a time. Read "${chosen.name}" (${chosen.dataRows} rows under ${chosen.columns} columns). Also in it: ${others.map((s) => `"${s.name}" (${s.dataRows} rows)`).join(", ")} — upload the file again for each of those you need.`,
+    );
+  }
+  return gridToTable(chosen.grid, "XLSX", warnings);
 }
+
 
 /**
  * Every sheet of a workbook, as a grid.

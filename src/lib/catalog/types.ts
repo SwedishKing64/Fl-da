@@ -60,6 +60,16 @@ export interface CanonicalLineItem {
   imageUrls: string[];
   collections: string; // comma separated
   tags: string; // comma separated
+  /**
+   * Columns the mapping had no canonical home for, kept rather than dropped.
+   *
+   * A supplier's spec export is mostly these. Volkl's carries tip width, tail width, three sidecut
+   * radii, the core, the key technologies and the weight with and without a binding — thirty-odd
+   * columns of exactly what a customer wants to know, and until now every one of them was thrown
+   * away at the mapping step because it did not fit one of the fields above. They become the
+   * product's metafields, which is where the Tech Specs list on the page is built from.
+   */
+  extras?: Record<string, string>;
 }
 
 export interface CanonicalFieldDef {
@@ -74,18 +84,20 @@ export interface CanonicalFieldDef {
 export const CANONICAL_FIELDS: CanonicalFieldDef[] = [
   { key: "title", label: "Product name", kind: "text", required: true, synonyms: ["title", "product", "product name", "description", "item", "item name", "name", "model", "product description", "article"] },
   { key: "brand", label: "Brand / vendor", kind: "text", synonyms: ["brand", "vendor", "manufacturer", "make", "supplier brand", "marke"] },
-  { key: "modelCode", label: "Model / style code", kind: "text", synonyms: ["model", "model code", "style", "style code", "style no", "style number", "model no", "model number", "product code", "article no", "article number", "item no", "item number", "art nr", "ref"] },
-  { key: "sku", label: "SKU", kind: "text", synonyms: ["sku", "sku code", "variant sku", "part number", "part no", "code", "ean/sku", "item code", "stock code"] },
-  { key: "barcode", label: "Barcode / EAN / UPC", kind: "text", synonyms: ["barcode", "ean", "upc", "gtin", "ean code", "ean13", "upc code", "bar code"] },
+  { key: "modelCode", label: "Model / style code", kind: "text", synonyms: ["model", "model code", "style", "style code", "style no", "style number", "model no", "model number", "product code", "article no", "article number", "basic article no", "supplier code", "item no", "item number", "art nr", "ref"] },
+  // "sku no length" is Volkl's own heading, "SKU no. // LENGTH", and it has to outrank the bare
+  // "length" synonym that also matches it — the longest match wins, so it is spelled out in full.
+  { key: "sku", label: "SKU", kind: "text", synonyms: ["sku", "sku code", "sku no", "sku number", "sku no length", "variant sku", "variant code", "part number", "part no", "code", "ean/sku", "item code", "stock code"] },
+  { key: "barcode", label: "Barcode / EAN / UPC", kind: "text", synonyms: ["barcode", "ean", "upc", "gtin", "ean no", "ean number", "ean code", "ean13", "upc code", "bar code"] },
   { key: "costPrice", label: "Unit cost price", kind: "number", synonyms: ["cost", "cost price", "unit cost", "unit price", "wholesale", "wholesale price", "price", "net price", "trade price", "dealer price", "whs", "w/s", "each", "unit", "amount", "line total", "total", "ext price", "extended price", "net amount", "value"] },
   { key: "quantity", label: "Quantity", kind: "number", synonyms: ["qty", "quantity", "units", "ordered", "qty ordered", "order qty", "pcs", "pieces", "count", "no of units"] },
   { key: "rrp", label: "RRP / MSRP", kind: "number", synonyms: ["rrp", "msrp", "retail", "retail price", "srp", "rec retail", "recommended retail", "list price", "map"] },
   { key: "grams", label: "Weight (grams)", kind: "number", synonyms: ["weight", "grams", "weight g", "weight (g)", "unit weight", "mass"] },
-  { key: "length", label: "Length (cm)", kind: "text", synonyms: ["length", "len", "ski length", "board length", "size cm", "length cm", "cm"] },
+  { key: "length", label: "Length (cm)", kind: "text", synonyms: ["length", "len", "ski length", "size ski length", "board length", "size cm", "length cm", "cm"] },
   { key: "size", label: "Size", kind: "text", synonyms: ["size", "sizes", "sz", "sz.", "size range", "garment size", "apparel size", "clothing size", "size name", "size code", "size desc", "size description", "boot size", "mondo", "mondopoint", "mp", "shoe size", "size us", "us size", "eu size", "uk size"] },
   { key: "width", label: "Width", kind: "text", synonyms: ["width", "last", "last width", "waist", "waist width", "last mm"] },
-  { key: "colour", label: "Colour", kind: "text", synonyms: ["colour", "color", "col", "colourway", "colorway", "farbe"] },
-  { key: "gender", label: "Gender", kind: "text", synonyms: ["gender", "sex", "mens/womens", "m/w", "unisex"] },
+  { key: "colour", label: "Colour", kind: "text", synonyms: ["colour", "color", "col", "colour name", "color name", "basic colour", "basic color", "colourway", "colorway", "farbe"] },
+  { key: "gender", label: "Gender", kind: "text", synonyms: ["gender", "sex", "suitable for", "mens/womens", "m/w", "unisex"] },
   { key: "season", label: "Season", kind: "text", synonyms: ["season", "yr", "year", "model year", "collection"] },
   { key: "category", label: "Category", kind: "text", synonyms: ["category", "cat", "product category", "department", "group", "product group", "class"] },
   { key: "productType", label: "Product type", kind: "text", synonyms: ["type", "product type", "sub category", "subcategory", "sub-category"] },

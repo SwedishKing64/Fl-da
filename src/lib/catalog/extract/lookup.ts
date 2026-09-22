@@ -175,6 +175,21 @@ export function houseBody(description: string, features: string[]): string {
 export function isPlaceholderBody(html: string): boolean {
   const body = html.trim();
   if (!body) return true;
+  /**
+   * A Tech Specs list with no prose in front of it is not a written description.
+   *
+   * A supplier's spec export gives the numbers and never the words — Volkl's has the waist width,
+   * the sidecut radii and the core, and not one sentence anyone would read. Those specs belong on
+   * the product immediately; the prose is what the web lookup goes and finds later. Without this
+   * line the two could not both happen: a body carrying a list read as "already written", so a
+   * product that had its specs could never get its description.
+   */
+  const prose = body.replace(/<(ul|ol|table)[\s\S]*?<\/\1>/gi, " ").replace(/<h[1-6][^>]*>[\s\S]*?<\/h[1-6]>/gi, " ");
+  const proseWords = prose.replace(/<[^>]+>/g, " ").trim().split(/\s+/).filter(Boolean);
+  // No prose AT ALL, rather than not much of it: a lookup that comes back with two short
+  // sentences is still somebody's writing and must not be fetched again, while a body built from
+  // a spec sheet has nothing outside its list and is still waiting for its words.
+  if (/<(ul|ol|h[1-6]|table)\b/i.test(body) && proseWords.length === 0) return true;
   if (/<(ul|ol|h[1-6]|table)\b/i.test(body)) return false;
   if ((body.match(/<p\b/gi) ?? []).length > 1) return false;
   const words = body.replace(/<[^>]+>/g, " ").trim().split(/\s+/).filter(Boolean);

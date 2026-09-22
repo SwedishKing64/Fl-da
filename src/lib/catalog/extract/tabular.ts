@@ -1,6 +1,8 @@
 import Papa from "papaparse";
 import ExcelJS from "exceljs";
 import type { ExtractedTable } from "./types";
+import { readInvoiceGrids } from "../invoice";
+import type { InvoiceLine } from "../reconcile";
 
 /**
  * Which row the column names are on.
@@ -49,6 +51,37 @@ function uniqueHeaders(raw: string[]): string[] {
     if (n > 0) name = `${name} (${n + 1})`;
     return name;
   });
+}
+
+/**
+ * An order, as the table the rest of the pipeline expects.
+ *
+ * One row per ordered length, with the two keys the other files join on: the model code as the
+ * supplier writes it, and a per-length SKU — "V2610112.000.170" — which is exactly the spelling
+ * the PIM export uses in its "SKU no. // LENGTH" column and what carries the barcode.
+ */
+export function orderToTable(order: { lines: InvoiceLine[]; sheet: string; warnings: string[] }): ExtractedTable {
+  const headers = ["Item No.", "SKU", "Description", "Length", "RRP", "Qty"];
+  const rows = order.lines.map((line) => {
+    const length = (line.size ?? "").trim();
+    return {
+      "Item No.": line.sku,
+      SKU: length ? `${line.sku}.${length}` : line.sku,
+      Description: line.title,
+      Length: length,
+      RRP: line.rrp === null ? "" : String(line.rrp),
+      Qty: line.quantity === null ? "" : String(line.quantity),
+    };
+  });
+  return {
+    headers,
+    rows,
+    method: "XLSX",
+    warnings: [
+      `Read as an order: ${rows.length} line${rows.length === 1 ? "" : "s"} from the quantities written on ${order.sheet}. The rest of the form is the supplier's price list, not this delivery, so it was left out.`,
+      ...order.warnings.filter((w) => !w.startsWith("Read as an order")),
+    ],
+  };
 }
 
 export function gridToTable(grid: string[][], method: ExtractedTable["method"], warnings: string[] = []): ExtractedTable {
@@ -105,6 +138,24 @@ function cellToString(value: ExcelJS.CellValue): string {
 export async function extractXlsx(buffer: Buffer, sheetName?: string): Promise<ExtractedTable> {
   const sheets = await sheetGrids(buffer);
   if (sheets.length === 0) return { headers: [], rows: [], method: "XLSX", warnings: ["Workbook has no sheets"] };
+
+  /**
+   * An order form is read as the order, not as the price list it is printed on.
+   *
+   * Their Volkl workbook prices the whole range — 375 models over a dozen tabs — and the delivery
+   * is the nine cells somebody wrote a number in. Read as a table it built 375 products, which is
+   * not a near miss: it is the supplier's catalogue arriving as this month's stock. Read as an
+   * order it builds the six skis and the binding that were actually bought, one variant per
+   * length, with the item code carried per length so the spec and barcode sheets can join to it.
+   *
+   * Only when a quantity has been written in. A blank form is a price list and still reads as one.
+   */
+  if (!sheetName) {
+    const order = readInvoiceGrids(sheets);
+    if (order && order.lines.some((l) => l.quantity !== null)) {
+      return orderToTable(order);
+    }
+  }
 
   const scored = sheets.map(({ name, grid }) => {
     const compact = grid.filter((r) => r && r.some((c) => (c ?? "").trim()));

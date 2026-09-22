@@ -60,21 +60,32 @@ describe("the real Volkl files", () => {
     expect(t.rows[0]["EAN No."]).toBe("883295505555");
   });
 
-  it("reads the order's goods, not its cover sheet", { timeout: 30_000 }, async () => {
-    // Twelve sheets. The first with rows on it is "Order Total" — a letterhead and some totals —
-    // so the one sheet that used to be read was the one with no products on it.
+  it("reads the order, not the price list it is printed on", { timeout: 30_000 }, async () => {
+    // Twelve sheets, 375 models priced across them, and a delivery of nine. Read as a table this
+    // built the supplier's whole range as new stock; read as an order it builds what was bought.
     const t = await extractXlsx(readFileSync(ORDER));
-    expect(t.headers).toEqual(["Supplier Code", "Code", "Size", "Qty", "Type"]);
-    expect(t.rows.length).toBeGreaterThan(400);
-    expect(t.rows[0]["Supplier Code"]).toBe("V2610001.000");
+    expect(t.headers).toEqual(["Item No.", "SKU", "Description", "Length", "RRP", "Qty"]);
+    expect(t.rows).toHaveLength(9);
+    expect(t.rows[0]["Item No."]).toBe("V2610112.000");
+    expect(t.rows[0]["Description"]).toBe("M7 MANTRA");
+    // The per-length SKU is the join the other two files land on.
+    expect(t.rows[0]["SKU"]).toBe("V2610112.000.170");
+    expect(t.warnings.join(" ")).toContain("Read as an order");
   });
 
-  it("names the sheets it did not read, with their sizes", { timeout: 30_000 }, async () => {
+  it("names the tabs the order came off", { timeout: 30_000 }, async () => {
     const t = await extractXlsx(readFileSync(ORDER));
     const note = t.warnings.join(" ");
-    expect(note).toContain("Volkl Ski Upload");
+    expect(note).toContain("Volkl Ski");
     expect(note).toContain("Marker Inline 2025");
-    expect(note).toMatch(/upload the file again/i);
+    expect(note).toMatch(/price list, not this delivery/i);
+  });
+
+  it("still reads a named sheet as a plain table", { timeout: 30_000 }, async () => {
+    // Asking for one by name is how a price list is read out of the same workbook.
+    const t = await extractXlsx(readFileSync(ORDER), "Volkl Ski Upload");
+    expect(t.headers).toEqual(["Supplier Code", "Code", "Size", "Qty", "Type"]);
+    expect(t.rows.length).toBeGreaterThan(400);
   });
 
   it("reads a named sheet when one is asked for", { timeout: 30_000 }, async () => {

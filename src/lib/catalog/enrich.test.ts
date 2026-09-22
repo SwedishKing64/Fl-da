@@ -24,6 +24,11 @@ describe("spec sheet enrichment", () => {
     expect(products[0].metafields).toMatchObject({ flex: "Medium", terrain: "All-Mountain" });
     expect(products[0].variants[0].item.rrp).toBe(999);
     expect(products[1].metafields).toMatchObject({ ability_level: "Advanced", waist_width: "98mm" });
-    expect(products[1].description).toBe("");
+    // A spec row with no prose on it still writes its Tech Specs, because a supplier's export is
+    // all numbers and no words and those numbers are most of what a customer wants. The body
+    // still reads as unwritten, so the web lookup can add the prose later.
+    expect(products[1].description).toBe(
+      ["<h2>Tech Specs</h2>", "<ul>", "<li>WAIST WIDTH: 98mm</li>", "<li>ABILITY: Advanced</li>", "</ul>"].join("\n"),
+    );
   });
 });

@@ -28,7 +28,11 @@ export function suggestMapping(headers: string[]): Mapping {
   // Pass 1: exact canonical key or exact synonym matches.
   for (const header of headers) {
     const n = norm(header);
-    if (canonicalKeys.has(header) && !used.has(header)) {
+    // A header that spells a canonical key maps to itself — except "description", which means
+    // two different things in the two vocabularies. Here it is the long body copy; in every
+    // supplier export it is the product's NAME ("M7 MANTRA", "SQUIRE 12 TCX 90MM"). Taking it
+    // literally put the model name in the body and left the product with no title.
+    if (canonicalKeys.has(header) && header !== "description" && !used.has(header)) {
       mapping[header] = header as keyof CanonicalLineItem;
       used.add(header);
       continue;
@@ -47,9 +51,13 @@ export function suggestMapping(headers: string[]): Mapping {
     for (const f of CANONICAL_FIELDS) {
       if (used.has(f.key)) continue;
       for (const s of f.synonyms) {
-        if (s.length >= 3 && (n.includes(` ${s} `) || n.startsWith(`${s} `) || n.endsWith(` ${s}`) || n === s)) {
-          if (!best || s.length > best.len) best = { key: f.key, len: s.length };
-        }
+        if (s.length < 3) continue;
+        if (!(n.includes(` ${s} `) || n.startsWith(`${s} `) || n.endsWith(` ${s}`) || n === s)) continue;
+        // The word has to be most of the heading, not a word inside it. "unit of measure" is not
+        // a unit cost and "type of wood" is not a product type, but both matched on one short
+        // word and quietly set a field from a column that meant something else entirely.
+        if (s.length / n.length < 0.4) continue;
+        if (!best || s.length > best.len) best = { key: f.key, len: s.length };
       }
     }
     if (best) {
@@ -111,6 +119,23 @@ export function applyMapping(row: Record<string, string>, mapping: Mapping, opti
   }
   if (item.quantity === null) item.quantity = 1;
   item.imageUrls = Array.from(new Set(item.imageUrls));
+
+  /**
+   * Keep the columns nothing canonical claimed.
+   *
+   * A supplier's spec export is mostly these, and dropping them was why a Volkl build came out
+   * with no specs on it: tip width, tail width, sidecut radii, core, key technologies. Only short
+   * values, because a column of prose is a description and belongs in the body, and only where
+   * there is something in the cell.
+   */
+  const extras: Record<string, string> = {};
+  for (const [header, key] of Object.entries(mapping)) {
+    if (key) continue;
+    const raw = (row[header] ?? "").toString().trim();
+    if (!raw || raw.length > 120) continue;
+    extras[header.trim()] = raw;
+  }
+  if (Object.keys(extras).length > 0) item.extras = extras;
   return item;
 }
 

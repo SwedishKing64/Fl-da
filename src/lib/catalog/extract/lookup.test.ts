@@ -94,8 +94,13 @@ describe("telling the invoice's words from the brand's", () => {
     expect(isPlaceholderBody(prose)).toBe(false);
     // Two paragraphs is someone's writing, however short.
     expect(isPlaceholderBody("<p>Short one.</p><p>Short two.</p>")).toBe(false);
-    // A spec list on its own is not a placeholder either.
-    expect(isPlaceholderBody("<ul><li>Shell: 20k</li></ul>")).toBe(false);
+    // A spec list on its own IS a placeholder, deliberately. A supplier's export gives the numbers
+    // and never the words, so those specs go on the product straight away — and the body still has
+    // to read as unwritten, or the lookup could never come back and add the prose.
+    expect(isPlaceholderBody("<ul><li>Shell: 20k</li></ul>")).toBe(true);
+    expect(isPlaceholderBody("<h2>Tech Specs</h2><ul><li>WAIST WIDTH: 96 mm</li></ul>")).toBe(true);
+    // With prose in front of it, it is written.
+    expect(isPlaceholderBody(`<p>${"word ".repeat(30).trim()}</p><ul><li>Shell: 20k</li></ul>`)).toBe(false);
   });
 
   it("lets the manufacturer's copy replace the invoice line, but not a written one", () => {

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Alert, Button, LinkButton, cx } from "@/app/(catalog)/ui";
 import { readingCountAction } from "@/app/(catalog)/actions";
+import { fitsUpload, shrinkAll, tooBig } from "@/app/(catalog)/shrink";
 
 interface UploadResult { filename: string; rows: number; method: string | null; kind: string; warnings: string[] }
 interface AutoResult { applied: boolean; products: number; variants: number }
@@ -24,6 +25,8 @@ export function UploadPanel({ batchId, aiEnabled, hasProducts, reading, productC
   // storing them. A bar that only ever sat at "Uploading…" is why a slow phone photo looked stuck.
   const [progress, setProgress] = useState<number | null>(null);
   const [sending, setSending] = useState(0);
+  /** What was shrunk on the way out, so a file arriving smaller than it left is not a mystery. */
+  const [notes, setNotes] = useState<string[]>([]);
   const [kind, setKind] = useState("AUTO");
   const [results, setResults] = useState<UploadResult[] | null>(null);
   const [auto, setAuto] = useState<AutoResult | null>(null);
@@ -53,13 +56,34 @@ export function UploadPanel({ batchId, aiEnabled, hasProducts, reading, productC
     return () => { stop = true; clearInterval(timer); };
   }, [reading, batchId, router]);
 
-  async function upload(files: FileList | File[]) {
-    const list = Array.from(files);
-    if (list.length === 0) return;
+  async function upload(chosen: FileList | File[]) {
+    const picked = Array.from(chosen);
+    if (picked.length === 0) return;
     setBusy(true);
     setError(null);
     setAuto(null);
     setProgress(0);
+    setNotes([]);
+
+    /**
+     * Shrink a scan or a photo before it goes.
+     *
+     * An upload body tops out at about 4.5MB on a serverless host, and a scanned A4 invoice at
+     * 600dpi is far past that — so it was refused at the edge before any of this app ran, with
+     * nothing to show for it but an upload that never finished. Nothing is lost: the reader scales
+     * anything over 1568px on its long edge down to 1568px before looking at it, so the extra
+     * pixels only ever made the file too big to arrive.
+     */
+    const { files: list, notes: shrunk } = await shrinkAll(picked);
+    setNotes(shrunk);
+    const over = list.find((f) => !fitsUpload(f.size));
+    if (over) {
+      setError(tooBig(over, over.size));
+      setBusy(false);
+      setProgress(null);
+      return;
+    }
+
     setSending(list.reduce((n, f) => n + f.size, 0));
     const form = new FormData();
     form.set("kind", kind);
@@ -76,7 +100,15 @@ export function UploadPanel({ batchId, aiEnabled, hasProducts, reading, productC
         xhr.upload.onload = () => setProgress(100);
         xhr.onload = () => {
           let parsed: { results?: UploadResult[]; auto?: AutoResult; error?: string };
-          try { parsed = JSON.parse(xhr.responseText); } catch { parsed = { error: `Upload failed (HTTP ${xhr.status})` }; }
+          try {
+            parsed = JSON.parse(xhr.responseText);
+          } catch {
+            // 413 never reaches our code: the host refuses the body at the edge and answers with
+            // its own page, so there is no JSON and no log line. Say what it actually means.
+            parsed = xhr.status === 413
+              ? { error: "The upload was refused for being too big before it reached the app. Pictures are shrunk here automatically, so this is either a large PDF — send fewer pages — or several files at once that together come to more than about 4MB. Try them one at a time." }
+              : { error: `Upload failed (HTTP ${xhr.status})` };
+          }
           if (xhr.status >= 200 && xhr.status < 300) resolve(parsed);
           else reject(new Error(parsed.error ?? `Upload failed (HTTP ${xhr.status})`));
         };
@@ -116,11 +148,16 @@ export function UploadPanel({ batchId, aiEnabled, hasProducts, reading, productC
       >
         <div className="text-sm font-medium text-[var(--ink)]">{busy ? "Uploading and reading…" : "Drop files here, or choose files"}</div>
         <div className="mt-1 text-xs">{chosen.hint}</div>
-        <div className="mt-1 text-xs">PDF, XLSX, CSV, TXT, JPG or PNG. {aiEnabled ? "PDFs, scans and photos are read by AI." : "ANTHROPIC_API_KEY is not set: only CSV/XLSX and text-based PDFs can be read."}</div>
+        <div className="mt-1 text-xs">PDF, XLSX, CSV, TXT, JPG or PNG. {aiEnabled ? "PDFs, scans and photos are read by AI. A scan or photo is shrunk here before it is sent — it is read at 1568px across whatever you give it, so there is no need to scan above 300dpi." : "ANTHROPIC_API_KEY is not set: only CSV/XLSX and text-based PDFs can be read."}</div>
         <div className="mt-3">
           <Button size="sm" onClick={() => inputRef.current?.click()} disabled={busy}>Choose files</Button>
           <input ref={inputRef} type="file" multiple accept=".pdf,.xlsx,.xlsm,.xls,.csv,.txt,image/*" className="hidden" onChange={(e) => e.target.files && upload(e.target.files)} />
         </div>
+        {notes.length > 0 && (
+          <ul className="mx-auto mt-3 max-w-md list-none text-left text-[11px] text-[var(--ink-soft)]">
+            {notes.map((n, i) => <li key={i}>{n}</li>)}
+          </ul>
+        )}
         {progress !== null && (
           <div className="mx-auto mt-4 w-full max-w-sm">
             <div className="h-2 overflow-hidden rounded-full bg-neutral-200">

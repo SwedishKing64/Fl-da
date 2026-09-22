@@ -35,7 +35,7 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/catalog/bat
   const results = [];
   for (const file of files) {
     if (file.size > MAX_BYTES) {
-      results.push({ filename: file.name, rows: 0, method: null, kind, warnings: [`File is larger than ${Math.round(MAX_BYTES / 1024 / 1024)}MB${process.env.VERCEL ? " (Vercel upload limit)" : ""}; split or compress it.`] });
+      results.push({ filename: file.name, rows: 0, method: null, kind, warnings: [`${file.name} is larger than ${Math.round(MAX_BYTES / 1024 / 1024)}MB, which is as much as one upload can carry. A picture is shrunk in the browser before it is sent, so this is a PDF — send fewer pages. Scanning above 300dpi does not help either way: it is read at 1568px across whatever you give it.`] });
       continue;
     }
     try {

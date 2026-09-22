@@ -6,7 +6,7 @@ import { applyPlan, describeFile, foldPlans, isWholeFile, whyNoMatch, type Adjus
 import { csvFilename } from "@/lib/catalog/csv";
 import { applyInvoice, reconcile, type InvoiceFields, type Reconciliation } from "@/lib/catalog/reconcile";
 import type { InvoiceRead } from "@/lib/catalog/invoice";
-import { fitWithin, fitsUpload, readableSize } from "@/lib/catalog/image-size";
+import { fitsUpload, looksLikeImage, shrinkImage, tooBig } from "@/app/(catalog)/shrink";
 import { Alert, Button, Card, INPUT, cx } from "@/app/(catalog)/ui";
 
 /**
@@ -75,63 +75,6 @@ const read = (file: File | Blob, name = "that file") => new Promise<string>((res
   r.onerror = () => reject(new Error(`Could not read ${name}`));
   r.readAsDataURL(file);
 });
-
-/**
- * Shrink a photo or screenshot before it is sent.
- *
- * A picture of an invoice off a phone is several megabytes, and a Server Action sends it base64
- * encoded into a request body that tops out at about 4.5MB — so it is refused at the edge before
- * any of this app runs, with no error to show and nothing in the logs. On screen that is a
- * spinner that never stops, which is exactly what it looked like.
- *
- * Nothing is lost by shrinking it: the API scales anything over 1568px on its long edge down to
- * 1568px before reading it anyway, so the megabytes were never going to be looked at.
- *
- * If the browser cannot decode the file — an iPhone HEIC in a browser that has no decoder for it —
- * the original is sent and the server says what it is.
- */
-async function shrinkImage(file: File): Promise<{ blob: Blob; type: string; note: string }> {
-  const asIs = { blob: file, type: file.type || "image/png", note: "" };
-  if (typeof createImageBitmap !== "function") return asIs;
-  let bitmap: ImageBitmap;
-  try {
-    bitmap = await createImageBitmap(file);
-  } catch {
-    return asIs;
-  }
-  try {
-    const { width, height } = fitWithin(bitmap.width, bitmap.height);
-    if (width === bitmap.width && height === bitmap.height && fitsUpload(file.size)) return asIs;
-    const canvas = document.createElement("canvas");
-    canvas.width = width; canvas.height = height;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return asIs;
-    ctx.drawImage(bitmap, 0, 0, width, height);
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.92));
-    if (!blob) return asIs;
-    return {
-      blob,
-      type: "image/jpeg",
-      note: `${bitmap.width}×${bitmap.height} at ${readableSize(file.size)}, sent at ${width}×${height} and ${readableSize(blob.size)} — the size it is read at.`,
-    };
-  } finally {
-    bitmap.close();
-  }
-}
-
-/**
- * What to say about a file that still will not fit after shrinking.
- *
- * Named rather than generic, because the fix differs: a picture that could not be decoded here
- * needs converting, and a 30MB PDF needs splitting. Both used to be a spinner that never stopped.
- */
-function tooBig(file: File, sent: number): string {
-  return looksLikeImage(file)
-    ? `${file.name} is ${readableSize(sent)}, and this browser could not shrink it — which usually means it is an iPhone HEIC. Open it and save it as a PNG or JPEG, or take a screenshot of it, and add that instead.`
-    : `${file.name} is ${readableSize(sent)}. An upload has to stay under ${readableSize(3 * 1024 * 1024)}, so split it or send the pages that matter.`;
-}
-
-const looksLikeImage = (file: File): boolean => /^image\//.test(file.type) || /\.(png|jpe?g|webp|gif|heic|heif)$/i.test(file.name);
 
 /** What a row would do to the files as they stand right now. */
 const measure = (row: Row, csvs: Array<{ name: string; csv: string }>): Array<{ name: string; result: AdjustResult }> =>
@@ -260,10 +203,10 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
   async function takeSheet(file: File) {
     setBusy("sheet"); setError(null); setPreview(null); setRows([]); setSheetNote(null); setOpen(null); setConfirmedWhole([]);
     try {
-      const sent = looksLikeImage(file) ? await shrinkImage(file) : { blob: file as Blob, type: file.type, note: "" };
-      if (!fitsUpload(sent.blob.size)) { setError(tooBig(file, sent.blob.size)); return; }
+      const sent = await shrinkImage(file);
+      if (!fitsUpload(sent.file.size)) { setError(tooBig(file, sent.file.size)); return; }
       setProgress(sent.note ? `Reading the sheet — ${sent.note}` : "Reading the sheet…");
-      const r = await readInstructionSheetAction({ name: file.name, type: sent.type, base64: await read(sent.blob, file.name) });
+      const r = await readInstructionSheetAction({ name: file.name, type: sent.file.type, base64: await read(sent.file, file.name) });
       if (!r.ok) { setError(r.error); return; }
       const instructions = r.data!.instructions;
       setSheetNote({ source: `${file.name} · ${r.data!.source}`, ignored: r.data!.ignored, unclear: r.data!.unclear });
@@ -297,10 +240,10 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
   async function takeInvoice(file: File) {
     setBusy("invoice"); setError(null); setPreview(null); setSaved(null);
     try {
-      const sent = looksLikeImage(file) ? await shrinkImage(file) : { blob: file as Blob, type: file.type, note: "" };
-      if (!fitsUpload(sent.blob.size)) { setError(tooBig(file, sent.blob.size)); return; }
+      const sent = await shrinkImage(file);
+      if (!fitsUpload(sent.file.size)) { setError(tooBig(file, sent.file.size)); return; }
       setProgress(sent.note ? `Reading ${file.name} — ${sent.note}` : `Reading ${file.name}…`);
-      const r = await readInvoiceAction({ name: file.name, type: sent.type, base64: await read(sent.blob, file.name) });
+      const r = await readInvoiceAction({ name: file.name, type: sent.file.type, base64: await read(sent.file, file.name) });
       if (!r.ok) { setError(r.error); setInvoice(null); return; }
       const data = r.data!;
       setInvoice({ ...data, filename: file.name });

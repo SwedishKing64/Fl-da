@@ -71,7 +71,8 @@ describe("matching", () => {
     const dupe = CSV.replace("'821264800140", "'821264800133");
     const r = reconcile(dupe, [line({ barcode: "821264800133", rrp: 1 })]);
     expect(r.matched).toEqual([]);
-    expect(r.ambiguous[0].reason).toMatch(/2 rows of the export/);
+    // Both rows are variants of the one product, which is the shape their package listings take.
+    expect(r.ambiguous[0].reason).toMatch(/on 2 variants of blaze-94/);
   });
 
   it("refuses a barcode the invoice itself lists twice", () => {

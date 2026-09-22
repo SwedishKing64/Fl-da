@@ -16,6 +16,8 @@ import { CURRENCIES, type AppSettings } from "@/lib/catalog/types";
 import { seedDefaults } from "@/lib/catalog/seed";
 import { planAdjustment, planAdjustments, screenInstructions, planningAvailable, describePlan, splitInstructions, type SplitInstructions } from "@/lib/catalog/adjust-plan";
 import type { Plan } from "@/lib/catalog/adjust";
+import { readInvoiceGrids, type InvoiceRead } from "@/lib/catalog/invoice";
+import { aiAvailable } from "@/lib/catalog/extract/ai";
 import { initialsFrom } from "@/lib/catalog/tagging";
 import { answerFeedback, feedbackAvailable, withRule, type FeedbackTurn } from "@/lib/catalog/feedback";
 import { describeDirectives, instructionsAvailable, parseDirectives, readInstructions, NO_DIRECTIVES } from "@/lib/catalog/instructions";
@@ -815,6 +817,78 @@ export async function readInstructionSheetAction(file: { name: string; type: str
     const message = err instanceof Error ? err.message : String(err);
     if (/timed? ?out|aborted|FUNCTION_INVOCATION_TIMEOUT/i.test(message)) {
       return { ok: false, error: `Reading ${file.name} took longer than the page allows. A sheet of a few pages should fit — if this one is much longer, split it and add it in parts.` };
+    }
+    return { ok: false, error: `Could not read ${file.name}: ${message}` };
+  }
+}
+
+/**
+ * Read a supplier's invoice into lines that can be matched against the shop.
+ *
+ * A workbook or a CSV is read by its columns, here, for nothing: an invoice's headings say what it
+ * holds, and reading them is instant, works with no API key, and gives the same answer twice. A PDF
+ * or a photograph of an invoice has no columns to read, so that goes to the model — which is most
+ * of why this accepts a picture at all: an invoice photographed on a phone in the stockroom is a
+ * real way one arrives.
+ */
+export async function readInvoiceAction(file: { name: string; type: string; base64: string }): Promise<ActionResult<InvoiceRead & { source: string }>> {
+  await requireUser();
+
+  const buffer = Buffer.from(file.base64, "base64");
+  if (buffer.byteLength > 8 * 1024 * 1024) return { ok: false, error: "That file is larger than 8MB. An invoice is normally well under that — check it is the right file." };
+
+  const isPdf = /\.pdf$/i.test(file.name) || file.type === "application/pdf";
+  const isImage = /^image\//.test(file.type) || /\.(png|jpe?g|webp|gif|heic)$/i.test(file.name);
+  const isWorkbook = /\.xlsx?$/i.test(file.name) || /spreadsheet|excel/i.test(file.type);
+  const isCsv = /\.csv$/i.test(file.name) || file.type === "text/csv";
+
+  try {
+    if (isWorkbook || isCsv) {
+      const grids = isWorkbook
+        ? await (await import("@/lib/catalog/extract/tabular")).sheetGrids(buffer)
+        : [{ name: file.name, grid: (await import("@/lib/catalog/csv")).parseCsv(buffer.toString("utf8")) }];
+      const read = readInvoiceGrids(grids);
+      if (!read) {
+        return { ok: false, error: `Nothing in ${file.name} reads as an order. An invoice needs a column identifying each line — a barcode, an EAN or an item code — and a column of prices or quantities to go with it. A list of barcodes on its own has nothing to change.` };
+      }
+      return { ok: true, data: { ...read, source: `read column by column from ${read.sheet.includes(",") ? "its tabs" : `the "${read.sheet}" tab`}` } };
+    }
+
+    if (!isPdf && !isImage) return { ok: false, error: `${file.name} is not a file this can read. Invoices come as a spreadsheet, a CSV, a PDF or a photograph.` };
+    if (!aiAvailable()) return { ok: false, error: `${file.name} has no columns to read, so it has to go to the API — set ANTHROPIC_API_KEY, or upload the order as a spreadsheet.` };
+
+    const { extractFromPdf, extractFromImage } = await import("@/lib/catalog/extract/ai");
+    const extracted = isPdf
+      ? await extractFromPdf(buffer, "INVOICE")
+      : await extractFromImage(buffer, file.type || "image/png", "INVOICE");
+
+    const lines = extracted.items
+      .map((item) => ({
+        sku: item.sku ?? "",
+        barcode: item.barcode ?? "",
+        title: item.title ?? "",
+        costPrice: item.costPrice,
+        // Same rule as the column reader: a zero is not a price, it is a line with none.
+        rrp: item.rrp !== null && item.rrp > 0 ? item.rrp : null,
+        quantity: item.quantity,
+      }))
+      .filter((l) => (l.barcode.trim() || l.sku.trim()) && (l.rrp !== null || l.quantity !== null));
+
+    if (lines.length === 0) {
+      return { ok: false, error: `${file.name} was read${extracted.summary ? ` — ${extracted.summary}` : ""}, but no line in it carries both something to match on (a barcode or an item code) and something to change (a price or a quantity).` };
+    }
+    return {
+      ok: true,
+      data: {
+        lines, sheet: file.name, warnings: [],
+        columns: { barcode: "", sku: "", rrp: "", quantity: "", title: "" },
+        source: `read as ${isPdf ? "a PDF" : "a picture"}${extracted.supplier ? `, from ${extracted.supplier}` : ""}`,
+      },
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (/timed? ?out|aborted|FUNCTION_INVOCATION_TIMEOUT/i.test(message)) {
+      return { ok: false, error: `Reading ${file.name} took longer than the page allows. Upload the order as a spreadsheet if you have one — that is read instantly.` };
     }
     return { ok: false, error: `Could not read ${file.name}: ${message}` };
   }

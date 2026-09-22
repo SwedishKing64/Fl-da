@@ -52,6 +52,15 @@ export interface Reconciliation {
    * puts a number on a product nobody checked.
    */
   ambiguous: Array<{ line: InvoiceLine; reason: string; rows: number[] }>;
+  /**
+   * How many keys each side actually has.
+   *
+   * Nothing matching is the commonest outcome and "0 matched" says nothing about why. These four
+   * numbers separate the three real causes: an invoice with no barcodes on it, an export with none
+   * either, or both sides full of keys that simply do not meet. Their own Volkl order form is the
+   * first of those — 375 lines, not one barcode — and without this it looks like a broken tool.
+   */
+  keys: { invoiceBarcodes: number; invoiceSkus: number; fileBarcodes: number; fileSkus: number };
 }
 
 /**
@@ -69,6 +78,28 @@ export function normaliseBarcode(value: string): string {
 }
 
 const normSku = (value: string): string => value.replace(/[\s'"]/g, "").toUpperCase();
+
+/**
+ * Why a line could not be placed, in terms of this shop's catalogue.
+ *
+ * The distinction matters because one of these is a mistake and the other is how the shop is
+ * built. A barcode on two DIFFERENT products means someone typed one in twice. A barcode on
+ * several rows of the SAME product is their package listings working as intended: a ski sold with
+ * a binding carries the ski's barcode on both the mounted and the unmounted variant, which is why
+ * 457 of the 474 barcodes in their ski export sit on more than one row. Neither is written to —
+ * the two fitting options differ by the $55 mounting, so one price does not belong on both — but
+ * being told which it is, is the difference between a file to fix and nothing to do.
+ */
+function reasonFor(
+  clash: { key: MatchKey; value: string; rows: number[]; onInvoice: number },
+  handleOf: Map<number, string>,
+): string {
+  if (clash.rows.length <= 1) return `${clash.key} ${clash.value} is on ${clash.onInvoice} lines of the invoice`;
+  const handles = new Set(clash.rows.map((r) => handleOf.get(r) ?? ""));
+  return handles.size === 1
+    ? `${clash.key} ${clash.value} is on ${clash.rows.length} variants of ${[...handles][0]} — one price cannot belong to both`
+    : `${clash.key} ${clash.value} is on ${clash.rows.length} rows across ${handles.size} different products`;
+}
 
 /**
  * Match every line of an invoice to a variant row of a Shopify export.
@@ -129,18 +160,20 @@ export function reconcile(csv: string, lines: InvoiceLine[]): Reconciliation {
     }
     const clash = tries.find((t) => t.rows.length > 1 || (t.rows.length === 1 && t.onInvoice > 1));
     if (clash) {
-      ambiguous.push({
-        line,
-        reason: clash.rows.length > 1
-          ? `${clash.key} ${clash.value} is on ${clash.rows.length} rows of the export`
-          : `${clash.key} ${clash.value} is on ${clash.onInvoice} lines of the invoice`,
-        rows: clash.rows,
-      });
+      ambiguous.push({ line, reason: reasonFor(clash, handleOf), rows: clash.rows });
       continue;
     }
     unmatched.push(line);
   }
-  return { matched, unmatched, ambiguous };
+  return {
+    matched, unmatched, ambiguous,
+    keys: {
+      invoiceBarcodes: lines.filter((l) => normaliseBarcode(l.barcode)).length,
+      invoiceSkus: lines.filter((l) => normSku(l.sku)).length,
+      fileBarcodes: byBarcode.size,
+      fileSkus: bySku.size,
+    },
+  };
 }
 
 /**
@@ -197,8 +230,11 @@ export function applyInvoice(csv: string, matched: Match[], fields: InvoiceField
       row[i] = value;
       changes.push({ handle: m.handle, title, column, before, after: value });
     };
-    if (fields.rrp && m.line.rrp !== null) write("Variant Compare At Price", m.line.rrp.toFixed(2));
-    if (fields.price && m.line.rrp !== null) write("Variant Price", m.line.rrp.toFixed(2));
+    // Never a zero. An empty price cell means "leave it alone" to Shopify and a zero means free,
+    // and a supplier document prints 0 for anything it does not price separately.
+    const rrp = m.line.rrp !== null && m.line.rrp > 0 ? m.line.rrp : null;
+    if (fields.rrp && rrp !== null) write("Variant Compare At Price", rrp.toFixed(2));
+    if (fields.price && rrp !== null) write("Variant Price", rrp.toFixed(2));
     if (fields.quantity && m.line.quantity !== null) write("Variant Inventory Qty", String(Math.round(m.line.quantity)));
   }
 

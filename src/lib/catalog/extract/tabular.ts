@@ -20,13 +20,22 @@ export function detectHeaderRow(grid: string[][]): number {
   for (let i = 0; i < Math.min(grid.length, 30); i++) {
     const cells = grid[i].map((c) => (c ?? "").trim()).filter(Boolean);
     if (cells.length < 3) continue;
+    // A row of numbers is never a header — but a header row is not always words. Their supplier
+    // order forms are size grids: "Item No. | Sizes | RRP | W/S | 148 | 150 | 153 | 155 | …", where
+    // two thirds of the headings are ski lengths. Demanding 70% words rejected the only real
+    // header on the sheet and settled on "State: | Delivery Date | 2026-05-01" six rows above it.
+    // Three words and a third of the row keeps a data row out while letting a size grid in; which
+    // row wins is then decided by distinct width below, where a header beats its own data easily.
     const textual = cells.filter((c) => !/^[-+$€£]?\d[\d,.]*%?$/.test(c)).length;
-    if (textual / cells.length < 0.7) continue;
+    if (textual < 3 || textual / cells.length < 0.33) continue;
     // Distinct values, not cells. A title merged across the sheet — "2025/26 Ski Price-List" —
     // arrives as that one phrase repeated in all thirty-three columns, which is wider than the
     // header underneath it and is not a header at all. Column names do not repeat.
     const distinct = new Set(cells.map((c) => c.toLowerCase())).size;
-    if (distinct > width) { width = distinct; best = i; }
+    // A header sits ABOVE its data, so an earlier candidate keeps the row unless a later one is
+    // clearly wider — a fifth more, not one cell more. Without the margin, a data row carrying one
+    // extra filled-in cell took the header's place on a sheet whose header was the very first row.
+    if (distinct > width * 1.2) { width = distinct; best = i; }
   }
   return best === -1 ? 0 : best;
 }
@@ -102,7 +111,13 @@ export async function extractXlsx(buffer: Buffer, sheetName?: string): Promise<E
     const header = detectHeaderRow(compact);
     const columns = (compact[header] ?? []).filter((c) => (c ?? "").trim()).length;
     const dataRows = Math.max(0, compact.length - header - 1);
-    return { name, grid: compact, columns, dataRows, score: columns >= 2 ? columns * dataRows : 0 };
+    // Cells with something in them, not columns times rows. A supplier's order form is a size grid
+    // — thirty-odd headings, of which twenty are ski lengths with an empty box under each waiting
+    // for a quantity — so by its header width it is the biggest table in the workbook and by what
+    // is actually on it, it is not. Counting what is filled in reads it as the mostly-empty form
+    // it is, and still prefers a real wide table over a narrow one.
+    const filled = compact.slice(header + 1).reduce((n, r) => n + r.filter((c) => (c ?? "").trim()).length, 0);
+    return { name, grid: compact, columns, dataRows, score: columns >= 2 ? filled : 0 };
   });
 
   const wanted = sheetName ? scored.find((s) => s.name === sheetName) : undefined;
@@ -147,7 +162,10 @@ export async function sheetGrids(buffer: Buffer): Promise<Array<{ name: string; 
       });
       grid[rowNumber - 1] = Array.from({ length: cells.length }, (_, i) => cells[i] ?? "");
     });
-    return { name: sheet.name, grid: grid.map((r) => r ?? []) };
+    // Array.from, not grid.map: eachRow skips empty rows, so grid is SPARSE, and map walks past a
+    // hole without calling its callback — the ?? never ran and the hole came out the other side.
+    // A workbook with a blank row in it then crashed whatever read it, on grid[i].map of undefined.
+    return { name: sheet.name, grid: Array.from(grid, (r) => r ?? []) };
   });
 }
 

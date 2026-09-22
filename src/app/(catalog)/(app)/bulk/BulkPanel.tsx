@@ -1,9 +1,11 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { logAdjustmentAction, planAdjustmentAction, readInstructionSheetAction, readSheetAgainstFilesAction } from "@/app/(catalog)/actions";
+import { logAdjustmentAction, planAdjustmentAction, readInstructionSheetAction, readInvoiceAction, readSheetAgainstFilesAction } from "@/app/(catalog)/actions";
 import { applyPlan, describeFile, foldPlans, isWholeFile, type AdjustResult, type FoldStep, type Plan } from "@/lib/catalog/adjust";
 import { csvFilename } from "@/lib/catalog/csv";
+import { applyInvoice, reconcile, type InvoiceFields, type Reconciliation } from "@/lib/catalog/reconcile";
+import type { InvoiceRead } from "@/lib/catalog/invoice";
 import { Alert, Button, Card, INPUT, cx } from "@/app/(catalog)/ui";
 
 /**
@@ -56,6 +58,14 @@ interface Row {
 }
 
 interface Applied { title: string; lines: string[]; changes: number; matched: number; steps: number; perFile: Array<{ name: string; changes: number }> }
+
+/** An invoice as read. How it matches is worked out from the files as they stand, never stored. */
+interface Invoice extends InvoiceRead {
+  filename: string;
+  source: string;
+}
+
+type Against = Array<{ name: string; reconciliation: Reconciliation }>;
 interface Preview { instruction: string; plan: Plan; understood: string; unclear: string; blocked: string[]; described: string[]; results: Array<{ name: string; result: AdjustResult }> }
 
 const read = (file: File) => new Promise<string>((resolve, reject) => {
@@ -71,6 +81,35 @@ const measure = (row: Row, csvs: Array<{ name: string; csv: string }>): Array<{ 
     ? csvs.map((s) => ({ name: s.name, result: applyPlan(s.csv, row.plan as Plan) }))
     : [];
 
+/**
+ * How many of an invoice's lines were placed, counted once each.
+ *
+ * Summing the per-file matches would count a product twice when two exports both hold it — which
+ * they do, because the catalogue comes out of Shopify in overlapping pieces.
+ */
+const placedLines = (against: Against): number =>
+  new Set(against.flatMap((a) => a.reconciliation.matched.map((m) => `${m.line.barcode}\u0000${m.line.sku}`))).size;
+
+/**
+ * Why nothing matched, in the terms of the two documents rather than "0 matched".
+ *
+ * There are only three answers and they need different things done about them, so it says which.
+ */
+function whyNothing(invoice: Invoice, against: Against): string {
+  const keys = against[0]?.reconciliation.keys;
+  if (!keys) return "Load an export from Shopify above and the invoice will be matched against it.";
+  if (keys.invoiceBarcodes === 0 && keys.invoiceSkus === 0) {
+    return `No line on ${invoice.filename} carries a barcode or an item code, so there is nothing to match on. An order form that lists only model names cannot be placed automatically.`;
+  }
+  if (keys.invoiceBarcodes === 0 && keys.fileSkus === 0) {
+    return `${invoice.filename} identifies its lines by item code (${keys.invoiceSkus} of them) and your export carries no SKUs at all — this shop keeps barcodes instead. Ask the supplier for the order with EANs on it, or add the barcodes to the products in Shopify.`;
+  }
+  if (keys.fileBarcodes === 0 && keys.fileSkus === 0) {
+    return "The loaded exports carry neither barcodes nor SKUs, so there is nothing on them to match an invoice against.";
+  }
+  return `Both documents carry codes — ${keys.invoiceBarcodes} barcodes and ${keys.invoiceSkus} item codes on the invoice, ${keys.fileBarcodes} and ${keys.fileSkus} on the exports — and none of them are the same. This is usually next season's goods, which the shop does not list yet.`;
+}
+
 const countChanges = (results: Array<{ result: AdjustResult }>) => results.reduce((n, r) => n + r.result.changes.length, 0);
 const countMatched = (results: Array<{ result: AdjustResult }>) => results.reduce((n, r) => n + r.result.matched, 0);
 
@@ -84,9 +123,22 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
   const [open, setOpen] = useState<number | null>(null);
   const [confirmedWhole, setConfirmedWhole] = useState<number[]>([]);
 
+  const invoiceRef = useRef<HTMLInputElement>(null);
+  const [invoice, setInvoice] = useState<Invoice | null>(null);
+  /**
+   * Which of an invoice's numbers to write.
+   *
+   * The recommended retail and the count are ticked; the selling price is not, and that is the
+   * decision this control exists to put in front of someone. A new season's RRP belongs in Compare
+   * At whatever else is true. Writing it into the price as well is right for a product at full
+   * price and wrong for one in the middle of a sale — it ends the sale, silently, on every product
+   * the invoice touched. So it is a tick someone makes, not a default they discover afterwards.
+   */
+  const [fields, setFields] = useState<InvoiceFields>({ rrp: true, price: false, quantity: true });
+
   const [instruction, setInstruction] = useState("");
   const [preview, setPreview] = useState<Preview | null>(null);
-  const [busy, setBusy] = useState<"files" | "sheet" | "planning" | "applying" | null>(null);
+  const [busy, setBusy] = useState<"files" | "sheet" | "invoice" | "planning" | "applying" | null>(null);
   const [progress, setProgress] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
@@ -154,6 +206,66 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
     } finally {
       setBusy(null); setProgress("");
     }
+  }
+
+  /**
+   * Take a supplier's invoice and match it against every loaded file.
+   *
+   * The matching runs here, in the browser, against the files as they stand — the same as every
+   * other change on this page, and for the same reason: an export runs to megabytes and never
+   * needs to leave the machine. Only the invoice itself goes to the server, and only to be read.
+   */
+  async function takeInvoice(file: File) {
+    setBusy("invoice"); setError(null); setPreview(null); setSaved(null);
+    try {
+      setProgress(`Reading ${file.name}…`);
+      const r = await readInvoiceAction({ name: file.name, type: file.type, base64: await read(file) });
+      if (!r.ok) { setError(r.error); setInvoice(null); return; }
+      const data = r.data!;
+      setInvoice({ ...data, filename: file.name });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(null); setProgress("");
+    }
+  }
+
+  function applyInvoiceNow() {
+    if (!invoice) return;
+    if (!fields.rrp && !fields.price && !fields.quantity) {
+      setError("Nothing was applied — tick at least one of the three numbers to write.");
+      return;
+    }
+    setBusy("applying"); setError(null); setSaved(null);
+
+    const results = sheets.map((s) => {
+      const m = against.find((a) => a.name === s.name)?.reconciliation.matched ?? [];
+      return { name: s.name, result: applyInvoice(s.csv, m, fields) };
+    });
+    if (results.every((r) => r.result.refused)) {
+      setBusy(null);
+      setError("Nothing was applied. The check that nothing moves except what was asked for did not pass, which is a fault in this tool rather than anything you did.");
+      return;
+    }
+    const nextSheets = sheets.map((s, i) => {
+      const hit = results[i];
+      const touched = !hit.result.refused && hit.result.changes.length > 0;
+      return { ...s, history: [...s.history, s.csv], csv: touched ? hit.result.csv : s.csv };
+    });
+    setSheets(nextSheets);
+
+    const matchedLines = placedLines(against);
+    const wrote = [fields.rrp ? "the recommended retail into Compare At" : "", fields.price ? "the selling price" : "", fields.quantity ? "the stock on hand" : ""].filter(Boolean);
+    setFeed((f) => [...f, {
+      title: `${invoice.filename} — ${results.reduce((n, r) => n + (r.result.refused ? 0 : r.result.changes.length), 0)} cells from the invoice`,
+      lines: [`Matched ${matchedLines} of ${invoice.lines.length} invoice lines, and wrote ${wrote.join(", ")}.`],
+      changes: results.reduce((n, r) => n + (r.result.refused ? 0 : r.result.changes.length), 0),
+      matched: matchedLines,
+      steps: 1,
+      perFile: results.map((r) => ({ name: r.name, changes: r.result.refused ? 0 : r.result.changes.length })),
+    }]);
+    setRows((current) => current.map((r) => ({ ...r, results: measure(r, nextSheets) })));
+    setBusy(null);
   }
 
   async function workOut(text = instruction) {
@@ -316,6 +428,15 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
   const nothingToDo = preview !== null && !refused && !blocked && totalChanges === 0;
   const noOperations = preview !== null && preview.plan.operations.length === 0;
   const changesSoFar = feed.reduce((n, f) => n + f.changes, 0);
+
+  // Worked out from the invoice and the files as they stand, rather than kept alongside them. Held
+  // in state it would have to be put back in step after every load, removal, apply and undo, and
+  // the one time it was missed it would show yesterday's match count over today's file.
+  // No useMemo: the compiler memoizes this, and writing it by hand only stops it doing so.
+  const against: Against = invoice
+    ? sheets.map((s) => ({ name: s.name, reconciliation: reconcile(s.csv, invoice.lines) }))
+    : [];
+  const placed = placedLines(against);
 
   // The sheet, laid out by product group. A row that cannot touch anything loaded is set aside
   // rather than queued, which is the difference between thirty-nine to go through and three.
@@ -512,6 +633,87 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
               <ul className="mt-1 list-disc pl-5">
                 {setAside.map((r) => <li key={r.id}>{r.instruction}{r.why ? <span className="italic"> — {r.why}</span> : null}</li>)}
               </ul>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {sheets.length > 0 && (
+        <Card
+          title="A supplier's invoice"
+          actions={invoice ? <Button size="sm" onClick={() => { setInvoice(null); setError(null); }}>Remove it</Button> : undefined}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="text-sm">
+              <span className="font-medium">Reordering, and the prices or the counts have changed?</span>
+              <span className="ml-2 text-xs text-[var(--ink-soft)]">Add the invoice and each line is matched to the variant it belongs to by barcode, or by item code where there is no barcode. A spreadsheet or CSV is read by its columns; a PDF or a photo of one goes to the API to be read.</span>
+            </div>
+            <Button size="sm" disabled={busy !== null} onClick={() => invoiceRef.current?.click()}>{busy === "invoice" ? "Reading…" : invoice ? "Use a different invoice" : "Add the invoice"}</Button>
+            <input ref={invoiceRef} type="file" accept=".xlsx,.xls,.csv,.pdf,.png,.jpg,.jpeg,.webp,.heic,image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void takeInvoice(f); e.target.value = ""; }} />
+          </div>
+
+          {busy === "invoice" && progress && (
+            <div className="mt-3">
+              <div className="h-1.5 overflow-hidden rounded-full bg-[var(--line-soft)]"><div className="h-full w-1/3 animate-pulse rounded-full bg-[var(--violet)]" /></div>
+              <p className="mt-1.5 text-xs text-[var(--ink-soft)]">{progress}</p>
+            </div>
+          )}
+
+          {invoice && (
+            <div className="mt-4 space-y-3">
+              <div className="rounded-xl border border-[var(--line-soft)] px-3 py-2.5 text-sm">
+                <div className="font-medium">{invoice.filename}</div>
+                <div className="mt-0.5 text-xs text-[var(--ink-soft)]">
+                  {invoice.lines.length} line{invoice.lines.length === 1 ? "" : "s"}, {invoice.source}.
+                  {invoice.columns.rrp || invoice.columns.quantity
+                    ? <> Prices from <strong>{invoice.columns.rrp || "nowhere"}</strong>, counts from <strong>{invoice.columns.quantity || "nowhere"}</strong>, matched on <strong>{invoice.columns.barcode || invoice.columns.sku || "barcode"}</strong>.</>
+                    : null}
+                </div>
+                {invoice.warnings.map((w, i) => <p key={i} className="mt-1.5 text-xs text-[var(--ink-soft)]">{w}</p>)}
+              </div>
+
+              <ul className="divide-y divide-[var(--line-soft)] text-sm">
+                {against.map((a) => {
+                  const r = a.reconciliation;
+                  return (
+                    <li key={a.name} className="py-2">
+                      <span className="font-medium">{a.name}</span>
+                      <span className="ml-2 tabular-nums text-xs text-[var(--ink-soft)]">
+                        {r.matched.length} matched · {r.unmatched.length} not in this file · {r.ambiguous.length} too ambiguous to place
+                      </span>
+                      {r.ambiguous.length > 0 && (
+                        <ul className="mt-1 list-disc pl-5 text-xs text-[var(--ink-soft)]">
+                          {r.ambiguous.slice(0, 3).map((x, i) => <li key={i}>{x.line.title || x.line.sku || x.line.barcode} — {x.reason}, so it is left alone</li>)}
+                          {r.ambiguous.length > 3 && <li>…and {r.ambiguous.length - 3} more</li>}
+                        </ul>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+
+              <fieldset className="rounded-xl border border-[var(--line-soft)] px-3 py-2.5">
+                <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-[var(--ink-soft)]">What to write</legend>
+                <label className="flex items-start gap-2 py-1 text-sm">
+                  <input type="checkbox" id="invoice-rrp" className="mt-1" checked={fields.rrp === true} onChange={(e) => setFields((f) => ({ ...f, rrp: e.target.checked }))} />
+                  <span>The recommended retail, into <strong>Compare At</strong>.<span className="block text-xs text-[var(--ink-soft)]">Where this shop keeps it. Nothing a customer pays changes.</span></span>
+                </label>
+                <label className="flex items-start gap-2 py-1 text-sm">
+                  <input type="checkbox" id="invoice-price" className="mt-1" checked={fields.price === true} onChange={(e) => setFields((f) => ({ ...f, price: e.target.checked }))} />
+                  <span>The selling price too.<span className="block text-xs text-[var(--ink-soft)]">Prices the products at the new recommended retail — which <strong>ends any sale</strong> the matched products are on. Right for a straight reorder at new-season pricing; wrong in the middle of a clearance.</span></span>
+                </label>
+                <label className="flex items-start gap-2 py-1 text-sm">
+                  <input type="checkbox" id="invoice-qty" className="mt-1" checked={fields.quantity === true} onChange={(e) => setFields((f) => ({ ...f, quantity: e.target.checked }))} />
+                  <span>The stock on hand.<span className="block text-xs text-[var(--ink-soft)]">Sets the count to what the invoice says, rather than adding to what is there.</span></span>
+                </label>
+              </fieldset>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <Button variant="primary" disabled={busy !== null || placed === 0} onClick={applyInvoiceNow}>
+                  Apply it to {placed} matched line{placed === 1 ? "" : "s"}
+                </Button>
+                {placed === 0 && <span className="text-xs text-[var(--ink-soft)]">{whyNothing(invoice, against)}</span>}
+              </div>
             </div>
           )}
         </Card>

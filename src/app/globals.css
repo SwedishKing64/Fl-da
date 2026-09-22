@@ -1,36 +1,44 @@
 @import "tailwindcss";
 
-/* Alpsport — the shop's own colours: the deep blue and mountain-sky of the oval, the yellow of
-   the wordmark, and snow for the ground. Blue carries every action; yellow is the highlight and is
-   spent sparingly, the way the logo spends it. */
+/* Rubin — a ruby set in a dark bezel.
+   The workspace stays light and quiet because it is where the numbers are read. The chrome around
+   it goes deep and warm, and the ruby is spent the way a jeweller spends one: on the single thing
+   that matters on a page, never on the frame. Gold appears about twice a screen.
+   Danger keeps its own hue on purpose — a warning that looks like the brand is not a warning. */
 :root {
   --paper: #ffffff;
-  --canvas: #f2f6fb;
-  --ink: #0f1b2a;
-  --ink-2: #4a5a6d;
-  --ink-soft: #7d8b9c;
-  --line: #d9e3ef;
-  --line-soft: #eaf0f7;
+  --canvas: #f7f5f4;
+  --ink: #17110f;
+  --ink-2: #4c4240;
+  --ink-soft: #8a7e7a;
+  --line: #e7e0dd;
+  --line-soft: #f2edeb;
 
-  --alp-blue: #0b4ea2;
-  --alp-blue-deep: #06356f;
-  --alp-sky: #2f8fd8;
-  --alp-yellow: #ffd400;
-  --alp-yellow-deep: #e8b400;
-  --alp-snow: #eef5fd;
+  --rubin: #a8133f;
+  --rubin-deep: #6d0a28;
+  --rubin-bright: #d62760;
+  --rubin-tint: #fdf1f5;
+  --gold: #d9a227;
+  --gold-deep: #a97a12;
+  --night: #1b1013;
+  --night-2: #2b1a20;
+  --night-3: #3d272e;
 
-  /* The app was built on a violet accent; these keep every existing class on brand. */
-  --violet: var(--alp-blue);
-  --violet-soft: var(--alp-snow);
-  --promoter: #12a594;
-  --passive: #d99a2b;
-  --detractor: #e05543;
-  --promoter-tint: #e6f6f2;
-  --passive-tint: #faf1dd;
-  --detractor-tint: #fbe9e5;
-  --shadow-sm: 0 1px 2px rgba(11, 78, 162, 0.06), 0 1px 3px rgba(11, 78, 162, 0.05);
-  --shadow: 0 14px 38px -20px rgba(11, 78, 162, 0.35);
-  --shadow-lift: 0 10px 26px -12px rgba(11, 78, 162, 0.28);
+  /* The review grid and a few older styles were written against these two names. */
+  --violet: var(--rubin);
+  --violet-soft: var(--rubin-tint);
+
+  --promoter: #0f9b7e;
+  --passive: #c8891a;
+  --detractor: #cf3126;
+  --promoter-tint: #e9f7f3;
+  --passive-tint: #fbf2e0;
+  --detractor-tint: #fceceb;
+
+  --shadow-sm: 0 1px 2px rgba(23, 17, 15, 0.05), 0 1px 3px rgba(23, 17, 15, 0.04);
+  --shadow: 0 18px 44px -24px rgba(109, 10, 40, 0.38);
+  --shadow-lift: 0 12px 28px -14px rgba(109, 10, 40, 0.26);
+  --ring: 0 0 0 3px rgba(168, 19, 63, 0.14);
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
   --r: 16px;
   --sans: var(--font-body), system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -365,23 +373,23 @@ p {
    dropped for a viewer who has asked for less movement.
    --------------------------------------------------------------------------- */
 
-@keyframes alp-rise {
+@keyframes rb-rise {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: none; }
 }
 
-@keyframes alp-sheen {
+@keyframes rb-sheen {
   from { background-position: -200% 0; }
   to { background-position: 200% 0; }
 }
 
-@keyframes alp-pulse-ring {
+@keyframes rb-pulse-ring {
   0% { box-shadow: 0 0 0 0 rgba(11, 78, 162, 0.35); }
   70% { box-shadow: 0 0 0 10px rgba(11, 78, 162, 0); }
   100% { box-shadow: 0 0 0 0 rgba(11, 78, 162, 0); }
 }
 
-.rise { animation: alp-rise 0.42s var(--ease) both; }
+.rise { animation: rb-rise 0.42s var(--ease) both; }
 .rise-1 { animation-delay: 0.04s; }
 .rise-2 { animation-delay: 0.08s; }
 .rise-3 { animation-delay: 0.12s; }
@@ -389,22 +397,201 @@ p {
 
 /* A card you can act on lifts a little under the cursor. */
 .lift { transition: transform 0.22s var(--ease), box-shadow 0.22s var(--ease), border-color 0.22s var(--ease); }
-.lift:hover { transform: translateY(-2px); box-shadow: var(--shadow-lift); border-color: color-mix(in srgb, var(--alp-sky) 45%, var(--line)); }
+.lift:hover { transform: translateY(-2px); box-shadow: var(--shadow-lift); border-color: color-mix(in srgb, var(--rubin-bright) 45%, var(--line)); }
 
 /* The band of colour the logo has, for headers and the primary button. */
-.alp-gradient { background: linear-gradient(135deg, var(--alp-blue-deep) 0%, var(--alp-blue) 45%, var(--alp-sky) 100%); }
 
 /* Something is loading and there is nothing to show yet. */
 .shimmer {
   background: linear-gradient(90deg, var(--line-soft) 25%, #fff 50%, var(--line-soft) 75%);
   background-size: 200% 100%;
-  animation: alp-sheen 1.4s linear infinite;
+  animation: rb-sheen 1.4s linear infinite;
 }
 
-.pulse-ring { animation: alp-pulse-ring 1.8s var(--ease) infinite; }
+.pulse-ring { animation: rb-pulse-ring 1.8s var(--ease) infinite; }
 
 @media (prefers-reduced-motion: reduce) {
   .rise, .shimmer, .pulse-ring { animation: none !important; }
   .lift { transition: none; }
   .lift:hover { transform: none; }
+}
+
+/* ---------------------------------------------------------------------------
+   Rubin chrome
+   --------------------------------------------------------------------------- */
+
+/* The dark bezel the workspace sits in. */
+.night { background: linear-gradient(170deg, var(--night) 0%, var(--night-2) 62%, var(--night-3) 100%); }
+.rubin-gradient { background: linear-gradient(135deg, var(--rubin-deep) 0%, var(--rubin) 52%, var(--rubin-bright) 100%); }
+
+/* The one gem on the page: a ruby that catches the light as you approach it. */
+.gem {
+  position: relative;
+  overflow: hidden;
+}
+.gem::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 38%, rgba(255, 255, 255, 0.28) 50%, transparent 62%);
+  transform: translateX(-120%);
+  transition: transform 0.65s var(--ease);
+}
+.gem:hover::after { transform: translateX(120%); }
+
+/* Nav */
+.nav-link {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 13.5px;
+  color: rgba(255, 255, 255, 0.62);
+  transition: color 0.18s var(--ease), background 0.18s var(--ease), transform 0.18s var(--ease);
+}
+.nav-link:hover { color: #fff; background: rgba(255, 255, 255, 0.07); transform: translateX(2px); }
+.nav-link.on { color: #fff; background: rgba(214, 39, 96, 0.18); font-weight: 600; }
+.nav-link.on::before {
+  content: "";
+  position: absolute;
+  left: -11px;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--gold);
+}
+.nav-link .ico { width: 16px; height: 16px; flex: none; opacity: 0.9; }
+
+/* Where you are in a batch: four steps, and the ones behind you stay lit. */
+.steps { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.step {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border-radius: 999px;
+  padding: 5px 12px 5px 7px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink-soft);
+  transition: all 0.2s var(--ease);
+}
+.step .n {
+  display: grid;
+  place-items: center;
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+.step.done { color: var(--rubin); }
+.step.done .n { background: var(--rubin); border-color: var(--rubin); color: #fff; }
+.step.on { color: var(--rubin-deep); background: var(--rubin-tint); font-weight: 700; }
+.step.on .n { background: var(--rubin); border-color: var(--rubin); color: #fff; box-shadow: var(--ring); }
+a.step:hover { background: var(--rubin-tint); color: var(--rubin-deep); }
+.step-sep { color: var(--line); font-size: 12px; }
+
+/* A number worth reading from across the room. */
+.stat {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  padding: 14px 16px;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.22s var(--ease), box-shadow 0.22s var(--ease);
+}
+.stat:hover { transform: translateY(-2px); box-shadow: var(--shadow-lift); }
+.stat::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--rubin);
+  opacity: 0.85;
+}
+.stat.gold::before { background: var(--gold); }
+.stat .k { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-soft); }
+.stat .v { margin-top: 3px; font-size: 26px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: var(--ink); }
+.stat .s { margin-top: 2px; font-size: 11.5px; color: var(--ink-soft); }
+
+/* A key on the keyboard, written down. */
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: #fff;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-2);
+}
+
+/* Command palette */
+.palette-back {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  justify-content: center;
+  /* Hug the results. Left to stretch, the panel fills the overlay and three matches sit at the
+     top of a tall empty box. */
+  align-items: flex-start;
+  padding: 12vh 16px 16px;
+  background: rgba(23, 17, 15, 0.42);
+  backdrop-filter: blur(3px);
+  animation: rb-fade 0.16s var(--ease) both;
+}
+.palette {
+  width: min(620px, 100%);
+  max-height: 64vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 30px 80px -30px rgba(23, 17, 15, 0.5);
+  animation: rb-pop 0.2s var(--ease) both;
+}
+.palette input {
+  border: 0;
+  border-bottom: 1px solid var(--line-soft);
+  padding: 16px 18px;
+  font: inherit;
+  font-size: 15px;
+  outline: none;
+}
+.palette-list { overflow: auto; padding: 6px; }
+.palette-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  border-radius: 10px;
+  padding: 9px 12px;
+  text-align: left;
+  font-size: 13.5px;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.palette-item .hint { margin-left: auto; font-size: 11px; color: var(--ink-soft); }
+.palette-item.on { background: var(--rubin-tint); color: var(--rubin-deep); font-weight: 600; }
+.palette-group { padding: 10px 12px 4px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); }
+
+@keyframes rb-fade { from { opacity: 0 } to { opacity: 1 } }
+@keyframes rb-pop { from { opacity: 0; transform: translateY(-8px) scale(0.985) } to { opacity: 1; transform: none } }
+@media (prefers-reduced-motion: reduce) {
+  .palette-back, .palette { animation: none }
+  .gem::after { display: none }
 }

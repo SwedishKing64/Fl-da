@@ -35,7 +35,7 @@ export default async function ReviewPage(props: PageProps<"/batches/[id]/review"
     <>
       <PageHeader
         title={<>{batch.name} <Badge tone={statusTone(batch.status)} className="align-middle">{batch.status.replace("_", " ")}</Badge></>}
-        subtitle={`Step 2 of 3 — check every product and price. ${review.batch.currency !== "AUD" ? `Costs in ${review.batch.currency} × ${review.batch.fxRateToAud} → AUD.` : ""} Costs are ${review.batch.gstTreatment === "INCLUSIVE" ? "GST-inclusive" : review.batch.gstTreatment === "NONE" ? "GST-free" : "ex-GST"}; retail prices include ${Math.round(review.settings.gstRate * 100)}% GST.`}
+        subtitle={`Check every product and price. ${review.batch.currency !== "AUD" ? `Costs in ${review.batch.currency} × ${review.batch.fxRateToAud} → AUD.` : ""} Costs are ${review.batch.gstTreatment === "INCLUSIVE" ? "GST-inclusive" : review.batch.gstTreatment === "NONE" ? "GST-free" : "ex-GST"}; retail prices include ${Math.round(review.settings.gstRate * 100)}% GST.`}
         actions={<LinkButton href={`/batches/${id}`}>Batch settings</LinkButton>}
       />
       <Steps batchId={id} current="review" status={batch.status} />

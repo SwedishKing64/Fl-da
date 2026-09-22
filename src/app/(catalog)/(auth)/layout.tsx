@@ -5,12 +5,12 @@ export default async function AuthLayout({ children }: { children: React.ReactNo
   if (gate) return gate;
   return (
     <main className="min-h-screen bg-[var(--canvas)]">
-      <header className="alp-gradient relative overflow-hidden pb-24 pt-12 text-center">
+      <header className="rubin-gradient relative overflow-hidden pb-24 pt-12 text-center">
         <div className="rise relative z-10 px-4">
-          <h1 className="text-2xl font-bold tracking-tight text-white">Alpsport CSV</h1>
-          <p className="mt-1 text-xs font-medium tracking-wide text-white/80">Supplier invoices → Shopify products</p>
+          <h1 className="text-3xl font-bold tracking-tight text-white">Rubin</h1>
+          <p className="mt-1 text-xs font-medium tracking-wide text-white/75">Shopify catalogue tools</p>
         </div>
-        {/* The range, cut out of the blue in the colour of the ground below it. */}
+        {/* The range, cut out of the ruby in the colour of the ground below it. */}
         <svg className="pointer-events-none absolute inset-x-0 bottom-0 h-20 w-full text-[var(--canvas)]" viewBox="0 0 1200 120" preserveAspectRatio="none" aria-hidden>
           <path d="M0 120 L190 44 L300 92 L470 18 L640 98 L820 52 L1000 104 L1200 60 L1200 120 Z" fill="currentColor" />
         </svg>

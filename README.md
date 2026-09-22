@@ -1,4 +1,4 @@
-# Alpsport CSV
+# Rubin
 
 An internal tool for a Sydney ski/snowboard retailer that turns supplier invoices, order
 confirmations and spec sheets into a ready-to-upload Shopify product CSV (or pushes products
@@ -48,7 +48,7 @@ with `npm run catalog:fixtures` after an intentional change.
 Vercel has no persistent disk, so the app needs a Postgres database and a Blob store there.
 Both are one click in the Vercel dashboard and their credentials are injected automatically.
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FSwedishKing64%2Fafterword%2Ftree%2Fclaude%2Fski-retailer-shopify-automation-wzossf&project-name=alpsport-csv&stores=%5B%7B%22type%22%3A%22integration%22%2C%22integrationSlug%22%3A%22neon%22%2C%22productSlug%22%3A%22neon%22%7D%2C%7B%22type%22%3A%22blob%22%7D%5D&env=ANTHROPIC_API_KEY&envDescription=Optional%3A%20enables%20PDF%2Fscan%2Fphoto%20invoice%20reading%20and%20AI%20product%20copy)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FSwedishKing64%2Fafterword%2Ftree%2Fclaude%2Fski-retailer-shopify-automation-wzossf&project-name=rubin&stores=%5B%7B%22type%22%3A%22integration%22%2C%22integrationSlug%22%3A%22neon%22%2C%22productSlug%22%3A%22neon%22%7D%2C%7B%22type%22%3A%22blob%22%7D%5D&env=ANTHROPIC_API_KEY&envDescription=Optional%3A%20enables%20PDF%2Fscan%2Fphoto%20invoice%20reading%20and%20AI%20product%20copy)
 
 Manual steps if you prefer:
 

@@ -31,7 +31,7 @@ export function ExtractedRows({ filename, headers, rows }: { filename: string; h
           )}
           <div className="overflow-auto rounded-lg border border-[var(--line)]">
             <table className="w-full text-xs">
-              <thead className="bg-[var(--alp-snow)] text-left">
+              <thead className="bg-[var(--rubin-tint)] text-left">
                 <tr>{used.map((h) => <th key={h} className={`whitespace-nowrap px-2.5 py-1.5 font-semibold ${key.has(h) ? "text-[var(--violet)]" : "text-[var(--ink-soft)]"}`}>{h}</th>)}</tr>
               </thead>
               <tbody>

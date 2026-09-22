@@ -37,9 +37,9 @@ export function InstructionChat({
       </p>
 
       {inForce.length > 0 && (
-        <div className="mb-3 rounded-lg border border-[var(--alp-yellow)] bg-[#fffdf2] p-3">
+        <div className="mb-3 rounded-lg border border-[var(--gold)] bg-[#fffdf2] p-3">
           <div className="mb-1 flex items-center justify-between gap-2">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--alp-yellow-deep)]">Building this batch with</span>
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--gold-deep)]">Building this batch with</span>
             <button
               className="text-xs text-[var(--ink-soft)] underline hover:text-[var(--ink)]"
               disabled={pending || locked}

@@ -399,7 +399,7 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
           )}
 
           {sheetNote && (
-            <div className="mt-3 rounded-lg border border-[var(--line-soft)] bg-[var(--alp-snow)] px-3 py-2 text-xs text-[var(--ink-soft)]">
+            <div className="mt-3 rounded-lg border border-[var(--line-soft)] bg-[var(--rubin-tint)] px-3 py-2 text-xs text-[var(--ink-soft)]">
               <strong>{sheetNote.source}</strong>
               {rows.length > 0 && (
                 <span> — {relevant.length} of {rows.length} change{rows.length === 1 ? "" : "s"} can touch the loaded files, across {groups.length} group{groups.length === 1 ? "" : "s"}. {stillToDo.length} still to do.</span>
@@ -464,7 +464,7 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
                           </label>
                         )}
                         {open === r.id && (
-                          <div className="mt-2 rounded-lg bg-[var(--alp-snow)] px-3 py-2 text-xs">
+                          <div className="mt-2 rounded-lg bg-[var(--rubin-tint)] px-3 py-2 text-xs">
                             {r.understood && <div className="font-medium">{r.understood}</div>}
                             <ul className="mt-1 list-disc pl-5 text-[var(--ink-soft)]">{r.described.map((line, i) => <li key={i}>{line}</li>)}</ul>
                             {r.unclear && <div className="mt-1 text-amber-800">Not sure about: {r.unclear}</div>}
@@ -487,7 +487,7 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
           })}
 
           {changesSoFar > 0 && (
-            <div className="mt-4 rounded-xl border-2 border-[var(--violet)] bg-[var(--alp-snow)] px-3 py-3">
+            <div className="mt-4 rounded-xl border-2 border-[var(--violet)] bg-[var(--rubin-tint)] px-3 py-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="text-sm">
                   <div className="font-semibold">Ready to import — <span className="tabular-nums">{changesSoFar}</span> cell{changesSoFar === 1 ? "" : "s"} changed across {edited.length} file{edited.length === 1 ? "" : "s"}.</div>
@@ -522,7 +522,7 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
           {feed.length > 0 && (
             <ol className="mb-4 space-y-2">
               {feed.map((f, i) => (
-                <li key={i} className="rounded-lg border border-[var(--line-soft)] bg-[var(--alp-snow)] px-3 py-2 text-sm">
+                <li key={i} className="rounded-lg border border-[var(--line-soft)] bg-[var(--rubin-tint)] px-3 py-2 text-sm">
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
                     <span className="font-medium">{i + 1}. {f.title}</span>
                     <span className="text-xs text-[var(--ink-soft)]">{f.steps} change{f.steps === 1 ? "" : "s"} · {f.changes} cell{f.changes === 1 ? "" : "s"}</span>
@@ -625,7 +625,7 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
                 <>
                   <div className="mt-3 max-h-80 overflow-auto rounded-lg border border-[var(--line-soft)]">
                     <table className="w-full text-xs">
-                      <thead className="sticky top-0 bg-[var(--alp-snow)] text-left">
+                      <thead className="sticky top-0 bg-[var(--rubin-tint)] text-left">
                         <tr>
                           {sheets.length > 1 && <th className="px-2.5 py-1.5 font-medium">File</th>}
                           <th className="px-2.5 py-1.5 font-medium">Product</th>

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { prisma, parseJson } from "@/lib/catalog/db";
-import { Badge, Card, Details, Empty, LinkButton, PageHeader, fmtDate, statusTone } from "@/app/(catalog)/ui";
+import { Badge, Card, Details, Empty, LinkButton, PageHeader, Stat, fmtDate, statusTone } from "@/app/(catalog)/ui";
 import type { ReviewSummary } from "@/lib/catalog/review-types";
 
 export default async function DashboardPage() {
@@ -26,10 +26,10 @@ export default async function DashboardPage() {
     <>
       <PageHeader title="Dashboard" subtitle="Turn supplier invoices and spec sheets into ready-to-import Shopify products." actions={<LinkButton href="/batches/new" variant="primary">New import</LinkButton>} />
       <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Stat label="Import batches" value={String(batches)} />
-        <Stat label="Products exported" value={String(products)} />
-        <Stat label="Variants exported" value={String(variants)} />
-        <Stat label="Units" value={String(units)} />
+        <Stat label="Import batches" value={batches.toLocaleString("en-AU")} sub={recent.length > 0 ? `last touched ${fmtDate(recent[0].updatedAt)}` : "none yet"} />
+        <Stat label="Products exported" value={products.toLocaleString("en-AU")} sub={`across ${exported.length} exported batch${exported.length === 1 ? "" : "es"}`} />
+        <Stat label="Variants exported" value={variants.toLocaleString("en-AU")} sub={products > 0 ? `${(variants / products).toFixed(1)} per product` : "—"} />
+        <Stat label="Units" value={units.toLocaleString("en-AU")} sub="ordered across those batches" tone="gold" />
       </div>
       <div className="grid gap-6 lg:grid-cols-3">
         <Card title="Recent batches" className={recent.length === 0 ? "lg:col-span-2" : "lg:col-span-3"} actions={<Link href="/batches" className="text-xs text-[var(--violet)]">All batches</Link>}>
@@ -77,12 +77,3 @@ export default async function DashboardPage() {
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="lift relative overflow-hidden rounded-xl border border-[var(--line)] bg-white p-4 shadow-[var(--shadow-sm)]">
-      <span className="alp-gradient absolute inset-x-0 top-0 h-1" aria-hidden />
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--ink-soft)]">{label}</div>
-      <div className="mt-1 text-xl font-semibold tabular-nums text-[var(--alp-blue-deep)]">{value}</div>
-    </div>
-  );
-}

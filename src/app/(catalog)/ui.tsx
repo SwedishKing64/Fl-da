@@ -20,7 +20,7 @@ export function Card({ children, className, title, actions }: { children: ReactN
 }
 
 const BUTTON = {
-  primary: "alp-gradient text-white shadow-[var(--shadow-sm)] hover:brightness-110 active:brightness-95 disabled:bg-neutral-400 disabled:bg-none",
+  primary: "rubin-gradient gem text-white shadow-[var(--shadow-sm)] hover:brightness-110 active:brightness-95 disabled:bg-neutral-400 disabled:bg-none",
   secondary: "border border-[var(--line)] bg-white hover:bg-neutral-50 disabled:text-neutral-400",
   danger: "border border-red-200 bg-white text-red-700 hover:bg-red-50 disabled:text-neutral-400",
   ghost: "hover:bg-neutral-100 disabled:text-neutral-400",
@@ -90,9 +90,9 @@ export const INPUT = "w-full rounded-lg border border-[var(--line)] bg-white px-
 
 export function PageHeader({ title, subtitle, actions }: { title: ReactNode; subtitle?: ReactNode; actions?: ReactNode }) {
   return (
-    <div className="mb-6 flex flex-wrap items-end justify-between gap-3 border-b-2 border-[var(--alp-yellow)] pb-4">
+    <div className="mb-6 flex flex-wrap items-end justify-between gap-3 border-b border-[var(--line)] pb-4">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-[var(--alp-blue-deep)]">{title}</h1>
+        <h1 className="text-[26px] font-bold tracking-tight text-[var(--ink)]">{title}</h1>
         {subtitle && <p className="mt-1 text-sm text-[var(--ink-soft)]">{subtitle}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
@@ -125,7 +125,7 @@ export function Empty({ children }: { children: ReactNode }) {
 export function Details({ summary, hint, children, className }: { summary: string; hint?: string; children: ReactNode; className?: string }) {
   return (
     <details className={cx("group rounded-xl border border-[var(--line)] bg-white shadow-[var(--shadow-sm)]", className)}>
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-3 text-sm font-semibold transition hover:bg-[var(--alp-snow)]">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-3 text-sm font-semibold transition hover:bg-[var(--rubin-tint)]">
         <span>
           {summary}
           {hint && <span className="ml-2 font-normal text-xs text-[var(--ink-soft)]">{hint}</span>}
@@ -135,4 +135,20 @@ export function Details({ summary, hint, children, className }: { summary: strin
       <div className="border-t border-[var(--line-soft)] p-5">{children}</div>
     </details>
   );
+}
+
+/** A headline number. The label is above it because that is the order you read them in. */
+export function Stat({ label, value, sub, tone }: { label: ReactNode; value: ReactNode; sub?: ReactNode; tone?: "gold" }) {
+  return (
+    <div className={cx("stat", tone)}>
+      <div className="k">{label}</div>
+      <div className="v">{value}</div>
+      {sub && <div className="s">{sub}</div>}
+    </div>
+  );
+}
+
+/** A key on the keyboard, written down, so a shortcut can be shown rather than described. */
+export function Kbd({ children }: { children: ReactNode }) {
+  return <kbd className="kbd">{children}</kbd>;
 }

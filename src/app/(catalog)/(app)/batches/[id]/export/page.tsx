@@ -22,7 +22,7 @@ export default async function ExportPage(props: PageProps<"/batches/[id]/export"
 
   return (
     <>
-      <PageHeader title={<>{batch.name} <Badge tone={statusTone(batch.status)} className="align-middle">{batch.status.replace("_", " ")}</Badge></>} subtitle="Step 4 of 4 — generate the Shopify CSV, or push straight to the store." actions={<LinkButton href={`/batches/${id}/review`}>← Back to review</LinkButton>} />
+      <PageHeader title={<>{batch.name} <Badge tone={statusTone(batch.status)} className="align-middle">{batch.status.replace("_", " ")}</Badge></>} subtitle="Generate the Shopify CSV, or push straight to the store." actions={<LinkButton href={`/batches/${id}/review`}>← Back to review</LinkButton>} />
       <Steps batchId={id} current="export" status={batch.status} />
       <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <div className="min-w-0 space-y-6">

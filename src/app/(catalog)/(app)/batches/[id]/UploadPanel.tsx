@@ -124,7 +124,7 @@ export function UploadPanel({ batchId, aiEnabled, hasProducts, reading, productC
         {progress !== null && (
           <div className="mx-auto mt-4 w-full max-w-sm">
             <div className="h-2 overflow-hidden rounded-full bg-neutral-200">
-              <div className="alp-gradient h-full rounded-full transition-[width] duration-200 ease-out" style={{ width: `${progress}%` }} />
+              <div className="rubin-gradient h-full rounded-full transition-[width] duration-200 ease-out" style={{ width: `${progress}%` }} />
             </div>
             <div className="mt-1.5 flex items-center justify-between text-xs text-[var(--ink-soft)]">
               <span>{progress < 100 ? `Uploading ${mb(sending)}` : "Uploaded — saving the files"}</span>
@@ -146,7 +146,7 @@ export function UploadPanel({ batchId, aiEnabled, hasProducts, reading, productC
       {/* The way on. Without it the only route to the grid was the step bar, which reads as a
           position indicator rather than something to click. */}
       {productCount > 0 && reading === 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--line)] bg-[var(--alp-snow)] px-4 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--line)] bg-[var(--rubin-tint)] px-4 py-3">
           <div className="text-sm">
             <div className="font-semibold">{productCount} product{productCount === 1 ? "" : "s"} built from these files.</div>
             <div className="text-xs text-[var(--ink-soft)]">Prices, tags and descriptions are all editable in the grid.</div>

@@ -63,11 +63,11 @@ export function Chat({
         {turns.map((t) =>
           t.role === "USER" ? (
             <div key={t.id} className="flex justify-end">
-              <p className="max-w-[80%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-[var(--alp-blue)] px-3 py-2 text-sm text-white">{t.body}</p>
+              <p className="max-w-[80%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-[var(--rubin)] px-3 py-2 text-sm text-white">{t.body}</p>
             </div>
           ) : (
             <div key={t.id} className="max-w-[85%]">
-              <p className="whitespace-pre-wrap rounded-2xl rounded-bl-sm border border-[var(--line)] bg-[var(--alp-snow)] px-3 py-2 text-sm">{t.body}</p>
+              <p className="whitespace-pre-wrap rounded-2xl rounded-bl-sm border border-[var(--line)] bg-[var(--rubin-tint)] px-3 py-2 text-sm">{t.body}</p>
               {renderExtra?.(t)}
             </div>
           ),
@@ -86,7 +86,7 @@ export function Chat({
           rows={2}
           disabled={disabled}
           placeholder={placeholder}
-          className="min-h-[46px] flex-1 resize-y rounded-lg border border-[var(--line)] bg-white px-3 py-2 text-sm outline-none transition focus:border-[var(--alp-sky)] focus:ring-2 focus:ring-[var(--alp-sky)]/25 disabled:bg-neutral-50"
+          className="min-h-[46px] flex-1 resize-y rounded-lg border border-[var(--line)] bg-white px-3 py-2 text-sm outline-none transition focus:border-[var(--rubin-bright)] focus:ring-2 focus:ring-[var(--rubin-bright)]/25 disabled:bg-neutral-50"
         />
         <Button variant="primary" onClick={send} disabled={pending || disabled || !draft.trim()}>{pending ? "…" : "Send"}</Button>
       </div>

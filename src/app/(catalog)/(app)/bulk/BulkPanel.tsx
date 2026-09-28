@@ -89,7 +89,9 @@ const measure = (row: Row, csvs: Array<{ name: string; csv: string }>): Array<{ 
  * they do, because the catalogue comes out of Shopify in overlapping pieces.
  */
 const placedLines = (against: Against): number =>
-  new Set(against.flatMap((a) => a.reconciliation.matched.map((m) => `${m.line.barcode}\u0000${m.line.sku}`))).size;
+  new Set(against.flatMap((a) => a.reconciliation.matched.map(
+    (m) => [m.line.barcode, m.line.sku, m.line.size ?? "", m.line.colour ?? ""].join("\u0000"),
+  ))).size;
 
 /**
  * Why nothing matched, in the terms of the two documents rather than "0 matched".
@@ -161,35 +163,55 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
     const added: Sheet[] = [];
     const rejected: string[] = [];
     try {
-      // A file that is plainly not a CSV is not "no products found" — it is in the wrong box, and
-      // saying which box is the whole of the fix. A photo of an invoice landing here was the most
-      // likely way to hit that.
-      const misplaced: string[] = [];
+      /**
+       * A file that is plainly not a Shopify export is not "no products found".
+       *
+       * This is the first box on the page and the obvious place to drop anything, so it used to
+       * filter every other kind out of the picker — which is how a PNG, a JPEG and an XLSX all
+       * came to be unselectable. It now takes whatever it is given and hands the rest to the
+       * reader that wants it, rather than making somebody find the right box first.
+       */
+      const misplaced: File[] = [];
       for (const file of Array.from(files)) {
-        if (looksLikeImage(file) || /\.(pdf|xlsx?)$/i.test(file.name)) { misplaced.push(file.name); continue; }
+        if (looksLikeImage(file) || /\.(pdf|xlsx?)$/i.test(file.name)) { misplaced.push(file); continue; }
         const csv = await file.text();
         const f = describeFile(csv);
         if (f.products === 0) { rejected.push(file.name); continue; }
         added.push({ name: file.name, csv, history: [], ...f });
       }
-      if (added.length === 0) {
-        setError(misplaced.length
-          ? `${misplaced.join(", ")} ${misplaced.length === 1 ? "is not a Shopify export" : "are not Shopify exports"}. This box takes the CSVs from Products → Export. An invoice or a photo of one goes under "A supplier's invoice" below; the buyer's sale sheet goes under "The buyer's sheet".`
-          : `No products found in ${rejected.join(", ") || "that file"}. These should be Shopify product exports — Products → Export in Shopify admin.`);
+      if (added.length === 0 && misplaced.length === 0) {
+        setError(`No products found in ${rejected.join(", ") || "that file"}. These should be Shopify product exports — Products → Export in Shopify admin.`);
         return;
       }
-      if (misplaced.length) setError(`Skipped ${misplaced.join(", ")} — this box takes Shopify export CSVs. An invoice goes under "A supplier's invoice" below.`);
       if (rejected.length) setError(`Skipped ${rejected.join(", ")} — no products in ${rejected.length === 1 ? "it" : "them"}.`);
       // Replacing a file already loaded rather than holding two copies of it.
-      setSheets((s) => [...s.filter((x) => !added.some((a) => a.name === x.name)), ...added]);
-      setFeed([]);
-      // The sheet was matched against the files that were loaded then, so it no longer holds.
-      setRows([]); setSheetNote(null);
+      if (added.length > 0) {
+        setSheets((s) => [...s.filter((x) => !added.some((a) => a.name === x.name)), ...added]);
+        setFeed([]);
+        // The sheet was matched against the files that were loaded then, so it no longer holds.
+        setRows([]); setSheetNote(null);
+      }
+      // Anything that is not an export goes to the reader that wants it, rather than being
+      // refused for being in the wrong box.
+      if (misplaced.length > 0) await routeToInvoice(misplaced);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(null);
     }
+  }
+
+  /**
+   * Send a file dropped on the exports box to the reader it belongs to.
+   *
+   * Only one at a time is read — an invoice is one document, and two dropped together is almost
+   * always a mistake worth naming rather than a batch worth running.
+   */
+  async function routeToInvoice(files: File[]) {
+    if (files.length > 1) {
+      setError(`${files.map((f) => f.name).join(", ")} — one invoice at a time. ${files[0].name} was read; add the others after it.`);
+    }
+    await takeInvoice(files[0]);
   }
 
   /**
@@ -491,9 +513,10 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
         </p>
         <div className="dropzone" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); if (e.dataTransfer.files.length) void takeCsvs(e.dataTransfer.files); }}>
           <div className="text-sm font-medium text-[var(--ink)]">{busy === "files" ? "Reading…" : "Drop exports here, or choose files"}</div>
+          <div className="mt-1 text-xs text-[var(--ink-soft)]">Shopify export CSVs. An invoice dropped here — a spreadsheet, a PDF or a photo — is sent to the invoice reader below rather than refused.</div>
           <div className="mt-3">
             <Button size="sm" onClick={() => csvRef.current?.click()} disabled={busy !== null}>Choose files</Button>
-            <input ref={csvRef} type="file" accept=".csv,text/csv" multiple className="hidden" onChange={(e) => { if (e.target.files?.length) void takeCsvs(e.target.files); e.target.value = ""; }} />
+            <input ref={csvRef} type="file" multiple className="hidden" onChange={(e) => { if (e.target.files?.length) void takeCsvs(e.target.files); e.target.value = ""; }} />
           </div>
         </div>
         {sheets.length > 0 && (
@@ -520,6 +543,14 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
       {error && <Alert tone="danger">{error}</Alert>}
       {saved && <Alert tone="success">Saved {saved}. Import each in Shopify admin → Products → Import, and tick <strong>Overwrite existing products</strong> so the changes apply.</Alert>}
 
+      {sheets.length === 0 && (
+        <Card title="The buyer's sheet">
+          <p className="text-sm text-[var(--ink-soft)]">
+            The sale sheet is read <em>against</em> the products in your exports — that is what tells a row about ski bindings from a row about goggles — so load the exports above first and this opens up.
+          </p>
+        </Card>
+      )}
+
       {sheets.length > 0 && (
         <Card
           title="The buyer's sheet"
@@ -533,7 +564,7 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
               <span className="ml-2 text-xs text-[var(--ink-soft)]">The shop&rsquo;s sale template as a spreadsheet, or a PDF or photo of a written page. A template is read column by column and exactly — no interpreting. Either way it is matched against the files above, grouped by shelf, and you approve a shelf at a time.</span>
             </div>
             <Button size="sm" disabled={busy !== null} onClick={() => sheetRef.current?.click()}>{busy === "sheet" ? "Reading…" : rows.length > 0 ? "Use a different sheet" : "Add the sale sheet"}</Button>
-            <input ref={sheetRef} type="file" accept=".xlsx,.xls,.csv,.pdf,.txt,.md,image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void takeSheet(f); e.target.value = ""; }} />
+            <input ref={sheetRef} type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void takeSheet(f); e.target.value = ""; }} />
           </div>
 
           {busy === "sheet" && progress && (
@@ -662,8 +693,14 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
         </Card>
       )}
 
-      {sheets.length > 0 && (
-        <Card
+      {/*
+        * Always here, not only once an export is loaded.
+        *
+        * Gated, there was nowhere on a fresh page to put a PNG, a JPEG or a spreadsheet at all:
+        * the only box was the exports one, which took CSVs. An invoice reads perfectly well on its
+        * own — what needs the exports is the matching, and the count says so itself.
+        */}
+      <Card
           title="A supplier's invoice"
           actions={invoice ? <Button size="sm" onClick={() => { setInvoice(null); setError(null); }}>Remove it</Button> : undefined}
         >
@@ -673,7 +710,7 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
               <span className="ml-2 text-xs text-[var(--ink-soft)]">Add the invoice and each line is matched by barcode, then by item code, then by the product&rsquo;s name — so an invoice that says SX-2M finds the SX-2M. A line that fits two products is never guessed at. A spreadsheet or CSV is read by its columns; a PDF or a photo of one goes to the API to be read.</span>
             </div>
             <Button size="sm" disabled={busy !== null} onClick={() => invoiceRef.current?.click()}>{busy === "invoice" ? "Reading…" : invoice ? "Use a different invoice" : "Add the invoice"}</Button>
-            <input ref={invoiceRef} type="file" accept=".xlsx,.xls,.csv,.pdf,.png,.jpg,.jpeg,.webp,.heic,image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void takeInvoice(f); e.target.value = ""; }} />
+            <input ref={invoiceRef} type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void takeInvoice(f); e.target.value = ""; }} />
           </div>
 
           {busy === "invoice" && progress && (
@@ -718,14 +755,21 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
                         <div className="mt-1 rounded-lg border border-dashed border-[var(--line)] px-2.5 py-2 text-xs text-[var(--ink-soft)]">
                           <strong>{byName(r).length} matched on the name</strong>, not a barcode — worth a look, since a name is the one key that can be read two ways. A price goes on every size; a count needs a barcode or a size per line.
                           <ul className="mt-1 list-disc pl-5">
-                            {byName(r).slice(0, 4).map((m, i) => <li key={i}>&ldquo;{m.on}&rdquo; → {m.handle}{m.rows.length > 1 ? ` (${m.rows.length} sizes)` : ""}</li>)}
+                            {byName(r).slice(0, 4).map((m, i) => (
+                              <li key={i}>
+                                &ldquo;{m.on}&rdquo;{m.line.size ? ` ${m.line.size}` : ""} → {m.handle}
+                                {m.rows.length > 1 ? ` (all ${m.rows.length} sizes)` : ""}
+                              </li>
+                            ))}
                             {byName(r).length > 4 && <li>…and {byName(r).length - 4} more</li>}
                           </ul>
                         </div>
                       )}
                       {r.ambiguous.length > 0 && (
                         <ul className="mt-1 list-disc pl-5 text-xs text-[var(--ink-soft)]">
-                          {r.ambiguous.slice(0, 3).map((x, i) => <li key={i}>{x.line.title || x.line.sku || x.line.barcode} — {x.reason}, so it is left alone</li>)}
+                          {[...new Map(r.ambiguous.map((x) => [x.reason, x])).values()].slice(0, 3).map((x, i) => (
+                            <li key={i}>{x.line.title || x.line.sku || x.line.barcode} — {x.reason}, so it is left alone</li>
+                          ))}
                           {r.ambiguous.length > 3 && <li>…and {r.ambiguous.length - 3} more</li>}
                         </ul>
                       )}
@@ -767,8 +811,7 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
               </div>
             </div>
           )}
-        </Card>
-      )}
+      </Card>
 
       {sheets.length > 0 && (
         <Card title="One change, in your own words" actions={feed.length > 0 ? <Button size="sm" onClick={undo}>Undo last</Button> : undefined}>

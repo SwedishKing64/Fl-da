@@ -121,9 +121,9 @@ describe("an invoice against the shop's own export", () => {
     expect(r.keys.fileBarcodes).toBeGreaterThan(400);
 
     expect(r.matched.every((m) => m.key === "name")).toBe(true);
-    // Only the Mantra Junior, which the shop lists in one season only. Everything else needs to be
-    // told which season the delivery is for — see the season test below.
-    expect(r.matched.map((m) => m.handle)).toEqual(["mantra-junior-2025", "mantra-junior-2025"]);
+    // Only the two the shop lists in one season each: the Mantra Junior and the Revolt 101.
+    // Everything else needs to be told which season the delivery is for — see the season test below.
+    expect(r.matched.map((m) => m.handle)).toEqual(["revolt-101-2027", "mantra-junior-2025", "mantra-junior-2025"]);
     expect(r.ambiguous.some((a) => a.reason.includes("matches") && a.reason.includes("products"))).toBe(true);
   });
 
@@ -255,8 +255,8 @@ describe("the Volkl order against the shop's ski export", () => {
     const csv = readFileSync(`${UP}48bf1557-products_export_1_5.csv`, "utf8");
 
     // Without one: "M7 Mantra" is eight listings — 2025, 2026 and 2027, each flat and as a package.
-    // Only the Mantra Junior places, because it is the one model the shop lists in a single season.
-    expect(reconcile(csv, invoice.lines).matched.map((m) => m.handle)).toEqual(["mantra-junior-2025", "mantra-junior-2025"]);
+    // Only the models the shop lists in a single season place: the Revolt 101 and the Mantra Junior.
+    expect(reconcile(csv, invoice.lines).matched.map((m) => m.handle)).toEqual(["revolt-101-2027", "mantra-junior-2025", "mantra-junior-2025"]);
 
     const r = reconcile(csv, invoice.lines, { season: "2027" });
     expect(r.ambiguous).toEqual([]);
@@ -265,9 +265,16 @@ describe("the Volkl order against the shop's ski export", () => {
     expect(where.get("M7 MANTRA 170")).toBe("m7-mantra");
     expect(where.get("MANTRA 88 W 163")).toBe("mantra-88-w-2027");
 
-    // And the rest of the delivery is genuinely new: no Blaze 94, no Revolt 101, no Griffon in it.
-    expect(r.unmatched.map((u) => u.title)).toEqual([
-      "BLAZE 94 BLACK FLAT", "BLAZE 94 ROSE FLAT", "REVOLT 101 FLAT", "GRIFFON 13 MN; 100MM",
-    ]);
+    // The order form writes the fitting and the colourway into the description column, and the
+    // shop does not: its listings are "Blaze 94 2027" and "Revolt 101 2027". Reading the whole
+    // wording as the name made three skis the shop already sells look new, and the one thing that
+    // really is new — a Marker binding, in a Volkl ski export — look like the exception.
+    expect(where.get("BLAZE 94 BLACK FLAT 179")).toBe("blaze-94-2027");
+    expect(where.get("REVOLT 101 FLAT 182")).toBe("revolt-101-2027");
+    expect(r.unmatched.map((u) => u.title)).toEqual(["GRIFFON 13 MN; 100MM"]);
+
+    // Two lengths in the order are of skis the shop sells and has never had in that length.
+    expect(r.matched.filter((m) => m.sizeMissing).map((m) => `${m.line.size} of ${m.handle}`))
+      .toEqual(["158 of blaze-94-2027", "138 of mantra-junior-2025"]);
   });
 });

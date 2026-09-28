@@ -95,11 +95,39 @@ describe("writing the invoice's numbers", () => {
   });
 
   it("writes the price and the quantity when those are asked for", () => {
-    const out = applyInvoice(CSV, matched, { price: true, quantity: true });
+    const out = applyInvoice(CSV, matched, { price: true, quantity: true, stock: "set" });
     const cols = out.changes.map((c) => c.column);
     expect(cols).toContain("Variant Price");
     expect(cols).toContain("Variant Inventory Qty");
     expect(out.changes.find((c) => c.column === "Variant Inventory Qty")?.after).toBe("9");
+  });
+
+  // A delivery ADDS. The row holds 4 and the invoice brings 9, so the shop has 13 — writing the
+  // invoice's 9 into the cell would quietly lose the four already on the shelf.
+  it("adds an arriving count to the stock already there, by default", () => {
+    const out = applyInvoice(CSV, matched, { quantity: true });
+    expect(out.changes.find((c) => c.column === "Variant Inventory Qty")?.before).toBe("4");
+    expect(out.changes.find((c) => c.column === "Variant Inventory Qty")?.after).toBe("13");
+  });
+
+  it("treats an empty stock cell as none, not as a reason to skip", () => {
+    const none = [
+      "Handle,Title,Variant Barcodes,Variant Inventory Qty",
+      "blaze-94,Blaze 94,'821264800133,",
+    ].join("\r\n") + "\r\n";
+    const m = reconcile(none, [line({ barcode: "821264800133", quantity: 3 })]).matched;
+    expect(applyInvoice(none, m, { quantity: true }).changes[0].after).toBe("3");
+  });
+
+  it("refuses to add to a stock cell that is not a count, and says which", () => {
+    const odd = [
+      "Handle,Title,Variant Barcodes,Variant Inventory Qty",
+      "blaze-94,Blaze 94,'821264800133,on order",
+    ].join("\r\n") + "\r\n";
+    const m = reconcile(odd, [line({ barcode: "821264800133", quantity: 3 })]).matched;
+    const out = applyInvoice(odd, m, { quantity: true });
+    expect(out.changes).toEqual([]);
+    expect(out.warnings.join(" ")).toContain("not a count");
   });
 
   it("leaves every other row of the file exactly as it was", () => {
@@ -226,7 +254,7 @@ describe("matching by name", () => {
   it("writes the count when the line says which size it is for", () => {
     const r = reconcile(GLOVES, [named("SX-2M", { size: "M", quantity: 12 })]);
     expect(r.matched[0].rows).toHaveLength(1);
-    const out = applyInvoice(GLOVES, r.matched, { quantity: true });
+    const out = applyInvoice(GLOVES, r.matched, { quantity: true, stock: "set" });
     expect(out.changes).toHaveLength(1);
     expect(out.changes[0].after).toBe("12");
   });
@@ -326,7 +354,7 @@ describe("a size-grid invoice", () => {
 
   it("writes each count to its own size, and the corrected retail across the product", () => {
     const r = reconcile(SWANY, INVOICE);
-    const out = applyInvoice(SWANY, r.matched, { rrp: true, quantity: true });
+    const out = applyInvoice(SWANY, r.matched, { rrp: true, quantity: true, stock: "set" });
     expect(out.refused).toBeUndefined();
 
     // Ten counts for eleven narrowed lines: the X-Change glove in M (8) already says 1 in the
@@ -344,6 +372,22 @@ describe("a size-grid invoice", () => {
 
     // And the size the listing does not have is named rather than passed over.
     expect(out.warnings.join(" ")).toContain("8.5-ML");
+  });
+
+  it("adds this delivery to the counts the shop already holds", () => {
+    const r = reconcile(SWANY, INVOICE);
+    const out = applyInvoice(SWANY, r.matched, { quantity: true });
+    expect(out.refused).toBeUndefined();
+    const counts = out.changes.filter((c) => c.column === "Variant Inventory Qty");
+    // Eleven now, not ten: the X-Change glove in M (8) holds 1 and one more is arriving, which is
+    // a change to 2 where setting the invoice's own 1 would have been no change at all.
+    expect(counts).toHaveLength(11);
+    // Nothing went down, and the shop gained exactly what the invoice says is arriving on the
+    // lines it could place on one size.
+    expect(counts.every((c) => Number(c.after) > Number(c.before || 0))).toBe(true);
+    const gained = counts.reduce((n, c) => n + Number(c.after) - Number(c.before || 0), 0);
+    const ordered = r.matched.filter((m) => m.rows.length === 1).reduce((n, m) => n + (m.line.quantity ?? 0), 0);
+    expect(gained).toBe(ordered);
   });
 
   it("leaves a price alone where the product's sizes are priced differently", () => {

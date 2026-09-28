@@ -484,13 +484,27 @@ export function applyPlan(text: string, plan: Plan): AdjustResult {
  * Values are compared as parsed, not as bytes: re-quoting a field that did not need quoting
  * changes the bytes and changes nothing about the data, and that is not what this is looking for.
  */
-export function verifyOnlyIntended(before: string[][], after: string, changes: Change[]): string[] {
+export function verifyOnlyIntended(
+  before: string[][],
+  after: string,
+  changes: Change[],
+  options: { appended?: number } = {},
+): string[] {
   const parsed = parseCsv(after).filter((r) => r.some((c) => c.trim() !== ""));
   const header = before[0];
   const problems: string[] = [];
 
-  if (parsed.length !== before.length) {
-    problems.push(`The file came back with ${parsed.length} rows instead of ${before.length}.`);
+  // A delivery can legitimately make the file LONGER: the products that are not in the shop yet
+  // are written on the end of it, so the same file carries the reorder and the new listings. Rows
+  // added past the ones that were there are not what this is checking — the promise is about the
+  // rows somebody already has, and every one of those is still compared cell by cell below.
+  const appended = Math.max(0, Math.round(options.appended ?? 0));
+  if (parsed.length !== before.length + appended) {
+    problems.push(
+      appended > 0
+        ? `The file came back with ${parsed.length} rows instead of ${before.length + appended} — the ${before.length - 1} it had, plus ${appended} added.`
+        : `The file came back with ${parsed.length} rows instead of ${before.length}.`,
+    );
     return problems;
   }
   if (parsed[0].join("\u0000") !== header.join("\u0000")) {

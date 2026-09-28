@@ -199,7 +199,35 @@ function nameKeysOf(line: InvoiceLine): string[] {
   // Wording is a last resort and only when there is enough of it to mean something. One common
   // word would match half the shelf, and be refused — but slowly, and for every line.
   if (words.length >= 2) keys.push(words.join(" "));
+  const trimmed = withoutFormWords(words);
+  if (trimmed.length >= 2 && trimmed.length < words.length) keys.push(trimmed.join(" "));
   return keys;
+}
+
+/**
+ * The order form's own vocabulary, which is not part of the product's name.
+ *
+ * Their Volkl form writes the fitting and the colourway into the description column: "REVOLT 101
+ * FLAT", "BLAZE 94 BLACK FLAT". The shop calls those two products "Revolt 101 2027" and "Blaze 94
+ * 2027", so the whole wording is not a run of the title's words and neither line matched — the
+ * shop was then offered them as NEW products it already had, which is exactly the duplicate this
+ * page exists to prevent. Both already have a column of their own on the line: the fitting is read
+ * into `form` and the colour into `colour`, so the words are redundant where they appear here.
+ *
+ * Only from the END, and only after the full wording has been tried and failed. Cutting words out
+ * of the middle would make "BLACK CROWS" a colour and a bird.
+ */
+const FORM_WORD = /^(FLAT|SYSTEM|PACKAGE|SET|INLINE|DEMO)$/;
+const COLOUR_WORD = new Set([
+  "BLACK", "WHITE", "GREY", "GRAY", "GRAPHITE", "CHARCOAL", "ANTHRACITE", "SILVER", "GOLD", "BRONZE",
+  "BLUE", "NAVY", "TEAL", "TURQUOISE", "MINT", "GREEN", "LIME", "OLIVE", "KHAKI", "YELLOW", "ORANGE",
+  "CORAL", "RED", "PINK", "ROSE", "PURPLE", "VIOLET", "BROWN", "BEIGE", "SAND", "CREAM",
+]);
+
+function withoutFormWords(words: string[]): string[] {
+  const out = [...words];
+  while (out.length > 0 && (FORM_WORD.test(out[out.length - 1]) || COLOUR_WORD.has(out[out.length - 1]))) out.pop();
+  return out;
 }
 
 /**
@@ -520,6 +548,32 @@ export interface InvoiceFields {
   price?: boolean;
   /** Variant Inventory Qty. */
   quantity?: boolean;
+  /**
+   * What a quantity on the invoice MEANS: stock arriving, or the new count.
+   *
+   * This is the difference between a delivery and a stocktake, and getting it the wrong way round
+   * loses stock silently. Three Mantras arriving on top of the two on the shelf is five; writing
+   * the invoice's 3 into the cell tells Shopify the shop has three, and the two it already had
+   * stop existing — nobody notices until a customer is told something is out of stock.
+   *
+   * "add" is the default because that is what the documents this reads ARE. An order form and a
+   * supplier invoice both describe goods coming IN. A count to be written as-is comes from a
+   * stocktake, which is the rarer case and says so.
+   */
+  stock?: "add" | "set";
+}
+
+/**
+ * The stock a row says is on the shelf, or null when the cell is not a count.
+ *
+ * Empty is zero — an export leaves the cell empty for a variant that has never had stock, and a
+ * delivery of three onto that is three. Anything else that is not a whole number is refused rather
+ * than treated as zero: a cell somebody has typed a note into would otherwise come back a number.
+ */
+function heldStock(value: string): number | null {
+  const text = value.trim();
+  if (text === "") return 0;
+  return /^-?\d+$/.test(text) ? Number(text) : null;
 }
 
 /**
@@ -547,6 +601,7 @@ export function applyInvoice(csv: string, matched: Match[], fields: InvoiceField
   const touched = new Set<number>();
   let spreadQuantities = 0;
   const missingSizes: string[] = [];
+  const unreadableCounts: string[] = [];
   for (const m of matched) {
     // Never a zero. An empty price cell means "leave it alone" to Shopify and a zero means free,
     // and a supplier document prints 0 for anything it does not price separately.
@@ -608,11 +663,20 @@ export function applyInvoice(csv: string, matched: Match[], fields: InvoiceField
       };
       if (fields.rrp && rrp !== null && rrpRows.includes(at)) write("Variant Compare At Price", rrp.toFixed(2));
       if (fields.price && rrp !== null && priceRows.includes(at)) write("Variant Price", rrp.toFixed(2));
-      if (!spread && fields.quantity && m.line.quantity !== null && m.rows.includes(at)) write("Variant Inventory Qty", String(Math.round(m.line.quantity)));
+      if (!spread && fields.quantity && m.line.quantity !== null && m.rows.includes(at)) {
+        const arriving = Math.round(m.line.quantity);
+        const held = heldStock(row[index.get("Variant Inventory Qty") ?? -1] ?? "");
+        if ((fields.stock ?? "add") === "set") write("Variant Inventory Qty", String(arriving));
+        else if (held === null) unreadableCounts.push(`${title || m.handle}`);
+        else write("Variant Inventory Qty", String(held + arriving));
+      }
     }
   }
   if (missingSizes.length > 0) {
     warnings.push(`The invoice orders ${missingSizes.length === 1 ? "a size" : "sizes"} the listing does not have — ${missingSizes.slice(0, 4).join(", ")}${missingSizes.length > 4 ? `, and ${missingSizes.length - 4} more` : ""}. The price went on, the count could not: there is no variant to put it on. Add the size in Shopify first if it is a new one.`);
+  }
+  if (unreadableCounts.length > 0) {
+    warnings.push(`${unreadableCounts.length} row${unreadableCounts.length === 1 ? "" : "s"} had something in the stock column that is not a count — ${unreadableCounts.slice(0, 4).join(", ")}${unreadableCounts.length > 4 ? `, and ${unreadableCounts.length - 4} more` : ""} — so nothing was added to ${unreadableCounts.length === 1 ? "it" : "them"}. Adding to a number this cannot read would invent one.`);
   }
   if (spreadQuantities > 0) {
     warnings.push(`${spreadQuantities} line${spreadQuantities === 1 ? "" : "s"} matched a product by name rather than a barcode, so ${spreadQuantities === 1 ? "its count was" : "their counts were"} left alone — a name says which product, not which size, and one count written onto every size invents stock. The prices went on. For counts, the invoice needs barcodes or a size per line.`);

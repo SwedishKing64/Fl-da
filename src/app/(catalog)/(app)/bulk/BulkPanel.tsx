@@ -10,6 +10,7 @@ import type { CanonicalLineItem } from "@/lib/catalog/types";
 import type { InvoiceRead } from "@/lib/catalog/invoice";
 import { fitsUpload, looksLikeImage, shrinkImage, tooBig } from "@/app/(catalog)/shrink";
 import { Alert, Button, Card, INPUT, cx } from "@/app/(catalog)/ui";
+import { ChangedCells } from "./ChangedCells";
 
 /**
  * Bulk changes to products the shop already sells.
@@ -60,7 +61,12 @@ interface Row {
   results: Array<{ name: string; result: AdjustResult }>;
 }
 
-interface Applied { title: string; lines: string[]; changes: number; matched: number; steps: number; perFile: Array<{ name: string; changes: number }> }
+interface Applied {
+  title: string; lines: string[]; changes: number; matched: number; steps: number;
+  /** Cells and rows are counted apart. A row written on the end of the file is not a cell that
+   *  moved, and adding the two together made the badge say "20 cells" over a diff showing 17. */
+  perFile: Array<{ name: string; changes: number; rowsAdded?: number }>;
+}
 
 /** An invoice as read. How it matches is worked out from the files as they stand, never stored. */
 interface Invoice extends InvoiceRead {
@@ -179,6 +185,8 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
   const [confirmWholeFile, setConfirmWholeFile] = useState(false);
+  /** Which file's changes are open. One at a time: two diffs side by side is two files to read. */
+  const [opened, setOpened] = useState<string | null>(null);
 
   async function takeCsvs(files: FileList | File[]) {
     setBusy("files"); setError(null); setPreview(null); setSaved(null);
@@ -390,7 +398,7 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
       changes: cells + rowsAdded,
       matched: matchedLines,
       steps: 1,
-      perFile: results.map((r) => ({ name: r.name, changes: (r.result.refused ? 0 : r.result.changes.length) + r.result.appended })),
+      perFile: results.map((r) => ({ name: r.name, changes: r.result.refused ? 0 : r.result.changes.length, rowsAdded: r.result.appended })),
     }]);
     setRows((current) => current.map((r) => ({ ...r, results: measure(r, nextSheets) })));
     setBusy(null);
@@ -546,7 +554,15 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
   // How many cells have actually been written into each file. Derived from the feed rather than
   // held alongside it, so undo takes it back without a second thing to keep in step.
   const appliedTo = (name: string) => feed.reduce((n, f) => n + (f.perFile.find((p) => p.name === name)?.changes ?? 0), 0);
-  const edited = sheets.filter((s) => appliedTo(s.name) > 0);
+  /**
+   * Whether a file is actually different from the one that was loaded.
+   *
+   * Read off the bytes rather than off the running total, because the total is bookkeeping and the
+   * file is the truth. They can disagree: an undo puts the file back without unwinding the tally.
+   */
+  const touched = (s: Sheet) => s.history.length > 0 && s.history[0] !== s.csv;
+  const rowsAddedTo = (name: string) => feed.reduce((n, f) => n + (f.perFile.find((p) => p.name === name)?.rowsAdded ?? 0), 0);
+  const edited = sheets.filter(touched);
 
   const wholeFile = preview ? isWholeFile(preview.plan.scope) : false;
   const refused = preview?.results.some((r) => r.result.refused) === true;
@@ -555,7 +571,14 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
   const blocked = preview !== null && preview.blocked.length > 0;
   const nothingToDo = preview !== null && !refused && !blocked && totalChanges === 0;
   const noOperations = preview !== null && preview.plan.operations.length === 0;
-  const changesSoFar = feed.reduce((n, f) => n + f.changes, 0);
+  const cellsSoFar = feed.reduce((n, f) => n + f.perFile.reduce((m, p) => m + p.changes, 0), 0);
+  const rowsSoFar = feed.reduce((n, f) => n + f.perFile.reduce((m, p) => m + (p.rowsAdded ?? 0), 0), 0);
+  const changesSoFar = cellsSoFar + rowsSoFar;
+  /** "17 cells and 3 rows", or just one of them — a count is only reassuring if it is the truth. */
+  const sizeOfIt = [
+    cellsSoFar > 0 ? `${cellsSoFar} cell${cellsSoFar === 1 ? "" : "s"} changed` : "",
+    rowsSoFar > 0 ? `${rowsSoFar} row${rowsSoFar === 1 ? "" : "s"} added` : "",
+  ].filter(Boolean).join(" and ");
 
   // Worked out from the invoice and the files as they stand, rather than kept alongside them. Held
   // in state it would have to be put back in step after every load, removal, apply and undo, and
@@ -612,18 +635,35 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
         {sheets.length > 0 && (
           <ul className="mt-3 divide-y divide-[var(--line-soft)] text-sm">
             {sheets.map((s) => (
-              <li key={s.name} className="flex flex-wrap items-center justify-between gap-2 py-2">
-                <div>
-                  <span className="font-medium">{s.name}</span>
-                  {appliedTo(s.name) > 0
-                    ? <span className="ml-2 rounded-full bg-[var(--violet)] px-2 py-0.5 text-[11px] font-semibold text-white tabular-nums">{appliedTo(s.name)} cells changed</span>
-                    : <span className="ml-2 text-[11px] text-[var(--ink-soft)]">unchanged</span>}
-                  <span className="ml-2 text-xs text-[var(--ink-soft)]">{s.products} products · {s.variantRows} rows · {s.types.slice(0, 4).join(", ") || s.vendors.slice(0, 4).join(", ")}{s.types.length > 4 ? ` +${s.types.length - 4}` : ""}</span>
+              <li key={s.name} className="py-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <span className="font-medium">{s.name}</span>
+                    {touched(s) ? (
+                      <>
+                        {appliedTo(s.name) > 0 && <span className="ml-2 rounded-full bg-[var(--violet)] px-2 py-0.5 text-[11px] font-semibold text-white tabular-nums">{appliedTo(s.name)} cells changed</span>}
+                        {rowsAddedTo(s.name) > 0 && <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-900 tabular-nums">{rowsAddedTo(s.name)} rows added</span>}
+                      </>
+                    ) : <span className="ml-2 text-[11px] text-[var(--ink-soft)]">unchanged</span>}
+                    <span className="ml-2 text-xs text-[var(--ink-soft)]">{s.products} products · {s.variantRows} rows · {s.types.slice(0, 4).join(", ") || s.vendors.slice(0, 4).join(", ")}{s.types.length > 4 ? ` +${s.types.length - 4}` : ""}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {/* Before the download, not after it. Whatever is wrong with a file is cheap to
+                        fix here and expensive to fix once it is in Shopify. */}
+                    {touched(s) && (
+                      <Button size="sm" onClick={() => setOpened((o) => (o === s.name ? null : s.name))}>
+                        {opened === s.name ? "Hide the changes" : "See what changed"}
+                      </Button>
+                    )}
+                    <Button size="sm" variant={touched(s) ? "primary" : undefined} onClick={() => setSaved(download(s))}>Download</Button>
+                    <Button size="sm" variant="danger" onClick={() => { setSheets((x) => x.filter((y) => y.name !== s.name)); setPreview(null); setRows([]); setSheetNote(null); setOpened(null); }}>Remove</Button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Button size="sm" variant={appliedTo(s.name) > 0 ? "primary" : undefined} onClick={() => setSaved(download(s))}>Download</Button>
-                  <Button size="sm" variant="danger" onClick={() => { setSheets((x) => x.filter((y) => y.name !== s.name)); setPreview(null); setRows([]); setSheetNote(null); }}>Remove</Button>
-                </div>
+                {opened === s.name && touched(s) && (
+                  <div className="mt-3 rounded-xl border border-[var(--line-soft)] bg-[var(--canvas)] p-3">
+                    <ChangedCells before={s.history[0]} after={s.csv} filename={s.name} />
+                  </div>
+                )}
               </li>
             ))}
           </ul>
@@ -756,7 +796,7 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
             <div className="mt-4 rounded-xl border-2 border-[var(--violet)] bg-[var(--rubin-tint)] px-3 py-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="text-sm">
-                  <div className="font-semibold">Ready to import — <span className="tabular-nums">{changesSoFar}</span> cell{changesSoFar === 1 ? "" : "s"} changed across {edited.length} file{edited.length === 1 ? "" : "s"}.</div>
+                  <div className="font-semibold">Ready to import — {sizeOfIt} across {edited.length} file{edited.length === 1 ? "" : "s"}.</div>
                   <div className="mt-0.5 text-xs text-[var(--ink-soft)]">Only the files something was written into are listed. The rest are still the ones you loaded, so there is nothing to re-import for them.</div>
                 </div>
                 <Button variant="primary" onClick={downloadAll}>Download {edited.length === 1 ? "it" : `all ${edited.length}`}</Button>
@@ -1004,7 +1044,7 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
 
           {feed.length > 0 && (
             <p className="mt-3 text-xs text-[var(--ink-soft)]">
-              <strong className="tabular-nums">{changesSoFar}</strong> cell{changesSoFar === 1 ? "" : "s"} changed so far across {sheets.length} file{sheets.length === 1 ? "" : "s"}. The download buttons above give you the files as they stand.
+              <strong>{sizeOfIt}</strong> so far across {sheets.length} file{sheets.length === 1 ? "" : "s"}. The download buttons above give you the files as they stand.
             </p>
           )}
         </Card>

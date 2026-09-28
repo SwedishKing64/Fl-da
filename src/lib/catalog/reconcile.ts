@@ -339,6 +339,35 @@ function narrowToSize(rows: number[], line: InvoiceLine, grid: string[][], index
 }
 
 /**
+ * Whether the line names a size this product does not list.
+ *
+ * Asked directly, rather than inferred from whether narrowing reduced the set. The inference was
+ * "narrowing changed nothing and there was more than one row to narrow", which cannot be true of a
+ * product with ONE variant — so a ski the shop lists only in 177, ordered in 184, came back as a
+ * plain match on the 177 and the count went onto the wrong length. Comparing the size to what the
+ * product actually carries answers it the same way however many variants there are.
+ *
+ * Only where the product is sold BY size. A single-variant product's option is "Title / Default
+ * Title", and a binding whose line says "100MM" would otherwise look like a ski missing a length
+ * and be given a variant it should not have. The option's own name says whether size is what
+ * varies — this shop writes Length, Size, Width, and also Colour and Binding Option, which are not
+ * sizes and are not treated as any.
+ */
+function missingSize(productRows: number[], line: InvoiceLine, grid: string[][], index: Map<string, number>): boolean {
+  const size = (line.size ?? "").trim();
+  if (!size || productRows.length === 0) return false;
+  const names = ["Option1 Name", "Option2 Name", "Option3 Name"].map((c) => index.get(c)).filter((i): i is number => i !== undefined);
+  const soldBySize = productRows.some((r) => names.some((i) => /length|size|mondo|width/i.test((grid[r]?.[i] ?? "").trim())));
+  if (!soldBySize) return false;
+  const values = ["Option1 Value", "Option2 Value", "Option3 Value"].map((c) => index.get(c)).filter((i): i is number => i !== undefined);
+  const want = sizeParts(size);
+  return !productRows.some((r) => values.some((i) => {
+    const value = (grid[r]?.[i] ?? "").trim();
+    return value !== "" && sameSize(want, sizeParts(value));
+  }));
+}
+
+/**
  * A size, as the two documents write it.
  *
  * Their Shopify options are "M (8)", "XL (9.5)", "S (6.5)", and a Swany invoice writes the same
@@ -516,7 +545,7 @@ export function reconcile(csv: string, lines: InvoiceLine[], options: ReconcileO
       const productRows = rowsOf.get(byName.handle) ?? [];
       const rows = narrowToSize(productRows, line, grid, index);
       if (rows.length > 0) {
-        const sizeMissing = (line.size ?? "").trim() !== "" && rows.length === productRows.length && productRows.length > 1;
+        const sizeMissing = missingSize(productRows, line, grid, index);
         matched.push({ line, rows, productRows, handle: byName.handle, key: "name", on: byName.on, ...(sizeMissing ? { sizeMissing: true } : {}) });
         continue;
       }

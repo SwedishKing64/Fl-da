@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { describePlan, groundScope, mapWithConcurrency } from "./adjust-plan";
+import { describePlan, groundScope, mapWithConcurrency, respellAddedTags } from "./adjust-plan";
 
 const FILE = {
   vendors: ["Burton", "Nitro", "Arc'teryx", "Anon", "POC", "Ride"],
@@ -220,5 +220,39 @@ describe("a brands cell with more than one brand in it", () => {
 
   it("splits an exclusion the same way", () => {
     expect(groundScope(scopeOf({ types: ["Ski Boots"], excludeVendors: ["Dalbello Head"] }), SHOP).scope.excludeVendors).toEqual(["Dalbello", "Head"]);
+  });
+});
+
+/**
+ * "Add the tag snow sale" added "snwo sale", every time.
+ *
+ * The loaded export carried the typo on a product or two, and the reader had been told to prefer
+ * the file's spelling "when the file has something close". A catalogue's typo is not a spelling.
+ */
+describe("a tag to add keeps the spelling it was asked for", () => {
+  const ask = "for all products add the tag snow sale";
+  const add = (tags: string[]) => [{ kind: "addTags" as const, tags }];
+
+  it("puts a typo the reader copied from the file back to the instruction's spelling", () => {
+    expect(respellAddedTags(add(["snwo sale"]), ask, ["snwo sale", "clearance"])).toEqual(add(["snow sale"]));
+  });
+
+  it("leaves the tag alone when it is the instruction's own word", () => {
+    expect(respellAddedTags(add(["snow sale"]), ask, ["snwo sale"])).toEqual(add(["snow sale"]));
+  });
+
+  it("still writes it the shop's way where only the hyphen differs", () => {
+    expect(respellAddedTags(add(["snow sale"]), ask, ["snow-sale"])).toEqual(add(["snow sale"]));
+    expect(respellAddedTags(add(["snwo-sale"]), ask, ["snow-sale"])).toEqual(add(["snow-sale"]));
+  });
+
+  it("does not touch a tag that is nothing like anything the instruction said", () => {
+    // A tag from the sheet's own tag column, or one the reader added for a stated reason.
+    expect(respellAddedTags(add(["clearance"]), ask, [])).toEqual(add(["clearance"]));
+  });
+
+  it("does not turn one real tag into a different real tag", () => {
+    // "snow sale" and "snow sales" are within reach of each other; only the one asked for is kept.
+    expect(respellAddedTags(add(["snow sales"]), ask, ["snow sales"])).toEqual(add(["snow sale"]));
   });
 });

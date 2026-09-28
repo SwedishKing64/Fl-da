@@ -61,7 +61,7 @@ const SYSTEM = `You turn an instruction from a ski shop's staff into edits to a 
 The shop's rules, which you follow without being told:
 - The recommended retail price lives in the Compare At column. Putting something "on sale", "on clearance" or "X% off" means the discount comes off the RECOMMENDED RETAIL, not off whatever the price happens to be today, so a product marked down twice does not compound. Use from: "rrp" unless the instruction plainly says otherwise.
 - "Into clearance" or "on clearance" means a discount AND the clearance tag. If the instruction gives no percentage, do the tag only and say in "unclear" that no percentage was given. An instruction that plainly says which tags to ADD is exactly that and nothing more: do the tags, add no discount, and leave "unclear" empty — it is not missing a percentage.
-- Tags are lower case. Use the spelling the file already uses when the file has something close.
+- Tags are lower case. A tag to ADD is spelled exactly as the instruction spells it — never change its letters to match something in the file, because the file can contain typos and copying one spreads it. The only change allowed is spacing and hyphens: if the instruction says "snow sale" and the file writes "snow-sale", use "snow-sale".
 - A season in the product title is setTitleYear: put the four digits in "text" and nothing else. The page works out where in the title it goes. Use renameTitle only for wording that is not a year. Neither one changes a product's URL, and nothing here ever edits a Handle. If the instruction also names the SEO title, the search title, or says "and the SEO title" or "both", set seo: true on that operation — one operation covers both columns, never two.
 - "Put the price back to the RRP", "bring it to RRP", "price them at the recommended retail", "take them off sale", "remove the discount", "back to full price" all mean endSale: the price returns to the recommended retail in Compare At and Compare At clears. Use it whenever the instruction says to price at the RRP WITHOUT giving a number. setPrice is only for an instruction that states an actual figure.
 - "Set the stock to 0", "mark them out of stock", "we have 12 left" is setQuantity. Stock is per variant, so it applies to every length or size the scope matched.
@@ -112,6 +112,62 @@ function toOperation(raw: z.infer<typeof OperationSchema>): Operation | null {
     case "setTitleYear": return /^\d{4}$/.test(raw.text.trim()) ? { kind: "setTitleYear", year: raw.text.trim(), ...(raw.seo ? { seo: true } : {}) } : null;
     case "renameTitle": return raw.find.trim() ? { kind: "renameTitle", find: raw.find.trim(), replace: raw.text, ...(raw.seo ? { seo: true } : {}) } : null;
   }
+}
+
+/**
+ * A tag to add is spelled the way the person spelled it.
+ *
+ * Asked for "snow sale", the page added "snwo sale", every time. Nothing in the code has that
+ * typo; the loaded export did — a product or two somebody once tagged by hand — and the reader was
+ * told to prefer the file's spelling "when the file has something close". So it found something
+ * close, and copied the typo onto every product in the shop. A catalogue's typo is not a spelling.
+ *
+ * The prompt now says so, and this makes it so whatever the reader does. Each tag it wants to add
+ * is compared with the instruction's own words: a tag the instruction does not contain, but that
+ * is within two letters of a run of words it does, is put back to the instruction's spelling. The
+ * one change still allowed is spacing and hyphens — "snow sale" asked for, "snow-sale" in the file
+ * — because that is the same word written the shop's way, which is why the rule existed at all.
+ */
+export function respellAddedTags(operations: Operation[], instruction: string, fileTags: string[]): Operation[] {
+  const words = instruction.toLowerCase().replace(/[^a-z0-9\s-]/g, " ").split(/[\s,]+/).filter(Boolean);
+  const loose = (value: string) => value.toLowerCase().replace(/[-_\s]+/g, " ").trim();
+  const runs = new Set<string>();
+  for (let i = 0; i < words.length; i++) {
+    for (let n = 1; n <= 4 && i + n <= words.length; n++) runs.add(loose(words.slice(i, i + n).join(" ")));
+  }
+  const byLoose = new Map(fileTags.map((t) => [loose(t), t]));
+
+  const fix = (tag: string): string => {
+    const want = loose(tag);
+    if (runs.has(want)) return tag;                                  // the instruction's own word
+    // Same number of words, at most two letters apart: a respelling, not a different tag.
+    const size = want.split(" ").length;
+    const said = [...runs].find((r) => r.split(" ").length === size && editDistance(r, want) <= 2);
+    if (!said) return tag;
+    // Written the shop's way where the shop writes the same word with a hyphen.
+    return byLoose.get(said) ?? said;
+  };
+
+  return operations.map((op) =>
+    op.kind === "addTags" ? { ...op, tags: [...new Set(op.tags.map(fix))] } : op,
+  );
+}
+
+/** Letters to change, add or remove to turn one string into the other. */
+function editDistance(a: string, b: string): number {
+  if (Math.abs(a.length - b.length) > 2) return 3;                   // too far apart to matter here
+  const row = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    let prev = row[0];
+    row[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const was = row[j];
+      // Two neighbouring letters swapped — "snwo" for "snow" — is two changes here, inside the limit.
+      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1));
+      prev = was;
+    }
+  }
+  return row[b.length];
 }
 
 /**
@@ -309,7 +365,7 @@ export async function planAdjustment(
   if (!parsed.success) return null;
 
   const { scope, dropped, blocked, category } = groundScope(parsed.data.scope, file);
-  const operations = blocked.length ? [] : parsed.data.operations.map(toOperation).filter((op): op is Operation => op !== null);
+  const operations = blocked.length ? [] : respellAddedTags(parsed.data.operations.map(toOperation).filter((op): op is Operation => op !== null), instruction, file.tags);
   const unclear = [parsed.data.unclear.trim(), ...dropped].filter(Boolean).join(" ");
   return { plan: { scope, operations }, understood: parsed.data.understood.trim(), unclear, blocked, category };
 }

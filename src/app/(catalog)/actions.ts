@@ -17,6 +17,7 @@ import { seedDefaults } from "@/lib/catalog/seed";
 import { planAdjustment, planAdjustments, screenInstructions, planningAvailable, describePlan, splitInstructions, type SplitInstructions } from "@/lib/catalog/adjust-plan";
 import type { Plan } from "@/lib/catalog/adjust";
 import { readInvoiceGrids, type InvoiceRead } from "@/lib/catalog/invoice";
+import { describeApiError } from "@/lib/catalog/api-errors";
 import type { CanonicalLineItem } from "@/lib/catalog/types";
 import { MAX_UPLOAD, readableSize } from "@/lib/catalog/image-size";
 import { aiAvailable } from "@/lib/catalog/extract/ai";
@@ -51,6 +52,9 @@ export async function createTablesAction(): Promise<ActionResult<{ statements: n
 function fail(err: unknown): ActionResult<never> {
   if (err instanceof z.ZodError) return { ok: false, error: err.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") };
   if (err instanceof ShopifyError) return { ok: false, error: err.message };
+  // Never the API's raw JSON. See api-errors.ts.
+  const fromApi = describeApiError(err);
+  if (fromApi) return { ok: false, error: fromApi };
   return { ok: false, error: err instanceof Error ? err.message : String(err) };
 }
 

@@ -245,6 +245,66 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
   }
 
   /**
+   * Plan a sheet's rows a few at a time, one request per chunk.
+   *
+   * The whole sheet used to go in ONE request, and this page gives a request sixty seconds. A
+   * seventy-row sheet is seventy calls to the reading service; on a busy day, with the retries that
+   * rides out, that ran past the minute and the request was killed — taking every row still waiting
+   * with it, which is how a sheet came back with rows simply missing. Eight rows fit comfortably
+   * inside the minute, a chunk that fails costs only its own eight rows, and the rest carry on.
+   *
+   * Sequential on purpose: Next runs one action at a time per page anyway, and sending them one
+   * after another is gentler on a service that has just said it is overloaded.
+   */
+  async function planInChunks(instructions: string[], ids?: number[]): Promise<Row[]> {
+    const CHUNK = 8;
+    const merge = (pick: (s: Sheet) => string[]) => [...new Set(sheets.flatMap(pick))].sort();
+    const file = {
+      products: sheets.reduce((n, s) => n + s.products, 0),
+      vendors: merge((s) => s.vendors), types: merge((s) => s.types), tags: merge((s) => s.tags),
+    };
+    const out: Row[] = [];
+    for (let start = 0; start < instructions.length; start += CHUNK) {
+      const part = instructions.slice(start, start + CHUNK);
+      const end = Math.min(start + CHUNK, instructions.length);
+      setProgress(`Reading rows ${start + 1}–${end} of ${instructions.length} against your ${sheets.length === 1 ? "file" : `${sheets.length} files`}…`);
+      const idOf = (i: number) => ids?.[start + i] ?? start + i;
+      const lost = (why: string): Row[] => part.map((instruction, i) => ({
+        id: idOf(i), instruction, group: "", relevant: true, why: "", plan: null, understood: "", unclear: "",
+        blocked: [], described: [], failed: why, state: "ready", results: [],
+      }));
+      try {
+        const m = await readSheetAgainstFilesAction(part, file);
+        if (!m.ok) { out.push(...lost(m.error)); continue; }
+        out.push(...m.data!.rows.map((row, i) => ({ ...row, id: idOf(i), state: "ready" as const, results: [] })));
+      } catch (err) {
+        // The request itself died — timed out, or the connection dropped. Its rows are marked, not lost.
+        out.push(...lost(`This group of rows did not come back from the server (${err instanceof Error ? err.message : String(err)}). Nothing was changed for them.`));
+      }
+    }
+    return out;
+  }
+
+  /** Read again only the rows that failed, keeping every row that worked exactly where it was. */
+  async function retryFailedRows() {
+    const failed = rows.filter((r) => r.failed && r.state === "ready");
+    if (failed.length === 0) return;
+    setBusy("sheet"); setError(null);
+    try {
+      const again = await planInChunks(failed.map((r) => r.instruction), failed.map((r) => r.id));
+      const byId = new Map(again.map((r) => [r.id, r]));
+      setRows((current) => current.map((r) => {
+        const fresh = byId.get(r.id);
+        return fresh ? { ...fresh, results: measure(fresh, sheets) } : r;
+      }));
+      const still = again.filter((r) => r.failed).length;
+      if (still > 0) setError(`${still} row${still === 1 ? "" : "s"} still could not be read. Nothing was changed for ${still === 1 ? "it" : "them"}.`);
+    } finally {
+      setBusy(null); setProgress("");
+    }
+  }
+
+  /**
    * Read the buyer's sheet and lay it out against the loaded files.
    *
    * Two round trips, not forty. The sheet is split into its rows, then the whole lot is matched
@@ -264,17 +324,11 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
       setSheetNote({ source: `${file.name} · ${r.data!.source}`, ignored: r.data!.ignored, unclear: r.data!.unclear });
       if (instructions.length === 0) return;
 
-      setProgress(`Matching ${instructions.length} change${instructions.length === 1 ? "" : "s"} against your ${sheets.length === 1 ? "file" : "files"}…`);
-      const merge = (pick: (s: Sheet) => string[]) => [...new Set(sheets.flatMap(pick))].sort();
-      const m = await readSheetAgainstFilesAction(instructions, {
-        products: sheets.reduce((n, s) => n + s.products, 0),
-        vendors: merge((s) => s.vendors), types: merge((s) => s.types), tags: merge((s) => s.tags),
-      });
-      if (!m.ok) { setError(m.error); return; }
-
+      const built = await planInChunks(instructions);
       setProgress("Working out what each one would change…");
-      const built: Row[] = m.data!.rows.map((row, id) => ({ ...row, id, state: "ready", results: [] }));
       setRows(built.map((row) => ({ ...row, results: measure(row, sheets) })));
+      const lost = built.filter((r) => r.failed).length;
+      if (lost > 0) setError(`${lost} of ${instructions.length} rows could not be read this time — they are marked below and nothing was changed for them. Use "Read those rows again" once the service has settled.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -704,6 +758,14 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
             </div>
           )}
 
+          {rows.some((r) => r.failed && r.state === "ready") && (
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
+              <span>
+                <strong className="tabular-nums">{rows.filter((r) => r.failed && r.state === "ready").length}</strong> row{rows.filter((r) => r.failed && r.state === "ready").length === 1 ? "" : "s"} could not be read — nothing was changed for {rows.filter((r) => r.failed && r.state === "ready").length === 1 ? "it" : "them"}. The rest of the sheet is unaffected.
+              </span>
+              <Button size="sm" disabled={busy !== null} onClick={() => void retryFailedRows()}>{busy === "sheet" ? "Reading…" : "Read those rows again"}</Button>
+            </div>
+          )}
           {sheetNote && (
             <div className="mt-3 rounded-lg border border-[var(--line-soft)] bg-[var(--rubin-tint)] px-3 py-2 text-xs text-[var(--ink-soft)]">
               <strong>{sheetNote.source}</strong>

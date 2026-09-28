@@ -13,6 +13,7 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { EXTRACTION_MODEL, aiAvailable } from "./extract/ai";
 import type { Operation, Plan } from "./adjust";
+import { describeApiError, isTransient } from "./api-errors";
 
 const ScopeSchema = z.object({
   vendors: z.array(z.string()).describe("Vendor names exactly as the file spells them. Empty unless the instruction names a brand."),
@@ -536,13 +537,29 @@ export async function screenInstructions(
     ...instructions.map((line, i) => `${i}. ${line}`),
   ].join("\n");
 
-  const response = await getClient().messages.stream({
-    model: EXTRACTION_MODEL,
-    max_tokens: 8000,
-    system: SCREEN_SYSTEM,
-    output_config: { format: zodOutputFormat(ScreenSchema), effort: "low" },
-    messages: [{ role: "user", content: context }],
-  }).finalMessage();
+  /**
+   * The screen is an optimisation, so it is never allowed to be the reason nothing happens.
+   *
+   * It is ONE call over the whole sheet, made before any row is planned, and when the service was
+   * overloaded it threw — which failed the entire sheet with the API's JSON on screen, before the
+   * row-by-row retries below had a chance to run. Without it every row is simply treated as
+   * relevant, which is safe: each is still grounded against the loaded files, and a row about
+   * goggles planned against a ski export matches nothing and says so.
+   */
+  let response: Anthropic.Message;
+  try {
+    response = await getClient().messages.stream({
+      model: EXTRACTION_MODEL,
+      max_tokens: 8000,
+      system: SCREEN_SYSTEM,
+      output_config: { format: zodOutputFormat(ScreenSchema), effort: "low" },
+      messages: [{ role: "user", content: context }],
+    }).finalMessage();
+  } catch (err) {
+    if (!isTransient(err)) throw err;
+    for (const row of all) row.why = "not sorted by shelf — the reading service was busy, so every row was kept";
+    return all;
+  }
 
   const text = response.content.find((b): b is Anthropic.TextBlock => b.type === "text")?.text;
   if (!text) return all;
@@ -616,36 +633,33 @@ export async function planAdjustments(
       ? { instruction, planned, failed: "" }
       : { instruction, planned: null, failed: "Could not make sense of this one." };
   };
-  const failure = (err: unknown, instruction: string) => ({ instruction, planned: null, failed: describeFailure(err) });
+  // Which rows the SERVICE turned away, as opposed to rows it could not make sense of — classified
+  // from the typed error while it is still an error, not guessed at from its text afterwards.
+  const turnedAway = new Set<number>();
+  const failure = (err: unknown, instruction: string, index: number) => {
+    if (isTransient(err)) turnedAway.add(index);
+    return { instruction, planned: null, failed: describeApiError(err) ?? (err instanceof Error ? err.message : String(err)) };
+  };
 
   // Four at a time rather than eight: eight was a burst the API answered with "overloaded" on a
   // big sheet, and a row that fails there is a row that is quietly not applied.
   const first = await mapWithConcurrency(instructions, concurrency, one, failure);
 
-  // Then one more pass over whatever the API itself refused, ONE AT A TIME. A refusal for load is
-  // about the moment, not the row — and by now the burst is over. A row it could not understand is
-  // not retried: asking again would get the same answer.
-  const again = first.map((r, i) => (r.failed && isTransient(r.failed) ? i : -1)).filter((i) => i >= 0);
-  for (const i of again) {
-    try { first[i] = await one(instructions[i]); } catch (err) { first[i] = failure(err, instructions[i]); }
+  // Then one more pass over whatever the service itself refused, ONE AT A TIME, after a pause.
+  // A refusal for load is about the moment, not the row. A row it could not understand is not
+  // retried: asking again would get the same answer.
+  if (turnedAway.size > 0) await new Promise((resolve) => setTimeout(resolve, RETRY_PAUSE_MS));
+  for (const i of [...turnedAway]) {
+    turnedAway.delete(i);
+    try { first[i] = await one(instructions[i]); } catch (err) { first[i] = failure(err, instructions[i], i); }
   }
   return first;
 }
 
-/** Load, rate limits and dropped connections: a problem with the moment, not with the row. */
-function isTransient(message: string): boolean {
-  return /overload|rate.?limit|529|503|502|timeout|timed out|ECONNRESET|socket hang up|temporarily/i.test(message);
-}
-
 /**
- * A failure in words somebody can act on.
+ * How long to let an overloaded service recover before the second pass.
  *
- * The API's own text for this is a JSON body — `{"type":"error","error":{"type":"overloaded_error"…`
- * — and that is what the page was showing next to the row.
+ * Long enough to be past a burst, short enough that the whole sheet still finishes inside the
+ * time the page gives one request.
  */
-function describeFailure(err: unknown): string {
-  const message = err instanceof Error ? err.message : String(err);
-  if (/overload|529/i.test(message)) return "The reading service was overloaded and this row was not read, even after waiting and trying again. Nothing was changed for it — read the sheet again in a minute and it will pick this row up.";
-  if (/rate.?limit|429/i.test(message)) return "Too many rows were sent to the reading service at once and this one was turned away. Nothing was changed for it — read the sheet again in a minute.";
-  return message;
-}
+const RETRY_PAUSE_MS = 8_000;

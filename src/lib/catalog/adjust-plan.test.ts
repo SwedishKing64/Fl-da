@@ -24,8 +24,9 @@ const FILE = {
 interface RawScope {
   vendors: string[]; types: string[]; tags: string[]; anyTags: string[];
   excludeTags: string[]; excludeVendors: string[]; handles: string[]; titleContains: string;
+  fitting: "flat" | "package" | "";
 }
-const EMPTY: RawScope = { vendors: [], types: [], tags: [], anyTags: [], excludeTags: [], excludeVendors: [], handles: [], titleContains: "" };
+const EMPTY: RawScope = { vendors: [], types: [], tags: [], anyTags: [], excludeTags: [], excludeVendors: [], handles: [], titleContains: "", fitting: "" };
 const scopeOf = (over: Partial<RawScope>): RawScope => ({ ...EMPTY, ...over });
 
 describe("groundScope", () => {

@@ -5,11 +5,11 @@
  * reads the same way every time — which is only worth claiming if it is the actual file.
  */
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { sheetGrids } from "./extract/tabular";
-import { looksLikeProductExport, readSaleSheet } from "./sale-sheet";
+import { looksLikeProductExport, readFitting, readSaleSheet } from "./sale-sheet";
 
 const TEMPLATE = path.resolve(__dirname, "../../../samples/sale-template.xlsx");
 
@@ -114,5 +114,93 @@ describe("what it refuses", () => {
 
   it("hands anything that is not the template back to the caller, rather than guessing", () => {
     expect(readSaleSheet(grid([["Notes from the buyer"], ["put the spyder jackets 30% off"]]))).toBeNull();
+  });
+});
+
+/**
+ * Their own sheet, rather than the template it was supposed to become.
+ *
+ * Three seasons of editing in place left it with its headings spread over two rows, the brand
+ * column headed with the month somebody last touched it, the discount column headed with the name
+ * of the sale, and the column that says flat or package headed with nothing at all. None of that
+ * is unusual for a working spreadsheet, and all of it meant the sheet was not recognised as the
+ * template — so the whole thing went to the model, which is given the words and not the columns.
+ */
+const THEIRS = "/root/.claude/uploads/94fb8bfb-35a9-5176-afe9-8fcc0dec9eb3/9ff42c55-2026_October_FINAL_SNOW_SALE_bulk_upload_.xlsx";
+
+describe.skipIf(!existsSync(THEIRS))("the shop's own sheet, headings and all", () => {
+  const read = async () => readSaleSheet(await sheetGrids(readFileSync(THEIRS)))!;
+
+  it("is recognised, though not one of its five columns is headed the way the template heads it", async () => {
+    const r = await read();
+    expect(r).not.toBeNull();
+    expect(r.instructions).toHaveLength(70);
+  });
+
+  it("tells the flat skis from the packages, which is two different discounts on two lines", async () => {
+    // Their sheet: 2027 snow skis flat 15% off, 2027 snow skis "pakage" 20% off. Read without the
+    // column, both lines take in both kinds and whichever ran second priced everything.
+    const r = await read();
+    const skis = r.instructions.filter((i) => i.includes("snow skis") && i.includes("2027"));
+    expect(skis).toHaveLength(3);
+    expect(skis[0]).toContain("15% off");
+    expect(skis[0]).toContain("sold flat, with no binding");
+    expect(skis[1]).toContain("20% off");
+    expect(skis[1]).toContain("sold as a package, with a binding");
+    // And the snowboards, where they spell it correctly and add a brand.
+    expect(r.instructions.some((i) => i.includes("snowboards sold flat") && i.includes("NITRO"))).toBe(true);
+    expect(r.instructions.some((i) => i.includes("snowboards sold as a package") && i.includes("25% off"))).toBe(true);
+  });
+
+  it("reads \"flat and package\" as both, which narrows nothing", async () => {
+    const r = await read();
+    const line = r.instructions.find((i) => i.includes("snow skis") && i.includes("2999"))!;
+    expect(line).toContain("25% off");
+    expect(line).not.toContain("sold flat");
+    expect(line).not.toContain("sold as a package");
+  });
+
+  it("does not read the year column as a column of tags to add", async () => {
+    // "Year tag" contains the word "tag". Matching a heading by what it contains made the year
+    // column the add-tags column as well, so every row asked to add its own year as a tag.
+    const r = await read();
+    expect(r.instructions.filter((i) => /Also add the tag/.test(i))).toEqual([]);
+  });
+
+  it("keeps the sub-type that is not a fitting", async () => {
+    const r = await read();
+    expect(r.instructions.some((i) => i.includes("jackets and pants"))).toBe(true);
+    expect(r.instructions.some((i) => i.includes("step on"))).toBe(true);
+    // The two midlayer rows carry no year, so they are set aside — and named by their sub-type,
+    // because by shelf alone both read "snow clothing 30% off" and one line appeared twice.
+    expect(r.ignored.filter((i) => i.includes("midlayer"))).toHaveLength(2);
+  });
+});
+
+describe("reading flat or package out of a sub-type cell", () => {
+  it("knows the shop's own spelling of package", () => {
+    // "pakage" is on three of the five rows that use it. A spelling to know, not to correct.
+    expect(readFitting("pakage").fitting).toBe("package");
+    expect(readFitting("pakage only").fitting).toBe("package");
+    expect(readFitting("package ").fitting).toBe("package");
+  });
+
+  it("reads flat, and the ways of saying it", () => {
+    expect(readFitting("flat").fitting).toBe("flat");
+    expect(readFitting("ski only").fitting).toBe("flat");
+    expect(readFitting("no bindings").fitting).toBe("flat");
+  });
+
+  it("reads both, and nothing, as the same answer: no narrowing", () => {
+    expect(readFitting("flat and package").fitting).toBeNull();
+    expect(readFitting("").fitting).toBeNull();
+    expect(readFitting("midlayer").fitting).toBeNull();
+  });
+
+  it("hands back what is left of the cell, so a sub-type beside it is not lost", () => {
+    expect(readFitting("midlayer").rest).toBe("midlayer");
+    // A cell that is not about the fitting comes back whole, words and all: taking "only" out of
+    // "step on only" would be editing a sub-type this knows nothing about.
+    expect(readFitting("step on only").rest).toBe("step on only");
   });
 });

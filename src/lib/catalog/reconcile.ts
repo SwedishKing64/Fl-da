@@ -20,7 +20,7 @@
  */
 
 import { parseCsv } from "./csv";
-import { quote, verifyOnlyIntended, type AdjustResult, type Change } from "./adjust";
+import { isPackage, quote, verifyOnlyIntended, type AdjustResult, type Change } from "./adjust";
 
 /** What one line of a supplier document says, reduced to the parts a match needs. */
 export interface InvoiceLine {
@@ -289,11 +289,15 @@ function sift(handles: string[], line: InvoiceLine, index: { seasonOf: Map<strin
     if (inSeason.length > 0) kept = inSeason;
   }
   if (kept.length > 1) {
-    const isPackage = (h: string) => /\binc\b/i.test(index.titleOf.get(h) ?? "");
+    // The shared test, not a second one. This used to look for "inc" alone, which misses the two
+    // titles that say "Binding Package" without ever saying inc — the Madshus "Annum Boot and
+    // NNNBC Binding Package" and the Rebels "Skis with Freeflex Pro 11 Binding Package". Whether a
+    // ski has a binding on it should not have two answers in one codebase. See isPackage.
+    const packaged = (h: string) => isPackage(index.titleOf.get(h) ?? "");
     const wantsFlat = line.form === "flat" || /\bflat\b/i.test(line.title);
     const wantsPackage = line.form === "package";
     if (wantsFlat || wantsPackage) {
-      const sorted = kept.filter((h) => (wantsFlat ? !isPackage(h) : isPackage(h)));
+      const sorted = kept.filter((h) => (wantsFlat ? !packaged(h) : packaged(h)));
       if (sorted.length > 0) kept = sorted;
     }
   }

@@ -1,6 +1,6 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { applyPlan, describeFile, foldPlans, isWholeFile, money, renamedTitle, titleWithYear, verifyOnlyIntended, whyNoMatch, type FoldStep, type Plan } from "./adjust";
+import { applyPlan, describeFile, foldPlans, isPackage, isWholeFile, money, renamedTitle, titleWithYear, verifyOnlyIntended, whyNoMatch, type FoldStep, type Plan } from "./adjust";
 import { parseCsv } from "./csv";
 
 /**
@@ -793,5 +793,77 @@ describe("why nothing matched", () => {
 
   it("says nothing when the scope does match", () => {
     expect(whyNoMatch(SWANY, { tags: ["2026"] })).toEqual([]);
+  });
+});
+
+/**
+ * A ski on its own, and the same ski with a binding on it.
+ *
+ * The shop sells and prices them separately, and their sale sheet says so on two lines: 2027 snow
+ * skis flat 15% off, 2027 snow skis package 20%. Nothing in a Shopify export says which a row is —
+ * what says it is the title — so without this both lines matched both kinds of ski and whichever
+ * ran second set the price of everything.
+ */
+describe("telling a flat ski from a package", () => {
+  it("reads the marker the way their own titles write it", () => {
+    // Measured on their 496 ski and board products: "inc" or "incl." catches 325, the word
+    // "package" catches 321, and together they catch 327 — neither alone is enough.
+    expect(isPackage("Blaze 94 2027 inc Marker Griffon Binding Package")).toBe(true);
+    expect(isPackage("Bent 110 inc Marker Griffon EX DEMO")).toBe(true);
+    expect(isPackage("Hero Elite LT Konect incl. SPX14 Bindings - Mounted")).toBe(true);
+    // Two say package and never say inc, and they are the reason "inc" alone was not enough.
+    expect(isPackage("Annum Boot and NNNBC Binding Package")).toBe(true);
+    expect(isPackage("Worldcup Rebels i GS RD Team Skis with Freeflex Pro 11 Binding Package")).toBe(true);
+    // And a flat ski is one with neither marker on it.
+    expect(isPackage("M7 Mantra 2025")).toBe(false);
+    expect(isPackage("Mindbender 89Ti 2025")).toBe(false);
+    // "Incline" is not "inc", and a word this matched loosely would file a flat ski as a package.
+    expect(isPackage("Incline 88 2027")).toBe(false);
+  });
+
+  it("splits the shop's 2027 skis in two, with nothing in both and nothing left out", () => {
+    const csv = readFileSync(SKIS, "utf8");
+    const run = (fitting?: "flat" | "package") => applyPlan(csv, {
+      scope: { types: ["Skis"], anyTags: ["2027"], ...(fitting ? { fitting } : {}) },
+      operations: [{ kind: "addTags", tags: ["snow sale"] }],
+    });
+    const both = run(), flat = run("flat"), pack = run("package");
+    expect(both.matched).toBe(96);
+    expect(flat.matched).toBe(39);
+    expect(pack.matched).toBe(57);
+    // Exhaustive and disjoint, which is what makes two discounts on two lines safe.
+    expect(flat.matched + pack.matched).toBe(both.matched);
+    expect(flat.refused).toBeUndefined();
+    expect(pack.refused).toBeUndefined();
+  });
+
+  it("puts each row's discount only on its own kind", () => {
+    const csv = [
+      "Handle,Title,Type,Tags,Variant Price,Variant Compare At Price",
+      "m7-mantra-2027,M7 Mantra 2027,Skis,2027,1599.99,1599.99",
+      "m7-mantra-2027-inc-marker-griffon-binding-package,M7 Mantra 2027 inc Marker Griffon Binding Package,Skis,2027,1899.99,1899.99",
+    ].join("\r\n") + "\r\n";
+    const flat = applyPlan(csv, { scope: { types: ["Skis"], fitting: "flat" }, operations: [{ kind: "discount", percent: 15 }] });
+    expect(flat.changes.map((c) => c.handle)).toEqual(["m7-mantra-2027"]);
+    expect(flat.changes[0].after).toBe("1359.99");
+    const pack = applyPlan(flat.csv, { scope: { types: ["Skis"], fitting: "package" }, operations: [{ kind: "discount", percent: 20 }] });
+    expect(pack.changes.map((c) => c.handle)).toEqual(["m7-mantra-2027-inc-marker-griffon-binding-package"]);
+    expect(pack.changes[0].after).toBe("1519.99");
+    // And the flat ski is still on ITS discount, not on the package's.
+    expect(pack.csv).toContain("1359.99");
+  });
+
+  it("counts as narrowing, so a fitting on its own is not the whole file", () => {
+    expect(isWholeFile({ fitting: "flat" })).toBe(false);
+    expect(isWholeFile({})).toBe(true);
+  });
+
+  it("names the fitting when it is what ruled everything out", () => {
+    const csv = [
+      "Handle,Title,Type,Tags,Variant Price,Variant Compare At Price",
+      "m7-mantra-2027-inc-marker-griffon-binding-package,M7 Mantra 2027 inc Marker Griffon Binding Package,Skis,2027,1899.99,1899.99",
+    ].join("\r\n") + "\r\n";
+    const why = whyNoMatch(csv, { types: ["Skis"], anyTags: ["2027"], fitting: "flat" });
+    expect(why.join(" ")).toContain("flat or package");
   });
 });

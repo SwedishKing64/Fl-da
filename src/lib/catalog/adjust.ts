@@ -47,6 +47,37 @@ export interface Scope {
   handles?: string[];
   /** A substring of the product title, case-insensitive. */
   titleContains?: string;
+  /**
+   * A ski or board sold on its own, or sold with a binding on it.
+   *
+   * The shop's sale sheet puts these in a column of their own and prices them differently — 2027
+   * snow skis flat 15% off, 2027 snow skis package 20% — so without it both rows land on both and
+   * whichever ran second decides the price of everything. There is no column in a Shopify export
+   * that says which; what says it is the TITLE. See isPackage.
+   */
+  fitting?: "flat" | "package";
+}
+
+/**
+ * Whether a title is a ski or board with a binding on it.
+ *
+ * Read off their own catalogue rather than assumed. Of the 496 ski and board products across their
+ * exports, 327 carry a marker in the title and 169 carry none:
+ *
+ *   inc / incl.        325    "Blaze 94 2027 inc Marker Griffon Binding Package"
+ *   the word package   321    "Annum Boot and NNNBC Binding Package"
+ *   either one         327
+ *
+ * Neither marker alone is enough and together they miss nothing. Six titles say "inc" without ever
+ * saying package — "Bent 110 inc Marker Griffon EX DEMO" — and two say package without "inc":
+ * "Worldcup Rebels i GS RD Team Skis with Freeflex Pro 11 Binding Package" and the Madshus
+ * "Annum Boot and NNNBC Binding Package". A flat ski is simply one with neither: "M7 Mantra 2025".
+ *
+ * "with" and "mounted" are deliberately not markers of their own. Both titles that use them also
+ * say package, so they add nothing — and "with" would catch a ski described by what it is made of.
+ */
+export function isPackage(title: string): boolean {
+  return /\binc\b|\bincl\.?\b|\bpackages?\b/i.test(title);
 }
 
 export type Operation =
@@ -216,6 +247,7 @@ function matches(scope: Scope, row: Record<string, string>): boolean {
   if (scope.types?.length && !scope.types.some((t) => eq(t, row["Type"] ?? ""))) return false;
   if (scope.handles?.length && !scope.handles.some((h) => eq(h, row["Handle"] ?? ""))) return false;
   if (scope.titleContains && !(row["Title"] ?? "").toLowerCase().includes(scope.titleContains.trim().toLowerCase())) return false;
+  if (scope.fitting && isPackage(row["Title"] ?? "") !== (scope.fitting === "package")) return false;
   const have = new Set(splitTags(row["Tags"] ?? "").map((t) => t.toLowerCase()));
   if (scope.tags?.length && !scope.tags.every((t) => have.has(t.trim().toLowerCase()))) return false;
   if (scope.anyTags?.length && !scope.anyTags.some((t) => have.has(t.trim().toLowerCase()))) return false;
@@ -228,7 +260,7 @@ function matches(scope: Scope, row: Record<string, string>): boolean {
 /** True when a scope names nothing at all, which would take in the whole file. */
 export function isWholeFile(scope: Scope): boolean {
   return !scope.vendors?.length && !scope.types?.length && !scope.tags?.length && !scope.anyTags?.length
-    && !scope.handles?.length && !scope.titleContains?.trim()
+    && !scope.handles?.length && !scope.titleContains?.trim() && !scope.fitting
     && !scope.excludeTags?.length && !scope.excludeVendors?.length;
 }
 
@@ -558,6 +590,7 @@ export function whyNoMatch(text: string, scope: Scope): string[] {
   const fields: Array<[keyof Scope, string]> = [
     ["vendors", "the brand"], ["types", "the type"], ["tags", "the tags it wanted ALL of"],
     ["anyTags", "the tags"], ["handles", "the named products"], ["titleContains", "the words in the title"],
+    ["fitting", "flat or package"],
     ["excludeTags", "what it was told to leave out"], ["excludeVendors", "the brands it was told to leave out"],
   ];
   const reasons: string[] = [];

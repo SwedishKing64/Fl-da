@@ -23,6 +23,7 @@ const ScopeSchema = z.object({
   excludeVendors: z.array(z.string()).describe("Vendors ruled out the same way. Empty otherwise."),
   handles: z.array(z.string()).describe("Exact product handles, when the instruction lists specific products. Otherwise empty."),
   titleContains: z.string().describe("A word from the product title to match on, when nothing else narrows it. Empty otherwise."),
+  fitting: z.enum(["flat", "package", ""]).describe("For skis and snowboards only: \"flat\" for the ones sold WITHOUT a binding, \"package\" for the ones sold WITH one. Empty unless the instruction says which."),
 });
 
 const OperationSchema = z.object({
@@ -63,6 +64,7 @@ The shop's rules, which you follow without being told:
 - A season in the product title is setTitleYear: put the four digits in "text" and nothing else. The page works out where in the title it goes. Use renameTitle only for wording that is not a year. Neither one changes a product's URL, and nothing here ever edits a Handle. If the instruction also names the SEO title, the search title, or says "and the SEO title" or "both", set seo: true on that operation — one operation covers both columns, never two.
 - "Put the price back to the RRP", "bring it to RRP", "price them at the recommended retail", "take them off sale", "remove the discount", "back to full price" all mean endSale: the price returns to the recommended retail in Compare At and Compare At clears. Use it whenever the instruction says to price at the RRP WITHOUT giving a number. setPrice is only for an instruction that states an actual figure.
 - "Set the stock to 0", "mark them out of stock", "we have 12 left" is setQuantity. Stock is per variant, so it applies to every length or size the scope matched.
+- A ski or snowboard is sold two ways and the shop prices them separately: FLAT means the ski on its own, PACKAGE means the ski with a binding on it. When an instruction says flat, "flat only", "no bindings", "ski only", "board only", set fitting: "flat". When it says package, "pakage" (they misspell it), "package only", "with bindings", "inc bindings", "binding package", set fitting: "package". When it says "flat and package", or says neither, leave fitting empty — that means both. This matters more than it looks: their sale sheet has "2027 snow skis flat 15%" on one line and "2027 snow skis package 20%" on the next, and without it each line takes in the other's products and whichever runs second sets the price of both.
 
 How to read a list of values. "Items tagged 2999 or 2026 or 2025" is ANY ONE of them, so it goes in anyTags. The tags field means ALL AT ONCE, and no product carries five different years, so putting a list there matches nothing. Getting this backwards is the single worst thing you can do here.
 
@@ -157,6 +159,7 @@ export function groundScope(
   const excludeVendors = scope.excludeVendors.map((v) => v.trim()).filter(Boolean);
   const handles = scope.handles.map((h) => h.trim()).filter(Boolean);
   const titleContains = scope.titleContains.trim();
+  const fitting = scope.fitting === "flat" || scope.fitting === "package" ? scope.fitting : undefined;
 
   // Two or more tags in the ALL list is almost always a list of alternatives read the wrong way —
   // no product carries two years or two shelves at once. Rather than match nothing, treat it as
@@ -191,6 +194,7 @@ export function groundScope(
       ...(excludeVendors.length ? { excludeVendors } : {}),
       ...(handles.length ? { handles } : {}),
       ...(titleContains ? { titleContains } : {}),
+      ...(fitting ? { fitting } : {}),
     },
     dropped,
     blocked,
@@ -250,6 +254,7 @@ export function describePlan(plan: Plan): string[] {
   if (s.anyTags?.length) parts.push(`tagged any of ${s.anyTags.join(", ")}`);
   if (s.handles?.length) parts.push(`${s.handles.length} named product${s.handles.length === 1 ? "" : "s"}`);
   if (s.titleContains) parts.push(`the title contains "${s.titleContains}"`);
+  if (s.fitting) parts.push(s.fitting === "flat" ? "sold flat, with no binding on it" : "sold as a package, with a binding on it");
   const nots: string[] = [];
   if (s.excludeTags?.length) nots.push(`tagged ${s.excludeTags.join(" or ")}`);
   if (s.excludeVendors?.length) nots.push(`from ${s.excludeVendors.join(" or ")}`);

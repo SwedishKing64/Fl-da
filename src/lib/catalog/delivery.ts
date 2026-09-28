@@ -223,6 +223,13 @@ function appendSizes(
 
     const row = header.map((column, i) => (VARIANT_COLUMNS.has(column) ? (source[i] ?? "") : ""));
     row[optionValue] = size;
+    // Shopify writes an option's NAME on a product's first row only, so a template taken from a
+    // later row has none. The importer does not need it for a product that already exists, but a
+    // variant row with a value and no name is a thing somebody reading the file has to work out.
+    for (const name of ["Option1 Name", "Option2 Name", "Option3 Name"]) {
+      const i = at.get(name);
+      if (i !== undefined && !(row[i] ?? "").trim()) row[i] = (grid[m.productRows[0]]?.[i] ?? "").trim();
+    }
     const write = (column: string, value: string) => {
       const i = at.get(column);
       if (i !== undefined && value !== "") row[i] = value;

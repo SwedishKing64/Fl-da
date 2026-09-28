@@ -17,6 +17,7 @@ import { seedDefaults } from "@/lib/catalog/seed";
 import { planAdjustment, planAdjustments, screenInstructions, planningAvailable, describePlan, splitInstructions, type SplitInstructions } from "@/lib/catalog/adjust-plan";
 import type { Plan } from "@/lib/catalog/adjust";
 import { readInvoiceGrids, type InvoiceRead } from "@/lib/catalog/invoice";
+import type { CanonicalLineItem } from "@/lib/catalog/types";
 import { MAX_UPLOAD, readableSize } from "@/lib/catalog/image-size";
 import { aiAvailable } from "@/lib/catalog/extract/ai";
 import { initialsFrom } from "@/lib/catalog/tagging";
@@ -906,6 +907,61 @@ export async function readInvoiceAction(file: { name: string; type: string; base
     if (/timed? ?out|aborted|FUNCTION_INVOCATION_TIMEOUT/i.test(message)) {
       return { ok: false, error: `Reading ${file.name} took longer than the page allows. Upload the order as a spreadsheet if you have one — that is read instantly.` };
     }
+    return { ok: false, error: `Could not read ${file.name}: ${message}` };
+  }
+}
+
+/**
+ * Read a supplier's spec sheet or barcode list into rows the delivery can look things up in.
+ *
+ * The companion to readInvoiceAction, and deliberately a different reading of a different kind of
+ * file. An order form says what is arriving; a spec export says what each thing IS — Volkl's has
+ * the waist width, the sidecut radii, the core and the technologies, thirty-odd columns of exactly
+ * what a customer wants to know — and a barcode list says which EAN belongs to which length. They
+ * carry no quantities and nothing is applied from them. They are searched for the products the
+ * order built, which is the order the shop does it in: the order form first, then these.
+ *
+ * Read by its columns, with no model involved, because a spec export is a table with headings and
+ * that is what the mapping suggester is for.
+ */
+export async function readReferenceAction(file: { name: string; type: string; base64: string }): Promise<ActionResult<{ rows: CanonicalLineItem[]; sheet: string; columns: string[]; warnings: string[] }>> {
+  await requireUser();
+
+  const buffer = Buffer.from(file.base64, "base64");
+  if (buffer.byteLength > MAX_UPLOAD) {
+    return { ok: false, error: `That file is ${readableSize(buffer.byteLength)}, and an upload has to stay under ${readableSize(MAX_UPLOAD)}. A spec export that big is usually several seasons in one workbook — split it, or save just this season's tab.` };
+  }
+
+  const isWorkbook = /\.xlsx?$/i.test(file.name) || /spreadsheet|excel/i.test(file.type);
+  const isCsv = /\.csv$/i.test(file.name) || file.type === "text/csv";
+  if (!isWorkbook && !isCsv) {
+    return { ok: false, error: `${file.name} has no columns to read. A spec sheet or barcode list has to be a spreadsheet or a CSV — a PDF of one has nothing to look up against.` };
+  }
+
+  try {
+    const { extractXlsx, extractCsv } = await import("@/lib/catalog/extract/tabular");
+    const table = isWorkbook ? await extractXlsx(buffer) : extractCsv(buffer);
+    const { suggestMapping, applyMapping } = await import("@/lib/catalog/mapping");
+    const mapping = suggestMapping(table.headers);
+    const rows = table.rows.map((row) => applyMapping(row, mapping)).filter((r) => r.barcode.trim() || r.sku.trim() || r.modelCode.trim() || r.description.trim());
+    if (rows.length === 0) {
+      return { ok: false, error: `Nothing in ${file.name} reads as a reference row. A spec sheet or barcode list needs a column identifying each row — an item code, a SKU or an EAN — and something to say about it.` };
+    }
+    const named = Object.entries(mapping).filter(([, header]) => header).map(([key]) => key);
+    return {
+      ok: true,
+      data: {
+        rows,
+        sheet: table.method ?? file.name,
+        columns: named,
+        warnings: [
+          `${rows.length} row${rows.length === 1 ? "" : "s"} read from ${file.name}. Nothing here is a delivery — it is searched for the products the order built, and adds none of its own.`,
+          ...table.warnings,
+        ],
+      },
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
     return { ok: false, error: `Could not read ${file.name}: ${message}` };
   }
 }

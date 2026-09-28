@@ -1,10 +1,12 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { logAdjustmentAction, planAdjustmentAction, readInstructionSheetAction, readInvoiceAction, readSheetAgainstFilesAction } from "@/app/(catalog)/actions";
+import { logAdjustmentAction, planAdjustmentAction, readInstructionSheetAction, readInvoiceAction, readReferenceAction, readSheetAgainstFilesAction } from "@/app/(catalog)/actions";
 import { applyPlan, describeFile, foldPlans, isWholeFile, whyNoMatch, type AdjustResult, type FoldStep, type Plan } from "@/lib/catalog/adjust";
 import { csvFilename } from "@/lib/catalog/csv";
-import { applyInvoice, reconcile, type InvoiceFields, type Reconciliation } from "@/lib/catalog/reconcile";
+import { reconcile, type InvoiceFields, type Reconciliation } from "@/lib/catalog/reconcile";
+import { buildDelivery } from "@/lib/catalog/delivery";
+import type { CanonicalLineItem } from "@/lib/catalog/types";
 import type { InvoiceRead } from "@/lib/catalog/invoice";
 import { fitsUpload, looksLikeImage, shrinkImage, tooBig } from "@/app/(catalog)/shrink";
 import { Alert, Button, Card, INPUT, cx } from "@/app/(catalog)/ui";
@@ -67,6 +69,9 @@ interface Invoice extends InvoiceRead {
 }
 
 type Against = Array<{ name: string; reconciliation: Reconciliation }>;
+
+/** A spec sheet or barcode list, to look the order's products up in. */
+interface Reference { filename: string; rows: CanonicalLineItem[]; columns: string[]; warnings: string[] }
 interface Preview { instruction: string; plan: Plan; understood: string; unclear: string; blocked: string[]; described: string[]; results: Array<{ name: string; result: AdjustResult }> }
 
 const read = (file: File | Blob, name = "that file") => new Promise<string>((resolve, reject) => {
@@ -92,6 +97,9 @@ const placedLines = (against: Against): number =>
   new Set(against.flatMap((a) => a.reconciliation.matched.map(
     (m) => [m.line.barcode, m.line.sku, m.line.size ?? "", m.line.colour ?? ""].join("\u0000"),
   ))).size;
+
+/** Lines that found their product but a size it does not list — a variant to be added, not a product. */
+const sizesMissing = (r: Reconciliation) => r.matched.filter((m) => m.sizeMissing);
 
 /**
  * Why nothing matched, in the terms of the two documents rather than "0 matched".
@@ -149,10 +157,24 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
    * perfectly clear to the person who signed the order matches eight products and is refused.
    */
   const [season, setSeason] = useState("");
+  /**
+   * How a count on the invoice is meant: stock arriving, or the number there now.
+   *
+   * Arriving, by default, because that is what the documents this page reads ARE. Writing an
+   * invoice's 3 into a cell that holds 2 does not record a delivery — it tells Shopify the shop has
+   * three, and the two already on the shelf stop existing without anybody being told.
+   */
+  const [stock, setStock] = useState<"add" | "set">("add");
+  /** The brand, for the products that have to be built. An order form seldom repeats it per line. */
+  const [vendor, setVendor] = useState("");
+  /** Whether the lines that are not in the shop yet get built onto the end of the file. */
+  const [buildNew, setBuildNew] = useState(true);
+  const referenceRef = useRef<HTMLInputElement>(null);
+  const [references, setReferences] = useState<Reference[]>([]);
 
   const [instruction, setInstruction] = useState("");
   const [preview, setPreview] = useState<Preview | null>(null);
-  const [busy, setBusy] = useState<"files" | "sheet" | "invoice" | "planning" | "applying" | null>(null);
+  const [busy, setBusy] = useState<"files" | "sheet" | "invoice" | "reference" | "planning" | "applying" | null>(null);
   const [progress, setProgress] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
@@ -276,18 +298,64 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
     }
   }
 
-  function applyInvoiceNow() {
+  /**
+   * Take a spec sheet or a barcode list, to look the order's products up in.
+   *
+   * Loaded after the order, and it is searched rather than read as a delivery: it carries no
+   * quantities, so nothing in it is arriving. Several can be added, because the three files Volkl
+   * sends are the order, the specs and the barcodes, and Burton's delivery is the same shape.
+   */
+  async function takeReference(file: File) {
+    setBusy("reference"); setError(null); setSaved(null);
+    try {
+      setProgress(`Reading ${file.name}…`);
+      const r = await readReferenceAction({ name: file.name, type: file.type, base64: await read(file, file.name) });
+      if (!r.ok) { setError(r.error); return; }
+      const data = r.data!;
+      setReferences((current) => [...current.filter((x) => x.filename !== file.name), { filename: file.name, rows: data.rows, columns: data.columns, warnings: data.warnings }]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(null); setProgress("");
+    }
+  }
+
+  /**
+   * Apply the delivery: the reorder onto the files, and what they have no room for onto the end.
+   *
+   * One pass per loaded file, because the catalogue comes out of Shopify in pieces and a delivery
+   * cuts across them. A product only ever exists in one of those pieces, so a line either matches
+   * a file or is new to all of them — and a product is only built onto a file that the delivery
+   * actually touched, so a Volkl order never appends skis to the goggles export.
+   */
+  function applyDeliveryNow() {
     if (!invoice) return;
-    if (!fields.rrp && !fields.price && !fields.quantity) {
-      setError("Nothing was applied — tick at least one of the three numbers to write.");
+    if (!fields.rrp && !fields.price && !fields.quantity && !buildNew) {
+      setError("Nothing was applied — tick at least one of the numbers to write, or let it build the products that are not in the shop yet.");
       return;
     }
     setBusy("applying"); setError(null); setSaved(null);
 
-    const results = sheets.map((s) => {
-      const m = against.find((a) => a.name === s.name)?.reconciliation.matched ?? [];
-      return { name: s.name, result: applyInvoice(s.csv, m, fields) };
-    });
+    const specs = references.flatMap((r) => r.rows);
+    /**
+     * Which file the new products go on: the one this delivery has the most to do with.
+     *
+     * Appending them to every loaded export would import the same product several times over, and
+     * appending them to the first would put skis on the end of the goggles file. The file with the
+     * most carry-overs in it is the one that already holds this supplier's other products.
+     */
+    const home = buildNew
+      ? [...against].sort((a, b) => b.reconciliation.matched.length - a.reconciliation.matched.length)[0]?.name ?? null
+      : null;
+
+    const results = sheets.map((s) => ({
+      name: s.name,
+      result: buildDelivery(s.csv, invoice.lines, {
+        season, vendor, specs,
+        fields: { ...fields, stock },
+        reorderOnly: s.name !== home,
+      }),
+    }));
     if (results.every((r) => r.result.refused)) {
       setBusy(null);
       setError("Nothing was applied. The check that nothing moves except what was asked for did not pass, which is a fault in this tool rather than anything you did.");
@@ -295,20 +363,34 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
     }
     const nextSheets = sheets.map((s, i) => {
       const hit = results[i];
-      const touched = !hit.result.refused && hit.result.changes.length > 0;
+      const touched = !hit.result.refused && (hit.result.changes.length > 0 || hit.result.appended > 0);
       return { ...s, history: [...s.history, s.csv], csv: touched ? hit.result.csv : s.csv };
     });
     setSheets(nextSheets);
 
+    const cells = results.reduce((n, r) => n + (r.result.refused ? 0 : r.result.changes.length), 0);
+    const rowsAdded = results.reduce((n, r) => n + r.result.appended, 0);
+    const builtProducts = results.flatMap((r) => r.result.fresh);
+    const builtSizes = results.flatMap((r) => r.result.freshSizes);
     const matchedLines = placedLines(against);
-    const wrote = [fields.rrp ? "the recommended retail into Compare At" : "", fields.price ? "the selling price" : "", fields.quantity ? "the stock on hand" : ""].filter(Boolean);
+    const wrote = [
+      fields.rrp ? "the recommended retail into Compare At" : "",
+      fields.price ? "the selling price" : "",
+      fields.quantity ? (stock === "add" ? "the arriving stock onto the counts already there" : "the stock count, set to the invoice's own number") : "",
+    ].filter(Boolean);
     setFeed((f) => [...f, {
-      title: `${invoice.filename} — ${results.reduce((n, r) => n + (r.result.refused ? 0 : r.result.changes.length), 0)} cells from the invoice`,
-      lines: [`Matched ${matchedLines} of ${invoice.lines.length} invoice lines, and wrote ${wrote.join(", ")}.`],
-      changes: results.reduce((n, r) => n + (r.result.refused ? 0 : r.result.changes.length), 0),
+      title: `${invoice.filename} — ${cells} cell${cells === 1 ? "" : "s"} changed${rowsAdded > 0 ? ` and ${rowsAdded} row${rowsAdded === 1 ? "" : "s"} added` : ""}`,
+      lines: [
+        `Matched ${matchedLines} of ${invoice.lines.length} line${invoice.lines.length === 1 ? "" : "s"} to products already in the shop${wrote.length ? `, and wrote ${wrote.join(", ")}` : ""}.`,
+        ...builtSizes.map((x) => `Added ${x.option} to ${x.title || x.handle} — a size it has not stocked before.`),
+        ...builtProducts.map((x) => `Built ${x.title} as a draft: ${x.variants.length} variant${x.variants.length === 1 ? "" : "s"}, ${x.type || "no Type"}${x.described ? ", described from the spec sheet" : ", with no description yet"}.`),
+        ...results.flatMap((r) => r.result.heldBack.map((h) => `Left alone: ${h.line.title || h.line.sku} — ${h.reason}.`)),
+        ...[...new Set(results.flatMap((r) => r.result.warnings))],
+      ],
+      changes: cells + rowsAdded,
       matched: matchedLines,
       steps: 1,
-      perFile: results.map((r) => ({ name: r.name, changes: r.result.refused ? 0 : r.result.changes.length })),
+      perFile: results.map((r) => ({ name: r.name, changes: (r.result.refused ? 0 : r.result.changes.length) + r.result.appended })),
     }]);
     setRows((current) => current.map((r) => ({ ...r, results: measure(r, nextSheets) })));
     setBusy(null);
@@ -483,6 +565,14 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
     ? sheets.map((s) => ({ name: s.name, reconciliation: reconcile(s.csv, invoice.lines, { season }) }))
     : [];
   const placed = placedLines(against);
+  // What the delivery would build, counted once across the loaded files: a line is new only if no
+  // file has it. Worked out from the same reconciliation the summary shows, not from a second pass.
+  const toBuild = new Set(
+    against.length === 0 ? [] :
+      against[0].reconciliation.unmatched
+        .filter((line) => against.every((a) => a.reconciliation.unmatched.includes(line)))
+        .map((line) => `${line.sku}\u0000${line.title}`),
+  ).size;
 
   // The sheet, laid out by product group. A row that cannot touch anything loaded is set aside
   // rather than queued, which is the difference between thirty-nine to go through and three.
@@ -701,13 +791,13 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
         * own — what needs the exports is the matching, and the count says so itself.
         */}
       <Card
-          title="A supplier's invoice"
+          title="A delivery, or a supplier's invoice"
           actions={invoice ? <Button size="sm" onClick={() => { setInvoice(null); setError(null); }}>Remove it</Button> : undefined}
         >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="text-sm">
-              <span className="font-medium">Reordering, and the prices or the counts have changed?</span>
-              <span className="ml-2 text-xs text-[var(--ink-soft)]">Add the invoice and each line is matched by barcode, then by item code, then by the product&rsquo;s name — so an invoice that says SX-2M finds the SX-2M. A line that fits two products is never guessed at. A spreadsheet or CSV is read by its columns; a PDF or a photo of one goes to the API to be read.</span>
+              <span className="font-medium">A delivery arriving, or prices that have changed?</span>
+              <span className="ml-2 text-xs text-[var(--ink-soft)]">Add the order form and each line is matched by barcode, then by item code, then by the product&rsquo;s name — so a line that says SX-2M finds the SX-2M. A line that fits two products is never guessed at. What it matches has its stock put up; a size the product does not list arrives as a variant of it, and a product the shop does not have is built onto the end of the same file. A spreadsheet or CSV is read by its columns; a PDF or a photo of one goes to the API to be read.</span>
             </div>
             <Button size="sm" disabled={busy !== null} onClick={() => invoiceRef.current?.click()}>{busy === "invoice" ? "Reading…" : invoice ? "Use a different invoice" : "Add the invoice"}</Button>
             <input ref={invoiceRef} type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void takeInvoice(f); e.target.value = ""; }} />
@@ -742,9 +832,20 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
                       <span className="ml-2 tabular-nums text-xs text-[var(--ink-soft)]">
                         {r.matched.length} matched · {r.unmatched.length} not in this file · {r.ambiguous.length} too ambiguous to place
                       </span>
+                      {sizesMissing(r).length > 0 && (
+                        <div className="mt-1 text-xs text-[var(--ink-soft)]">
+                          <strong>{sizesMissing(r).length} {sizesMissing(r).length === 1 ? "size is" : "sizes are"} new to a product you already sell</strong> — {sizesMissing(r).length === 1 ? "it arrives" : "they arrive"} as {sizesMissing(r).length === 1 ? "a variant" : "variants"} of it, copying the settings of the sizes it already has.
+                          <ul className="mt-1 list-disc pl-5">
+                            {sizesMissing(r).slice(0, 4).map((m, i) => <li key={i}>{m.line.size} of {m.handle}</li>)}
+                            {sizesMissing(r).length > 4 && <li>…and {sizesMissing(r).length - 4} more</li>}
+                          </ul>
+                        </div>
+                      )}
                       {r.unmatched.length > 0 && (
                         <div className="mt-1 text-xs text-[var(--ink-soft)]">
-                          <strong>{r.unmatched.length} {r.unmatched.length === 1 ? "line is" : "lines are"} not in the shop yet</strong> — a delivery of something new. Build {r.unmatched.length === 1 ? "it" : "them"} in <strong>Import batches</strong>; this page only changes products that already exist.
+                          <strong>{r.unmatched.length} {r.unmatched.length === 1 ? "line is" : "lines are"} not in this file</strong> — {buildNew
+                            ? <>so {r.unmatched.length === 1 ? "it is built" : "they are built"} as {r.unmatched.length === 1 ? "a draft product" : "draft products"} on the end of whichever export this delivery has the most to do with.</>
+                            : <>and nothing will be built, because that box is unticked. Tick it, or build {r.unmatched.length === 1 ? "it" : "them"} in <strong>Import batches</strong>.</>}
                           <ul className="mt-1 list-disc pl-5">
                             {r.unmatched.slice(0, 4).map((u, i) => <li key={i}>{u.title || u.sku}{u.size ? ` — ${u.size}` : ""}</li>)}
                             {r.unmatched.length > 4 && <li>…and {r.unmatched.length - 4} more</li>}
@@ -787,6 +888,41 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
                 <span className="text-xs text-[var(--ink-soft)]">An order form never says which, and the shop lists three at once — without it, &ldquo;M7 Mantra&rdquo; is eight products and gets refused.</span>
               </label>
 
+              <label className="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--line-soft)] px-3 py-2.5 text-sm">
+                <span className="font-medium">Whose delivery this is</span>
+                <input
+                  id="invoice-vendor" value={vendor} onChange={(e) => setVendor(e.target.value)}
+                  placeholder="Burton" className={cx(INPUT, "w-40")}
+                />
+                <span className="text-xs text-[var(--ink-soft)]">The brand, for anything that has to be built. An order form seldom repeats it on every line, and a product with no Vendor is one nobody can find by brand.</span>
+              </label>
+
+              {/* The spec sheet and the barcode list, after the order. They are searched for what
+                  the order named, never read as a delivery of their own — see readReferenceAction. */}
+              <div className="rounded-xl border border-[var(--line-soft)] px-3 py-2.5 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <span className="font-medium">Spec sheets and barcode lists</span>
+                    <span className="ml-2 text-xs text-[var(--ink-soft)]">Optional, and only for the products that have to be built. Burton&rsquo;s spec sheet is where their descriptions come from; a barcode list is where the EAN for each size is. Add the order first, then these &mdash; they are searched for what it named.</span>
+                  </div>
+                  <Button size="sm" disabled={busy !== null} onClick={() => referenceRef.current?.click()}>{busy === "reference" ? "Reading…" : references.length > 0 ? "Add another" : "Add a spec sheet"}</Button>
+                  <input ref={referenceRef} type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void takeReference(f); e.target.value = ""; }} />
+                </div>
+                {references.length > 0 && (
+                  <ul className="mt-2 divide-y divide-[var(--line-soft)] text-xs">
+                    {references.map((ref) => (
+                      <li key={ref.filename} className="flex flex-wrap items-center justify-between gap-2 py-1.5">
+                        <span>
+                          <strong>{ref.filename}</strong> — {ref.rows.length} row{ref.rows.length === 1 ? "" : "s"}
+                          {ref.columns.length > 0 && <span className="text-[var(--ink-soft)]">, read as {ref.columns.join(", ")}</span>}
+                        </span>
+                        <Button size="sm" onClick={() => setReferences((c) => c.filter((x) => x.filename !== ref.filename))}>Remove</Button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
               <fieldset className="rounded-xl border border-[var(--line-soft)] px-3 py-2.5">
                 <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-[var(--ink-soft)]">What to write</legend>
                 <label className="flex items-start gap-2 py-1 text-sm">
@@ -799,15 +935,37 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
                 </label>
                 <label className="flex items-start gap-2 py-1 text-sm">
                   <input type="checkbox" id="invoice-qty" className="mt-1" checked={fields.quantity === true} onChange={(e) => setFields((f) => ({ ...f, quantity: e.target.checked }))} />
-                  <span>The stock on hand.<span className="block text-xs text-[var(--ink-soft)]">Sets the count to what the invoice says, rather than adding to what is there.</span></span>
+                  <span>The stock.<span className="block text-xs text-[var(--ink-soft)]">Which of the two things below a count on this document means.</span></span>
                 </label>
+                {fields.quantity && (
+                  <div className="ml-6 mt-1 space-y-1 rounded-lg border border-dashed border-[var(--line)] px-2.5 py-2">
+                    <label className="flex items-start gap-2 text-sm">
+                      <input type="radio" id="invoice-stock-add" name="invoice-stock" className="mt-1" checked={stock === "add"} onChange={() => setStock("add")} />
+                      <span>Stock <strong>arriving</strong> — add it to what is there.<span className="block text-xs text-[var(--ink-soft)]">Three arriving on two already on the shelf is five. This is what a delivery or an order form is, so it is the default. Applying the same document twice would add it twice.</span></span>
+                    </label>
+                    <label className="flex items-start gap-2 text-sm">
+                      <input type="radio" id="invoice-stock-set" name="invoice-stock" className="mt-1" checked={stock === "set"} onChange={() => setStock("set")} />
+                      <span>The count <strong>as it stands now</strong> — set it to this number.<span className="block text-xs text-[var(--ink-soft)]">A stocktake, not a delivery. Anything already on the shelf that this document does not mention is replaced by its number.</span></span>
+                    </label>
+                  </div>
+                )}
+              </fieldset>
+
+              <fieldset className="rounded-xl border border-[var(--line-soft)] px-3 py-2.5">
+                <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-[var(--ink-soft)]">The lines that are not in the shop yet</legend>
+                <label className="flex items-start gap-2 py-1 text-sm">
+                  <input type="checkbox" id="invoice-build" className="mt-1" checked={buildNew} onChange={(e) => setBuildNew(e.target.checked)} />
+                  <span>Build them onto the end of the same file, as drafts.<span className="block text-xs text-[var(--ink-soft)]">So one delivery is one file: the carry-overs have their counts put up and the new products are written after them, priced at the invoice&rsquo;s recommended retail and unpublished until somebody looks at them. A product whose URL the file already uses is never written &mdash; that would edit the product that has it &mdash; and is named instead.</span></span>
+                </label>
+                <p className="py-1 text-xs text-[var(--ink-soft)]">A size that is new to a product you already sell is always added, whether this is ticked or not: it is a variant of that product, not a product.</p>
               </fieldset>
 
               <div className="flex flex-wrap items-center gap-2">
-                <Button variant="primary" disabled={busy !== null || placed === 0} onClick={applyInvoiceNow}>
-                  Apply it to {placed} matched line{placed === 1 ? "" : "s"}
+                <Button variant="primary" disabled={busy !== null || (placed === 0 && !(buildNew && toBuild > 0))} onClick={applyDeliveryNow}>
+                  {busy === "applying" ? "Working…" : `Apply the delivery — ${placed} carry-over${placed === 1 ? "" : "s"}${buildNew && toBuild > 0 ? `, ${toBuild} to build` : ""}`}
                 </Button>
-                {placed === 0 && <span className="text-xs text-[var(--ink-soft)]">{whyNothing(invoice, against)}</span>}
+                {placed === 0 && !buildNew && <span className="text-xs text-[var(--ink-soft)]">{whyNothing(invoice, against)}</span>}
+                {placed === 0 && buildNew && toBuild > 0 && <span className="text-xs text-[var(--ink-soft)]">Nothing on this invoice is in the loaded exports, so all of it is built. {whyNothing(invoice, against)}</span>}
               </div>
             </div>
           )}

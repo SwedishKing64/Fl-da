@@ -111,7 +111,8 @@ describe("a delivery of carry-overs and new products", () => {
     expect(cell.Handle).toBe("blaze-94-2027");
     expect(cell["Option1 Value"]).toBe("163");
     expect(cell["Variant Inventory Qty"]).toBe("2");
-    // Copied from a length the product already has, so the new one arrives with the same settings.
+    // Copied from a length the product already has, so the new one arrives with the same settings —
+    // and with the option's name, which Shopify writes on a product's first row only.
     expect(cell["Option1 Name"]).toBe("Length");
     // And nothing of the PRODUCT, so importing this adds a variant rather than editing the ski.
     expect(cell.Title).toBe("");

@@ -49,13 +49,18 @@ export async function createTablesAction(): Promise<ActionResult<{ statements: n
   }
 }
 
+/** An error as words for the page. An API error is described; anything else keeps its message. */
+function said(err: unknown): string {
+  return describeApiError(err) ?? (err instanceof Error ? err.message : String(err));
+}
+
 function fail(err: unknown): ActionResult<never> {
   if (err instanceof z.ZodError) return { ok: false, error: err.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") };
   if (err instanceof ShopifyError) return { ok: false, error: err.message };
   // Never the API's raw JSON. See api-errors.ts.
   const fromApi = describeApiError(err);
   if (fromApi) return { ok: false, error: fromApi };
-  return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  return { ok: false, error: said(err) };
 }
 
 // ---------------------------------------------------------------------------
@@ -461,7 +466,7 @@ export async function pushBatchAction(batchId: string, opts: { confirm: boolean;
     revalidatePath(`/batches/${batchId}`);
     return result;
   } catch (err) {
-    return { ok: false, errors: [err instanceof Error ? err.message : String(err)], created: 0, updated: 0 };
+    return { ok: false, errors: [said(err)], created: 0, updated: 0 };
   }
 }
 
@@ -613,7 +618,7 @@ export async function retryExtractionAction(fileId: string): Promise<ActionResul
     revalidatePath(`/batches/${file.batchId}`);
     return { ok: true, data: { rows: result.rows, warnings: result.warnings } };
   } catch (err) {
-    await prisma.sourceFile.update({ where: { id: fileId }, data: { extractionStatus: "FAILED", extractionError: err instanceof Error ? err.message : String(err) } }).catch(() => undefined);
+    await prisma.sourceFile.update({ where: { id: fileId }, data: { extractionStatus: "FAILED", extractionError: said(err) } }).catch(() => undefined);
     return fail(err);
   }
 }
@@ -790,7 +795,7 @@ export async function readInstructionSheetAction(file: { name: string; type: str
       }
       return { ok: true, data: { ...split, source: `${grids.length} sheet${grids.length === 1 ? "" : "s"}, read as a table` } };
     } catch (err) {
-      return { ok: false, error: `Could not open ${file.name}: ${err instanceof Error ? err.message : String(err)}` };
+      return { ok: false, error: `Could not open ${file.name}: ${said(err)}` };
     }
   }
 
@@ -822,7 +827,7 @@ export async function readInstructionSheetAction(file: { name: string; type: str
     }
     return { ok: true, data: { ...split, source } };
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = said(err);
     if (/timed? ?out|aborted|FUNCTION_INVOCATION_TIMEOUT/i.test(message)) {
       return { ok: false, error: `Reading ${file.name} took longer than the page allows. A sheet of a few pages should fit — if this one is much longer, split it and add it in parts.` };
     }
@@ -907,7 +912,7 @@ export async function readInvoiceAction(file: { name: string; type: string; base
       },
     };
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = said(err);
     if (/timed? ?out|aborted|FUNCTION_INVOCATION_TIMEOUT/i.test(message)) {
       return { ok: false, error: `Reading ${file.name} took longer than the page allows. Upload the order as a spreadsheet if you have one — that is read instantly.` };
     }
@@ -965,7 +970,7 @@ export async function readReferenceAction(file: { name: string; type: string; ba
       },
     };
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = said(err);
     return { ok: false, error: `Could not read ${file.name}: ${message}` };
   }
 }

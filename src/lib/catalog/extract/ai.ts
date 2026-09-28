@@ -7,6 +7,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import type { ExtractedTable } from "./types";
+import { retrying } from "../api-errors";
 
 export const EXTRACTION_MODEL = process.env.CATALOG_AI_MODEL || "claude-opus-5";
 
@@ -105,15 +106,14 @@ export function aiAvailable(): boolean {
 type ContentBlocks = Anthropic.MessageParam["content"];
 
 async function runExtraction(content: ContentBlocks): Promise<AiExtraction> {
-  const stream = getClient().messages.stream({
+  const message = await retrying(() => getClient().messages.stream({
     model: EXTRACTION_MODEL,
     max_tokens: 64000,
     system: SYSTEM,
     thinking: { type: "adaptive" },
     output_config: { format: zodOutputFormat(ExtractionSchema), effort: "medium" },
     messages: [{ role: "user", content }],
-  });
-  const message = await stream.finalMessage();
+  }).finalMessage());
   if (message.stop_reason === "refusal") throw new Error("The AI declined to process this document");
   if (message.stop_reason === "max_tokens") throw new Error("Document too large for a single extraction; split the file");
   const text = message.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("");

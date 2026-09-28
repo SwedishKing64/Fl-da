@@ -15,6 +15,7 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { EXTRACTION_MODEL, aiAvailable } from "./ai";
 import { houseBody, isPlaceholderBody } from "../body";
+import { retrying } from "../api-errors";
 
 /** What a lookup can establish. Anything it could not find comes back empty rather than invented. */
 const FoundSchema = z.object({
@@ -75,7 +76,7 @@ export function lookupAvailable(): boolean {
 export async function lookupProduct(request: LookupRequest): Promise<ProductLookup | null> {
   if (!lookupAvailable() || !request.title.trim()) return null;
 
-  const research = await getClient().messages.stream({
+  const research = await retrying(() => getClient().messages.stream({
     model: EXTRACTION_MODEL,
     max_tokens: 8000,
     system: RESEARCH_SYSTEM,
@@ -83,7 +84,7 @@ export async function lookupProduct(request: LookupRequest): Promise<ProductLook
     output_config: { effort: "low" },
     tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 6 }],
     messages: [{ role: "user", content: describe(request) }],
-  }).finalMessage();
+  }).finalMessage());
 
   const notes = research.content
     .filter((block): block is Anthropic.TextBlock => block.type === "text")
@@ -92,13 +93,13 @@ export async function lookupProduct(request: LookupRequest): Promise<ProductLook
     .trim();
   if (!notes) return null;
 
-  const shaped = await getClient().messages.stream({
+  const shaped = await retrying(() => getClient().messages.stream({
     model: EXTRACTION_MODEL,
     max_tokens: 4000,
     system: SHAPE_SYSTEM,
     output_config: { format: zodOutputFormat(FoundSchema), effort: "low" },
     messages: [{ role: "user", content: `${describe(request)}\n\nResearch notes:\n${notes}` }],
-  }).finalMessage();
+  }).finalMessage());
 
   const text = shaped.content.find((block): block is Anthropic.TextBlock => block.type === "text")?.text;
   if (!text) return null;

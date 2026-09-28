@@ -13,7 +13,7 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { EXTRACTION_MODEL, aiAvailable } from "./extract/ai";
 import type { Operation, Plan } from "./adjust";
-import { describeApiError, isTransient } from "./api-errors";
+import { describeApiError, isTransient, retrying } from "./api-errors";
 
 const ScopeSchema = z.object({
   vendors: z.array(z.string()).describe("Vendor names exactly as the file spells them. Empty unless the instruction names a brand."),
@@ -295,13 +295,13 @@ export async function planAdjustment(
     `Instruction: ${instruction.trim()}`,
   ].join("\n");
 
-  const response = await getClient().messages.stream({
+  const response = await retrying(() => getClient().messages.stream({
     model: EXTRACTION_MODEL,
     max_tokens: 2000,
     system: SYSTEM,
     output_config: { format: zodOutputFormat(PlanSchema), effort: "low" },
     messages: [{ role: "user", content: context }],
-  }).finalMessage();
+  }).finalMessage());
 
   const text = response.content.find((b): b is Anthropic.TextBlock => b.type === "text")?.text;
   if (!text) return null;
@@ -431,13 +431,13 @@ export async function splitInstructions(input: string | { pdf: Buffer } | { imag
     content = [{ type: "image", source: { type: "base64", media_type: input.mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: input.image.toString("base64") } }];
   }
 
-  const response = await getClient().messages.stream({
+  const response = await retrying(() => getClient().messages.stream({
     model: EXTRACTION_MODEL,
     max_tokens: 8000,
     system: SPLIT_SYSTEM,
     output_config: { format: zodOutputFormat(SplitSchema), effort: "low" },
     messages: [{ role: "user", content }],
-  }).finalMessage();
+  }).finalMessage());
 
   const body = response.content.find((b): b is Anthropic.TextBlock => b.type === "text")?.text;
   if (!body) return null;
@@ -461,7 +461,7 @@ export async function splitInstructions(input: string | { pdf: Buffer } | { imag
 export async function readInstructionImage(buffer: Buffer, mimeType: string): Promise<string> {
   if (!planningAvailable()) return "";
   const isPdf = mimeType === "application/pdf";
-  const response = await getClient().messages.stream({
+  const response = await retrying(() => getClient().messages.stream({
     model: EXTRACTION_MODEL,
     max_tokens: 4000,
     system: "Transcribe this document. Write out the text on it, in order, keeping every brand, product name, tag, year, percentage and price exactly as printed. Keep the line and list structure. Do not summarise, explain or reorder, and do not add anything that is not on the page. If part of it is handwritten, transcribe that too and mark it (handwritten).",
@@ -472,7 +472,7 @@ export async function readInstructionImage(buffer: Buffer, mimeType: string): Pr
         source: { type: "base64", media_type: isPdf ? "application/pdf" : (mimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp"), data: buffer.toString("base64") },
       } as Anthropic.ContentBlockParam],
     }],
-  }).finalMessage();
+  }).finalMessage());
   return response.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("\n").trim();
 }
 
@@ -548,13 +548,13 @@ export async function screenInstructions(
    */
   let response: Anthropic.Message;
   try {
-    response = await getClient().messages.stream({
+    response = await retrying(() => getClient().messages.stream({
       model: EXTRACTION_MODEL,
       max_tokens: 8000,
       system: SCREEN_SYSTEM,
       output_config: { format: zodOutputFormat(ScreenSchema), effort: "low" },
       messages: [{ role: "user", content: context }],
-    }).finalMessage();
+    }).finalMessage());
   } catch (err) {
     if (!isTransient(err)) throw err;
     for (const row of all) row.why = "not sorted by shelf — the reading service was busy, so every row was kept";

@@ -16,6 +16,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { EXTRACTION_MODEL, aiAvailable } from "./extract/ai";
+import { retrying } from "./api-errors";
 
 const ReplySchema = z.object({
   reply: z.string().describe("The answer to the person, in two or three sentences. Say what went wrong and what would fix it. Plain words, no markdown."),
@@ -78,14 +79,14 @@ export async function answerFeedback(context: FeedbackContext, thread: FeedbackT
     ...thread.map((t) => ({ role: t.role === "USER" ? ("user" as const) : ("assistant" as const), content: t.body })),
   ];
 
-  const response = await getClient().messages.stream({
+  const response = await retrying(() => getClient().messages.stream({
     model: EXTRACTION_MODEL,
     max_tokens: 4000,
     system: SYSTEM,
     thinking: { type: "adaptive" },
     output_config: { format: zodOutputFormat(ReplySchema), effort: "low" },
     messages,
-  }).finalMessage();
+  }).finalMessage());
 
   const text = response.content.find((b): b is Anthropic.TextBlock => b.type === "text")?.text;
   if (!text) return null;

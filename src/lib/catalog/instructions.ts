@@ -14,6 +14,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { EXTRACTION_MODEL, aiAvailable } from "./extract/ai";
+import { retrying } from "./api-errors";
 
 const DirectivesSchema = z.object({
   addTags: z.array(z.string()).describe("Tags to put on every product in this batch, exactly as the shop writes them. The season sentinels 2998 and 2999 belong here when asked for."),
@@ -73,14 +74,14 @@ export async function readInstructions(thread: Array<{ role: "USER" | "ASSISTANT
     ...thread.map((t) => ({ role: t.role === "USER" ? ("user" as const) : ("assistant" as const), content: t.body })),
   ];
 
-  const response = await getClient().messages.stream({
+  const response = await retrying(() => getClient().messages.stream({
     model: EXTRACTION_MODEL,
     max_tokens: 3000,
     system: SYSTEM,
     thinking: { type: "adaptive" },
     output_config: { format: zodOutputFormat(ReadSchema), effort: "low" },
     messages,
-  }).finalMessage();
+  }).finalMessage());
 
   const text = response.content.find((b): b is Anthropic.TextBlock => b.type === "text")?.text;
   if (!text) return null;

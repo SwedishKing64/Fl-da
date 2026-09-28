@@ -7,7 +7,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it } from "vitest";
-import { describeApiError, isTransient } from "./api-errors";
+import { describeApiError, isTransient, retrying } from "./api-errors";
 
 const fromApi = (status: number, type: string, message: string) =>
   Anthropic.APIError.generate(status, { type: "error", error: { type, message } }, undefined, new Headers());
@@ -38,5 +38,55 @@ describe("an error from the reading service", () => {
 
   it("leaves an error that did not come from the API to the caller", () => {
     expect(describeApiError(new Error("something else"))).toBeNull();
+  });
+});
+
+/**
+ * The one that actually reached the page.
+ *
+ * An overload in the MIDDLE of a streamed answer is not a failed request — the request succeeded,
+ * with a 200 — so the SDK throws it exactly like this, from its own streaming code: no status, the
+ * raw body as the message, and the type on `.type`. Classifying by status alone missed it, and it
+ * went to the page as its JSON. Built here the same way the SDK builds it.
+ */
+describe("an overload in the middle of a streamed answer", () => {
+  const body = { type: "error", error: { details: null, type: "overloaded_error", message: "Overloaded" }, request_id: "req_011CfVGhsKFq2XaKZ3fhxGaw" };
+  const midStream = new Anthropic.APIError(undefined, body, undefined, new Headers(), "overloaded_error");
+
+  it("is the message that was on the page", () => {
+    // Proves this test builds the real thing: no status, and the bare JSON as the message.
+    expect(midStream.status).toBeUndefined();
+    expect(midStream.message).toContain('"overloaded_error"');
+  });
+
+  it("is read as an overload although it has no status", () => {
+    expect(isTransient(midStream)).toBe(true);
+    const said = describeApiError(midStream)!;
+    expect(said).toContain("overloaded");
+    expect(said).not.toContain("{");
+  });
+
+  it("is asked again, because the SDK's own retries never see it", async () => {
+    let calls = 0;
+    const answer = await retrying(async () => {
+      calls++;
+      if (calls < 3) throw midStream;
+      return "read";
+    }, [1, 1, 1]);
+    expect(answer).toBe("read");
+    expect(calls).toBe(3);
+  });
+
+  it("gives up after its waits, and hands back the error to be described", async () => {
+    let calls = 0;
+    await expect(retrying(async () => { calls++; throw midStream; }, [1, 1])).rejects.toBe(midStream);
+    expect(calls).toBe(3);
+  });
+
+  it("does not ask again when the request itself was wrong", async () => {
+    let calls = 0;
+    const wrong = fromApi(400, "invalid_request_error", "bad");
+    await expect(retrying(async () => { calls++; throw wrong; }, [1, 1])).rejects.toBe(wrong);
+    expect(calls).toBe(1);
   });
 });

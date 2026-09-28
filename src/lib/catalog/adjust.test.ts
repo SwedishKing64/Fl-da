@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { applyPlan, describeFile, foldPlans, isPackage, isWholeFile, money, renamedTitle, titleWithYear, verifyOnlyIntended, whyNoMatch, type FoldStep, type Plan } from "./adjust";
 import { parseCsv } from "./csv";
@@ -865,5 +865,44 @@ describe("telling a flat ski from a package", () => {
     ].join("\r\n") + "\r\n";
     const why = whyNoMatch(csv, { types: ["Skis"], anyTags: ["2027"], fitting: "flat" });
     expect(why.join(" ")).toContain("flat or package");
+  });
+});
+
+/**
+ * A pole is not a ski because it carries the tag "ski".
+ *
+ * 88 of their 91 ski poles carry "ski", so a sheet row about snow skis, grounded on that tag, took
+ * in every pole. The pole also carries "ski poles", and across all their exports no ski ever does.
+ */
+const POLES = "/root/.claude/uploads/94fb8bfb-35a9-5176-afe9-8fcc0dec9eb3/a2ea123b-Skipoles.csv";
+
+describe("a product on a narrower shelf is not on the broad one", () => {
+  const csv = [
+    "Handle,Title,Type,Tags,Variant Price,Variant Compare At Price",
+    "mantra-2027,M7 Mantra 2027,Skis,\"ski, skis, 2027\",1599.99,1599.99",
+    "mantra-2027-inc-griffon,M7 Mantra 2027 inc Griffon Binding Package,Skis,\"ski, ski packages, 2027\",1899.99,1899.99",
+    "expedition-poles,Expedition Carbon Pro Ski Poles,Ski Accessories,\"ski, ski poles, 2027\",199.99,199.99",
+    "tune-kit,Race Tuning Kit,Ski Accessories,\"ski, ski tuning, 2027\",89.99,89.99",
+  ].join("\r\n") + "\r\n";
+  const handles = (scope: Parameters<typeof applyPlan>[1]["scope"]) =>
+    applyPlan(csv, { scope, operations: [{ kind: "addTags", tags: ["probe"] }] }).changes.map((c) => c.handle);
+
+  it("keeps poles and tuning kits out of a scope that asks for skis by the tag", () => {
+    expect(handles({ tags: ["ski"], anyTags: ["2027"] })).toEqual(["mantra-2027", "mantra-2027-inc-griffon"]);
+  });
+
+  it("keeps a ski package in — 'ski packages' is the one ski tag real skis carry", () => {
+    expect(handles({ tags: ["ski"] })).toContain("mantra-2027-inc-griffon");
+  });
+
+  it("still gives the poles to a scope that asks for the poles", () => {
+    expect(handles({ tags: ["ski poles"] })).toEqual(["expedition-poles"]);
+  });
+
+  it.skipIf(!existsSync(POLES))("takes none of their 91 poles for a snow-skis row", () => {
+    const poles = readFileSync(POLES, "utf8");
+    const matched = (scope: Parameters<typeof applyPlan>[1]["scope"]) => applyPlan(poles, { scope, operations: [{ kind: "addTags", tags: ["probe"] }] }).matched;
+    expect(matched({ tags: ["ski"], anyTags: ["2999"] })).toBe(0);
+    expect(matched({ tags: ["ski poles"], anyTags: ["2999"] })).toBe(55);
   });
 });

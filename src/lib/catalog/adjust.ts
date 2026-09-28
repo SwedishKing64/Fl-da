@@ -241,6 +241,37 @@ const fmt = (value: number): string => value.toFixed(2);
 
 const splitTags = (raw: string): string[] => raw.split(",").map((t) => t.trim()).filter(Boolean);
 
+/**
+ * Shelves that sit INSIDE a broader word, and so must not be taken in by it.
+ *
+ * Their ski poles carry the tag "ski" — 88 of 91 in the poles export do — so a sheet row about
+ * snow skis, grounded on that tag, repriced every pole. The shop's own tags already say which shelf
+ * a product is really on: a pole also carries "ski poles", and a ski never does. Measured across
+ * all their exports, each tag below sits on products that are not skis (or not boards) and on NO
+ * ski (or board) at all — "ski poles" on 88 non-skis and 0 skis, "ski accessories" on 290 and 0.
+ *
+ * The one "ski …" tag real skis DO carry is "ski packages", on 292 of them, and "snowboard packages"
+ * is on 7 boards and 5 other things — so neither is here. A product carrying a tag on this list is
+ * on that shelf, whatever else it is tagged, unless the instruction asked for that shelf itself.
+ */
+const NARROWER_SHELVES: Record<"ski" | "snowboard", string[]> = {
+  ski: [
+    "ski accessories", "ski accessores", "ski tuning", "ski poles", "ski gloves", "ski helmets",
+    "ski and boot bags", "ski and snowboard bags", "ski boots", "ski bindings", "ski bags",
+  ],
+  snowboard: ["snowboard accessories", "snowboard bindings", "snowboard boots", "snowboard bags"],
+};
+
+const shelfWord = (value: string): string => value.trim().toLowerCase().replace(/[-_\s]+/g, " ");
+
+/** Which broad shelf a scope asks for by its bare name — "skis", "snow skis", "ski" — if any. */
+function broadShelfOf(scope: Scope): "ski" | "snowboard" | null {
+  const asked = [...(scope.types ?? []), ...(scope.tags ?? []), ...(scope.anyTags ?? [])].map(shelfWord);
+  if (asked.some((a) => /^(snow )?skis?$/.test(a))) return "ski";
+  if (asked.some((a) => /^snowboards?$/.test(a))) return "snowboard";
+  return null;
+}
+
 function matches(scope: Scope, row: Record<string, string>): boolean {
   const eq = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
   if (scope.vendors?.length && !scope.vendors.some((v) => eq(v, row["Vendor"] ?? ""))) return false;
@@ -251,6 +282,13 @@ function matches(scope: Scope, row: Record<string, string>): boolean {
   const have = new Set(splitTags(row["Tags"] ?? "").map((t) => t.toLowerCase()));
   if (scope.tags?.length && !scope.tags.every((t) => have.has(t.trim().toLowerCase()))) return false;
   if (scope.anyTags?.length && !scope.anyTags.some((t) => have.has(t.trim().toLowerCase()))) return false;
+  // A product on a narrower shelf is not on the broad one. See NARROWER_SHELVES.
+  const broad = broadShelfOf(scope);
+  if (broad) {
+    const asked = new Set([...(scope.types ?? []), ...(scope.tags ?? []), ...(scope.anyTags ?? [])].map(shelfWord));
+    const carried = new Set([...have].map(shelfWord));
+    if (NARROWER_SHELVES[broad].some((shelf) => carried.has(shelf) && !asked.has(shelf))) return false;
+  }
   // Exclusions last, and they win: "not the 2027s" means not the 2027s, whatever else matched.
   if (scope.excludeTags?.some((t) => have.has(t.trim().toLowerCase()))) return false;
   if (scope.excludeVendors?.some((v) => eq(v, row["Vendor"] ?? ""))) return false;

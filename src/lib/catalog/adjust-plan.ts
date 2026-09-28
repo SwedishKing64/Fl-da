@@ -77,7 +77,15 @@ If the instruction does not narrow the products at all, leave every scope field 
 That last rule is about the scope and nothing else. When the instruction says plainly what to do — add a tag, take 30% off — always return that operation. Whether it turns out to change anything is not your decision: the products it matches may already be that way, and the page works that out for itself and says so.`;
 
 let client: Anthropic | null = null;
-const getClient = (): Anthropic => (client ??= new Anthropic());
+/**
+ * More patience than the SDK's default of two retries.
+ *
+ * A season's sheet is seventy rows, each its own call. Two quick retries is not enough to ride out
+ * the API saying it is overloaded, and a row that gives up is a row that silently is not applied —
+ * which is what "things were missing" turned out to be. The SDK backs off exponentially and honours
+ * the server's retry-after, so more attempts cost time on a bad minute and nothing on a good one.
+ */
+const getClient = (): Anthropic => (client ??= new Anthropic({ maxRetries: 6 }));
 
 export function planningAvailable(): boolean {
   return aiAvailable();
@@ -134,7 +142,64 @@ export function groundScope(
     return out;
   };
 
-  const vendors = keep(scope.vendors, file.vendors, "vendor");
+  /**
+   * A brands cell holds BRANDS, plural, and the sheet writes them with nothing between them.
+   *
+   * "Dalbello Head" is two brands and "Atomic Lange" is two more, and matched whole against the
+   * vendor list they are neither — so the whole condition emptied and the row was blocked. Which is
+   * safe and useless: the rule was written for two brands and applied to none.
+   *
+   * Splitting on spaces alone is worse than not splitting, because a brand can BE two words:
+   * "Helly Hansen", "Black Crows", "Backcountry Access", "One Planet" — seven of this shop's
+   * thirty-eight vendors have a space in them. So the longest run of words that is a real vendor
+   * wins, left to right, and a word that starts no vendor is passed over. "helly hansen mens only"
+   * is Helly Hansen; "black crows" is Black Crows and not Black Diamond; "Dalbello Head" is both.
+   *
+   * Nothing here can invent a brand: a run is kept only if the loaded file HAS that vendor, and a
+   * cell where none of it matches still empties the field and still blocks the instruction.
+   */
+  const vendorsIn = (value: string, have: string[]): string[] => {
+    const words = norm(value).split(" ").filter(Boolean);
+    const byName = new Map(have.map((h) => [norm(h), h]));
+    const found: string[] = [];
+    // Four words is past the longest vendor this shop has and well past any it is likely to get.
+    const LONGEST = 4;
+    for (let i = 0; i < words.length;) {
+      let took = 0;
+      for (let n = Math.min(words.length - i, LONGEST); n >= 1; n--) {
+        const hit = byName.get(words.slice(i, i + n).join(" "));
+        if (!hit) continue;
+        if (!found.includes(hit)) found.push(hit);
+        took = n;
+        break;
+      }
+      i += took || 1;
+    }
+    return found;
+  };
+
+  const keepVendors = (wanted: string[], have: string[]): string[] => {
+    const out: string[] = [];
+    for (const w of wanted) {
+      if (!w.trim()) continue;
+      const whole = have.find((h) => norm(h) === norm(w));
+      if (whole) { if (!out.includes(whole)) out.push(whole); continue; }
+      const found = vendorsIn(w, have);
+      if (found.length === 0) { dropped.push(`vendor "${w.trim()}" is not in this file`); continue; }
+      for (const f of found) if (!out.includes(f)) out.push(f);
+      // Said out loud, and it says the rest was passed over rather than leaving that to be noticed:
+      // "Dalbello Head" comes back as Head alone when the boots export is not one of the loaded
+      // files, and that reads like the sheet was understood unless it says what it left behind.
+      const rest = norm(w).split(" ").filter(Boolean).length - found.reduce((n, f) => n + norm(f).split(" ").length, 0);
+      dropped.push(
+        `read "${w.trim()}" as ${found.length === 1 ? "the brand" : "the brands"} ${found.join(" and ")}`
+        + (rest > 0 ? ` — the rest of it matches no brand in the loaded files` : ""),
+      );
+    }
+    return out;
+  };
+
+  const vendors = keepVendors(scope.vendors, file.vendors);
   let tags = keep(scope.tags, file.tags, "tag");
   let anyTags = keep(scope.anyTags, file.tags, "tag");
 
@@ -156,7 +221,12 @@ export function groundScope(
   // An exclusion the file has never heard of is harmless — it simply excludes nothing — so it is
   // kept rather than dropped, and never reported as a problem.
   const excludeTags = scope.excludeTags.map((t) => t.trim()).filter(Boolean);
-  const excludeVendors = scope.excludeVendors.map((v) => v.trim()).filter(Boolean);
+  // Same reading for an exclusion — "but not Dalbello Head" leaves out both — except that a brand
+  // the file has never heard of is kept rather than dropped: it simply excludes nothing.
+  const excludeVendors = scope.excludeVendors
+    .map((v) => v.trim())
+    .filter(Boolean)
+    .flatMap((v) => (file.vendors.some((h) => norm(h) === norm(v)) ? [v] : vendorsIn(v, file.vendors).length > 0 ? vendorsIn(v, file.vendors) : [v]));
   const handles = scope.handles.map((h) => h.trim()).filter(Boolean);
   const titleContains = scope.titleContains.trim();
   const fitting = scope.fitting === "flat" || scope.fitting === "package" ? scope.fitting : undefined;
@@ -538,17 +608,44 @@ export async function mapWithConcurrency<In, Out>(
 export async function planAdjustments(
   instructions: string[],
   file: { products: number; vendors: string[]; types: string[]; tags: string[] },
-  concurrency = 8,
+  concurrency = 4,
 ): Promise<Array<{ instruction: string; planned: PlannedChange | null; failed: string }>> {
-  return mapWithConcurrency(
-    instructions,
-    concurrency,
-    async (instruction) => {
-      const planned = await planAdjustment(instruction, file);
-      return planned
-        ? { instruction, planned, failed: "" }
-        : { instruction, planned: null, failed: "Could not make sense of this one." };
-    },
-    (err, instruction) => ({ instruction, planned: null, failed: err instanceof Error ? err.message : String(err) }),
-  );
+  const one = async (instruction: string) => {
+    const planned = await planAdjustment(instruction, file);
+    return planned
+      ? { instruction, planned, failed: "" }
+      : { instruction, planned: null, failed: "Could not make sense of this one." };
+  };
+  const failure = (err: unknown, instruction: string) => ({ instruction, planned: null, failed: describeFailure(err) });
+
+  // Four at a time rather than eight: eight was a burst the API answered with "overloaded" on a
+  // big sheet, and a row that fails there is a row that is quietly not applied.
+  const first = await mapWithConcurrency(instructions, concurrency, one, failure);
+
+  // Then one more pass over whatever the API itself refused, ONE AT A TIME. A refusal for load is
+  // about the moment, not the row — and by now the burst is over. A row it could not understand is
+  // not retried: asking again would get the same answer.
+  const again = first.map((r, i) => (r.failed && isTransient(r.failed) ? i : -1)).filter((i) => i >= 0);
+  for (const i of again) {
+    try { first[i] = await one(instructions[i]); } catch (err) { first[i] = failure(err, instructions[i]); }
+  }
+  return first;
+}
+
+/** Load, rate limits and dropped connections: a problem with the moment, not with the row. */
+function isTransient(message: string): boolean {
+  return /overload|rate.?limit|529|503|502|timeout|timed out|ECONNRESET|socket hang up|temporarily/i.test(message);
+}
+
+/**
+ * A failure in words somebody can act on.
+ *
+ * The API's own text for this is a JSON body — `{"type":"error","error":{"type":"overloaded_error"…`
+ * — and that is what the page was showing next to the row.
+ */
+function describeFailure(err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err);
+  if (/overload|529/i.test(message)) return "The reading service was overloaded and this row was not read, even after waiting and trying again. Nothing was changed for it — read the sheet again in a minute and it will pick this row up.";
+  if (/rate.?limit|429/i.test(message)) return "Too many rows were sent to the reading service at once and this one was turned away. Nothing was changed for it — read the sheet again in a minute.";
+  return message;
 }

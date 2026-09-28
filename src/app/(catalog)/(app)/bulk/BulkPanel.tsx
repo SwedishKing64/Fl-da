@@ -803,9 +803,28 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
               </div>
               <ul className="mt-2 divide-y divide-[var(--line-soft)] text-sm">
                 {edited.map((s) => (
-                  <li key={s.name} className="flex flex-wrap items-center justify-between gap-2 py-1.5">
-                    <span>{s.name.replace(/\.csv$/i, "")}<span className="ml-2 text-xs text-[var(--ink-soft)] tabular-nums">{appliedTo(s.name)} cells</span></span>
-                    <Button size="sm" onClick={() => setSaved(download(s))}>Download this one</Button>
+                  <li key={s.name} className="py-1.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span>
+                        {s.name.replace(/\.csv$/i, "")}
+                        <span className="ml-2 text-xs text-[var(--ink-soft)] tabular-nums">
+                          {appliedTo(s.name)} cells{rowsAddedTo(s.name) > 0 ? ` · ${rowsAddedTo(s.name)} rows added` : ""}
+                        </span>
+                      </span>
+                      <span className="flex items-center gap-2">
+                        {/* The same preview as the files list above, here too — this is where the
+                            page leaves you after a sheet has run, a long scroll from the top. */}
+                        <Button size="sm" onClick={() => setOpened((o) => (o === s.name ? null : s.name))}>
+                          {opened === s.name ? "Hide the changes" : "See what changed"}
+                        </Button>
+                        <Button size="sm" onClick={() => setSaved(download(s))}>Download this one</Button>
+                      </span>
+                    </div>
+                    {opened === s.name && (
+                      <div className="mt-3 rounded-xl border border-[var(--line-soft)] bg-white p-3">
+                        <ChangedCells before={s.history[0]} after={s.csv} filename={s.name} />
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>

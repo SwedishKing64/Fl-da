@@ -16,7 +16,7 @@ const SeoSchema = z.object({
 
 let client: Anthropic | null = null;
 function getClient(): Anthropic {
-  if (!client) client = new Anthropic();
+  if (!client) client = new Anthropic({ maxRetries: 6 }); // see getClient in adjust-plan.ts: two retries does not ride out "overloaded"
   return client;
 }
 

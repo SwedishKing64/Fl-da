@@ -174,3 +174,51 @@ describe("describePlan", () => {
     expect(lines[4]).toBe("Set the stock on hand to 0.");
   });
 });
+
+/**
+ * A brands cell holds brands, plural, with nothing between them.
+ *
+ * "Dalbello Head" was matched whole against the vendor list, found nothing, and the row was blocked
+ * — two brands asked for and neither changed. Splitting on spaces alone would be worse: seven of
+ * the shop's thirty-eight vendors are two words, and "Black Crows" is not "Black" and "Crows".
+ */
+describe("a brands cell with more than one brand in it", () => {
+  const SHOP = { vendors: ["Head", "Dalbello", "Atomic", "K2", "Burton", "Black Crows", "Black Diamond", "Helly Hansen", "Oakley"], types: ["Skis", "Ski Boots"], tags: ["2026", "2027"] };
+
+  it("splits two brands written side by side", () => {
+    expect(groundScope(scopeOf({ vendors: ["Dalbello Head"] }), SHOP).scope.vendors).toEqual(["Dalbello", "Head"]);
+    expect(groundScope(scopeOf({ vendors: ["K2 burton"] }), SHOP).scope.vendors).toEqual(["K2", "Burton"]);
+  });
+
+  it("keeps a two-word brand whole, and reads the shop's hyphen as its space", () => {
+    expect(groundScope(scopeOf({ vendors: ["black crows"] }), SHOP).scope.vendors).toEqual(["Black Crows"]);
+    expect(groundScope(scopeOf({ vendors: ["black-crows"] }), SHOP).scope.vendors).toEqual(["Black Crows"]);
+    // Longest run first: Black Crows and Black Diamond share a first word and are two brands.
+    expect(groundScope(scopeOf({ vendors: ["black-crows black-diamond"] }), SHOP).scope.vendors).toEqual(["Black Crows", "Black Diamond"]);
+  });
+
+  it("passes over the words that are not brands, and says it did", () => {
+    const r = groundScope(scopeOf({ vendors: ["helly hansen mens only"] }), SHOP);
+    expect(r.scope.vendors).toEqual(["Helly Hansen"]);
+    expect(r.dropped.join(" ")).toContain("matches no brand");
+  });
+
+  it("names a brand the loaded files do not have, rather than acting as if it was read", () => {
+    // Their sheet says Dalbello Head, and a ski-only export has Head in it but no Dalbello.
+    const r = groundScope(scopeOf({ vendors: ["Dalbello Head"] }), { ...SHOP, vendors: ["Head"] });
+    expect(r.scope.vendors).toEqual(["Head"]);
+    expect(r.dropped.join(" ")).toContain("the rest of it matches no brand");
+  });
+
+  it("still blocks a cell with no brand in it at all, rather than dropping the condition", () => {
+    // "2999 is selected A\T +selected look" is a note. Run without a brand it would be every 2999
+    // binding in the shop, which is not what the row says.
+    const r = groundScope(scopeOf({ vendors: ["all alpine touring"], anyTags: ["2026"] }), SHOP);
+    expect(r.scope.vendors).toBeUndefined();
+    expect(r.blocked.length).toBeGreaterThan(0);
+  });
+
+  it("splits an exclusion the same way", () => {
+    expect(groundScope(scopeOf({ types: ["Ski Boots"], excludeVendors: ["Dalbello Head"] }), SHOP).scope.excludeVendors).toEqual(["Dalbello", "Head"]);
+  });
+});

@@ -23,6 +23,7 @@ import { slugify } from "./handle";
 import type { GroupedProduct } from "./grouping";
 import { productTitle, seasonTagFrom } from "./titles";
 import { rememberedBinding, type Listing } from "./shop-memory";
+import { COLOUR_WORDS } from "./types";
 
 /** What the shop charges to mount a binding, before any discount. */
 export const MOUNT_FEE = 55;
@@ -210,10 +211,39 @@ export function isFlatSki(g: { productType: string; title: string; tags: string[
  * through the same writer as the flat ski: its variants are copies of the flat ski's line items
  * with the package's price and cost on them.
  */
+/** The bindings someone asked for, by who the skis are for. See BatchDirectives.packageBindings. */
+export type ChosenBindings = Partial<Record<"mens" | "womens" | "kids", BindingSpec>>;
+
+/**
+ * A binding as somebody named it — "the Griffon", "Marker Squire", "Look Pivot 12" — as something to
+ * find on the price list. The shop's own defaults are used where the name is one of theirs, so "the
+ * Griffon" is the Griffon 13 MN in black and not every Griffon on the Marker tab.
+ */
+export function specFromName(name: string): BindingSpec | null {
+  const n = name.trim();
+  if (!n) return null;
+  // "Squire black": the shop's Squire, in the colour asked for rather than its usual white.
+  const colour = n.toUpperCase().split(/[^A-Z]+/).find((w) => COLOUR_WORDS.has(w));
+  for (const spec of [DEFAULT_PACKAGE_BINDINGS.mens, DEFAULT_PACKAGE_BINDINGS.womens]) {
+    const word = spec.shortName.replace(/^marker\s+/i, "");
+    if (!new RegExp(`\\b${word}\\b`, "i").test(n)) continue;
+    if (!colour) return spec;
+    const named = colour.charAt(0) + colour.slice(1).toLowerCase();
+    return { ...spec, label: `${spec.shortName} - ${named}`, colour: new RegExp(`^\\s*${colour}\\s*$`, "i") };
+  }
+  const bySwatch = specFromLabel(n);
+  if (bySwatch) return bySwatch;
+  const words = n.split(/\s+/).filter((w) => !/^(marker|look|tyrolia|salomon|atomic|rossignol|the|binding|bindings)$/i.test(w));
+  if (words.length === 0) return null;
+  const esc = (w: string) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return { label: n, shortName: n, model: new RegExp(`\\b${words.map(esc).join("\\s*")}\\b`, "i"), colour: /./ };
+}
+
 export function packageProducts(
   products: GroupedProduct[],
   priceList: Array<{ title: string; colour?: string; rrp: number | null; costPrice: number | null }>,
   listings: Listing[] = [],
+  chosen: ChosenBindings = {},
 ): { packages: GroupedProduct[]; skipped: PackageSkip[] } {
   const packages: GroupedProduct[] = [];
   const skipped: PackageSkip[] = [];
@@ -223,7 +253,8 @@ export function packageProducts(
     const flatTitle = productTitle(g.title, season);
     const gender = g.tags.find((t) => /^(mens|womens|kids)$/.test(t)) ?? "";
     // A kids' ski takes the binding the shop packaged the model with last time, if it ever did.
-    const spec = bindingSpecFor(gender, flatTitle) ?? specFromLabel(rememberedBinding({ title: g.title, brand: g.brand }, listings));
+    const who = gender === "womens" ? "womens" : gender === "kids" || !bindingSpecFor(gender, flatTitle) ? "kids" : "mens";
+    const spec = chosen[who] ?? bindingSpecFor(gender, flatTitle) ?? specFromLabel(rememberedBinding({ title: g.title, brand: g.brand }, listings));
     if (!spec) { skipped.push({ title: flatTitle, reason: "a kids' ski takes a junior binding, and neither the order nor the shop's earlier packages of it say which" }); continue; }
     const binding = bindingFrom(spec, priceList);
     if (!binding) { skipped.push({ title: flatTitle, reason: `no ${spec.label} with one price on the supplier's price list` }); continue; }
@@ -286,9 +317,9 @@ export function specFromLabel(label: string): BindingSpec | null {
  */
 export function isPackageBinding(
   p: { title: string; category?: string; productType: string; variants: Array<{ item: { colour: string } }> },
-  extra: BindingSpec[] = [],
+  extra: Array<BindingSpec | undefined> = [],
 ): boolean {
   if (!/binding/i.test(p.productType) && p.category !== "bindings") return false;
   const colour = p.variants.map((v) => v.item.colour.trim()).find(Boolean) ?? "";
-  return [DEFAULT_PACKAGE_BINDINGS.mens, DEFAULT_PACKAGE_BINDINGS.womens, ...extra].some((spec) => spec.model.test(p.title) && spec.colour.test(colour || p.title));
+  return [DEFAULT_PACKAGE_BINDINGS.mens, DEFAULT_PACKAGE_BINDINGS.womens, ...extra.filter((e): e is BindingSpec => Boolean(e))].some((spec) => spec.model.test(p.title) && spec.colour.test(colour || p.title));
 }

@@ -22,6 +22,11 @@ const DirectivesSchema = z.object({
   vendor: z.string().describe("The brand every product in this batch is, when the invoice does not say and the person has. Empty otherwise."),
   productType: z.string().describe("The Type every product in this batch should carry, when the person has said. Empty otherwise."),
   evergreen: z.boolean().describe("True when they have said these products do not change year to year and should carry the evergreen marker instead of a season."),
+  packages: z.enum(["", "build", "none"]).describe("Ski binding packages. 'build' when they ask for the skis to be packaged / partnered / sold with a binding; 'none' when they say not to make packages; empty when they have not mentioned it (packages are then built as usual)."),
+  packageBindings: z.array(z.object({
+    for: z.enum(["mens", "womens", "kids", "all"]).describe("Which skis this binding goes with."),
+    binding: z.string().describe("The binding as they named it, e.g. 'Marker Griffon', 'Squire', 'Look Pivot 12'."),
+  })).describe("Which binding the packages are made with, when they say. 'Griffon for the men's and Squire for the women's' is two entries. Empty when they have not said."),
   notes: z.string().describe("Anything else worth knowing that is not one of the fields above — kept with the batch and used when copy is written. Empty when there is nothing."),
 });
 
@@ -33,12 +38,16 @@ export const NO_DIRECTIVES: BatchDirectives = {
   vendor: "",
   productType: "",
   evergreen: false,
+  packages: "",
+  packageBindings: [],
   notes: "",
 };
 
 const SYSTEM = `A member of staff at a ski and snowboard shop in Australia is about to build Shopify products from a supplier invoice, and is telling you what is true about that invoice before it is read.
 
 Turn what they say into directives that apply to every product in the batch. Take them at their word: if they say every product needs the 2998 tag, that is the tag, spelled as they spelled it. If they say everything is 30% off, that is 30.
+
+Skis are built twice as a matter of course: flat, and as a package with a binding (men's with the Marker Griffon, women's with the Marker Squire), priced from the binding on the supplier's own price list. When they talk about packaging, partnering or selling skis with a binding, that is the packages and packageBindings fields.
 
 Only fill a field they actually asked for. Everything else stays empty, null or false — a directive changes every product in the batch, so inventing one is expensive. Anything they say that is not one of the fields goes in notes, where it reaches the writing without changing a field.
 
@@ -97,6 +106,9 @@ export function describeDirectives(d: BatchDirectives): string[] {
   if (d.addTags.length) out.push(`Tags on every product: ${d.addTags.join(", ")}`);
   if (d.evergreen) out.push("Evergreen, not a season");
   if (d.discountPct !== null) out.push(`${d.discountPct}% off every price`);
+  if (d.packages === "none") out.push("No binding packages");
+  if (d.packageBindings.length) out.push(`Packages with: ${d.packageBindings.map((b) => `${b.binding} (${b.for === "all" ? "all skis" : b.for})`).join(", ")}`);
+  else if (d.packages === "build") out.push("Every ski also as a binding package");
   if (d.notes.trim()) out.push(d.notes.trim());
   return out;
 }
@@ -104,8 +116,10 @@ export function describeDirectives(d: BatchDirectives): string[] {
 export function parseDirectives(json: string): BatchDirectives {
   if (!json.trim()) return NO_DIRECTIVES;
   try {
-    const parsed = DirectivesSchema.safeParse(JSON.parse(json));
-    return parsed.success ? parsed.data : NO_DIRECTIVES;
+    // Field by field, so directives saved before a field existed still read — a batch told "30% off"
+    // last week keeps its 30% now that packages can be asked for too.
+    const parsed = DirectivesSchema.partial().safeParse(JSON.parse(json));
+    return parsed.success ? { ...NO_DIRECTIVES, ...Object.fromEntries(Object.entries(parsed.data).filter(([, v]) => v !== undefined)) } : NO_DIRECTIVES;
   } catch {
     return NO_DIRECTIVES;
   }

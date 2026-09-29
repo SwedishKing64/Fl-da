@@ -12,7 +12,7 @@ import { DEFAULT_CATEGORY_RULES, type CategoryRuleLike } from "./categorize";
 import { enrichFromSpecs, normKey } from "./specs";
 import { houseBody } from "./body";
 import { keepOrderedLines, resolveAgainstReference } from "./reference-match";
-import { isFlatSki, isPackageBinding, packageProducts } from "./packages";
+import { isFlatSki, isPackageBinding, packageProducts, specFromName, type ChosenBindings } from "./packages";
 import { readInvoiceGrids, type PriceRow } from "./invoice";
 import { asShopPrice, existingHandle, rememberedVendor } from "./shop-memory";
 import { brandIn, isBrand } from "./brands";
@@ -535,7 +535,14 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
     ...(await orderPriceLists(batch.files.filter((f) => f.extractionStatus === "DONE" && f.detectedKind !== "SHOP_EXPORT"))),
     ...items.map((i) => ({ sku: i.item.sku, title: i.item.title, colour: i.item.colour, rrp: i.item.rrp, costPrice: i.item.costPrice })),
   ];
-  const { packages, skipped } = packageProducts(grouped, priceList, listings);
+  // What was said in the instruction chat: no packages at all, or which binding for whose skis.
+  const chosen: ChosenBindings = {};
+  for (const b of directives.packageBindings) {
+    const spec = specFromName(b.binding);
+    if (!spec) continue;
+    for (const who of b.for === "all" ? (["mens", "womens", "kids"] as const) : [b.for]) chosen[who] = spec;
+  }
+  const { packages, skipped } = directives.packages === "none" ? { packages: [], skipped: [] } : packageProducts(grouped, priceList, listings, chosen);
   grouped.push(...(packages as typeof grouped));
   // A product the shop already sells keeps the handle it sells it under, so importing the file
   // updates it rather than listing it twice. See existingHandle.
@@ -551,7 +558,7 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
     }
   }
   // The package bindings ordered with the skis go on the skis, not on the shelf. See isPackageBinding.
-  const setAside = grouped.some((g) => isFlatSki(g)) ? grouped.filter((g) => isPackageBinding(g)) : [];
+  const setAside = directives.packages !== "none" && grouped.some((g) => isFlatSki(g)) ? grouped.filter((g) => isPackageBinding(g, Object.values(chosen))) : [];
   for (const g of setAside) grouped.splice(grouped.indexOf(g), 1);
   if (setAside.length > 0) {
     for (const fileId of [...new Set(items.map((i) => i.fileId))]) {

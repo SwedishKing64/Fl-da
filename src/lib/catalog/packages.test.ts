@@ -154,3 +154,30 @@ describe("the binding's price off a supplier's price list", () => {
     ])).toBeNull();
   });
 });
+
+describe("a binding as somebody names it in the instruction chat", () => {
+  it("is the shop's own Griffon or Squire, in the colour asked for", async () => {
+    const { specFromName, bindingFrom } = await import("./packages");
+    const list = [
+      { title: "GRIFFON 13 MN; 90MM", colour: "BLACK", rrp: 459, costPrice: 208.64 },
+      { title: "GRIFFON X 13; 90MM", colour: "BLACK", rrp: 479, costPrice: 217.73 },
+      { title: "SQUIRE 11; 90MM", colour: "WHITE", rrp: 349, costPrice: 158.64 },
+      { title: "SQUIRE 11; 90MM", colour: "BLACK", rrp: 349, costPrice: 158.64 },
+    ];
+    // "the griffon" is the Griffon 13 MN the shop packages with — not every Griffon on the tab.
+    expect(bindingFrom(specFromName("the griffon")!, list)).toMatchObject({ label: "Marker Griffon - Black", rrp: 459 });
+    expect(bindingFrom(specFromName("Squire")!, list)).toMatchObject({ label: "Marker Squire - White" });
+    expect(bindingFrom(specFromName("squire black")!, list)).toMatchObject({ label: "Marker Squire - Black", rrp: 349 });
+  });
+});
+
+describe("directives saved before packages could be asked for", () => {
+  it("still read, with packages left as usual", async () => {
+    const { parseDirectives } = await import("./instructions");
+    const d = parseDirectives(JSON.stringify({ addTags: ["2998"], discountPct: 30, vendor: "", productType: "", evergreen: false, notes: "" }));
+    expect(d.addTags).toEqual(["2998"]);
+    expect(d.discountPct).toBe(30);
+    expect(d.packages).toBe("");
+    expect(d.packageBindings).toEqual([]);
+  });
+});

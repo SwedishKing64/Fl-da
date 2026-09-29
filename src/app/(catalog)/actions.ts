@@ -1209,14 +1209,24 @@ export async function sendInstructionAction(batchId: string, message: string): P
       );
       if (reading) {
         directives = reading.directives;
-        await prisma.$transaction([
-          prisma.importBatch.update({ where: { id: batchId }, data: { directives: JSON.stringify(reading.directives) } }),
-          prisma.batchInstruction.create({ data: { batchId, role: "ASSISTANT", body: reading.reply } }),
-        ]);
-        await logAudit("batch.instruction", { batchId, userId: user.id, details: reading.directives });
-        // Products already built are rebuilt against what was just said.
+        await prisma.importBatch.update({ where: { id: batchId }, data: { directives: JSON.stringify(reading.directives) } });
+        // Brand, Type, tags and packages are decided when products are BUILT, so a batch already
+        // built has to be built again for them to take — it used to only re-price, and "package
+        // them with the Griffon" changed nothing while the reply said it would.
         const built = await prisma.product.count({ where: { batchId } });
-        if (built > 0) await repriceBatch(batchId);
+        let outcome = "";
+        if (built > 0) {
+          const { untouchedSinceBuilt } = await import("@/lib/catalog/pipeline");
+          if (await untouchedSinceBuilt(batchId)) {
+            const rebuilt = await autoApplyMappings(batchId, user.id);
+            outcome = rebuilt.products > 0 ? ` Rebuilt the ${rebuilt.products} products with this.` : "";
+          } else {
+            await repriceBatch(batchId);
+            outcome = " The products have been edited by hand, so they were only re-priced: open Column mapping and build again to apply the rest (that replaces the edits).";
+          }
+        }
+        await prisma.batchInstruction.create({ data: { batchId, role: "ASSISTANT", body: `${reading.reply}${outcome}` } });
+        await logAudit("batch.instruction", { batchId, userId: user.id, details: reading.directives });
       }
     }
 
@@ -1237,7 +1247,11 @@ export async function clearInstructionsAction(batchId: string): Promise<ActionRe
       prisma.importBatch.update({ where: { id: batchId }, data: { directives: JSON.stringify(NO_DIRECTIVES) } }),
     ]);
     const built = await prisma.product.count({ where: { batchId } });
-    if (built > 0) await repriceBatch(batchId);
+    if (built > 0) {
+      const { untouchedSinceBuilt } = await import("@/lib/catalog/pipeline");
+      if (await untouchedSinceBuilt(batchId)) await autoApplyMappings(batchId, user.id);
+      else await repriceBatch(batchId);
+    }
     await logAudit("batch.instruction.cleared", { batchId, userId: user.id });
     revalidatePath(`/batches/${batchId}`);
     return { ok: true };

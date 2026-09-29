@@ -273,3 +273,21 @@ export function specFromLabel(label: string): BindingSpec | null {
     colour: new RegExp(`^\\s*${esc(m[2].trim())}\\s*$`, "i"),
   };
 }
+
+/**
+ * A binding on the order that is there to go on the skis, not to be sold on its own.
+ *
+ * Their Völkl order has five Marker Griffon 13 MN in black beside the skis: the binding every men's
+ * package is made with. Built as a product of its own it became a "Griffon 13 MN" listing nobody
+ * asked for, while the packages it was bought for went on without it. So a binding the packages use
+ * (the Griffon in black, the Squire in white, or one a package here was built with), ordered in the
+ * same delivery as skis, is package stock and is not listed.
+ */
+export function isPackageBinding(
+  p: { title: string; category?: string; productType: string; variants: Array<{ item: { colour: string } }> },
+  extra: BindingSpec[] = [],
+): boolean {
+  if (!/binding/i.test(p.productType) && p.category !== "bindings") return false;
+  const colour = p.variants.map((v) => v.item.colour.trim()).find(Boolean) ?? "";
+  return [DEFAULT_PACKAGE_BINDINGS.mens, DEFAULT_PACKAGE_BINDINGS.womens, ...extra].some((spec) => spec.model.test(p.title) && spec.colour.test(colour || p.title));
+}

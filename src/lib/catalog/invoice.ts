@@ -22,6 +22,7 @@
 import { detectHeaderRow } from "./extract/tabular";
 import { normaliseBarcode, type InvoiceLine } from "./reconcile";
 import { terrainColumn } from "./shop-memory";
+import { brandIn } from "./brands";
 
 export interface InvoiceRead {
   lines: InvoiceLine[];
@@ -193,6 +194,9 @@ function readOrder(name: string, grid: string[][]): InvoiceRead | null {
   const lines: InvoiceLine[] = [];
   const priceList: PriceRow[] = [];
   let sizeGrid = false;
+  // The tab says whose goods these are: "Volkl Ski", "Marker Inline 2025". The distributor's name
+  // at the top of the form ("Sportrade Australia") is who sent them, not what they are.
+  const tabBrand = brandIn(name);
   for (const section of sections) {
     for (let r = section.at + 1; r < section.end; r++) {
       const row = grid[r] ?? [];
@@ -213,6 +217,7 @@ function readOrder(name: string, grid: string[][]): InvoiceRead | null {
         title: text(row[section.title]),
         ...(form ? { form } : {}),
         ...(colour ? { colour } : {}),
+        ...(tabBrand ? { brand: tabBrand } : {}),
         costPrice: positive(section.cost),
         rrp: positive(section.rrp),
       };

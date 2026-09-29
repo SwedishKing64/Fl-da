@@ -35,8 +35,9 @@ import { productTitle, seasonTagFrom, seoTitle } from "./titles";
 import { buildHandle } from "./handle";
 import { applyInvoice, reconcile, sameSizeText, type InvoiceFields, type InvoiceLine, type Match, type Reconciliation } from "./reconcile";
 import { resolveAgainstReference } from "./reference-match";
-import { asShopPrice, listingsFromCsv, type Listing } from "./shop-memory";
-import { packageProducts } from "./packages";
+import { asShopPrice, listingsFromCsv, rememberedVendor, type Listing } from "./shop-memory";
+import { brandIn, isBrand } from "./brands";
+import { isFlatSki, isPackageBinding, packageProducts } from "./packages";
 import type { PriceRow } from "./invoice";
 import type { CanonicalLineItem } from "./types";
 
@@ -129,7 +130,15 @@ export function buildDelivery(csv: string, invoiced: InvoiceLine[], options: Del
   // The recommended retail ending the way the shop ends this brand's prices — Völkl's 1649 is the
   // shop's 1649.99 — so a carry-over's Compare At is not cut by 99 cents. See asShopPrice.
   const shop = [...(options.listings ?? []), ...listingsFromCsv(csv)];
-  const ordered = invoiced.map((line) => withBarcode({ ...line, rrp: asShopPrice(line.rrp, options.vendor ?? "", shop) }, options.specs ?? []));
+  // The vendor typed on the page counts only if it is a brand: the distributor's name is not one.
+  // Each line then takes its own brand where the form or the shop says one. See brands.ts.
+  const vendors = [...new Set(shop.map((l) => l.vendor).filter(Boolean))];
+  const typed = (options.vendor ?? "").trim();
+  options = { ...options, vendor: isBrand(typed, vendors) ? typed : "" };
+  const ordered = invoiced.map((line) => {
+    const brand = (line.brand ?? "").trim() || rememberedVendor(line.title, shop) || brandIn(line.title, vendors) || options.vendor || "";
+    return withBarcode({ ...line, ...(brand ? { brand } : {}), rrp: asShopPrice(line.rrp, brand, shop) }, options.specs ?? []);
+  });
   // The order's wording, put into the shop's before anything is matched: see joinToReference.
   const joined = joinToReference(ordered, options);
   const lines = joined.lines;
@@ -486,6 +495,15 @@ function appendFresh(
     }
     build.push(product);
   }
+  // The package bindings ordered with skis go on the skis, not on the shelf. See isPackageBinding.
+  const skiDelivery = build.some((g) => isFlatSki(g)) || /^skis?$/i.test(fallback?.productType ?? "");
+  if (skiDelivery) {
+    for (const g of build.filter((p) => isPackageBinding(p))) {
+      build.splice(build.indexOf(g), 1);
+      // Accounted for as a line that was not written, with why — not dropped without a word.
+      for (const line of lineOf(g)) heldBack.push({ line, reason: "it is the binding the ski packages are made with, ordered to go on the skis, so it is not listed on its own" });
+    }
+  }
   // Each new flat ski is also built as its binding package, priced from the order form's own
   // binding rows. A package the file already has is left alone, like any other product.
   const { packages, skipped } = packageProducts(build, options.priceList ?? [], [...(options.listings ?? []), ...listingsFromCsv(csv)]);
@@ -677,7 +695,7 @@ function canonical(line: InvoiceLine, vendor: string, season: string): Canonical
   const isLength = /^\d{2,3}(\.\d)?$/.test(size);
   return {
     title: line.title.trim(),
-    brand: vendor,
+    brand: (line.brand ?? "").trim() || vendor,
     modelCode: line.sku.trim(),
     sku: "",
     barcode: line.barcode.trim(),

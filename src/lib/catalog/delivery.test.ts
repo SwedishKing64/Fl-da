@@ -184,10 +184,13 @@ describe.skipIf(!existsSync(ORDER) || !existsSync(SKIS))("against the real order
     // only listing is the 2025 one — last season's, so its two lines are built new — and the
     // ninth is a Marker binding. One length is new to a ski the shop has in the others.
     expect(out.carryOver).toHaveLength(6);
-    expect(out.fresh.map((f) => f.title)).toEqual(["Mantra Junior 2027", "Griffon 13 MN 2027", "Mantra Junior 2027 inc Marker Squire Binding Package"]);
+    expect(out.fresh.map((f) => f.title)).toEqual(["Mantra Junior 2027", "Mantra Junior 2027 inc Marker Squire Binding Package"]);
     expect(out.freshSizes.map((f) => `${f.option} of ${f.handle}`)).toEqual(["158 of blaze-94-2027"]);
-    // A binding by its model name, though the form never says "binding" (it used to be filed as a
-    // ski, because every other line was one).
-    expect(out.fresh.find((f) => f.title.startsWith("Griffon"))?.type).toBe("Ski Bindings");
+    // The five Griffons are the binding the men's packages are made with: package stock, not a
+    // "Griffon 13 MN" listing of their own — and named as such rather than dropped. They are
+    // Marker's, from the tab they are on, not Völkl's or the distributor's.
+    expect(out.heldBack.map((h) => `${h.line.title} ${h.line.brand}: ${h.reason}`)).toEqual([
+      "GRIFFON 13 MN; 100MM Marker: it is the binding the ski packages are made with, ordered to go on the skis, so it is not listed on its own",
+    ]);
   });
 });

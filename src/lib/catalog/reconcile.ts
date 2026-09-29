@@ -53,6 +53,8 @@ export interface InvoiceLine {
   named?: boolean;
   /** The riding style the form gives it — Burton's PH3 "ALL MOUNTAIN" — for filing a new model. */
   terrain?: string;
+  /** The brand, where the form says — Völkl's order keeps skis on "Volkl Ski" and bindings on "Marker Inline". */
+  brand?: string;
 }
 
 export type MatchKey = "barcode" | "sku" | "name";

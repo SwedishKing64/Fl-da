@@ -94,7 +94,7 @@ describe.skipIf(!existsSync(ORDER) || !existsSync(SKIS))("a real delivery, read 
     // Seven variant rows of flat skis, and twelve of their binding packages, which carry the same
     // stock: every binding and fitting of the length that arrived.
     expect(d.changedRows).toBe(19);
-    expect(d.addedRows).toBe(10);
+    expect(d.addedRows).toBe(9);
     const { parseCsv } = await import("./csv");
     const rowsInFile = parseCsv(csv).filter((r) => r.some((c) => c.trim())).length - 1;
     expect(d.changedRows + d.untouched).toBe(rowsInFile);
@@ -120,7 +120,7 @@ describe.skipIf(!existsSync(ORDER) || !existsSync(SKIS))("a real delivery, read 
       // Last season's Mantra Junior is not this season's: the 2027 one is built new.
       "138 of mantra-junior-2027",
       "148 of mantra-junior-2027",
-      "BLACK / 100mm of griffon-13-mn-2027",
+      // Not the Griffon: it is the packages' binding, ordered to go on the skis.
     ]);
   });
 });

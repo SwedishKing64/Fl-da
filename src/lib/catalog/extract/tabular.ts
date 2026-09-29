@@ -63,12 +63,13 @@ function uniqueHeaders(raw: string[]): string[] {
 export function orderToTable(order: { lines: InvoiceLine[]; sheet: string; warnings: string[] }): ExtractedTable {
   // Cost and colour too: dropping them left every Volkl line with no cost, though the form prices
   // every row, and the Griffon with no colour to tell its black from its orange.
-  const headers = ["Item No.", "SKU", "Description", "Colour", "Length", "RRP", "Cost", "Qty"];
+  const headers = ["Item No.", "SKU", "Brand", "Description", "Colour", "Length", "RRP", "Cost", "Qty"];
   const rows = order.lines.map((line) => {
     const length = (line.size ?? "").trim();
     return {
       "Item No.": line.sku,
       SKU: length ? `${line.sku}.${length}` : line.sku,
+      Brand: (line.brand ?? "").trim(),
       Description: line.title,
       Colour: (line.colour ?? "").trim(),
       Length: length,

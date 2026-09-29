@@ -64,7 +64,7 @@ describe("the real Volkl files", () => {
     // Twelve sheets, 375 models priced across them, and a delivery of nine. Read as a table this
     // built the supplier's whole range as new stock; read as an order it builds what was bought.
     const t = await extractXlsx(readFileSync(ORDER));
-    expect(t.headers).toEqual(["Item No.", "SKU", "Description", "Colour", "Length", "RRP", "Cost", "Qty"]);
+    expect(t.headers).toEqual(["Item No.", "SKU", "Brand", "Description", "Colour", "Length", "RRP", "Cost", "Qty"]);
     expect(t.rows).toHaveLength(9);
     expect(t.rows[0]["Item No."]).toBe("V2610112.000");
     expect(t.rows[0]["Description"]).toBe("M7 MANTRA");

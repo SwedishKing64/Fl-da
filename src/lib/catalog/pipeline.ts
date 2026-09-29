@@ -12,9 +12,10 @@ import { DEFAULT_CATEGORY_RULES, type CategoryRuleLike } from "./categorize";
 import { enrichFromSpecs, normKey } from "./specs";
 import { houseBody } from "./body";
 import { keepOrderedLines, resolveAgainstReference } from "./reference-match";
-import { packageProducts } from "./packages";
+import { isFlatSki, isPackageBinding, packageProducts } from "./packages";
 import { readInvoiceGrids, type PriceRow } from "./invoice";
-import { asShopPrice } from "./shop-memory";
+import { asShopPrice, rememberedVendor } from "./shop-memory";
+import { brandIn, isBrand } from "./brands";
 import { askToJoin } from "./reference-ai";
 import { aiAvailable } from "./extract/ai";
 import { repairCategoryRules, repairProductTags, repairTagRuleSpelling } from "./seed";
@@ -436,7 +437,12 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
    * assumes you know who sent it. The supplier the batch was filed under does know, so a product
    * that arrives without a vendor takes theirs rather than going out with the column empty.
    */
-  const supplierBrand = batch.supplier?.defaultBrand?.trim() || batch.supplier?.name?.trim() || "";
+  // Not the distributor, though: Sportrade sends Völkl and Marker, and its name went out as the
+  // vendor and the tag of a whole Völkl order. The supplier's own name is a brand only if it is one.
+  // See brands.ts.
+  const knownVendors = [...new Set((await prisma.shopListing.findMany({ select: { vendor: true }, distinct: ["vendor"] }).catch(() => [])).map((l) => l.vendor).filter(Boolean))];
+  const supplierName = batch.supplier?.name?.trim() ?? "";
+  const supplierBrand = batch.supplier?.defaultBrand?.trim() || (isBrand(supplierName, knownVendors) ? supplierName : "");
 
   // What someone said about this invoice in words: the brand it all is, the tag it all needs, the
   // discount on all of it. A directive applies to every product in the batch by design.
@@ -445,6 +451,16 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
   // The shop's listings as last remembered, for the shelves it gave each model before.
   const listings = (await prisma.shopListing.findMany({ select: { handle: true, title: true, vendor: true, productType: true, tags: true, price: true, bindingOption: true } }).catch(() => []))
     .map((l) => ({ ...l, tags: l.tags.split(",").map((t) => t.trim()).filter(Boolean) }));
+  // A line with no brand of its own: the vendor the shop already sells this model under, or a brand
+  // its own name or its file names — "PIM_Export_VolklSkis" — spell out.
+  const fileNames = batch.files.map((f) => f.filename.replace(/[_\-.]+/g, " ")).join(" ");
+  for (const entry of items) {
+    if (entry.item.brand.trim() && isBrand(entry.item.brand, knownVendors)) continue;
+    const found = rememberedVendor(entry.item.title, listings) || brandIn(entry.item.title, knownVendors) || brandIn(fileNames, knownVendors);
+    if (found || (entry.item.brand.trim() && !isBrand(entry.item.brand, knownVendors) && entry.item.brand.trim().toLowerCase() === supplierName.toLowerCase())) {
+      entry.item = { ...entry.item, brand: found };
+    }
+  }
   const grouped = enrichFromSpecs(groupLineItems(items.map((i) => i.item), categoryRules, { builtBy: batch.builtBy, listings }), specItems).map((raw) => {
     const told = directives.vendor.trim();
     // A brand filled in here, after the tags were made, never became one — and every listing the
@@ -483,6 +499,14 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
   const priceList = await orderPriceLists(batch.files.filter((f) => (f.detectedKind ?? f.kind) !== "SPEC_SHEET" && f.extractionStatus === "DONE"));
   const { packages, skipped } = packageProducts(grouped, priceList, listings);
   grouped.push(...(packages as typeof grouped));
+  // The package bindings ordered with the skis go on the skis, not on the shelf. See isPackageBinding.
+  const setAside = grouped.some((g) => isFlatSki(g)) ? grouped.filter((g) => isPackageBinding(g)) : [];
+  for (const g of setAside) grouped.splice(grouped.indexOf(g), 1);
+  if (setAside.length > 0) {
+    for (const fileId of [...new Set(items.map((i) => i.fileId))]) {
+      await noteOnFile(fileId, `Not listed on its own: ${setAside.map((g) => `${g.title} (${g.variants.reduce((n, v) => n + (v.item.quantity ?? 0), 0)})`).join(", ")} — the binding the ski packages are made with, ordered to go on the skis.`);
+    }
+  }
   if (packages.length > 0 || skipped.length > 0) {
     for (const fileId of [...new Set(items.map((i) => i.fileId))]) {
       await noteOnFile(fileId, [

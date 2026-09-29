@@ -181,3 +181,14 @@ export function rememberedBinding(product: { title: string; brand: string }, lis
   if (same.length === 0) return "";
   return same.reduce((a, b) => (yearOf(b) > yearOf(a) ? b : a)).bindingOption ?? "";
 }
+
+/**
+ * The vendor the shop already sells a model under, when the order does not say: every listing of
+ * "M7 Mantra", whatever the year, is Volkl. Only an answer all its listings agree on.
+ */
+export function rememberedVendor(title: string, listings: Listing[]): string {
+  const key = modelKey(title);
+  if (!key) return "";
+  const vendors = new Set(listings.filter((l) => l.vendor.trim() && modelKey(l.title, l.vendor) === key).map((l) => l.vendor.trim()));
+  return vendors.size === 1 ? [...vendors][0] : "";
+}

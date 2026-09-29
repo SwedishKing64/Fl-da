@@ -157,7 +157,8 @@ describe.skipIf(!existsSync(`${UP}22065406-products_export_1-7.csv`))("the Volkl
 
   it("counts the skis onto their packages too, matched by the barcode the two share", { timeout: 60_000 }, async () => {
     const { out } = await deliver();
-    expect(out.heldBack).toEqual([]);
+    // Only the Griffons, which go on the skis rather than on the shelf.
+    expect(out.heldBack.map((h) => h.line.title.slice(0, 13))).toEqual(["GRIFFON 13 MN"]);
     const qty = out.changes.filter((c) => c.column === "Variant Inventory Qty").map((c) => `${c.handle} ${c.before}->${c.after}`);
     expect(qty).toEqual(expect.arrayContaining([
       "m7-mantra 3->5",

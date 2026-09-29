@@ -291,7 +291,7 @@ export function resolveAgainstReference(
       sku: line.sku || line.modelCode,
       // Only a season that reads as a year. Volkl writes "26/27"; left as it is it became a tag.
       season: line.season || (/^20\d{2}$/.test(seasonFrom(spec.season)) ? seasonFrom(spec.season) : ""),
-      gender: tidyGender(line.gender) || tidyGender(genderOf(spec.title)),
+      gender: tidyGender(line.gender) || tidyGender(spec.gender) || tidyGender(genderOf(spec.title)),
       colour: line.colour || found.graphic || way?.colour || "",
       terrain: line.terrain || spec.terrain,
     };
@@ -409,7 +409,10 @@ function fillFromSiblings(items: CanonicalLineItem[], joined: Resolution["joined
 }
 
 function tidyGender(value: string): string {
-  const t = tokens(value)[0] ?? "";
+  // Völkl's PIM writes "Unisex/Men" for a men's ski: the more specific word is the answer.
+  const all = tokens(value);
+  if (all.includes("UNISEX") && all.length > 1) return tidyGender(all.filter((w) => w !== "UNISEX").join(" "));
+  const t = all[0] ?? "";
   if (t === "MENS" || t === "MEN") return "Mens";
   if (t === "WOMENS" || t === "WOMEN") return "Womens";
   if (t === "UNISEX") return "Unisex";

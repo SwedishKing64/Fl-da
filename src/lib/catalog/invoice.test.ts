@@ -257,6 +257,8 @@ describe("the Volkl order against the shop's ski export", () => {
     // Without one: "M7 Mantra" is eight listings — 2025, 2026 and 2027, each flat and as a package.
     // Only the models the shop lists in a single season place: the Revolt 101 and the Mantra Junior.
     expect(reconcile(csv, invoice.lines).matched.map((m) => m.handle)).toEqual(["revolt-101-2027", "mantra-junior-2025", "mantra-junior-2025"]);
+    // With one, the 2025 Mantra Junior is last season's listing, not where 2027 stock goes: it is
+    // new, like the binding. It used to be counted onto the 2025 listing and given a 138.
 
     const r = reconcile(csv, invoice.lines, { season: "2027" });
     expect(r.ambiguous).toEqual([]);
@@ -271,10 +273,10 @@ describe("the Volkl order against the shop's ski export", () => {
     // really is new — a Marker binding, in a Volkl ski export — look like the exception.
     expect(where.get("BLAZE 94 BLACK FLAT 179")).toBe("blaze-94-2027");
     expect(where.get("REVOLT 101 FLAT 182")).toBe("revolt-101-2027");
-    expect(r.unmatched.map((u) => u.title)).toEqual(["GRIFFON 13 MN; 100MM"]);
+    expect(r.unmatched.map((u) => u.title)).toEqual(["MANTRA JUNIOR", "MANTRA JUNIOR", "GRIFFON 13 MN; 100MM"]);
 
-    // Two lengths in the order are of skis the shop sells and has never had in that length.
+    // One length in the order is of a ski the shop sells and has never had in that length.
     expect(r.matched.filter((m) => m.sizeMissing).map((m) => `${m.line.size} of ${m.handle}`))
-      .toEqual(["158 of blaze-94-2027", "138 of mantra-junior-2025"]);
+      .toEqual(["158 of blaze-94-2027"]);
   });
 });

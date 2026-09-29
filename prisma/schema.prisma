@@ -487,6 +487,8 @@ model ShopListing {
   vendor      String   @default("")
   productType String   @default("")
   tags        String   @default("") // comma separated, as the export writes them
+  price       Float?   // recommended retail as listed: Compare At where set, else Price
+  bindingOption String @default("") // a package's binding, e.g. "Marker Squire - Black"
   updatedAt   DateTime @updatedAt
 
   @@index([vendor])

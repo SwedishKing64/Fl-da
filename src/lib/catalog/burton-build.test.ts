@@ -239,10 +239,12 @@ describe.skipIf(!existsSync(ORDER) || !existsSync(LIST) || !existsSync(SHOP))("w
   }, 60_000);
 
   it("adds a new length under Length, not under Colour, at the order's cost", async () => {
-    const result = await run(readFileSync(SHOP, "utf8"), false);
-    const rows = parseCsv(result.csv);
+    const shop = readFileSync(SHOP, "utf8");
+    const result = await run(shop, false);
+    const rows = parseCsv(result.csv).filter((r) => r.some((c) => c.trim()));
     const h = rows[0];
-    const added = rows.slice(-3).filter((r) => r[h.indexOf("Handle")] === "process-2027");
+    const before = parseCsv(shop).filter((r) => r.some((c) => c.trim())).length;
+    const added = rows.slice(before).filter((r) => r[h.indexOf("Handle")] === "process-2027");
     expect(added.map((r) => [r[h.indexOf("Option1 Value")], r[h.indexOf("Option2 Value")], r[h.indexOf("Cost per item")]])).toEqual([
       ["Bad Dog", "152", "503.99"],
       ["Bad Dog", "155", "503.99"],

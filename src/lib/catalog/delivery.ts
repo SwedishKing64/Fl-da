@@ -33,9 +33,11 @@ import { houseBody } from "./body";
 import { enrichFromSpecs } from "./specs";
 import { productTitle, seasonTagFrom, seoTitle } from "./titles";
 import { buildHandle } from "./handle";
-import { applyInvoice, reconcile, type InvoiceFields, type InvoiceLine, type Match, type Reconciliation } from "./reconcile";
+import { applyInvoice, reconcile, sameSizeText, type InvoiceFields, type InvoiceLine, type Match, type Reconciliation } from "./reconcile";
 import { resolveAgainstReference } from "./reference-match";
-import { listingsFromCsv, type Listing } from "./shop-memory";
+import { asShopPrice, listingsFromCsv, type Listing } from "./shop-memory";
+import { packageProducts } from "./packages";
+import type { PriceRow } from "./invoice";
 import type { CanonicalLineItem } from "./types";
 
 export interface DeliveryOptions {
@@ -64,6 +66,8 @@ export interface DeliveryOptions {
   sourceOf?: (spec: CanonicalLineItem) => string;
   /** The shop's listings, from every loaded export, for what it decided about a model last season. */
   listings?: Listing[];
+  /** Every priced row of the order form, ordered or not — what a binding package is priced from. */
+  priceList?: PriceRow[];
   /** Leave the new products off the end, and only add the stock. Default: both. */
   reorderOnly?: boolean;
 }
@@ -121,7 +125,11 @@ export interface FreshSize {
  * going up, a variant being added and a product being added can never claim the same row, and a
  * pass that cannot be written leaves the ones before it standing.
  */
-export function buildDelivery(csv: string, ordered: InvoiceLine[], options: DeliveryOptions = {}): DeliveryResult {
+export function buildDelivery(csv: string, invoiced: InvoiceLine[], options: DeliveryOptions = {}): DeliveryResult {
+  // The recommended retail ending the way the shop ends this brand's prices — Völkl's 1649 is the
+  // shop's 1649.99 — so a carry-over's Compare At is not cut by 99 cents. See asShopPrice.
+  const shop = [...(options.listings ?? []), ...listingsFromCsv(csv)];
+  const ordered = invoiced.map((line) => withBarcode({ ...line, rrp: asShopPrice(line.rrp, options.vendor ?? "", shop) }, options.specs ?? []));
   // The order's wording, put into the shop's before anything is matched: see joinToReference.
   const joined = joinToReference(ordered, options);
   const lines = joined.lines;
@@ -157,6 +165,13 @@ export function buildDelivery(csv: string, ordered: InvoiceLine[], options: Deli
   }
   warnings.push(...sizes.warnings);
 
+  // Pass 2b. The same skis on their package listings. See mirrorToPackages.
+  const mirrored = fields.quantity ? mirrorToPackages(csvSoFar, reconciliation.matched, fields) : { csv: csvSoFar, changes: [] as Change[], appended: 0, warnings: [] as string[] };
+  csvSoFar = mirrored.csv;
+  appended += mirrored.appended;
+  reorder.changes.push(...mirrored.changes);
+  warnings.push(...mirrored.warnings);
+
   if (options.reorderOnly || reconciliation.unmatched.length === 0) {
     return { csv: csvSoFar, changes: reorder.changes, carryOver: reconciliation.matched, fresh: [], freshSizes: sizes.added, appended, heldBack, reconciliation, warnings };
   }
@@ -182,6 +197,118 @@ export function buildDelivery(csv: string, ordered: InvoiceLine[], options: Deli
     heldBack: [...heldBack, ...built.heldBack],
     reconciliation,
     warnings: [...warnings, ...built.warnings],
+  };
+}
+
+/**
+ * The skis that arrived, counted onto their binding packages as well.
+ *
+ * The shop lists each ski twice — "M7 Mantra 2027" and "M7 Mantra 2027 inc Marker Griffon Binding
+ * Package" — and both show the same stock, because they are the same skis: every variant of a
+ * package carries the count of its length (their M7 Mantra 170 is 3 on the flat listing and 3 on
+ * each of the package's variants). So two M7 Mantras in 177 arriving are two more on the flat ski
+ * AND two more on every 177 of its package; counted onto the flat one only, the package would go on
+ * saying they were out of stock.
+ *
+ * A length the package does not list yet is added to it under each binding and fitting it offers,
+ * copied from a length it has — the same way a new size is added to the flat ski.
+ */
+function mirrorToPackages(
+  csv: string,
+  matched: Match[],
+  fields: InvoiceFields,
+): { csv: string; changes: Change[]; appended: number; warnings: string[] } {
+  const grid = parseCsv(csv).filter((r) => r.some((c) => c.trim() !== ""));
+  const header = grid[0] ?? [];
+  const at = new Map(header.map((h, i) => [h, i]));
+  const [H, T, Q] = [at.get("Handle"), at.get("Title"), at.get("Variant Inventory Qty")];
+  if (H === undefined || T === undefined || Q === undefined) return { csv, changes: [], appended: 0, warnings: [] };
+
+  const norm = (t: string) => t.toLowerCase().replace(/\s+/g, " ").trim();
+  const rowsOf = new Map<string, number[]>();
+  const titleOf = new Map<string, string>();
+  for (let r = 1; r < grid.length; r++) {
+    const handle = (grid[r][H] ?? "").trim();
+    if (!handle) continue;
+    rowsOf.set(handle, [...(rowsOf.get(handle) ?? []), r]);
+    const title = (grid[r][T] ?? "").trim();
+    if (title && !titleOf.has(handle)) titleOf.set(handle, title);
+  }
+  // Package listings by the flat ski they are: the part of the title before " inc ".
+  const packagesOf = new Map<string, string[]>();
+  for (const [handle, title] of titleOf) {
+    const m = /^(.*?)\s+inc\s+.*\bpackage\b/i.exec(title);
+    if (!m) continue;
+    const flat = norm(m[1]);
+    packagesOf.set(flat, [...(packagesOf.get(flat) ?? []), handle]);
+  }
+  if (packagesOf.size === 0) return { csv, changes: [], appended: 0, warnings: [] };
+
+  /** The option column holding the length on this product, from its first row's option names. */
+  const lengthColumn = (first: string[]): number | undefined => {
+    for (const n of [1, 2, 3]) {
+      const name = at.get(`Option${n} Name`);
+      if (name !== undefined && /length|size/i.test(first[name] ?? "")) return at.get(`Option${n} Value`);
+    }
+    return undefined;
+  };
+
+  const changes: Change[] = [];
+  const added: string[][] = [];
+  const touched: string[] = [];
+  for (const m of matched) {
+    const size = (m.line.size ?? "").trim();
+    const qty = m.line.quantity;
+    if (!size || qty === null || qty <= 0) continue;
+    const flatTitle = titleOf.get(m.handle) ?? "";
+    if (!flatTitle || /\binc\b/i.test(flatTitle)) continue;
+    for (const pack of packagesOf.get(norm(flatTitle)) ?? []) {
+      const rows = rowsOf.get(pack) ?? [];
+      const first = grid[rows[0]] ?? [];
+      const L = lengthColumn(first);
+      if (L === undefined) continue;
+      const same = rows.filter((r) => sameSizeText(grid[r][L] ?? "", size));
+      if (same.length > 0) {
+        for (const r of same) {
+          const before = (grid[r][Q] ?? "").trim();
+          const held = Number(before);
+          const after = String(fields.stock === "set" ? Math.round(qty) : (Number.isFinite(held) ? held : 0) + Math.round(qty));
+          if (after === before) continue;
+          grid[r][Q] = after;
+          changes.push({ handle: pack, title: r === rows[0] ? titleOf.get(pack) ?? "" : "", column: "Variant Inventory Qty", before, after });
+        }
+      } else {
+        // A new length: one row per binding and fitting the package offers, copied from a length it has.
+        const combos = new Map<string, number>();
+        for (const r of rows) {
+          const key = header.map((h, i) => (/^Option\d Value$/.test(h) && i !== L ? grid[r][i] ?? "" : "")).join("\u0000");
+          if (!combos.has(key)) combos.set(key, r);
+        }
+        for (const r of combos.values()) {
+          const row = header.map((column, i) => (VARIANT_COLUMNS.has(column) ? (grid[r][i] ?? "") : ""));
+          row[H] = pack;
+          row[L] = size;
+          row[Q] = String(Math.round(qty));
+          for (const name of ["Variant SKU", "Variant Barcodes", "Variant Barcode"]) { const i = at.get(name); if (i !== undefined) row[i] = name === "Variant SKU" ? "" : m.line.barcode.trim(); }
+          for (const name of ["Option1 Name", "Option2 Name", "Option3 Name"]) { const i = at.get(name); if (i !== undefined && !(row[i] ?? "").trim()) row[i] = (first[i] ?? "").trim(); }
+          added.push(row);
+        }
+      }
+      touched.push(`${size} of ${titleOf.get(pack) ?? pack}`);
+    }
+  }
+  if (changes.length === 0 && added.length === 0) return { csv, changes: [], appended: 0, warnings: [] };
+
+  const out = [header, ...grid.slice(1), ...added].map((row) => header.map((_, i) => quote(row[i] ?? "")).join(",")).join("\r\n") + "\r\n";
+  // The grid above was changed in place, so the check is against the file it came from.
+  const original = parseCsv(csv).filter((r) => r.some((c) => c.trim() !== ""));
+  const problems = verifyOnlyIntended(original, out, changes, { appended: added.length });
+  if (problems.length > 0) {
+    return { csv, changes: [], appended: 0, warnings: [`The stock was NOT put onto the binding packages. A check found ${problems.length} thing${problems.length === 1 ? "" : "s"} about the rest of the file that would have changed, which is a fault in this tool rather than anything you did.`, ...problems.slice(0, 3)] };
+  }
+  return {
+    csv: out, changes, appended: added.length,
+    warnings: [`The same skis were counted onto their binding packages, which show the same stock as the flat ski: ${[...new Set(touched)].slice(0, 6).join(", ")}${touched.length > 6 ? ", and more" : ""}.${added.length > 0 ? ` ${added.length} package row${added.length === 1 ? " was" : "s were"} added for lengths the package did not list yet.` : ""}`],
   };
 }
 
@@ -359,6 +486,11 @@ function appendFresh(
     }
     build.push(product);
   }
+  // Each new flat ski is also built as its binding package, priced from the order form's own
+  // binding rows. A package the file already has is left alone, like any other product.
+  const { packages, skipped } = packageProducts(build, options.priceList ?? [], [...(options.listings ?? []), ...listingsFromCsv(csv)]);
+  for (const pack of packages) if (!taken.has(pack.handle)) build.push(pack);
+  for (const k of skipped) warnings.push(`No binding package was built for ${k.title}: ${k.reason}.`);
   if (build.length === 0) return { csv, fresh: [], appended: 0, heldBack, warnings };
 
   const products = build.map((g) => toProduct(g, vendor));
@@ -457,6 +589,29 @@ function handlesFor(product: GroupedProduct, vendor: string): string[] {
   const title = productTitle(product.title, seasonTagFrom(product.tags));
   const brand = product.brand || vendor;
   return [...new Set([product.handle, buildHandle({ title }), buildHandle({ brand, title })])].filter(Boolean);
+}
+
+/**
+ * A line's barcode from the barcode list, where the order form did not print one.
+ *
+ * Völkl's order has the item code and the length in two places — "V2610135.000" under 158 — and
+ * its barcode list has them as one: "V2610135.000.158", 821264839478. Without it a new length
+ * added to a listing went on with no barcode, and a carry-over could only be matched by name.
+ * Only an answer the list gives once: two different barcodes for one code and length is no answer.
+ */
+function withBarcode(line: InvoiceLine, specs: CanonicalLineItem[]): InvoiceLine {
+  const code = line.sku.trim().toUpperCase();
+  const size = (line.size ?? "").trim().toUpperCase();
+  if (line.barcode.trim() || !code || !size) return line;
+  const key = (v: string) => v.trim().toUpperCase().replace(/\s+/g, "");
+  const want = key(`${code}.${size}`);
+  const found = new Set(
+    specs
+      .filter((s) => s.barcode.trim() && ([s.sku, s.modelCode].some((k) => key(k) === want)
+        || (s.modelCode.trim() && code.startsWith(key(s.modelCode)) && sameSizeText(s.length || s.size, size))))
+      .map((s) => s.barcode.trim().replace(/^'/, "")),
+  );
+  return found.size === 1 ? { ...line, barcode: [...found][0] } : line;
 }
 
 /**

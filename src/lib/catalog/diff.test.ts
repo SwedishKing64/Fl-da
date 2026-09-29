@@ -88,11 +88,13 @@ describe.skipIf(!existsSync(ORDER) || !existsSync(SKIS))("a real delivery, read 
     const d = diffCsv(csv, out.csv);
 
     expect(d.problem).toBe("");
-    // Two columns out of forty-eight, which is why the preview shows the columns that moved and
-    // not the file: a season's change touches a handful of them.
-    expect(d.columns).toEqual(["Variant Inventory Qty", "Variant Compare At Price"]);
-    expect(d.changedRows).toBe(11);
-    expect(d.addedRows).toBe(3);
+    // One column out of forty-eight, which is why the preview shows the columns that moved and not
+    // the file. (Compare At no longer moves: Völkl's 1649 is the shop's 1649.99 — see asShopPrice.)
+    expect(d.columns).toEqual(["Variant Inventory Qty"]);
+    // Seven variant rows of flat skis, and twelve of their binding packages, which carry the same
+    // stock: every binding and fitting of the length that arrived.
+    expect(d.changedRows).toBe(19);
+    expect(d.addedRows).toBe(10);
     const { parseCsv } = await import("./csv");
     const rowsInFile = parseCsv(csv).filter((r) => r.some((c) => c.trim())).length - 1;
     expect(d.changedRows + d.untouched).toBe(rowsInFile);
@@ -108,8 +110,17 @@ describe.skipIf(!existsSync(ORDER) || !existsSync(SKIS))("a real delivery, read 
     const added = d.rows.filter((r) => r.kind === "added");
     expect(added.map((r) => `${r.option} of ${r.handle}`)).toEqual([
       "158 of blaze-94-2027",
-      "138 of mantra-junior-2025",
-      "Default Title of griffon-13-mn-100mm-2027",
+      // The same new length on the Blaze's package, under each binding and fitting it offers.
+      "158 / Marker Griffon - Black / Do Not Mount My Bindings of blaze-94-2027-inc-marker-griffon-binding-package",
+      "158 / Marker Griffon - Black / Please Mount My Bindings of blaze-94-2027-inc-marker-griffon-binding-package",
+      "158 / ATK HY 13 Free / Do Not Mount My Bindings of blaze-94-2027-inc-marker-griffon-binding-package",
+      "158 / ATK HY 13 Free / Please Mount My Bindings of blaze-94-2027-inc-marker-griffon-binding-package",
+      "158 / Salomon S/Lab Shift2 MNC 13 / Do Not Mount My Bindings of blaze-94-2027-inc-marker-griffon-binding-package",
+      "158 / Salomon S/Lab Shift2 MNC 13 / Please Mount My Bindings of blaze-94-2027-inc-marker-griffon-binding-package",
+      // Last season's Mantra Junior is not this season's: the 2027 one is built new.
+      "138 of mantra-junior-2027",
+      "148 of mantra-junior-2027",
+      "BLACK / 100mm of griffon-13-mn-2027",
     ]);
   });
 });

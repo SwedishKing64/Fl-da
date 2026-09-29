@@ -30,11 +30,20 @@ export interface InvoiceRead {
   columns: { barcode: string; sku: string; rrp: string; quantity: string; title: string; size: string; colour: string };
   warnings: string[];
   /**
+   * Every priced row on the form, ordered or not — the supplier's price list. A package is priced
+   * from a binding nobody ordered on its own: the Griffon the M7 Mantra is sold with is a row of
+   * the Marker tab with no quantity against it.
+   */
+  priceList?: PriceRow[];
+  /**
    * "grid" when the quantities were read off a size grid — a column per length, a number in the
    * box — which has no row-per-line table of its own; "flat" when each line is a row.
    */
   shape?: "grid" | "flat";
 }
+
+/** One row of a supplier's price list. */
+export interface PriceRow { sku: string; title: string; colour: string; rrp: number | null; costPrice: number | null }
 
 const text = (value: unknown): string => (value ?? "").toString().trim();
 const norm = (value: string): string => value.toLowerCase().replace(/[\s._/-]+/g, " ").trim();
@@ -149,7 +158,7 @@ function looksLikeItemCode(value: string): boolean {
   return value.length >= 3 && value.length <= 40 && (value.match(/\s/g) ?? []).length <= 1 && /^[A-Za-z0-9]/.test(value);
 }
 
-interface Section { at: number; end: number; sku: number; title: number; rrp: number; qty: number; sizes: Array<[number, string]> }
+interface Section { at: number; end: number; sku: number; title: number; rrp: number; cost: number; colour: number; qty: number; sizes: Array<[number, string]> }
 
 function sectionsOf(grid: string[][]): Section[] {
   const heads: number[] = [];
@@ -166,7 +175,13 @@ function sectionsOf(grid: string[][]): Section[] {
       .map((c, i) => [i, c] as [number, string])
       .filter(([i, c]) => qty >= 0 && i > qty && /^\d{2,3}(\.\d)?$/.test(c.trim()));
     const sku = headings.findIndex((c) => ITEM_HEADING.test(norm(c)));
-    return { at, end: n + 1 < heads.length ? heads[n + 1] : grid.length, sku, title: sku + 1, rrp: find(RRP), qty, sizes };
+    // What the shop pays. Their Volkl form prices both W/S and INDENT, and the shop's own costs are
+    // the INDENT figure to the cent — the M7 Mantra at 749.55, the Griffon at 208.64 — so INDENT
+    // is taken where there is one. This used to be left out altogether, and every Volkl line came
+    // through with no cost.
+    const indent = find(/^indent( price)?$/);
+    const cost = indent >= 0 ? indent : find(/^(w s|ws|wholesale|whsl|dealer|cost)( price)?$/);
+    return { at, end: n + 1 < heads.length ? heads[n + 1] : grid.length, sku, title: sku + 1, rrp: find(RRP), cost, colour: find(/^colou?r$/), qty, sizes };
   });
 }
 
@@ -176,6 +191,7 @@ function readOrder(name: string, grid: string[][]): InvoiceRead | null {
   if (sections.length === 0) return null;
 
   const lines: InvoiceLine[] = [];
+  const priceList: PriceRow[] = [];
   let sizeGrid = false;
   for (const section of sections) {
     for (let r = section.at + 1; r < section.end; r++) {
@@ -189,14 +205,18 @@ function readOrder(name: string, grid: string[][]): InvoiceRead | null {
       // ski and the ski-with-binding, which the shop lists as two products at two prices.
       const kind = norm(text(row[0]));
       const form = kind === "flat" ? ("flat" as const) : kind === "system" ? ("package" as const) : undefined;
+      const positive = (at: number) => (at >= 0 && (readNumber(text(row[at])) ?? 0) > 0 ? readNumber(text(row[at])) : null);
+      const colour = section.colour >= 0 ? text(row[section.colour]) : "";
       const base = {
         sku,
         barcode: "",
         title: text(row[section.title]),
         ...(form ? { form } : {}),
-        costPrice: null,
-        rrp: section.rrp >= 0 ? ((readNumber(text(row[section.rrp])) ?? 0) > 0 ? readNumber(text(row[section.rrp])) : null) : null,
+        ...(colour ? { colour } : {}),
+        costPrice: positive(section.cost),
+        rrp: positive(section.rrp),
       };
+      if (base.rrp !== null) priceList.push({ sku, title: base.title, colour, rrp: base.rrp, costPrice: base.costPrice });
       let onThisRow = 0;
       for (const [at, heading] of section.sizes) {
         const quantity = orderedQuantity(text(row[at]));
@@ -216,10 +236,28 @@ function readOrder(name: string, grid: string[][]): InvoiceRead | null {
   if (lines.length === 0) return null;
   return {
     lines,
+    priceList,
     sheet: name,
     columns: { barcode: "", sku: "Item No.", rrp: "RRP", quantity: sizeGrid ? "the length columns" : "QTY", title: 'the column beside "Item No."', size: sizeGrid ? "the column heading" : "", colour: "" },
     warnings: [],
   };
+}
+
+/** Every priced row of a size-grid form's sections, ordered or not. */
+function readOrderPrices(grid: string[][]): PriceRow[] {
+  const out: PriceRow[] = [];
+  for (const section of sectionsOf(grid).filter((s) => s.sku >= 0 && s.rrp >= 0)) {
+    for (let r = section.at + 1; r < section.end; r++) {
+      const row = grid[r] ?? [];
+      const sku = text(row[section.sku]);
+      if (!looksLikeItemCode(sku)) continue;
+      const num = (at: number) => (at >= 0 && (readNumber(text(row[at])) ?? 0) > 0 ? readNumber(text(row[at])) : null);
+      const rrp = num(section.rrp);
+      if (rrp === null) continue;
+      out.push({ sku, title: text(row[section.title]), colour: section.colour >= 0 ? text(row[section.colour]) : "", rrp, costPrice: num(section.cost) });
+    }
+  }
+  return out;
 }
 
 /** Read one sheet as an invoice, or decide it is not one. */
@@ -267,6 +305,16 @@ function readGrid(name: string, grid: string[][]): InvoiceRead | null {
    * is: the name is matched to the shop, or to the description list, afterwards.
    */
   const orderedRows = quantity ? rows.filter((row) => orderedQuantity(text(row[quantity.index])) !== null) : [];
+  const money = (c: Column | null, row: string[]) => (c && (readNumber(text(row[c.index])) ?? 0) > 0 ? readNumber(text(row[c.index])) : null);
+  const priceList: PriceRow[] = rrp
+    ? rows.filter((row) => money(rrp, row) !== null).map((row) => ({
+        sku: sku ? text(row[sku.index]) : "",
+        title: title ? text(row[title.index]) : "",
+        colour: colour ? text(row[colour.index]) : "",
+        rrp: money(rrp, row),
+        costPrice: money(cost, row),
+      }))
+    : [];
   const asOrder = orderedRows.length > 0 && orderedRows.length < rows.length;
 
   const lines: InvoiceLine[] = [];
@@ -301,6 +349,7 @@ function readGrid(name: string, grid: string[][]): InvoiceRead | null {
   const used = (c: Column | null, of: (l: InvoiceLine) => string) => (lines.some((l) => of(l).trim()) ? heading(c) : "");
   return {
     lines,
+    priceList,
     sheet: name,
     columns: { barcode: used(barcode, (l) => l.barcode), sku: used(sku, (l) => l.sku), rrp: heading(rrp), quantity: heading(quantity), title: heading(title), size: heading(size), colour: heading(colour) },
     warnings: asOrder
@@ -334,8 +383,12 @@ export function readInvoiceGrids(grids: Array<{ name: string; grid: string[][] }
   const ordered = grids.map((g) => readOrder(g.name, g.grid)).filter((r): r is InvoiceRead => r !== null);
   if (ordered.length > 0) {
     const lines = ordered.flatMap((o) => o.lines);
+    // The whole form's prices, not only the tabs something was ordered from: the bindings a package
+    // is priced from may sit on a tab with nothing ordered on it.
+    const everyTab = grids.flatMap((g) => readOrderPrices(g.grid));
     return {
       lines,
+      priceList: everyTab,
       shape: "grid",
       sheet: ordered.map((o) => o.sheet).join(", "),
       columns: ordered[0].columns,
@@ -369,6 +422,7 @@ export function readInvoiceGrids(grids: Array<{ name: string; grid: string[][] }
   }
   return {
     lines: kept.flatMap((k) => k.lines),
+    priceList: kept.flatMap((k) => k.priceList ?? []),
     shape: "flat",
     sheet: kept.map((k) => k.sheet).join(", "),
     columns: first.columns,

@@ -1,7 +1,7 @@
 // Recommended defaults: pricing rules, category rules and a sample supplier. Safe to re-run.
 
 import { prisma } from "./db";
-import { DEFAULT_CATEGORY_RULES } from "./categorize";
+import { BINDINGS_PATTERN, DEFAULT_CATEGORY_RULES, OLD_BINDINGS_PATTERN } from "./categorize";
 import { DEFAULT_TAG_RULES } from "./rules";
 import { isValidType } from "./taxonomy";
 
@@ -154,6 +154,9 @@ export async function repairCategoryRules(): Promise<number> {
 }
 
 async function repairCategoryRulesNow(): Promise<number> {
+  // A bindings rule still on the old default learns the binding model names. One somebody has
+  // edited is theirs and is left alone.
+  await prisma.categoryRule.updateMany({ where: { category: "bindings", pattern: OLD_BINDINGS_PATTERN }, data: { pattern: BINDINGS_PATTERN } }).catch(() => undefined);
   const rows = await prisma.categoryRule.findMany();
   const broken = rows.filter((r) => r.productType && !isValidType(r.productType));
   if (broken.length === 0) return 0;

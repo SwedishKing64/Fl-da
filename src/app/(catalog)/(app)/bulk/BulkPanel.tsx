@@ -489,7 +489,7 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
     const results = sheets.map((s) => ({
       name: s.name,
       result: buildDelivery(s.csv, invoice.lines, {
-        season, vendor, specs, decided, sourceOf, listings,
+        season, vendor, specs, decided, sourceOf, listings, priceList: invoice.priceList ?? [],
         fields: { ...fields, stock },
         reorderOnly: s.name !== home,
       }),

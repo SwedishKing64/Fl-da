@@ -107,7 +107,8 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
     const baseTitle = entries.map((e) => e.item.title.trim()).find(Boolean) ?? first.modelCode ?? "Untitled";
     // The Title column does not carry the brand — not one of the shop's 827 products begins with
     // its own vendor. The brand belongs in the Vendor column and in the SEO title.
-    const title = withoutVendor(brand, baseTitle);
+    // Without the punctuation a size left behind when it was lifted out: "GRIFFON 13 MN; 100MM".
+    const title = withoutVendor(brand, baseTitle).replace(/[\s;,:–-]+$/, "");
     const items = entries.map((e) => e.item);
     const productType = group.rule?.productType ?? (first.productType || "");
     // What varies decides which options exist; the shop's own habit decides the order they are

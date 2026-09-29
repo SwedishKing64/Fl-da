@@ -152,7 +152,7 @@ describe.skipIf(!existsSync(ORDER) || !existsSync(SKIS))("against the real order
     expect(read.lines.length).toBeLessThan(60);
 
     const csv = readFileSync(SKIS, "utf8");
-    const out = buildDelivery(csv, read.lines, { season: "2027", vendor: "Volkl" });
+    const out = buildDelivery(csv, read.lines, { season: "2027", vendor: "Volkl", priceList: read.priceList });
     expect(out.refused).toBeUndefined();
 
     const before = parseCsv(csv).filter((r) => r.some((c) => c.trim()));
@@ -176,17 +176,18 @@ describe.skipIf(!existsSync(ORDER) || !existsSync(SKIS))("against the real order
     }
 
     // And every line is accounted for: written onto a row, built, or named as held back.
-    const placed = out.carryOver.length + out.fresh.reduce((n, f) => n + f.variants.length, 0) + out.heldBack.length;
+    // (A binding package is built beside a new ski, from no line of its own, so it is not counted.)
+    const placed = out.carryOver.length + out.fresh.filter((f) => !/\binc\b.*\bpackage\b/i.test(f.title)).reduce((n, f) => n + f.variants.length, 0) + out.heldBack.length;
     expect(placed).toBe(read.lines.length);
 
-    // Eight of the nine ticked lines are skis the shop already sells; the ninth is a Marker
-    // binding, which is not in a Volkl ski export and is the only thing built. Two of the eight
-    // are lengths it has never had, so they arrive as variants of the ski that has the others.
-    expect(out.carryOver).toHaveLength(8);
-    expect(out.fresh.map((f) => f.title)).toEqual(["Griffon 13 MN; 100mm 2027"]);
-    expect(out.freshSizes.map((f) => `${f.option} of ${f.handle}`)).toEqual(["158 of blaze-94-2027", "138 of mantra-junior-2025"]);
-    // Read off the carry-overs: all 452 Volkl products in this export are Type "Skis", and the
-    // order form does not contain the word "ski" anywhere.
-    expect(out.fresh[0].type).toBe("Skis");
+    // Six of the nine ticked lines are skis the shop already sells in 2027. The Mantra Junior's
+    // only listing is the 2025 one — last season's, so its two lines are built new — and the
+    // ninth is a Marker binding. One length is new to a ski the shop has in the others.
+    expect(out.carryOver).toHaveLength(6);
+    expect(out.fresh.map((f) => f.title)).toEqual(["Mantra Junior 2027", "Griffon 13 MN 2027", "Mantra Junior 2027 inc Marker Squire Binding Package"]);
+    expect(out.freshSizes.map((f) => `${f.option} of ${f.handle}`)).toEqual(["158 of blaze-94-2027"]);
+    // A binding by its model name, though the form never says "binding" (it used to be filed as a
+    // ski, because every other line was one).
+    expect(out.fresh.find((f) => f.title.startsWith("Griffon"))?.type).toBe("Ski Bindings");
   });
 });

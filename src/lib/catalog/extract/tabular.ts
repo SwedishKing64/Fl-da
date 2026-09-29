@@ -61,15 +61,19 @@ function uniqueHeaders(raw: string[]): string[] {
  * the PIM export uses in its "SKU no. // LENGTH" column and what carries the barcode.
  */
 export function orderToTable(order: { lines: InvoiceLine[]; sheet: string; warnings: string[] }): ExtractedTable {
-  const headers = ["Item No.", "SKU", "Description", "Length", "RRP", "Qty"];
+  // Cost and colour too: dropping them left every Volkl line with no cost, though the form prices
+  // every row, and the Griffon with no colour to tell its black from its orange.
+  const headers = ["Item No.", "SKU", "Description", "Colour", "Length", "RRP", "Cost", "Qty"];
   const rows = order.lines.map((line) => {
     const length = (line.size ?? "").trim();
     return {
       "Item No.": line.sku,
       SKU: length ? `${line.sku}.${length}` : line.sku,
       Description: line.title,
+      Colour: (line.colour ?? "").trim(),
       Length: length,
       RRP: line.rrp === null ? "" : String(line.rrp),
+      Cost: line.costPrice === null ? "" : String(Math.round(line.costPrice * 100) / 100),
       Qty: line.quantity === null ? "" : String(line.quantity),
     };
   });

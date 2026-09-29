@@ -930,7 +930,7 @@ export async function readInvoiceAction(file: { name: string; type: string; base
  * listing of a model — built from an order in an import batch, days later — carries the shelves
  * the shop gave it. Only the handle, title, vendor, type and tags travel. See shop-memory.
  */
-export async function rememberListingsAction(listings: Array<{ handle: string; title: string; vendor: string; productType: string; tags: string[] }>): Promise<ActionResult<{ remembered: number }>> {
+export async function rememberListingsAction(listings: Array<{ handle: string; title: string; vendor: string; productType: string; tags: string[]; price?: number | null; bindingOption?: string }>): Promise<ActionResult<{ remembered: number }>> {
   await requireUser();
   try {
     const clean = listings.filter((l) => l.handle.trim() && l.title.trim()).slice(0, 20000);
@@ -939,7 +939,7 @@ export async function rememberListingsAction(listings: Array<{ handle: string; t
       await prisma.$transaction([
         prisma.shopListing.deleteMany({ where: { handle: { in: chunk.map((l) => l.handle.trim()) } } }),
         prisma.shopListing.createMany({
-          data: chunk.map((l) => ({ handle: l.handle.trim(), title: l.title.trim(), vendor: l.vendor.trim(), productType: l.productType.trim(), tags: l.tags.join(", ") })),
+          data: chunk.map((l) => ({ handle: l.handle.trim(), title: l.title.trim(), vendor: l.vendor.trim(), productType: l.productType.trim(), tags: l.tags.join(", "), price: typeof l.price === "number" ? l.price : null, bindingOption: (l.bindingOption ?? "").trim() })),
         }),
       ]);
     }

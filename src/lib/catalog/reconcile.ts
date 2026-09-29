@@ -298,6 +298,13 @@ function sift(handles: string[], line: InvoiceLine, index: { seasonOf: Map<strin
   if (index.season) {
     const inSeason = kept.filter((h) => (index.seasonOf.get(h) ?? "").includes(index.season.toUpperCase()));
     if (inSeason.length > 0) kept = inSeason;
+    // Only other seasons' listings: this delivery is not their stock. The 2027 Mantra Junior was
+    // being counted onto "Mantra Junior 2025" — and given a 138 it never had — because that was the
+    // only Mantra Junior in the file. A listing that names no year at all is still a candidate.
+    else {
+      const undated = kept.filter((h) => !/\b20\d\d\b/.test(index.seasonOf.get(h) ?? ""));
+      kept = undated;
+    }
   }
   if (kept.length > 1) {
     // The shared test, not a second one. This used to look for "inc" alone, which misses the two
@@ -409,6 +416,11 @@ function sameSize(a: { letter: string; number: number | null; wide?: boolean }, 
   const numbers = a.number !== null && b.number !== null ? Math.abs(a.number - b.number) < 0.01 : null;
   if (letters === false || numbers === false) return false;
   return letters === true || numbers === true;
+}
+
+/** Whether two written sizes are the same size: "158W" and "158 Wide" are, "158" and "158W" are not. */
+export function sameSizeText(a: string, b: string): boolean {
+  return a.trim() !== "" && b.trim() !== "" && sameSize(sizeParts(a), sizeParts(b));
 }
 
 /**
@@ -542,7 +554,20 @@ export function reconcile(csv: string, lines: InvoiceLine[], options: ReconcileO
     const barcode = normaliseBarcode(line.barcode);
     const sku = normSku(line.sku);
     const tries: Array<{ key: MatchKey; value: string; rows: number[]; onInvoice: number }> = [];
-    if (barcode) tries.push({ key: "barcode", value: barcode, rows: byBarcode.get(barcode) ?? [], onInvoice: lineBarcodes.get(barcode) ?? 0 });
+    /**
+     * The shop gives a ski's package the ski's own barcode, so one barcode finds the flat ski AND
+     * its package — the M7 Mantra's 821264838167 is on "M7 Mantra 2027" and on both fittings of
+     * "M7 Mantra 2027 inc Marker Griffon Binding Package". That is not a clash: a line that does not
+     * say it is a package is the flat ski (the package takes the same count separately — see
+     * mirrorToPackages in delivery.ts), and one that does is the package.
+     */
+    const flatOrPackage = (rows: number[]): number[] => {
+      if (rows.length <= 1) return rows;
+      const wantsPackage = line.form === "package";
+      const kept = rows.filter((r) => isPackage(titleOf.get(handleOf.get(r) ?? "") ?? "") === wantsPackage);
+      return kept.length > 0 && kept.length < rows.length ? kept : rows;
+    };
+    if (barcode) tries.push({ key: "barcode", value: barcode, rows: flatOrPackage(byBarcode.get(barcode) ?? []), onInvoice: lineBarcodes.get(barcode) ?? 0 });
     if (sku) tries.push({ key: "sku", value: sku, rows: bySku.get(sku) ?? [], onInvoice: lineSkus.get(sku) ?? 0 });
 
     const hit = tries.find((t) => t.rows.length === 1 && t.onInvoice === 1);

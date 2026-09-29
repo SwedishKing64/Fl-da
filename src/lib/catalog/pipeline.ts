@@ -12,6 +12,9 @@ import { DEFAULT_CATEGORY_RULES, type CategoryRuleLike } from "./categorize";
 import { enrichFromSpecs, normKey } from "./specs";
 import { houseBody } from "./body";
 import { keepOrderedLines, resolveAgainstReference } from "./reference-match";
+import { packageProducts } from "./packages";
+import { readInvoiceGrids, type PriceRow } from "./invoice";
+import { asShopPrice } from "./shop-memory";
 import { askToJoin } from "./reference-ai";
 import { aiAvailable } from "./extract/ai";
 import { repairCategoryRules, repairProductTags, repairTagRuleSpelling } from "./seed";
@@ -440,7 +443,7 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
   const directives = parseDirectives(batch.directives);
 
   // The shop's listings as last remembered, for the shelves it gave each model before.
-  const listings = (await prisma.shopListing.findMany({ select: { handle: true, title: true, vendor: true, productType: true, tags: true } }).catch(() => []))
+  const listings = (await prisma.shopListing.findMany({ select: { handle: true, title: true, vendor: true, productType: true, tags: true, price: true, bindingOption: true } }).catch(() => []))
     .map((l) => ({ ...l, tags: l.tags.split(",").map((t) => t.trim()).filter(Boolean) }));
   const grouped = enrichFromSpecs(groupLineItems(items.map((i) => i.item), categoryRules, { builtBy: batch.builtBy, listings }), specItems).map((raw) => {
     const told = directives.vendor.trim();
@@ -465,8 +468,29 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
       option1Name: viaTemplate.optionNames[0] ?? g.option1Name,
       option2Name: viaTemplate.optionNames[1] ?? g.option2Name,
       option3Name: viaTemplate.optionNames[2] ?? g.option3Name,
+      // The recommended retail ending as the shop ends this brand's prices: Völkl's 1649 is the
+      // shop's 1649.99. See asShopPrice.
+      variants: g.variants.map((v) => ({ ...v, item: { ...v.item, rrp: asShopPrice(v.item.rrp, g.brand, listings) } })),
     };
   });
+
+  /**
+   * Every flat ski is also built as its binding package — "M7 Mantra 2027 inc Marker Griffon
+   * Binding Package" beside "M7 Mantra 2027" — priced from the binding on the supplier's own price
+   * list. The list is read again from the order form itself: an order's table holds only what was
+   * ordered, and the Griffon a package is priced from is a row nobody ordered.
+   */
+  const priceList = await orderPriceLists(batch.files.filter((f) => (f.detectedKind ?? f.kind) !== "SPEC_SHEET" && f.extractionStatus === "DONE"));
+  const { packages, skipped } = packageProducts(grouped, priceList, listings);
+  grouped.push(...(packages as typeof grouped));
+  if (packages.length > 0 || skipped.length > 0) {
+    for (const fileId of [...new Set(items.map((i) => i.fileId))]) {
+      await noteOnFile(fileId, [
+        packages.length > 0 ? `Built ${packages.length} binding package${packages.length === 1 ? "" : "s"} beside the flat skis: ${packages.map((p) => p.title).join(", ")}.` : "",
+        ...skipped.map((k) => `No package for ${k.title}: ${k.reason}.`),
+      ].filter(Boolean).join(" "));
+    }
+  }
 
   // Rebuild the batch's products from scratch (mapping is re-runnable until export).
   await prisma.$transaction([
@@ -579,6 +603,24 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
 }
 
 /** Add a line to what the upload table says about a file, once. */
+/** The priced rows of every order form in a batch, read again from the files themselves. */
+async function orderPriceLists(files: Array<{ filename: string; storagePath: string }>): Promise<PriceRow[]> {
+  const out: PriceRow[] = [];
+  for (const f of files) {
+    if (!/\.(xlsx?|csv)$/i.test(f.filename)) continue;
+    try {
+      const buffer = await readFile(f.storagePath);
+      const grids = /\.csv$/i.test(f.filename)
+        ? [{ name: f.filename, grid: (await import("./csv")).parseCsv(buffer.toString("utf8")) }]
+        : await (await import("./extract/tabular")).sheetGrids(buffer);
+      out.push(...(readInvoiceGrids(grids)?.priceList ?? []));
+    } catch {
+      // A file that cannot be read again has already said so when it was first read.
+    }
+  }
+  return out;
+}
+
 export async function noteOnFile(fileId: string, note: string): Promise<void> {
   const file = await prisma.sourceFile.findUnique({ where: { id: fileId }, select: { extractionError: true } });
   const now = file?.extractionError ?? "";

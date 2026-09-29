@@ -20,6 +20,9 @@
 
 import { money } from "./adjust";
 import { slugify } from "./handle";
+import type { GroupedProduct } from "./grouping";
+import { productTitle, seasonTagFrom } from "./titles";
+import { rememberedBinding, type Listing } from "./shop-memory";
 
 /** What the shop charges to mount a binding, before any discount. */
 export const MOUNT_FEE = 55;
@@ -33,6 +36,8 @@ export interface BindingChoice {
   label: string;
   /** Recommended retail of the binding on its own. */
   rrp: number;
+  /** What the shop pays for the binding, added to the ski's cost. Null when the order does not say. */
+  cost?: number | null;
   /** For the title: "Marker Griffon". Falls back to the label. */
   shortName?: string;
 }
@@ -43,7 +48,7 @@ export interface FlatSki {
   season: string;
   tags: string[];
   /** One entry per length, with that length's own recommended retail and barcode. */
-  lengths: Array<{ length: string; rrp: number | null; barcode?: string }>;
+  lengths: Array<{ length: string; rrp: number | null; barcode?: string; cost?: number | null; quantity?: number | null }>;
 }
 
 export interface PackageVariant {
@@ -52,6 +57,13 @@ export interface PackageVariant {
   bindingFitting: string;
   /** Null when the ski or the binding has no recommended retail — never a guessed number. */
   rrp: number | null;
+  /**
+   * What the package costs the shop: the ski's cost plus the binding's. Mounting is labour, so it
+   * adds nothing here — the M7 Mantra package costs 958.19 mounted or not (749.55 + 208.64).
+   */
+  cost: number | null;
+  /** The ski's stock for this length: a package is the same ski, so it is the same count. */
+  quantity: number | null;
   /**
    * The SKI's barcode for this length, on every variant of it.
    *
@@ -104,12 +116,13 @@ export function buildPackage(ski: FlatSki, bindings: BindingChoice[]): SkiPackag
   const title = packageTitle(ski.title, ski.season, chosen[0]);
 
   const variants: PackageVariant[] = [];
-  for (const { length, rrp, barcode } of ski.lengths) {
+  for (const { length, rrp, barcode, cost = null, quantity = null } of ski.lengths) {
     const code = (barcode ?? "").trim();
     for (const binding of chosen) {
       const base = rrp === null ? null : money(rrp + binding.rrp);
-      variants.push({ length, bindingOption: binding.label, bindingFitting: FITTING_NO_MOUNT, rrp: base, barcode: code });
-      variants.push({ length, bindingOption: binding.label, bindingFitting: FITTING_MOUNT, rrp: base === null ? null : money(base + MOUNT_FEE), barcode: code });
+      const both = cost === null || cost === undefined || binding.cost === null || binding.cost === undefined ? null : money(cost + binding.cost);
+      variants.push({ length, bindingOption: binding.label, bindingFitting: FITTING_NO_MOUNT, rrp: base, cost: both, quantity, barcode: code });
+      variants.push({ length, bindingOption: binding.label, bindingFitting: FITTING_MOUNT, rrp: base === null ? null : money(base + MOUNT_FEE), cost: both, quantity, barcode: code });
     }
   }
 
@@ -120,10 +133,143 @@ export function buildPackage(ski: FlatSki, bindings: BindingChoice[]): SkiPackag
 
   return {
     title,
-    handle: slugify(`${ski.brand} ${title}`.trim()),
+    // The flat ski's handle with the package on the end — "m7-mantra-2027-inc-marker-griffon-
+    // binding-package" — which is how every package in the shop is addressed. Never the brand.
+    handle: slugify(title),
     brand: ski.brand,
     tags,
     optionNames: ["Length", "Binding Option", "Binding Fitting"],
     variants,
+  };
+}
+
+/**
+ * The binding a ski is packaged with, by who the ski is for.
+ *
+ * The shop's own choice, from its catalogue: men's and unisex skis go with the Marker Griffon in
+ * black (59 packages), women's with the Marker Squire in white (30). A kids' ski takes a junior
+ * binding the order has to name, so none is chosen for it here.
+ */
+export const DEFAULT_PACKAGE_BINDINGS: { mens: BindingSpec; womens: BindingSpec } = {
+  mens: { label: "Marker Griffon - Black", shortName: "Marker Griffon", model: /\bGRIFFON\s*13\s*MN\b/i, colour: /\bBLACK\b/i },
+  womens: { label: "Marker Squire - White", shortName: "Marker Squire", model: /\bSQUIRE\s*11\b/i, colour: /\bWHITE\b/i },
+};
+
+/** How a binding is found in a supplier's price list. */
+export interface BindingSpec {
+  label: string;
+  shortName: string;
+  model: RegExp;
+  colour: RegExp;
+}
+
+/** Which of the defaults a ski takes, from its gender and name. Null for a kids' ski. */
+export function bindingSpecFor(gender: string, title: string): BindingSpec | null {
+  const g = `${gender} ${title}`.toLowerCase();
+  if (/\b(kid|kids|junior|jr|youth|girls?|boys?)\b/.test(g)) return null;
+  if (/\b(women|womens|women's|ladies|w)\b/.test(g)) return DEFAULT_PACKAGE_BINDINGS.womens;
+  return DEFAULT_PACKAGE_BINDINGS.mens;
+}
+
+/**
+ * The binding's price and cost, read off the supplier's own price list.
+ *
+ * Their Marker tab prices every width of a binding the same — the Griffon 13 MN is 459 at 90, 100,
+ * 110 and 120mm — so any row of the right model and colour gives the price. Where two rows of the
+ * model disagree on price, none is taken: a guessed binding price is a wrong package price.
+ */
+export function bindingFrom(spec: BindingSpec, priceList: Array<{ title: string; colour?: string; rrp: number | null; costPrice: number | null }>): BindingChoice | null {
+  // The colour column where the list has one; the name only where it does not.
+  const rows = priceList.filter((r) => spec.model.test(r.title) && spec.colour.test((r.colour ?? "").trim() || r.title) && r.rrp !== null && r.rrp > 0);
+  if (rows.length === 0) return null;
+  const prices = new Set(rows.map((r) => r.rrp));
+  if (prices.size > 1) return null;
+  const costs = new Set(rows.map((r) => r.costPrice).filter((c): c is number => c !== null && c > 0));
+  return { label: spec.label, shortName: spec.shortName, rrp: rows[0].rrp!, cost: costs.size === 1 ? [...costs][0] : null };
+}
+
+/** Why a ski was not given a package, for the page to say. */
+export interface PackageSkip { title: string; reason: string }
+
+/** Is this grouped product a flat ski — the thing a package is built from? */
+export function isFlatSki(g: { productType: string; title: string; tags: string[] }): boolean {
+  return /^skis?$/i.test(g.productType.trim()) && !/\binc\b|\bpackage\b|\bsystem\b/i.test(g.title) && !g.tags.includes("ski packages");
+}
+
+/**
+ * The binding package of every flat ski in a delivery, alongside the flat ski itself.
+ *
+ * The shop sells each of its skis twice: "M7 Mantra 2027", the ski on its own, and "M7 Mantra 2027
+ * inc Marker Griffon Binding Package" — the same ski, the same stock, with a binding added to the
+ * price and to the cost, and the choice of having it mounted for $55. Men's skis go with the Griffon
+ * in black and women's with the Squire in white (see DEFAULT_PACKAGE_BINDINGS); the binding's price
+ * and cost are read off the supplier's own price list, never assumed.
+ *
+ * Each package is written in the product shape the rest of the build already uses, so it goes
+ * through the same writer as the flat ski: its variants are copies of the flat ski's line items
+ * with the package's price and cost on them.
+ */
+export function packageProducts(
+  products: GroupedProduct[],
+  priceList: Array<{ title: string; colour?: string; rrp: number | null; costPrice: number | null }>,
+  listings: Listing[] = [],
+): { packages: GroupedProduct[]; skipped: PackageSkip[] } {
+  const packages: GroupedProduct[] = [];
+  const skipped: PackageSkip[] = [];
+  for (const g of products) {
+    if (!isFlatSki(g)) continue;
+    const season = seasonTagFrom(g.tags);
+    const flatTitle = productTitle(g.title, season);
+    const gender = g.tags.find((t) => /^(mens|womens|kids)$/.test(t)) ?? "";
+    // A kids' ski takes the binding the shop packaged the model with last time, if it ever did.
+    const spec = bindingSpecFor(gender, flatTitle) ?? specFromLabel(rememberedBinding({ title: g.title, brand: g.brand }, listings));
+    if (!spec) { skipped.push({ title: flatTitle, reason: "a kids' ski takes a junior binding, and neither the order nor the shop's earlier packages of it say which" }); continue; }
+    const binding = bindingFrom(spec, priceList);
+    if (!binding) { skipped.push({ title: flatTitle, reason: `no ${spec.label} with one price on the supplier's price list` }); continue; }
+    const title = packageTitle(flatTitle, season ?? "", binding);
+    const variants = g.variants.flatMap((v) => {
+      const length = v.item.length || v.item.size || v.option1Value || "";
+      const rrp = v.item.rrp === null ? null : money(v.item.rrp + binding.rrp);
+      const cost = v.item.costPrice === null || binding.cost === null || binding.cost === undefined ? null : money(v.item.costPrice + binding.cost);
+      return [FITTING_NO_MOUNT, FITTING_MOUNT].map((fitting) => ({
+        ...v,
+        item: { ...v.item, rrp: rrp === null ? null : fitting === FITTING_MOUNT ? money(rrp + MOUNT_FEE) : rrp, costPrice: cost },
+        option1Value: length,
+        option2Value: binding.label,
+        option3Value: fitting,
+      }));
+    });
+    const tags = [...g.tags];
+    for (const t of ["ski packages", "ski", "skis"]) if (!tags.includes(t)) tags.push(t);
+    packages.push({
+      ...g,
+      key: `${g.key}|package`,
+      handle: slugify(title),
+      title,
+      tags,
+      option1Name: "Length",
+      option2Name: "Binding Option",
+      option3Name: "Binding Fitting",
+      variants,
+    });
+  }
+  return { packages, skipped };
+}
+
+/**
+ * A binding named the way a package's Binding Option names it — "Marker Squire - Black" — as
+ * something to find on a price list: the model words, and exactly that colour.
+ */
+export function specFromLabel(label: string): BindingSpec | null {
+  const m = /^(.*?)\s*-\s*([A-Za-z /]+)$/.exec(label.trim());
+  if (!m) return null;
+  const words = m[1].split(/\s+/).filter((w) => !/^(marker|look|tyrolia|salomon|atomic|rossignol)$/i.test(w));
+  if (words.length === 0) return null;
+  const esc = (w: string) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return {
+    label: label.trim(),
+    shortName: m[1].trim(),
+    model: new RegExp(`\\b${words.map(esc).join("\\s*")}\\b`, "i"),
+    colour: new RegExp(`^\\s*${esc(m[2].trim())}\\s*$`, "i"),
   };
 }

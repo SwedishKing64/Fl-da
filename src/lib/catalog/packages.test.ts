@@ -68,8 +68,8 @@ describe("building one", () => {
     expect(pack.tags).toContain("volkl");
   });
 
-  it("gets a handle built from the brand and the package name", () => {
-    expect(pack.handle).toBe("volkl-blaze-94-2027-inc-marker-griffon-binding-package");
+  it("gets the flat ski's handle with the package on the end, as the shop addresses them", () => {
+    expect(pack.handle).toBe("blaze-94-2027-inc-marker-griffon-binding-package");
   });
 
   it("offers every binding on every length when there is more than one", () => {

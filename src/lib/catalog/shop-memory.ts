@@ -24,6 +24,10 @@ export interface Listing {
   vendor: string;
   productType: string;
   tags: string[];
+  /** The listing's recommended retail as the shop writes it: Compare At where set, else Price. */
+  price?: number | null;
+  /** A package's binding, as its Binding Option reads: "Marker Squire - Black". */
+  bindingOption?: string;
 }
 
 /** Every riding-style tag the shop uses, board and ski. */
@@ -58,6 +62,8 @@ export function listingsFromCsv(csv: string): Listing[] {
   const header = grid[0] ?? [];
   const at = (name: string) => header.indexOf(name);
   const [H, T, V, Y, G] = [at("Handle"), at("Title"), at("Vendor"), at("Type"), at("Tags")];
+  const [P, C] = [at("Variant Price"), at("Variant Compare At Price")];
+  const bindingAt = [1, 2, 3].map((n) => [at(`Option${n} Name`), at(`Option${n} Value`)] as const);
   if (H < 0 || T < 0) return [];
   const out: Listing[] = [];
   const seen = new Set<string>();
@@ -72,6 +78,8 @@ export function listingsFromCsv(csv: string): Listing[] {
       vendor: V >= 0 ? (row[V] ?? "").trim() : "",
       productType: Y >= 0 ? (row[Y] ?? "").trim() : "",
       tags: G >= 0 ? (row[G] ?? "").split(",").map((t) => t.trim()).filter(Boolean) : [],
+      price: priceOf(C >= 0 ? row[C] : "") ?? priceOf(P >= 0 ? row[P] : ""),
+      bindingOption: bindingAt.map(([n, v]) => (n >= 0 && v >= 0 && /^binding option$/i.test((row[n] ?? "").trim()) ? (row[v] ?? "").trim() : "")).find(Boolean) ?? "",
     });
   }
   return out;
@@ -136,4 +144,40 @@ export function disciplinesFromTerrain(productType: string, text: string): strin
     if (/touring|skitour|backcountry/.test(t)) out.push("Touring Skis");
   }
   return out.flatMap((d) => tagsFor(d).slice(0, 1));
+}
+
+function priceOf(raw: string | undefined): number | null {
+  const n = Number((raw ?? "").replace(/[$,\s]/g, ""));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/**
+ * A supplier's recommended retail, ending the way the shop ends this brand's prices.
+ *
+ * Völkl's form says 1649; the shop lists the M7 Mantra at 1649.99, and 104 of its 107 Völkl prices
+ * end in .99. Written as 1649 it would have cut every carry-over's Compare At by 99 cents and put
+ * every new ski a cent off its siblings. Other brands are the other way — most Rossignol and Black
+ * Crows prices are whole dollars — so it is read per brand, and only a clear majority decides.
+ */
+export function asShopPrice(rrp: number | null, vendor: string, listings: Listing[]): number | null {
+  if (rrp === null || !Number.isInteger(rrp)) return rrp;
+  const brand = vendor.trim().toLowerCase();
+  const prices = listings.filter((l) => l.vendor.trim().toLowerCase() === brand && typeof l.price === "number").map((l) => l.price as number);
+  if (prices.length < 3) return rrp;
+  const cents99 = prices.filter((p) => Math.round(p * 100) % 100 === 99).length;
+  return cents99 / prices.length >= 0.7 ? Math.round((rrp + 0.99) * 100) / 100 : rrp;
+}
+
+/**
+ * The binding the shop packaged this model with last time, as its Binding Option reads.
+ *
+ * Their Mantra Junior 2025 package is "Marker Squire - Black"; a kids' ski takes whatever junior
+ * binding the shop chose for it, and that choice is only written down in its previous package.
+ */
+export function rememberedBinding(product: { title: string; brand: string }, listings: Listing[]): string {
+  const key = modelKey(product.title, product.brand);
+  const brand = product.brand.trim().toLowerCase();
+  const same = listings.filter((l) => l.bindingOption && l.vendor.trim().toLowerCase() === brand && modelKey(l.title, l.vendor) === key);
+  if (same.length === 0) return "";
+  return same.reduce((a, b) => (yearOf(b) > yearOf(a) ? b : a)).bindingOption ?? "";
 }

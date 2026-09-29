@@ -11,13 +11,14 @@
  * stock instead of the nine skis that were bought.
  */
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { extractXlsx } from "./extract/tabular";
 import { applyMapping, suggestMapping } from "./mapping";
 import { enrichFromSpecs } from "./pipeline";
 import { keepOrderedLines, resolveAgainstReference } from "./reference-match";
 import { DEFAULT_CATEGORY_RULES } from "./categorize";
+import { parseCsv } from "./csv";
 import type { CanonicalLineItem } from "./types";
 
 const UP = "/root/.claude/uploads/94fb8bfb-35a9-5176-afe9-8fcc0dec9eb3/";
@@ -118,5 +119,78 @@ describe("the Volkl order joined to its reference sheets", () => {
     expect(shown).toContain("MANTRA JUNIOR||138|2027");
     const blaze = items.filter((i) => i.title === "BLAZE 94");
     expect(new Set(blaze.map((i) => i.modelCode)).size).toBe(1);
+  });
+});
+
+/**
+ * The Völkl order as the shop sells skis: flat, and as a package with a binding.
+ *
+ * Checked against the shop's own export (22065406): the M7 Mantra 2027 is 1649.99 flat and 2108.99
+ * with a Griffon (+459), 2163.99 mounted (+55), costing 749.55 and 958.19 (+208.64, the Griffon's
+ * INDENT price); the Mantra 88 W is 1449.99 flat and 1798.99 with a Squire (+349).
+ */
+describe.skipIf(!existsSync(`${UP}22065406-products_export_1-7.csv`))("the Volkl order, flat and packaged", () => {
+  async function deliver() {
+    const { sheetGrids } = await import("./extract/tabular");
+    const { readInvoiceGrids } = await import("./invoice");
+    const { buildDelivery } = await import("./delivery");
+    const { listingsFromCsv } = await import("./shop-memory");
+    const invoice = readInvoiceGrids(await sheetGrids(readFileSync(ORDER)))!;
+    const [specs, barcodes] = await Promise.all([SPECS, BARCODES].map(async (p) => {
+      const t = await extractXlsx(readFileSync(p));
+      const m = suggestMapping(t.headers, t.rows);
+      return t.rows.map((r) => applyMapping(r, m));
+    }));
+    const csv = readFileSync(`${UP}22065406-products_export_1-7.csv`, "utf8");
+    const memory = listingsFromCsv(readFileSync(`${UP}48bf1557-products_export_1_5.csv`, "utf8"));
+    return { invoice, csv, out: buildDelivery(csv, invoice.lines, { season: "2027", vendor: "Volkl", specs: [...specs, ...barcodes], listings: memory, priceList: invoice.priceList }) };
+  }
+
+  it("reads the bindings' prices and costs off the Marker tab", { timeout: 60_000 }, async () => {
+    const { invoice } = await deliver();
+    const { bindingFrom, DEFAULT_PACKAGE_BINDINGS } = await import("./packages");
+    expect(bindingFrom(DEFAULT_PACKAGE_BINDINGS.mens, invoice.priceList!)).toMatchObject({ label: "Marker Griffon - Black", rrp: 459 });
+    expect(bindingFrom(DEFAULT_PACKAGE_BINDINGS.womens, invoice.priceList!)).toMatchObject({ label: "Marker Squire - White", rrp: 349 });
+    // INDENT, which is what the shop's costs are: the M7 Mantra at 749.55.
+    expect(invoice.lines.find((l) => l.title === "M7 MANTRA")?.costPrice).toBeCloseTo(749.55, 2);
+  });
+
+  it("counts the skis onto their packages too, matched by the barcode the two share", { timeout: 60_000 }, async () => {
+    const { out } = await deliver();
+    expect(out.heldBack).toEqual([]);
+    const qty = out.changes.filter((c) => c.column === "Variant Inventory Qty").map((c) => `${c.handle} ${c.before}->${c.after}`);
+    expect(qty).toEqual(expect.arrayContaining([
+      "m7-mantra 3->5",
+      "m7-mantra-2027-inc-marker-griffon-binding-package 3->5",
+      "mantra-88-w-2027 0->1",
+      "mantra-88-w-2027-inc-marker-squire-binding-package 0->1",
+    ]));
+    // No Compare At cut from 1649.99 to 1649.
+    expect(out.changes.filter((c) => c.column === "Variant Compare At Price")).toEqual([]);
+  });
+
+  it("adds a new length to the package as well as the ski, with the ski's barcode", { timeout: 60_000 }, async () => {
+    const { out, csv } = await deliver();
+    const rows = parseCsv(out.csv).filter((r) => r.some((c) => c.trim()));
+    const h = rows[0];
+    const added = rows.slice(parseCsv(csv).filter((r) => r.some((c) => c.trim())).length);
+    const pack158 = added.filter((r) => r[h.indexOf("Handle")] === "blaze-94-2027-inc-marker-griffon-binding-package");
+    expect(pack158).toHaveLength(6);   // 3 bindings the package offers × 2 fittings
+    expect(new Set(pack158.map((r) => r[h.indexOf("Option1 Value")]))).toEqual(new Set(["158"]));
+    expect(new Set(pack158.map((r) => r[h.indexOf("Variant Barcodes")]))).toEqual(new Set(["821264839478"]));
+  });
+
+  it("builds a new ski's package from the binding the shop chose for it last season", { timeout: 60_000 }, async () => {
+    const { out } = await deliver();
+    const pack = out.fresh.find((f) => f.handle === "mantra-junior-2027-inc-marker-squire-binding-package")!;
+    expect(pack.title).toBe("Mantra Junior 2027 inc Marker Squire Binding Package");
+    expect(pack.tags).toContain("ski packages");
+    expect(pack.variants.map((v) => `${v.option} ${v.price}`)).toEqual([
+      "138 / Marker Squire - Black / Do Not Mount My Bindings 948.99",
+      "138 / Marker Squire - Black / Please Mount My Bindings 1003.99",
+      "148 / Marker Squire - Black / Do Not Mount My Bindings 948.99",
+      "148 / Marker Squire - Black / Please Mount My Bindings 1003.99",
+    ]);
+    expect(pack.variants.every((v) => v.barcode.startsWith("82126484"))).toBe(true);
   });
 });

@@ -16,10 +16,19 @@ export interface CategoryRuleLike {
   active: boolean;
 }
 
+/**
+ * A binding, by the word or by the model. An order form writes "GRIFFON 13 MN; 100MM" with no
+ * "binding" anywhere, and the one Griffon on the Völkl order was being filed as a ski. The model
+ * names only count on a line that is not itself a ski or a package — "M7 Mantra inc Marker Griffon
+ * Binding Package" is a ski, and a ski's copy may well name the binding it pairs with.
+ */
+export const OLD_BINDINGS_PATTERN = String.raw`\bbindings?\b|\bdin\b`;
+export const BINDINGS_PATTERN = String.raw`\bbindings?\b|\bdin\b|^(?![\s\S]*\b(inc|package|system|skis)\b)[\s\S]*\b(griffon|squire|jester|kingpin|duke pt|alpinist|pivot|strive|shift\s?2?|tyrolia attack|protector|vmotion|xpress|spx|nx\s?\d)\b`;
+
 /** Seeded defaults; editable in Settings. Order matters (boots before skis so "ski boot" wins). */
 export const DEFAULT_CATEGORY_RULES: CategoryRuleLike[] = [
   { category: "boots", pattern: String.raw`\bboots?\b|\bhawx\b|\bmondo`, productType: "Ski Boots", collections: "Ski Boots", tags: "boots", option1: "size", option2: "width", option3: "colour", priority: 100, active: true },
-  { category: "bindings", pattern: String.raw`\bbindings?\b|\bdin\b`, productType: "Ski Bindings", collections: "Bindings", tags: "bindings", option1: "size", option2: "colour", option3: null, priority: 95, active: true },
+  { category: "bindings", pattern: BINDINGS_PATTERN, productType: "Ski Bindings", collections: "Bindings", tags: "bindings", option1: "size", option2: "colour", option3: null, priority: 95, active: true },
   { category: "poles", pattern: String.raw`\bpoles?\b`, productType: "Ski Poles", collections: "Poles", tags: "poles", option1: "length", option2: "colour", option3: null, priority: 90, active: true },
   { category: "helmets", pattern: String.raw`\bhelmets?\b`, productType: "Helmets", collections: "Helmets", tags: "helmets, protection", option1: "size", option2: "colour", option3: null, priority: 85, active: true },
   { category: "goggles", pattern: String.raw`\bgoggles?\b|\blens\b`, productType: "Goggles", collections: "Goggles", tags: "goggles", option1: "colour", option2: "size", option3: null, priority: 84, active: true },
@@ -204,7 +213,8 @@ export function tagsFor(rule: CategoryRuleLike | null, items: CanonicalLineItem[
     if (i.season) tags.add(i.season);
     if (i.gender) tags.add(i.gender);
     if (i.abilityLevel) tags.add(i.abilityLevel);
-    if (i.terrain) tags.add(i.terrain);
+    // Not the terrain word itself ("Freeride"): it becomes the shop's riding-style shelf instead
+    // ("freeride and powder skis") — see shop-memory — and the bare word is no tag the shop uses.
   }
   return Array.from(tags);
 }

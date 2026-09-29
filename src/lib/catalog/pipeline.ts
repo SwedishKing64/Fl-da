@@ -445,6 +445,14 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
     const joined = resolved.joined.filter((j) => "to" in j).length;
     const missing = [...new Set(resolved.joined.filter((j): j is { line: string; reason: string } => "reason" in j).map((j) => j.line))];
     const orderFiles = [...new Set(items.map((i) => i.fileId))];
+    // A reference sheet none of the order is on is very likely the wrong file — Burton's description
+    // list in a Völkl batch — and nothing else says so: it is simply never used.
+    const fileOfTitle = new Map<string, string>();
+    for (const spec of specItems) if (!fileOfTitle.has(spec.title)) fileOfTitle.set(spec.title, specSource.get(spec) ?? "");
+    const usedFiles = new Set(resolved.joined.flatMap((j) => ("to" in j ? [fileOfTitle.get(j.to) ?? ""] : [])));
+    for (const fileId of new Set(specItems.map((spec) => specSource.get(spec) ?? "").filter(Boolean))) {
+      if (!usedFiles.has(fileId)) await noteOnFile(fileId, `None of this order's ${items.length} lines are on this sheet, so nothing was taken from it. If it should be part of this order, check it is the right file; if it belongs to another brand, remove it from this batch.`);
+    }
     for (const fileId of orderFiles) {
       await noteOnFile(fileId, `Joined to the reference sheet: ${joined} of ${items.length} lines${missing.length ? `. Not on it, so built from the order alone: ${missing.slice(0, 6).join(", ")}${missing.length > 6 ? `, and ${missing.length - 6} more` : ""}` : ""}.`);
     }

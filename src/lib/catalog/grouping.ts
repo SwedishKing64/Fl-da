@@ -6,7 +6,7 @@ import { normaliseOptionName, optionNamesFor } from "./options";
 import { catalogTags } from "./product-tags";
 import { productTitle, seasonTagFrom, withoutVendor } from "./titles";
 import type { CanonicalLineItem } from "./types";
-import { disciplinesFromTerrain, rememberedDisciplines, type Listing } from "./shop-memory";
+import { disciplinesFromTerrain, rememberedDisciplines, rememberedType, type Listing } from "./shop-memory";
 
 export interface GroupedVariant {
   item: CanonicalLineItem;
@@ -85,7 +85,10 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
   const groups = new Map<string, { rule: CategoryRuleLike | null; entries: Array<{ item: CanonicalLineItem; index: number }> }>();
 
   const enriched = rawItems.map((raw) => {
-    const rule = detectCategory(raw, rules);
+    // Nothing on the order says what it is: the shop's own filing of the model does. See shop-memory.
+    const remembered = rememberedType({ title: raw.title, brand: raw.brand }, opts.listings ?? []);
+    const rule = detectCategory(raw, rules)
+      ?? (remembered ? rules.find((r) => r.active && (r.productType === remembered || r.category === remembered.toLowerCase())) ?? null : null);
     return { rule, item: enrichFromTitle(raw, rule?.category ?? "other") };
   });
   normaliseCodes(enriched.map((e) => e.item));

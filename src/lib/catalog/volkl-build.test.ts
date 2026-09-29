@@ -195,3 +195,32 @@ describe.skipIf(!existsSync(`${UP}22065406-products_export_1-7.csv`))("the Volkl
     expect(pack.variants.every((v) => v.barcode.startsWith("82126484"))).toBe(true);
   });
 });
+
+/**
+ * The Völkl order with only the barcode list beside it — no PIM export — and Burton's description
+ * list in the batch by mistake. Reported from the shop floor: "Joined to the reference sheet: 1 of 9".
+ * The barcode list keys each row by the code WITH the length on the end ("V2610134.000.179"); the
+ * order says "V2610134.000". Only a code that starts with the sheet's was ever tried.
+ */
+describe.skipIf(!existsSync(`${UP}0ad81c42-Items_and_Descriptions_2027.xlsx`))("the Volkl order against its barcode list alone", () => {
+  it("joins every line, and gives each length its barcode", { timeout: 60_000 }, async () => {
+    const load = async (path: string) => {
+      const t = await extractXlsx(readFileSync(path));
+      const m = suggestMapping(t.headers, t.rows);
+      return t.rows.map((r) => applyMapping(r, m));
+    };
+    const [order, barcodes, burton] = await Promise.all([load(ORDER), load(BARCODES), load(`${UP}0ad81c42-Items_and_Descriptions_2027.xlsx`)]);
+    const lines = keepOrderedLines(order.map((item) => ({ item, fileId: "o" }))).kept.map((k) => k.item);
+    const specs = [...barcodes, ...burton].filter((s) => s.title.trim());
+    const r = resolveAgainstReference(lines, specs, DEFAULT_CATEGORY_RULES);
+    expect(r.joined.filter((j) => "to" in j)).toHaveLength(lines.length);
+    const built = enrichFromSpecs(
+      (await import("./grouping")).groupLineItems(r.items.map((i) => ({ ...i, brand: "Volkl" })), DEFAULT_CATEGORY_RULES),
+      specs,
+    );
+    const byLength = Object.fromEntries(built.flatMap((p) => p.variants.map((v) => [`${p.title} ${v.item.length}`, v.item.barcode])));
+    expect(byLength["M7 MANTRA 170"]).toBe("821264838167");
+    expect(byLength["M7 MANTRA 177"]).toBe("821264838105");
+    expect(byLength["MANTRA 88 W 163"]).toBe("821264838518");
+  });
+});

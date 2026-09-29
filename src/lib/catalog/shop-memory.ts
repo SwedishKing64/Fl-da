@@ -212,3 +212,16 @@ export function existingHandle(product: { title: string; brand: string; season: 
     && (season === 0 || yearOf(l) === season));
   return hits.length === 1 ? hits[0].handle : "";
 }
+
+/**
+ * The Type the shop files this model under, when nothing on the order says what it is: "Blaze 94"
+ * and "Revolt 101" carry no word that says ski, and an order form seldom does. Only an answer every
+ * listing of the model agrees on.
+ */
+export function rememberedType(product: { title: string; brand: string }, listings: Listing[]): string {
+  const key = modelKey(product.title, product.brand);
+  if (!key) return "";
+  const brand = product.brand.trim().toLowerCase();
+  const types = new Set(listings.filter((l) => l.productType.trim() && l.vendor.trim().toLowerCase() === brand && modelKey(l.title, l.vendor) === key).map((l) => l.productType.trim()));
+  return types.size === 1 ? [...types][0] : "";
+}

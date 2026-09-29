@@ -194,11 +194,17 @@ export function UploadPanel({ batchId, aiEnabled, reading, productCount }: { bat
       )}
 
       {results && (
-        <Alert tone={results.every((r) => r.rows > 0 || r.kind === "PRODUCT_PHOTO") ? "success" : "warning"}>
+        <Alert tone={results.some((r) => r.warnings.length > 0 && r.rows === 0 && r.method === null) ? "warning" : results.every((r) => r.rows > 0 || r.method === null || r.kind === "PRODUCT_PHOTO") ? "success" : "warning"}>
           <ul className="space-y-1">
-            {results.map((r, i) => (
-              <li key={`${r.filename}-${i}`}><strong>{r.filename}</strong>: {r.kind === "PRODUCT_PHOTO" ? "product photo" : `${r.rows} rows`}{r.method ? ` via ${r.method.replace("_", " ").toLowerCase()}` : ""}{r.kind && r.kind !== "PRODUCT_PHOTO" && r.kind !== "AUTO" ? ` (${r.kind.replace("_", " ").toLowerCase()})` : ""}{r.warnings.length ? ` — ${r.warnings.join(" ")}` : ""}</li>
-            ))}
+            {results.map((r, i) => {
+              // A file just stored has not been read yet — that happens in the background, after this
+              // answer — so its row count here is always 0. Saying "0 rows" told people the file was
+              // empty when it had 30; the real counts are in the table below once it is read.
+              const stored = r.method === null && r.rows === 0 && r.warnings.length === 0 && r.kind !== "PRODUCT_PHOTO";
+              return (
+                <li key={`${r.filename}-${i}`}><strong>{r.filename}</strong>: {stored ? "uploaded — being read, the table below shows what was found" : <>{r.kind === "PRODUCT_PHOTO" ? "product photo" : `${r.rows} rows`}{r.method ? ` via ${r.method.replace("_", " ").toLowerCase()}` : ""}{r.kind && r.kind !== "PRODUCT_PHOTO" && r.kind !== "AUTO" ? ` (${r.kind.replace("_", " ").toLowerCase()})` : ""}{r.warnings.length ? ` — ${r.warnings.join(" ")}` : ""}</>}</li>
+              );
+            })}
           </ul>
           {auto && !auto.applied && results.some((r) => r.rows > 0) && <div className="mt-2 text-xs">Some columns were not recognised. Everything that could be built has been; <a href={`/batches/${batchId}/map`} className="font-semibold underline">set the rest by hand</a> and it is remembered for this supplier.</div>}
         </Alert>

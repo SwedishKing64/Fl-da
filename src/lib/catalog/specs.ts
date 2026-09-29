@@ -88,8 +88,12 @@ export function enrichFromSpecs<T extends { title: string; brand: string; descri
   const byCodeLength = new Map<string, CanonicalLineItem>();
   const byCode = new Map<string, CanonicalLineItem>();
   for (const spec of specs) {
-    const sku = normKey(spec.sku);
-    if (sku && spec.barcode.trim()) bySku.set(sku, spec);
+    // A barcode list keys its rows by the compound code ("V2610155.000.182") in its article column
+    // and has no SKU column at all, so that code is a SKU here too.
+    for (const key of [spec.sku, spec.modelCode]) {
+      const sku = normKey(key);
+      if (sku && spec.barcode.trim() && !bySku.has(sku)) bySku.set(sku, spec);
+    }
     const code = normKey(spec.modelCode);
     const length = spec.length.replace(/[^\d.]/g, "");
     if (code && length && spec.barcode.trim()) byCodeLength.set(`${code} ${length}`, spec);

@@ -177,22 +177,34 @@ export interface LineMatch {
  * over is a word from another model's name, so it is not that board. The most specific match wins,
  * and a tie is refused rather than guessed.
  */
-export function matchLine(line: CanonicalLineItem, refs: Reference[], vocabulary: Set<string>): LineMatch | { reason: string } {
+export function matchLine(line: CanonicalLineItem, refs: Reference[], vocabulary: Set<string>, sharedCodes = true): LineMatch | { reason: string } {
   const code = (line.modelCode || line.sku).replace(/\s+/g, "").toUpperCase();
   const coded = refs.filter((r) => r.code);
   if (code && coded.length > 0) {
-    const hits = coded.filter((r) => code === r.code || (r.code.length >= 4 && code.startsWith(r.code)));
-    const longest = Math.max(0, ...hits.map((r) => r.code.length));
-    const best = hits.filter((r) => r.code.length === longest);
+    // The sheet's code may be shorter than the order's (a PIM keys the model, "V2610134"; the order
+    // says "V2610134.000") or LONGER (a barcode list keys the length, "V2610134.000.179"), and both
+    // are the same model. Longer only where it extends the order's code at a separator, so that
+    // "V26101" does not claim "V2610134".
+    const extends_ = (r: Reference) => r.code.length > code.length && r.code.startsWith(code) && /^[.\-/]/.test(r.code.slice(code.length));
+    const hits = coded.filter((r) => code === r.code || (r.code.length >= 4 && code.startsWith(r.code)) || extends_(r));
+    const longest = Math.max(0, ...hits.filter((r) => !extends_(r)).map((r) => r.code.length));
+    const exact = hits.filter((r) => !extends_(r) && r.code.length === longest);
+    const best = exact.length > 0 ? exact : hits;
     // Several rows under ONE code are one model — a spec export has a row per length, five for the
-    // M7 Mantra — not five candidates. Only different codes of the same length are a real tie.
+    // M7 Mantra — not five candidates. Only different codes of the same length are a real tie. Rows
+    // under a longer code (a row per length AND per colour) are one model when they share a name.
     const codes = new Set(best.map((r) => r.code));
-    if (codes.size === 1) {
+    const names = new Set(best.map((r) => shopName(r.spec.title).toUpperCase()));
+    if (codes.size === 1 || (exact.length === 0 && names.size === 1)) {
       const named = best.find((r) => r.spec.description.trim()) ?? best[0];
       return { spec: named.spec, how: "code", graphic: graphicOf(line.title, named, vocabulary) };
     }
-    if (codes.size > 1) return { reason: `code ${code} fits ${codes.size} different codes on the reference sheet` };
-    return { reason: `code ${code} is not on the reference sheet` };
+    if (codes.size > 1) return { reason: `code ${code} fits ${names.size} different models on the reference sheet` };
+    // Not on the sheet by its code. Where OTHER lines' codes do hit it the two share a code system,
+    // so this one is simply not on it — Burton's splitboard has a code the list lacks, and matched
+    // by name it became the Fish 3D snowboard. Only where no code of the order is on the sheet at
+    // all are they different systems, and the wording is the one key they have in common.
+    if (sharedCodes) return { reason: `code ${code} is not on the reference sheet` };
   }
 
   const words = expand(tokens(line.title));
@@ -270,10 +282,16 @@ export function resolveAgainstReference(
   // in here means the line is about another model.
   const vocabulary = new Set(refs.flatMap((r) => r.required));
   const joined: Resolution["joined"] = [];
+  // Do the order's codes and the sheet's codes come from one system? If any line's code is on the
+  // sheet, they do. See matchLine.
+  const sharedCodes = items.some((line) => {
+    const code = (line.modelCode || line.sku).replace(/\s+/g, "").toUpperCase();
+    return code !== "" && refs.some((r) => r.code && (code === r.code || (r.code.length >= 4 && code.startsWith(r.code)) || (r.code.startsWith(code) && /^[.\-/]/.test(r.code.slice(code.length)))));
+  });
   const named = colourways(refs.map((r) => shopName(r.spec.title)));
   const out = items.map((line, index) => {
     const pre = decided.get(index);
-    const found = pre ? { spec: pre, how: "model" as const, graphic: graphicOf(line.title, referenceOf(pre), vocabulary) } : matchLine(line, refs, vocabulary);
+    const found = pre ? { spec: pre, how: "model" as const, graphic: graphicOf(line.title, referenceOf(pre), vocabulary) } : matchLine(line, refs, vocabulary, sharedCodes);
     if ("reason" in found) {
       joined.push({ line: line.title || line.sku, reason: found.reason });
       return widen(line, rules);

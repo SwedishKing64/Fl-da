@@ -239,16 +239,59 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
   }
 
   /**
-   * Send a file dropped on the exports box to the reader it belongs to.
+   * Send files dropped on the exports box to the reader each belongs to.
    *
-   * Only one at a time is read — an invoice is one document, and two dropped together is almost
-   * always a mistake worth naming rather than a batch worth running.
+   * A supplier's delivery is usually more than one file — Burton's order form and its description
+   * list, Volkl's order, spec export and barcode list — and they arrive together. This used to read
+   * the FIRST one as the invoice and ignore the rest, and a browser lists them alphabetically: the
+   * description list was never loaded, or was read as the order, and every board came out with no
+   * description though the sheet of them had been dropped right there. See takeDocuments.
    */
   async function routeToInvoice(files: File[]) {
-    if (files.length > 1) {
-      setError(`${files.map((f) => f.name).join(", ")} — one invoice at a time. ${files[0].name} was read; add the others after it.`);
+    await takeDocuments(files);
+  }
+
+  /**
+   * Several supplier files at once: the order is whichever has quantities written on it, and every
+   * other spreadsheet is a reference sheet to look its lines up in.
+   *
+   * Which is which is read off the files, not off which box they were dropped in or what order the
+   * browser listed them in. With no quantities anywhere, the one that reads as an invoice at all is
+   * taken as a price list and the rest are still references.
+   */
+  async function takeDocuments(files: File[]) {
+    if (files.length === 1) return takeInvoice(files[0]);
+    setBusy("invoice"); setError(null); setPreview(null); setSaved(null);
+    const readings: Array<{ file: File; data: Invoice | null; ordered: number }> = [];
+    try {
+      for (const file of files) {
+        const sent = await shrinkImage(file);
+        if (!fitsUpload(sent.file.size)) { setError(tooBig(file, sent.file.size)); return; }
+        setProgress(`Reading ${file.name}…`);
+        const r = await readInvoiceAction({ name: file.name, type: sent.file.type, base64: await read(sent.file, file.name) });
+        const data = r.ok && r.data ? { ...r.data, filename: file.name } : null;
+        readings.push({ file, data, ordered: data ? data.lines.filter((l) => (l.quantity ?? 0) > 0).length : 0 });
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      return;
+    } finally {
+      setBusy(null); setProgress("");
     }
-    await takeInvoice(files[0]);
+    const readable = readings.filter((r) => r.data);
+    const order = [...readable].sort((a, b) => b.ordered - a.ordered)[0];
+    if (!order) {
+      setError(`None of ${files.map((f) => f.name).join(", ")} reads as an order or invoice — it needs a column identifying each line and a column of prices or quantities. Add the order form, then these as its spec sheets.`);
+      return;
+    }
+    setInvoice(order.data);
+    const rest = readings.filter((r) => r !== order);
+    const sheetsOnly = rest.filter((r) => /\.(xlsx?|csv)$/i.test(r.file.name));
+    const skipped = rest.filter((r) => !sheetsOnly.includes(r));
+    for (const r of sheetsOnly) await takeReference(r.file);
+    if (skipped.length > 0) {
+      setError(`${skipped.map((r) => r.file.name).join(", ")} ${skipped.length === 1 ? "was" : "were"} not used: ${order.file.name} was read as the order, and a spec sheet or barcode list has to be a spreadsheet or a CSV.`);
+    }
   }
 
   /**
@@ -954,7 +997,7 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
               <span className="ml-2 text-xs text-[var(--ink-soft)]">Add the order form and each line is matched by barcode, then by item code, then by the product&rsquo;s name — so a line that says SX-2M finds the SX-2M. A line that fits two products is never guessed at. What it matches has its stock put up; a size the product does not list arrives as a variant of it, and a product the shop does not have is built onto the end of the same file. A spreadsheet or CSV is read by its columns; a PDF or a photo of one goes to the API to be read.</span>
             </div>
             <Button size="sm" disabled={busy !== null} onClick={() => invoiceRef.current?.click()}>{busy === "invoice" ? "Reading…" : invoice ? "Use a different invoice" : "Add the invoice"}</Button>
-            <input ref={invoiceRef} type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void takeInvoice(f); e.target.value = ""; }} />
+            <input ref={invoiceRef} type="file" multiple className="hidden" onChange={(e) => { const f = Array.from(e.target.files ?? []); if (f.length) void takeDocuments(f); e.target.value = ""; }} />
           </div>
 
           {busy === "invoice" && progress && (
@@ -1060,7 +1103,7 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
                     <span className="ml-2 text-xs text-[var(--ink-soft)]">Burton&rsquo;s description list or Volkl&rsquo;s spec export: each order line is found on it first, so the order&rsquo;s shorthand (&ldquo;CUSTOM NEW GRAPHIC 58W&rdquo;) is matched to the shop under the catalogue&rsquo;s name (Custom, 158W), and anything that has to be built takes its description from it. A barcode list is where the EAN for each size is. Add the order first, then these.</span>
                   </div>
                   <Button size="sm" disabled={busy !== null} onClick={() => referenceRef.current?.click()}>{busy === "reference" ? "Reading…" : references.length > 0 ? "Add another" : "Add a spec sheet"}</Button>
-                  <input ref={referenceRef} type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void takeReference(f); e.target.value = ""; }} />
+                  <input ref={referenceRef} type="file" multiple className="hidden" onChange={(e) => { const f = Array.from(e.target.files ?? []); e.target.value = ""; void (async () => { for (const file of f) await takeReference(file); })(); }} />
                 </div>
                 {references.length > 0 && (
                   <ul className="mt-2 divide-y divide-[var(--line-soft)] text-xs">

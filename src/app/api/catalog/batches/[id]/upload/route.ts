@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { requireApiUser } from "@/lib/catalog/auth";
 import { prisma } from "@/lib/catalog/db";
 import { after } from "next/server";
-import { autoApplyMappings, extractStoredFile, storeFile } from "@/lib/catalog/pipeline";
+import { autoApplyMappings, extractStoredFile, noteOnFile, storeFile, untouchedSinceBuilt } from "@/lib/catalog/pipeline";
 import type { UploadKind } from "@/lib/catalog/extract";
 import { logAudit } from "@/lib/catalog/audit";
 
@@ -50,7 +50,10 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/catalog/bat
   await logAudit("batch.files_uploaded", { batchId: id, userId: user.id, details: { files: stored.map((f) => f.filename) } });
 
   const origin = req.nextUrl.origin;
-  const shouldMap = autoMap && batch.status !== "REVIEW";
+  // A batch with products already is rebuilt with the new file in it — unless somebody has edited
+  // those products since, which a rebuild would undo. See untouchedSinceBuilt.
+  const hadProducts = (await prisma.product.count({ where: { batchId: id } })) > 0;
+  const shouldMap = autoMap && (!hadProducts || (await untouchedSinceBuilt(id)));
   after(async () => {
     for (const file of stored) {
       try {
@@ -64,6 +67,11 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/catalog/bat
       }
     }
     if (shouldMap) await autoApplyMappings(id, user.id).catch(() => undefined);
+    else if (autoMap && hadProducts) {
+      for (const file of stored) {
+        await noteOnFile(file.id, "Added after the products were built and then edited by hand, so they have not been rebuilt with it — a rebuild starts again from the files and would lose those edits. To use it, open Column mapping and build again.").catch(() => undefined);
+      }
+    }
   });
 
   // `reading` tells the page there is more to come, so it can wait rather than look finished.

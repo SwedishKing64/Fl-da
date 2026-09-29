@@ -576,11 +576,30 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
 }
 
 /** Add a line to what the upload table says about a file, once. */
-async function noteOnFile(fileId: string, note: string): Promise<void> {
+export async function noteOnFile(fileId: string, note: string): Promise<void> {
   const file = await prisma.sourceFile.findUnique({ where: { id: fileId }, select: { extractionError: true } });
   const now = file?.extractionError ?? "";
   if (now.includes(note)) return;
   await prisma.sourceFile.update({ where: { id: fileId }, data: { extractionError: now ? `${now} ${note}` : note } });
+}
+
+/** What counts as somebody having changed a batch's products by hand. A rebuild would undo it. */
+export const HAND_EDITS = ["product.edited", "variant.edited", "variant.deleted", "batch.bulk_edit", "batch.seo"];
+
+/**
+ * Whether a batch's products are still exactly what the files built.
+ *
+ * A file added to a batch that already has products — the description list uploaded a minute
+ * after the order — used to be read and then ignored: products were only built for a batch that
+ * had none, so the boards stayed as the order alone had made them, with no descriptions, and
+ * nothing said why. Rebuilding is the right answer as long as nobody has edited the products since
+ * they were built, because a rebuild starts again from the files and would throw the edits away.
+ */
+export async function untouchedSinceBuilt(batchId: string): Promise<boolean> {
+  const built = await prisma.product.findFirst({ where: { batchId }, orderBy: { createdAt: "desc" }, select: { createdAt: true } });
+  if (!built) return true;
+  const edits = await prisma.auditLog.count({ where: { batchId, action: { in: HAND_EDITS }, createdAt: { gt: built.createdAt } } });
+  return edits === 0;
 }
 
 /** Attach uploaded product photos to products whose SKU / model code / title appears in the filename or AI hint. */

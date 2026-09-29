@@ -247,7 +247,9 @@ export async function updateProductAction(productId: string, patch: z.infer<type
   try {
     const data = productPatch.parse(patch);
     const { metafields, ...rest } = data;
-    await prisma.product.update({ where: { id: productId }, data: { ...rest, ...(metafields ? { metafields: JSON.stringify(metafields) } : {}), ...(rest.status ? { published: rest.status === "active" } : {}) } });
+    const product = await prisma.product.update({ where: { id: productId }, data: { ...rest, ...(metafields ? { metafields: JSON.stringify(metafields) } : {}), ...(rest.status ? { published: rest.status === "active" } : {}) } });
+    // Recorded so a file added later does not rebuild the batch over this. See untouchedSinceBuilt.
+    await logAudit("product.edited", { batchId: product.batchId, details: { productId, fields: Object.keys(data) } });
     if (rest.category !== undefined || rest.vendor !== undefined) {
       const variants = await prisma.variant.findMany({ where: { productId }, select: { id: true } });
       for (const v of variants) await repriceVariant(v.id);
@@ -280,7 +282,8 @@ export async function updateVariantAction(variantId: string, patch: z.infer<type
   try {
     const data = variantPatch.parse(patch);
     const { locationQuantities, ...rest } = data;
-    await prisma.variant.update({ where: { id: variantId }, data: { ...rest, ...(locationQuantities ? { locationQuantities: JSON.stringify(locationQuantities), quantity: Object.values(locationQuantities).reduce((a, b) => a + b, 0) } : {}) } });
+    const variant = await prisma.variant.update({ where: { id: variantId }, data: { ...rest, ...(locationQuantities ? { locationQuantities: JSON.stringify(locationQuantities), quantity: Object.values(locationQuantities).reduce((a, b) => a + b, 0) } : {}) }, include: { product: { select: { batchId: true } } } });
+    await logAudit("variant.edited", { batchId: variant.product.batchId, details: { variantId, fields: Object.keys(data) } });
     await repriceVariant(variantId);
     return { ok: true };
   } catch (err) {
@@ -293,6 +296,8 @@ export async function deleteVariantAction(variantId: string): Promise<ActionResu
   const v = await prisma.variant.findUnique({ where: { id: variantId } });
   if (!v) return { ok: false, error: "Variant not found" };
   await prisma.variant.delete({ where: { id: variantId } });
+  const owner = await prisma.product.findUnique({ where: { id: v.productId }, select: { batchId: true } });
+  if (owner) await logAudit("variant.deleted", { batchId: owner.batchId, details: { variantId } });
   const remaining = await prisma.variant.count({ where: { productId: v.productId } });
   if (remaining === 0) await prisma.product.delete({ where: { id: v.productId } });
   return { ok: true };

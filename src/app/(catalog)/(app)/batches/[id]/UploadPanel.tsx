@@ -16,7 +16,7 @@ const KINDS = [
   { value: "PRODUCT_PHOTO", label: "Product photos", hint: "Attached to products by name or SKU in the filename, or via the review grid." },
 ];
 
-export function UploadPanel({ batchId, aiEnabled, hasProducts, reading, productCount }: { batchId: string; aiEnabled: boolean; hasProducts: boolean; reading: number; productCount: number }) {
+export function UploadPanel({ batchId, aiEnabled, reading, productCount }: { batchId: string; aiEnabled: boolean; hasProducts: boolean; reading: number; productCount: number }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [active, setActive] = useState(false);
@@ -87,7 +87,8 @@ export function UploadPanel({ batchId, aiEnabled, hasProducts, reading, productC
     setSending(list.reduce((n, f) => n + f.size, 0));
     const form = new FormData();
     form.set("kind", kind);
-    form.set("autoMap", hasProducts ? "0" : "1");
+    // The server decides whether to rebuild: it knows whether the products were edited by hand.
+    form.set("autoMap", "1");
     for (const f of list) form.append("files", f);
     try {
       // XHR rather than fetch: fetch reports nothing at all about how far a request body has got,

@@ -174,14 +174,35 @@ export async function extractXlsx(buffer: Buffer, sheetName?: string): Promise<E
   const wanted = sheetName ? scored.find((s) => s.name === sheetName) : undefined;
   const chosen = wanted ?? scored.reduce((a, b) => (b.score > a.score ? b : a));
 
+  /**
+   * Tabs with the same headings are one table, split up for somebody's convenience.
+   *
+   * A supplier's description list or barcode list often comes a tab per product family — skis on
+   * one, bindings on the next — with identical columns on each. Only one tab was read, and the page
+   * said to "upload the file again for each of those you need", which nobody can do usefully. Tabs
+   * whose heading row is the same as the chosen one's are now read with it, in workbook order. A
+   * tab with DIFFERENT headings is a different table — Volkl's "Order Total" summary beside its ski
+   * tab — and is still left out and named.
+   */
+  const headingsOf = (t: (typeof scored)[number]) =>
+    (t.grid[detectHeaderRow(t.grid)] ?? []).map((c) => (c ?? "").toString().trim().toLowerCase()).filter(Boolean).join("\u0000");
+  const same = wanted ? [] : scored.filter((t) => t !== chosen && t.dataRows > 0 && headingsOf(t) === headingsOf(chosen));
+  const grid = same.length === 0 ? chosen.grid : [
+    ...chosen.grid,
+    ...same.flatMap((t) => t.grid.slice(detectHeaderRow(t.grid) + 1)),
+  ];
+
   const warnings: string[] = [];
-  const others = scored.filter((s) => s.name !== chosen.name && s.dataRows > 0);
+  if (same.length > 0) {
+    warnings.push(`Read ${same.length + 1} tabs with the same columns as one list: ${[chosen, ...same].map((t) => `"${t.name}" (${t.dataRows} rows)`).join(", ")}.`);
+  }
+  const others = scored.filter((t) => t !== chosen && !same.includes(t) && t.dataRows > 0);
   if (others.length > 0) {
     warnings.push(
-      `This workbook has ${scored.length} sheets and only one can be read at a time. Read "${chosen.name}" (${chosen.dataRows} rows under ${chosen.columns} columns). Also in it: ${others.map((s) => `"${s.name}" (${s.dataRows} rows)`).join(", ")} — upload the file again for each of those you need.`,
+      `Also in this workbook, with different columns, and not read: ${others.map((t) => `"${t.name}" (${t.dataRows} rows)`).join(", ")}. If one of those is what you meant, save it as its own file.`,
     );
   }
-  return gridToTable(chosen.grid, "XLSX", warnings);
+  return gridToTable(grid, "XLSX", warnings);
 }
 
 

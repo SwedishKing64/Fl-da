@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyMapping, headerHash, looksLikeReference, mappingProblems, suggestMapping } from "./mapping";
+import { applyMapping, headerHash, looksLikeReference, mappingProblems, suggestMapping, seasonFrom, repairTemplate } from "./mapping";
 import { DEFAULT_CATEGORY_RULES, chooseOptions, detectCategory, enrichFromTitle } from "./categorize";
 import { groupLineItems } from "./grouping";
 import { emptyLineItem } from "./types";
@@ -130,5 +130,77 @@ describe("what a table is for", () => {
   it("does not call a table a reference when there is nothing on it to look up", () => {
     expect(looksLikeReference(["notes", "comments"])).toBe(false);
     expect(looksLikeReference([])).toBe(false);
+  });
+});
+
+describe("reading a supplier's columns for what they are", () => {
+  it("takes a blank quantity as not ordered when the sheet has a quantity column", () => {
+    const m = suggestMapping(["Description", "Order Qty"]);
+    expect(applyMapping({ Description: "Custom", "Order Qty": "" }, m).quantity).toBeNull();
+    expect(applyMapping({ Description: "Custom", "Order Qty": "2" }, m).quantity).toBe(2);
+  });
+
+  it("still means one of each when the sheet has no quantity column at all", () => {
+    expect(applyMapping({ Description: "Custom" }, suggestMapping(["Description"])).quantity).toBe(1);
+  });
+
+  it("reads Model # as the model's number and Model name as its name", () => {
+    const m = suggestMapping(["Model #", "Model name"]);
+    expect(m["Model #"]).toBe("modelCode");
+    expect(m["Model name"]).toBe("title");
+  });
+
+  it("takes the AUD price over the NZD one, whichever column comes first", () => {
+    const m = suggestMapping(["Description", "NZD-RETAIL", "AUD-RETAIL", "NZD-WHSL", "AUD-WHSL"]);
+    expect(m["AUD-RETAIL"]).toBe("rrp");
+    expect(m["AUD-WHSL"]).toBe("costPrice");
+    expect(m["NZD-RETAIL"]).toBe("");
+  });
+
+  it("reads Material as a code only when what is under it looks like one", () => {
+    // Burton's SAP code column, and an apparel sheet's fabric column, under the same heading.
+    const codes = [{ Material: "106881A97DRG" }, { Material: "106891A97DRG" }];
+    const fabric = [{ Material: "100% polyester" }, { Material: "Merino wool" }];
+    expect(suggestMapping(["Description", "Material"], codes)["Material"]).toBe("modelCode");
+    expect(suggestMapping(["Description", "Material"], fabric)["Material"]).not.toBe("modelCode");
+  });
+
+  it("reads a supplier's season code as the year", () => {
+    expect(seasonFrom("27WIN")).toBe("2027");
+    expect(seasonFrom("W27")).toBe("2027");
+    expect(seasonFrom("2026")).toBe("2026");
+    expect(seasonFrom("26/27")).toBe("2027");
+    expect(seasonFrom("2026/27")).toBe("2027");
+    expect(seasonFrom("2627")).toBe("2027");
+    expect(seasonFrom("26/28")).toBe("26/28");
+  });
+
+  it("keeps a feature bullet whole, however long", () => {
+    const long = "Directional Shape is the classic snowboard shape, designed to be ridden with a slightly longer nose than tail to concentrate pop in the tail";
+    const item = applyMapping({ Name: "Custom", "Bullet 1": long, Notes: long }, suggestMapping(["Name", "Bullet 1", "Notes"]));
+    expect(item.extras?.["Bullet 1"]).toBe(long);
+    expect(item.extras?.["Notes"]).toBeUndefined();          // long prose that is not a bullet is still the body's job
+  });
+});
+
+describe("a saved mapping, kept where it holds", () => {
+  it("adds a field the fresh reading finds and the saved one leaves out", () => {
+    // A template saved before AUD-RETAIL was recognised: boards with no price, for good.
+    const saved = { Description: "title", "AUD-RETAIL": "" } as const;
+    const fresh = suggestMapping(["Description", "AUD-RETAIL"]);
+    expect(repairTemplate({ ...saved }, fresh, [])["AUD-RETAIL"]).toBe("rrp");
+  });
+
+  it("drops a saved choice the data under it rules out", () => {
+    // Bare numbers are never a product's name.
+    const saved = { "Model #": "title", "Model name": "modelCode" } as const;
+    const rows = [{ "Model #": "10688", "Model name": "Men's Custom Camber Snowboard" }, { "Model #": "10689", "Model name": "Men's Custom X Camber Snowboard" }];
+    const out = repairTemplate({ ...saved }, suggestMapping(["Model #", "Model name"], rows), rows);
+    expect(out["Model #"]).toBe("modelCode");
+  });
+
+  it("leaves a deliberate choice alone when nothing disproves it", () => {
+    const saved = { Description: "title", Code: "sku" } as const;
+    expect(repairTemplate({ ...saved }, suggestMapping(["Description", "Code"]), [{ Description: "Custom", Code: "ABC-123" }])).toEqual(saved);
   });
 });

@@ -16,6 +16,8 @@ import { describe, expect, it } from "vitest";
 import { extractXlsx } from "./extract/tabular";
 import { applyMapping, suggestMapping } from "./mapping";
 import { enrichFromSpecs } from "./pipeline";
+import { keepOrderedLines, resolveAgainstReference } from "./reference-match";
+import { DEFAULT_CATEGORY_RULES } from "./categorize";
 import type { CanonicalLineItem } from "./types";
 
 const UP = "/root/.claude/uploads/94fb8bfb-35a9-5176-afe9-8fcc0dec9eb3/";
@@ -87,5 +89,34 @@ describe("the Volkl December delivery", () => {
     expect(womens.metafields.gender).toBe("Ladies");
     expect(womens.metafields.waist_width).toBe("88 mm");
     expect(products.find((p) => p.title === "MANTRA JUNIOR")!.metafields.gender).toBe("Junior");
+  });
+});
+
+describe("the Volkl order joined to its reference sheets", () => {
+  async function join() {
+    const [order, specs, barcodes] = await Promise.all([ORDER, SPECS, BARCODES].map(async (path) => {
+      const table = await extractXlsx(readFileSync(path));
+      const mapping = suggestMapping(table.headers, table.rows);
+      return table.rows.map((row) => applyMapping(row, mapping));
+    }));
+    const { kept } = keepOrderedLines(order.map((item) => ({ item, fileId: "order" })));
+    const source = new Map<CanonicalLineItem, string>([...specs.map((s) => [s, "pim"] as const), ...barcodes.map((s) => [s, "barcodes"] as const)]);
+    return resolveAgainstReference(kept.map((k) => k.item), [...specs, ...barcodes], DEFAULT_CATEGORY_RULES, new Map(), (s) => source.get(s) ?? "");
+  }
+
+  it("joins every line, and names each ski the way the shop does", { timeout: 60_000 }, async () => {
+    const { items, joined } = await join();
+    expect(joined.filter((j) => "to" in j)).toHaveLength(joined.length);
+    const skis = items.filter((i) => i.productType === "Skis");
+    const shown = skis.map((i) => `${i.title}|${i.colour}|${i.length}|${i.season}`);
+    // "BLAZE 94 BLACK FLAT" is the flat (no binding) Blaze 94 in black: the shop's "Blaze 94 2027",
+    // Colour Black. Not "Blaze 94 Black" in a colour called "Flat".
+    expect(shown).toContain("BLAZE 94|Black|179|2027");
+    expect(shown).toContain("BLAZE 94|Rose|158|2027");
+    expect(shown).toContain("REVOLT 101||182|2027");
+    // "Junior" is part of the model's name ("Mantra Junior 2025" in the shop), not its colour.
+    expect(shown).toContain("MANTRA JUNIOR||138|2027");
+    const blaze = items.filter((i) => i.title === "BLAZE 94");
+    expect(new Set(blaze.map((i) => i.modelCode)).size).toBe(1);
   });
 });

@@ -3,8 +3,12 @@
 // mapping to raw rows to produce CanonicalLineItems.
 
 import { createHash } from "node:crypto";
-import { CANONICAL_FIELDS, emptyLineItem, type CanonicalLineItem } from "./types";
+import { CANONICAL_FIELDS, FEATURE_COLUMN, emptyLineItem, type CanonicalLineItem } from "./types";
+export { FEATURE_COLUMN };
 import { parseIntSafe, parseMoney } from "./money";
+import { seasonFrom } from "./season";
+
+export { seasonFrom };
 
 export type Mapping = Record<string, keyof CanonicalLineItem | "">;
 
@@ -16,13 +20,54 @@ export interface MappingOptions {
 }
 
 function norm(h: string): string {
-  return h.toLowerCase().replace(/[_\-./()]/g, " ").replace(/\s+/g, " ").trim();
+  // "#" is "number". Kept as a symbol, "Model #" read as the bare word "model" and was taken as
+  // the product's NAME — on Burton's description list that put 10688 in the title and the real
+  // name, in the next column, into the model code, and no description could ever be matched.
+  return h.toLowerCase().replace(/#/g, " number ").replace(/[_\-./()]/g, " ").replace(/\s+/g, " ").trim();
 }
 
+
+/** Three-letter currency codes that head a price column: "AUD-RETAIL", "NZD-WHSL". */
+const CURRENCY = /^(aud|nzd|usd|eur|gbp|cad|chf|jpy|sek|nok)\s/;
+
+/**
+ * Whether a column is another currency's copy of one this shop prices in.
+ *
+ * Burton's order form carries every price twice — AUD-RETAIL and NZD-RETAIL, AUD-WHSL and NZD-WHSL —
+ * and which one a heading match landed on came down to which column happened to come first. For
+ * an Australian shop the AUD one is the price, whatever order the columns are in.
+ */
+function isOtherCurrencyTwin(header: string, headers: string[]): boolean {
+  const n = norm(header);
+  const m = CURRENCY.exec(n);
+  if (!m || m[1] === "aud") return false;
+  const rest = n.slice(m[0].length);
+  return headers.some((h) => norm(h) === `aud ${rest}`);
+}
+
+/**
+ * A column whose heading suggests a code is only a code if what is under it looks like one.
+ *
+ * "Material" is Burton's SAP code column — 106881A97DRG — and an apparel spec sheet's fabric
+ * column, "100% polyester". Taken on its heading alone, the second would become every garment's
+ * model code and group a whole delivery into one product.
+ */
+const CODE_LIKE = /^(?=.*\d)[A-Z0-9][A-Z0-9.\-/]{3,}$/i;
+function valuesLookLikeCodes(header: string, rows: Array<Record<string, string>>): boolean {
+  const values = rows.map((r) => (r[header] ?? "").toString().trim()).filter(Boolean);
+  if (values.length === 0) return true;          // nothing to disprove it; an empty column costs nothing
+  return values.filter((v) => CODE_LIKE.test(v)).length / values.length >= 0.8;
+}
+const NEEDS_CODE_VALUES = /^(material|material number|material no)$/;
+
 /** Best-effort mapping suggestion from header names via the synonym lists in CANONICAL_FIELDS. */
-export function suggestMapping(headers: string[]): Mapping {
+export function suggestMapping(headers: string[], rows: Array<Record<string, string>> = []): Mapping {
   const mapping: Mapping = {};
   const used = new Set<string>();
+  // Checked before anything claims a field, so a twin can never take the AUD column's place.
+  const skip = new Set(headers.filter((h) => isOtherCurrencyTwin(h, headers)));
+  const refused = (header: string, key: string): boolean =>
+    key === "modelCode" && NEEDS_CODE_VALUES.test(norm(header)) && !valuesLookLikeCodes(header, rows);
   const canonicalKeys = new Set(CANONICAL_FIELDS.map((f) => f.key as string));
 
   // Pass 1: exact canonical key or exact synonym matches.
@@ -37,7 +82,8 @@ export function suggestMapping(headers: string[]): Mapping {
       used.add(header);
       continue;
     }
-    const exact = CANONICAL_FIELDS.find((f) => !used.has(f.key) && f.synonyms.includes(n));
+    if (skip.has(header)) continue;
+    const exact = CANONICAL_FIELDS.find((f) => !used.has(f.key) && f.synonyms.includes(n) && !refused(header, f.key));
     if (exact) {
       mapping[header] = exact.key;
       used.add(exact.key);
@@ -46,10 +92,11 @@ export function suggestMapping(headers: string[]): Mapping {
   // Pass 2: header contains a synonym (longest synonym wins).
   for (const header of headers) {
     if (mapping[header]) continue;
+    if (skip.has(header)) { mapping[header] = ""; continue; }
     const n = norm(header);
     let best: { key: keyof CanonicalLineItem; len: number } | null = null;
     for (const f of CANONICAL_FIELDS) {
-      if (used.has(f.key)) continue;
+      if (used.has(f.key) || refused(header, f.key)) continue;
       for (const s of f.synonyms) {
         if (s.length < 3) continue;
         if (!(n.includes(` ${s} `) || n.startsWith(`${s} `) || n.endsWith(` ${s}`) || n === s)) continue;
@@ -66,6 +113,50 @@ export function suggestMapping(headers: string[]): Mapping {
     } else mapping[header] = "";
   }
   return mapping;
+}
+
+/**
+ * A saved mapping, kept where it holds and corrected where the file disproves it.
+ *
+ * A template is saved when somebody ticks Save on the mapping screen, and from then on it wins for
+ * every file with the same headings — which is how a Burton mapping with no price column in it went
+ * on producing boards with no prices, long after the columns could be read properly. A deliberate
+ * choice still stands. What it may no longer do:
+ *
+ *   - leave out a field the fresh reading finds, that the template does not map anywhere else —
+ *     so a template saved before AUD-WHSL was recognised as the cost now gets the cost;
+ *   - keep a choice the data under it rules out: a column of bare numbers is never a product NAME
+ *     (Burton's "Model #", 10688), and a price or a quantity has to be a number.
+ */
+export function repairTemplate(saved: Mapping, fresh: Mapping, rows: Array<Record<string, string>>): Mapping {
+  const out: Mapping = { ...saved };
+  const values = (header: string) => rows.map((r) => (r[header] ?? "").toString().trim()).filter(Boolean);
+  const mostly = (header: string, test: (v: string) => boolean) => {
+    const v = values(header);
+    return v.length > 0 && v.filter(test).length / v.length >= 0.8;
+  };
+  const disproved = (header: string, key: string): boolean => {
+    if (key === "title") return mostly(header, (v) => /^\d+$/.test(v));
+    if (["costPrice", "rrp", "quantity", "grams"].includes(key)) return mostly(header, (v) => parseMoney(v) === null);
+    if (key === "barcode") return mostly(header, (v) => !/^'?\d{8,14}$/.test(v));
+    return false;
+  };
+  for (const [header, key] of Object.entries(saved)) {
+    if (key && disproved(header, key)) out[header] = fresh[header] ?? "";
+  }
+  const used = () => new Set(Object.values(out).filter(Boolean));
+  for (const [header, key] of Object.entries(fresh)) {
+    if (!key || out[header]) continue;
+    if (!used().has(key)) out[header] = key;
+  }
+  // Two headings on one field after the corrections: the saved one keeps it.
+  const seen = new Set<string>();
+  for (const [header, key] of Object.entries(out)) {
+    if (!key) continue;
+    if (seen.has(key) && !(saved[header] === key)) out[header] = "";
+    seen.add(key);
+  }
+  return out;
 }
 
 /** Hints derived from the header a cost column was mapped from (e.g. "Amount" => line totals). */
@@ -117,8 +208,17 @@ export function applyMapping(row: Record<string, string>, mapping: Mapping, opti
   if (options.costIsLineTotal && item.costPrice !== null && item.quantity && item.quantity > 0) {
     item.costPrice = Math.round((item.costPrice / item.quantity) * 10000) / 10000;
   }
-  if (item.quantity === null) item.quantity = 1;
+  /**
+   * A blank quantity is "not ordered", when the sheet has a quantity column at all.
+   *
+   * This defaulted every blank to 1, and an order form is mostly blanks: Burton's W27 form is the
+   * whole range, 125 rows, with a number in ORDER QTY against the 12 boards that were bought. Every
+   * one of the 125 came out ordered, in quantity one. A sheet with no quantity column still gets 1
+   * per line — an invoice that lists what was sent and never says how many means one of each.
+   */
+  if (item.quantity === null && !Object.values(mapping).includes("quantity")) item.quantity = 1;
   item.imageUrls = Array.from(new Set(item.imageUrls));
+  item.season = seasonFrom(item.season);
 
   /**
    * Keep the columns nothing canonical claimed.
@@ -132,7 +232,10 @@ export function applyMapping(row: Record<string, string>, mapping: Mapping, opti
   for (const [header, key] of Object.entries(mapping)) {
     if (key) continue;
     const raw = (row[header] ?? "").toString().trim();
-    if (!raw || raw.length > 120) continue;
+    // A feature bullet is a sentence by nature and is kept whole. Burton's description list puts
+    // its tech specs in "Bullet 1" to "Bullet 8", and the 120-character limit meant for prose was
+    // throwing away every one of them — which is most of what the shop's listings say.
+    if (!raw || (raw.length > 120 && !FEATURE_COLUMN.test(header.trim()))) continue;
     extras[header.trim()] = raw;
   }
   if (Object.keys(extras).length > 0) item.extras = extras;

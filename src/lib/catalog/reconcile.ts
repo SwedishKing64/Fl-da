@@ -20,6 +20,7 @@
  */
 
 import { parseCsv } from "./csv";
+import { COLOUR_WORDS } from "./types";
 import { isPackage, quote, verifyOnlyIntended, type AdjustResult, type Change } from "./adjust";
 
 /** What one line of a supplier document says, reduced to the parts a match needs. */
@@ -218,15 +219,10 @@ function nameKeysOf(line: InvoiceLine): string[] {
  * of the middle would make "BLACK CROWS" a colour and a bird.
  */
 const FORM_WORD = /^(FLAT|SYSTEM|PACKAGE|SET|INLINE|DEMO)$/;
-const COLOUR_WORD = new Set([
-  "BLACK", "WHITE", "GREY", "GRAY", "GRAPHITE", "CHARCOAL", "ANTHRACITE", "SILVER", "GOLD", "BRONZE",
-  "BLUE", "NAVY", "TEAL", "TURQUOISE", "MINT", "GREEN", "LIME", "OLIVE", "KHAKI", "YELLOW", "ORANGE",
-  "CORAL", "RED", "PINK", "ROSE", "PURPLE", "VIOLET", "BROWN", "BEIGE", "SAND", "CREAM",
-]);
 
 function withoutFormWords(words: string[]): string[] {
   const out = [...words];
-  while (out.length > 0 && (FORM_WORD.test(out[out.length - 1]) || COLOUR_WORD.has(out[out.length - 1]))) out.pop();
+  while (out.length > 0 && (FORM_WORD.test(out[out.length - 1]) || COLOUR_WORDS.has(out[out.length - 1]))) out.pop();
   return out;
 }
 

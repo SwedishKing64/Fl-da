@@ -82,14 +82,14 @@ export interface CanonicalFieldDef {
 }
 
 export const CANONICAL_FIELDS: CanonicalFieldDef[] = [
-  { key: "title", label: "Product name", kind: "text", required: true, synonyms: ["title", "product", "product name", "description", "item", "item name", "name", "model", "product description", "article"] },
+  { key: "title", label: "Product name", kind: "text", required: true, synonyms: ["title", "product", "product name", "description", "item", "item name", "name", "model", "model name", "product description", "article"] },
   { key: "brand", label: "Brand / vendor", kind: "text", synonyms: ["brand", "vendor", "manufacturer", "make", "supplier brand", "marke"] },
-  { key: "modelCode", label: "Model / style code", kind: "text", synonyms: ["model", "model code", "style", "style code", "style no", "style number", "model no", "model number", "product code", "article no", "article number", "basic article no", "supplier code", "item no", "item number", "art nr", "ref"] },
+  { key: "modelCode", label: "Model / style code", kind: "text", synonyms: ["model", "model code", "style", "style code", "style no", "style number", "model no", "model number", "material", "material number", "material no", "product code", "article no", "article number", "basic article no", "supplier code", "item no", "item number", "art nr", "ref"] },
   // "sku no length" is Volkl's own heading, "SKU no. // LENGTH", and it has to outrank the bare
   // "length" synonym that also matches it — the longest match wins, so it is spelled out in full.
   { key: "sku", label: "SKU", kind: "text", synonyms: ["sku", "sku code", "sku no", "sku number", "sku no length", "variant sku", "variant code", "part number", "part no", "code", "ean/sku", "item code", "stock code"] },
   { key: "barcode", label: "Barcode / EAN / UPC", kind: "text", synonyms: ["barcode", "ean", "upc", "gtin", "ean no", "ean number", "ean code", "ean13", "upc code", "bar code"] },
-  { key: "costPrice", label: "Unit cost price", kind: "number", synonyms: ["cost", "cost price", "unit cost", "unit price", "wholesale", "wholesale price", "price", "net price", "trade price", "dealer price", "whs", "w/s", "each", "unit", "amount", "line total", "total", "ext price", "extended price", "net amount", "value"] },
+  { key: "costPrice", label: "Unit cost price", kind: "number", synonyms: ["cost", "cost price", "unit cost", "unit price", "wholesale", "wholesale price", "whsl", "whsl price", "price", "net price", "trade price", "dealer price", "whs", "w/s", "each", "unit", "amount", "line total", "total", "ext price", "extended price", "net amount", "value"] },
   { key: "quantity", label: "Quantity", kind: "number", synonyms: ["qty", "quantity", "units", "ordered", "qty ordered", "order qty", "pcs", "pieces", "count", "no of units"] },
   { key: "rrp", label: "RRP / MSRP", kind: "number", synonyms: ["rrp", "msrp", "retail", "retail price", "srp", "rec retail", "recommended retail", "list price", "map"] },
   { key: "grams", label: "Weight (grams)", kind: "number", synonyms: ["weight", "grams", "weight g", "weight (g)", "unit weight", "mass"] },
@@ -98,7 +98,7 @@ export const CANONICAL_FIELDS: CanonicalFieldDef[] = [
   { key: "width", label: "Width", kind: "text", synonyms: ["width", "last", "last width", "waist", "waist width", "last mm"] },
   { key: "colour", label: "Colour", kind: "text", synonyms: ["colour", "color", "col", "colour name", "color name", "basic colour", "basic color", "colourway", "colorway", "farbe"] },
   { key: "gender", label: "Gender", kind: "text", synonyms: ["gender", "sex", "suitable for", "mens/womens", "m/w", "unisex"] },
-  { key: "season", label: "Season", kind: "text", synonyms: ["season", "yr", "year", "model year", "collection"] },
+  { key: "season", label: "Season", kind: "text", synonyms: ["season", "yr", "year", "model year", "collection", "season indicator", "sap season indicator", "season code"] },
   { key: "category", label: "Category", kind: "text", synonyms: ["category", "cat", "product category", "department", "group", "product group", "class"] },
   { key: "productType", label: "Product type", kind: "text", synonyms: ["type", "product type", "sub category", "subcategory", "sub-category"] },
   { key: "description", label: "Description / specs", kind: "text", synonyms: ["long description", "specs", "specification", "details", "features", "product details", "tech specs", "body"] },
@@ -255,3 +255,21 @@ export const WARNING_CODES: RowFlag["code"][] = [
   "UPDATE_EXISTING",
   "DUPLICATE_SKU_SHOPIFY",
 ];
+
+/**
+ * A column holding one of the supplier's own feature bullets: "Bullet 3", "Feature 1", "Tech Spec 2".
+ *
+ * Not "Highlight": Burton's "Product Highlight" columns restate the bullets as marketing lines, and
+ * the shop's own listings use the bullets — its Custom X body is Bullet 1 to 7, word for word.
+ */
+export const FEATURE_COLUMN = /^(bullet|feature|key feature|tech ?spec|spec|technology)s?\s*#?\s*\d+$/i;
+
+/**
+ * The words a supplier uses for a colourway. Read from the END of a name only — "BLAZE 94 ROSE" is
+ * the Blaze 94 in rose, while "BLACK CROWS" is a brand and "BLACK PEARL" a ski.
+ */
+export const COLOUR_WORDS = new Set([
+  "BLACK", "WHITE", "GREY", "GRAY", "GRAPHITE", "CHARCOAL", "ANTHRACITE", "SILVER", "GOLD", "BRONZE",
+  "BLUE", "NAVY", "TEAL", "TURQUOISE", "MINT", "GREEN", "LIME", "OLIVE", "KHAKI", "YELLOW", "ORANGE",
+  "CORAL", "RED", "PINK", "ROSE", "PURPLE", "VIOLET", "BROWN", "BEIGE", "SAND", "CREAM",
+]);

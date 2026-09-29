@@ -7,7 +7,7 @@
  */
 
 import { houseBody, isPlaceholderBody } from "./body";
-import type { CanonicalLineItem } from "./types";
+import { FEATURE_COLUMN, type CanonicalLineItem } from "./types";
 
 export const normKey = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 
@@ -19,7 +19,24 @@ export const normKey = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " "
  * and stopped there, so nothing a supplier stated about a ski ever appeared where a customer
  * reads it.
  */
+/**
+ * The supplier's own feature bullets, in the order the sheet numbers them, or none.
+ *
+ * Where a sheet has them they ARE the tech specs, written by the brand: the shop's Custom X 2027
+ * listing is Burton's Bullet 1 to 7 word for word under its Tech Specs heading. A "KEY: value" line
+ * built from the other columns would say the same thing worse, so bullets replace them rather than
+ * joining them.
+ */
+function featureBullets(spec: CanonicalLineItem): string[] {
+  return Object.entries(spec.extras ?? {})
+    .filter(([k, v]) => FEATURE_COLUMN.test(k) && v.trim())
+    .sort(([a], [b]) => Number(/\d+/.exec(a)?.[0] ?? 0) - Number(/\d+/.exec(b)?.[0] ?? 0))
+    .map(([, v]) => v.trim());
+}
+
 function specLines(spec: CanonicalLineItem): string[] {
+  const bullets = featureBullets(spec);
+  if (bullets.length > 0) return bullets;
   const fields: Array<[string, string]> = [
     ["LENGTH", spec.length],
     ["WAIST WIDTH", spec.width],
@@ -48,7 +65,7 @@ function specLines(spec: CanonicalLineItem): string[] {
  * on a real export and mean nothing to anyone buying a ski. They are kept off the page rather
  * than dropped from the data, so a metafield that turns out to matter can still be found.
  */
-const PAPERWORK = /customs|hts|fedas|ctn|carton|country of origin|changes vs|inline\/smu|unit of measure|rental/i;
+const PAPERWORK = /customs|hts|fedas|ctn|carton|country of origin|changes vs|inline\/smu|unit of measure|rental|\bseo\b|short description|highlight|behind the graphic|fine print|warranty|season indicator/i;
 
 const forCustomers = (extras: Record<string, string> | undefined): Record<string, string> =>
   Object.fromEntries(Object.entries(extras ?? {}).filter(([k]) => !PAPERWORK.test(k)));

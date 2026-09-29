@@ -5,11 +5,15 @@ import { productTitle, seasonTagFrom, seoTitle } from "./titles";
 import { parseDirectives } from "./instructions";
 import { prisma, parseJson } from "./db";
 import { extractFile, type UploadKind } from "./extract";
-import { applyMapping, headerHash, looksLikeReference, mappingProblems, suggestMapping, suggestOptions, type Mapping, type MappingOptions } from "./mapping";
+import { applyMapping, headerHash, looksLikeReference, mappingProblems, repairTemplate, suggestMapping, suggestOptions, type Mapping, type MappingOptions } from "./mapping";
 import { groupLineItems } from "./grouping";
 import { houseTags } from "./product-tags";
 import { DEFAULT_CATEGORY_RULES, type CategoryRuleLike } from "./categorize";
 import { enrichFromSpecs, normKey } from "./specs";
+import { houseBody } from "./body";
+import { keepOrderedLines, resolveAgainstReference } from "./reference-match";
+import { askToJoin } from "./reference-ai";
+import { aiAvailable } from "./extract/ai";
 import { repairCategoryRules, repairProductTags, repairTagRuleSpelling } from "./seed";
 import { applyTagRules, type TagRuleLike } from "./rules";
 import { applyTemplates, type ProductTemplateLike } from "./templates";
@@ -267,10 +271,12 @@ export async function mappingState(batchId: string): Promise<HeaderGroup[]> {
         filenames: [],
         rowCount: 0,
         sampleRows: [],
-        suggestion: template ? parseJson<Mapping>(template.mappings, {}) : isCanonical ? Object.fromEntries(headers.map((h) => [h, h])) as Mapping : suggestMapping(headers),
+        suggestion: template
+          ? repairTemplate(parseJson<Mapping>(template.mappings, {}), suggestMapping(headers, rows), rows)
+          : isCanonical ? Object.fromEntries(headers.map((h) => [h, h])) as Mapping : suggestMapping(headers, rows),
         options: template
           ? parseJson<MappingOptions>(template.options, {})
-          : { ...(isCanonical ? {} : suggestOptions(suggestMapping(headers))), ...(batch.supplier?.defaultBrand ? { fixed: { brand: batch.supplier.defaultBrand } } : {}) },
+          : { ...(isCanonical ? {} : suggestOptions(suggestMapping(headers, rows))), ...(batch.supplier?.defaultBrand ? { fixed: { brand: batch.supplier.defaultBrand } } : {}) },
         templateId: template?.id ?? null,
         templateName: template?.name ?? null,
         isCanonical,
@@ -324,6 +330,7 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
   const byHash = new Map(inputs.map((i) => [i.hash, i]));
   const items: Array<{ item: CanonicalLineItem; fileId: string; rowIndex: number; raw: Record<string, string> }> = [];
   const specItems: CanonicalLineItem[] = [];
+  const specSource = new Map<CanonicalLineItem, string>();
   for (const file of batch.files) {
     if (file.extractionStatus !== "DONE") continue;
     const headers = parseJson<string[]>(file.headers, []);
@@ -335,7 +342,7 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
     rows.forEach((raw, rowIndex) => {
       const item = applyMapping(raw, input.mapping, input.options);
       if (!item.title && !item.sku && item.costPrice === null) return; // blank/footer row
-      if (isSpec) specItems.push(item);
+      if (isSpec) { specItems.push(item); specSource.set(item, file.id); }
       else items.push({ item, fileId: file.id, rowIndex, raw });
     });
   }
@@ -355,6 +362,47 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
     specItems.length = 0;
   }
 
+  const [categoryRules, tagRules, templates] = await Promise.all([loadCategoryRules(), loadTagRules(), loadProductTemplates()]);
+
+  // Only what was ordered. See keepOrderedLines.
+  const readAsOrder = keepOrderedLines(items);
+  if (readAsOrder.notOrdered > 0 || readAsOrder.footers > 0) {
+    for (const fileId of readAsOrder.files) {
+      const total = items.filter((i) => i.fileId === fileId).length;
+      const kept = readAsOrder.kept.filter((i) => i.fileId === fileId).length;
+      await noteOnFile(fileId, `Read as an order: ${kept} of ${total} rows have a quantity against them, and only those were built. The rest is the supplier's price list for the season, not this delivery.`);
+    }
+    items.splice(0, items.length, ...readAsOrder.kept);
+  }
+
+  /**
+   * Join the order to the supplier's reference sheet BEFORE the products are grouped.
+   *
+   * The join is what says which lines are one product — Burton spells Process two ways on the same
+   * form — and what the product is called, what kind of thing it is and what season it belongs to,
+   * none of which an order line says. See reference-match.ts. Where the API is available, the lines
+   * the rules could not place are put to it as well; its answers are checked against the sheet
+   * before any is used.
+   */
+  if (specItems.length > 0 && items.length > 0) {
+    const lines = items.map((i) => i.item);
+    let decided = new Map<number, CanonicalLineItem>();
+    const sourceOf = (spec: CanonicalLineItem) => specSource.get(spec) ?? "";
+    const first = resolveAgainstReference(lines, specItems, categoryRules, decided, sourceOf);
+    const left = first.joined.map((j, i) => ("reason" in j ? i : -1)).filter((i) => i >= 0);
+    if (left.length > 0 && aiAvailable()) {
+      decided = await askToJoin(left.map((i) => ({ index: i, line: lines[i] })), specItems).catch(() => new Map());
+    }
+    const resolved = decided.size > 0 ? resolveAgainstReference(lines, specItems, categoryRules, decided, sourceOf) : first;
+    resolved.items.forEach((item, k) => { items[k].item = item; });
+    const joined = resolved.joined.filter((j) => "to" in j).length;
+    const missing = [...new Set(resolved.joined.filter((j): j is { line: string; reason: string } => "reason" in j).map((j) => j.line))];
+    const orderFiles = [...new Set(items.map((i) => i.fileId))];
+    for (const fileId of orderFiles) {
+      await noteOnFile(fileId, `Joined to the reference sheet: ${joined} of ${items.length} lines${missing.length ? `. Not on it, so built from the order alone: ${missing.slice(0, 6).join(", ")}${missing.length > 6 ? `, and ${missing.length - 6} more` : ""}` : ""}.`);
+    }
+  }
+
   if (batch.supplierId) {
     for (const input of inputs) {
       if (!input.saveTemplate?.name) continue;
@@ -365,7 +413,6 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
     }
   }
 
-  const [categoryRules, tagRules, templates] = await Promise.all([loadCategoryRules(), loadTagRules(), loadProductTemplates()]);
 
   /**
    * Plenty of invoices never name the brand: a Giro order lists a helmet and a pair of goggles and
@@ -380,7 +427,10 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
 
   const grouped = enrichFromSpecs(groupLineItems(items.map((i) => i.item), categoryRules, { builtBy: batch.builtBy }), specItems).map((raw) => {
     const told = directives.vendor.trim();
-    const g = raw.brand.trim() ? raw : { ...raw, brand: told || supplierBrand };
+    // A brand filled in here, after the tags were made, never became one — and every listing the
+    // shop has carries its brand as a tag ("burton" on all of its Burton boards).
+    const filled = told || supplierBrand;
+    const g = raw.brand.trim() ? raw : { ...raw, brand: filled, tags: filled ? [...raw.tags, filled.toLowerCase()] : raw.tags };
     // Learned conventions first, then hand-written rules, which can always override them.
     const viaTemplate = applyTemplates(
       { vendor: g.brand, productType: g.productType, category: g.category, tags: g.tags, collections: g.collections, metafields: g.metafields, optionNames: [g.option1Name, g.option2Name, g.option3Name].filter((n): n is string => Boolean(n)) },
@@ -420,7 +470,9 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
         handle: g.handle,
         title,
         seoTitle: seoTitle(g.brand, title),
-        bodyHtml: g.description ? `<p>${escapeHtml(g.description)}</p>` : "",
+        // A body the spec sheet already laid out in the house format is used as it is. Wrapping it
+        // again — in a <p>, escaped — turned its <h2> and <li> into text a customer would read.
+        bodyHtml: /^\s*</.test(g.description) ? g.description : houseBody(g.description, []),
         vendor: g.brand,
         productType: g.productType,
         category: g.category,
@@ -509,8 +561,12 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
   return { products: grouped.length, variants: variantCount, problems: [] };
 }
 
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+/** Add a line to what the upload table says about a file, once. */
+async function noteOnFile(fileId: string, note: string): Promise<void> {
+  const file = await prisma.sourceFile.findUnique({ where: { id: fileId }, select: { extractionError: true } });
+  const now = file?.extractionError ?? "";
+  if (now.includes(note)) return;
+  await prisma.sourceFile.update({ where: { id: fileId }, data: { extractionError: now ? `${now} ${note}` : note } });
 }
 
 /** Attach uploaded product photos to products whose SKU / model code / title appears in the filename or AI hint. */

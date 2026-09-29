@@ -951,7 +951,7 @@ export async function readReferenceAction(file: { name: string; type: string; ba
     const { extractXlsx, extractCsv } = await import("@/lib/catalog/extract/tabular");
     const table = isWorkbook ? await extractXlsx(buffer) : extractCsv(buffer);
     const { suggestMapping, applyMapping } = await import("@/lib/catalog/mapping");
-    const mapping = suggestMapping(table.headers);
+    const mapping = suggestMapping(table.headers, table.rows);
     const rows = table.rows.map((row) => applyMapping(row, mapping)).filter((r) => r.barcode.trim() || r.sku.trim() || r.modelCode.trim() || r.description.trim());
     if (rows.length === 0) {
       return { ok: false, error: `Nothing in ${file.name} reads as a reference row. A spec sheet or barcode list needs a column identifying each row — an item code, a SKU or an EAN — and something to say about it.` };

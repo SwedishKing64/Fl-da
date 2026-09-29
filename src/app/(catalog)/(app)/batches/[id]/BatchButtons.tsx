@@ -2,7 +2,8 @@
 
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { deleteBatchAction, deleteSourceFileAction, retryExtractionAction } from "@/app/(catalog)/actions";
+import { buildProductsAction, deleteBatchAction, deleteSourceFileAction, retryExtractionAction } from "@/app/(catalog)/actions";
+import { useState } from "react";
 import { Button } from "@/app/(catalog)/ui";
 
 export function DeleteFileButton({ fileId }: { fileId: string }) {
@@ -33,5 +34,29 @@ export function RetryExtractionButton({ fileId }: { fileId: string }) {
     >
       {pending ? "Reading…" : "Read again"}
     </Button>
+  );
+}
+
+/** The way on from the upload page when nothing has been built yet — and why, if nothing can be. */
+export function BuildProductsButton({ batchId }: { batchId: string }) {
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
+  return (
+    <span className="inline-flex flex-col items-end gap-1">
+      <Button
+        variant="primary"
+        disabled={pending}
+        onClick={() => start(async () => {
+          setError(null);
+          const r = await buildProductsAction(batchId);
+          if (!r.ok) { setError(r.error); return; }
+          router.push(`/batches/${batchId}/review`);
+        })}
+      >
+        {pending ? "Building…" : "Build products →"}
+      </Button>
+      {error && <span className="max-w-sm text-right text-xs text-red-700">{error}</span>}
+    </span>
   );
 }

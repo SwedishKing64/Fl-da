@@ -66,7 +66,13 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/catalog/bat
         }).catch(() => undefined);
       }
     }
-    if (shouldMap) await autoApplyMappings(id, user.id).catch(() => undefined);
+    if (shouldMap) {
+      await autoApplyMappings(id, user.id).catch(async (err) => {
+        // Said on the file, where it is seen — not swallowed, leaving a batch with no products and
+        // no reason. The Build products button runs it again.
+        for (const file of stored) await noteOnFile(file.id, `The products could not be built: ${err instanceof Error ? err.message : String(err)}`).catch(() => undefined);
+      });
+    }
     else if (autoMap && hadProducts) {
       for (const file of stored) {
         await noteOnFile(file.id, "Added after the products were built and then edited by hand, so they have not been rebuilt with it — a rebuild starts again from the files and would lose those edits. To use it, open Column mapping and build again.").catch(() => undefined);

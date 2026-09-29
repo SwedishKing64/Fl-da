@@ -184,12 +184,27 @@ export async function ingestFile(batchId: string, file: { filename: string; mime
     // A spreadsheet never reached the model, so nothing classified it and everything came through
     // as a delivery. Its columns say what it is: see looksLikeReference.
     const reference = detected === null && looksLikeReference(table.headers);
-    const effective: UploadKind = requested !== "AUTO"
-      ? requested
+    /**
+     * An order form uploaded as "barcodes, specs or descriptions" is still the order. The kind is
+     * picked once on the page and stays picked, so the Völkl order went up as a reference sheet
+     * after its PIM export did — and a batch with no order in it has nothing arriving, builds
+     * nothing, and offered no way on. Quantities written against some of its rows settle it.
+     */
+    const orderedHere = (() => {
+      if (table.warnings.some((w) => /^Read as an order/.test(w))) return true;
+      const qty = Object.entries(suggestMapping(table.headers, table.rows)).find(([, k]) => k === "quantity")?.[0];
+      if (!qty) return false;
+      const filled = table.rows.filter((r) => Number((r[qty] ?? "").toString().replace(/[^\d.]/g, "")) > 0).length;
+      return filled > 0 && filled < table.rows.length;
+    })();
+    const misfiled = requested === "SPEC_SHEET" && orderedHere;
+    const effective: UploadKind = misfiled ? "INVOICE"
+      : requested !== "AUTO" ? requested
       : detected === "SPEC_SHEET" || reference ? "SPEC_SHEET"
       : detected === "PRODUCT_PHOTO" ? "PRODUCT_PHOTO"
       : "INVOICE";
     const warnings = [...table.warnings];
+    if (misfiled) warnings.push("Uploaded as barcodes, specs or descriptions, but quantities are written against some of its rows, so it was read as the order.");
     if (reference) {
       warnings.push(`Read as a reference sheet: ${table.rows.length} rows with no price or quantity on them, so nothing here is a delivery. It is searched for the products the order builds — barcodes, specs, descriptions — and adds none of its own.`);
     }
@@ -217,6 +232,7 @@ export async function ingestFile(batchId: string, file: { filename: string; mime
         rawRows: JSON.stringify(table.rows),
         extractedText: table.text ?? null,
         extractionError: warnings.length ? warnings.join(" ") : null,
+        priceList: JSON.stringify(await priceListOf(file.filename, file.buffer)),
       },
     });
     if (meta && effective === "INVOICE") {
@@ -496,7 +512,11 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
    * list. The list is read again from the order form itself: an order's table holds only what was
    * ordered, and the Griffon a package is priced from is a row nobody ordered.
    */
-  const priceList = await orderPriceLists(batch.files.filter((f) => (f.detectedKind ?? f.kind) !== "SPEC_SHEET" && f.extractionStatus === "DONE"));
+  // The order's own lines too: the Griffons on it carry their price and cost, whatever else fails.
+  const priceList = [
+    ...(await orderPriceLists(batch.files.filter((f) => f.extractionStatus === "DONE"))),
+    ...items.map((i) => ({ sku: i.item.sku, title: i.item.title, colour: i.item.colour, rrp: i.item.rrp, costPrice: i.item.costPrice })),
+  ];
   const { packages, skipped } = packageProducts(grouped, priceList, listings);
   grouped.push(...(packages as typeof grouped));
   // The package bindings ordered with the skis go on the skis, not on the shelf. See isPackageBinding.
@@ -627,19 +647,34 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
 }
 
 /** Add a line to what the upload table says about a file, once. */
-/** The priced rows of every order form in a batch, read again from the files themselves. */
-async function orderPriceLists(files: Array<{ filename: string; storagePath: string }>): Promise<PriceRow[]> {
+/** Every priced row of a spreadsheet, read from the upload itself. Empty for anything else. */
+async function priceListOf(filename: string, buffer: Buffer): Promise<PriceRow[]> {
+  if (!/\.(xlsx?|csv)$/i.test(filename)) return [];
+  try {
+    const grids = /\.csv$/i.test(filename)
+      ? [{ name: filename, grid: (await import("./csv")).parseCsv(buffer.toString("utf8")) }]
+      : await (await import("./extract/tabular")).sheetGrids(buffer);
+    return readInvoiceGrids(grids)?.priceList ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * The priced rows of every file in a batch: stored when each was read, and read again from the file
+ * only for one uploaded before that was kept. Every file, not just the orders — an order form
+ * uploaded as "barcodes, specs or descriptions" is still where the binding prices are.
+ */
+async function orderPriceLists(files: Array<{ filename: string; storagePath: string; priceList: string }>): Promise<PriceRow[]> {
   const out: PriceRow[] = [];
   for (const f of files) {
+    const kept = parseJson<PriceRow[]>(f.priceList, []);
+    if (kept.length > 0) { out.push(...kept); continue; }
     if (!/\.(xlsx?|csv)$/i.test(f.filename)) continue;
     try {
-      const buffer = await readFile(f.storagePath);
-      const grids = /\.csv$/i.test(f.filename)
-        ? [{ name: f.filename, grid: (await import("./csv")).parseCsv(buffer.toString("utf8")) }]
-        : await (await import("./extract/tabular")).sheetGrids(buffer);
-      out.push(...(readInvoiceGrids(grids)?.priceList ?? []));
+      out.push(...(await priceListOf(f.filename, await readFile(f.storagePath))));
     } catch {
-      // A file that cannot be read again has already said so when it was first read.
+      // Not readable again; the order's own lines still price what was ordered, below.
     }
   }
   return out;

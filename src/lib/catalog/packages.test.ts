@@ -134,3 +134,23 @@ describe("barcodes on a package", () => {
     expect(pack.variants.every((v) => v.barcode === "")).toBe(true);
   });
 });
+
+describe("the binding's price off a supplier's price list", () => {
+  it("takes one cost however many decimals it is written to", async () => {
+    const { bindingFrom, DEFAULT_PACKAGE_BINDINGS } = await import("./packages");
+    // The order form's INDENT is 208.6363…; the same Griffon, read off the order's own line, 208.64.
+    const found = bindingFrom(DEFAULT_PACKAGE_BINDINGS.mens, [
+      { title: "GRIFFON 13 MN; 90MM", colour: "BLACK", rrp: 459, costPrice: 208.63636363636363 },
+      { title: "GRIFFON 13 MN 100MM BLACK", colour: "BLACK", rrp: 459, costPrice: 208.64 },
+    ]);
+    expect(found).toMatchObject({ label: "Marker Griffon - Black", rrp: 459, cost: 208.64 });
+  });
+
+  it("refuses a binding priced two different ways", async () => {
+    const { bindingFrom, DEFAULT_PACKAGE_BINDINGS } = await import("./packages");
+    expect(bindingFrom(DEFAULT_PACKAGE_BINDINGS.mens, [
+      { title: "GRIFFON 13 MN; 90MM", colour: "BLACK", rrp: 459, costPrice: 208.64 },
+      { title: "GRIFFON 13 MN; 100MM", colour: "BLACK", rrp: 479, costPrice: 208.64 },
+    ])).toBeNull();
+  });
+});

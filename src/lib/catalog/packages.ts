@@ -182,10 +182,11 @@ export function bindingFrom(spec: BindingSpec, priceList: Array<{ title: string;
   // The colour column where the list has one; the name only where it does not.
   const rows = priceList.filter((r) => spec.model.test(r.title) && spec.colour.test((r.colour ?? "").trim() || r.title) && r.rrp !== null && r.rrp > 0);
   if (rows.length === 0) return null;
-  const prices = new Set(rows.map((r) => r.rrp));
+  // To the cent: the order form's 208.6363… and the same figure written 208.64 are one price.
+  const prices = new Set(rows.map((r) => money(r.rrp!)));
   if (prices.size > 1) return null;
-  const costs = new Set(rows.map((r) => r.costPrice).filter((c): c is number => c !== null && c > 0));
-  return { label: spec.label, shortName: spec.shortName, rrp: rows[0].rrp!, cost: costs.size === 1 ? [...costs][0] : null };
+  const costs = new Set(rows.map((r) => r.costPrice).filter((c): c is number => c !== null && c > 0).map(money));
+  return { label: spec.label, shortName: spec.shortName, rrp: money(rows[0].rrp!), cost: costs.size === 1 ? [...costs][0] : null };
 }
 
 /** Why a ski was not given a package, for the page to say. */

@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma, parseJson, createTables, databaseStatus } from "@/lib/catalog/db";
 import { createSession, destroySession, hashPassword, requireUser, usersExist, verifyPassword } from "@/lib/catalog/auth";
-import { allocateBatchFreight, applyMappings, applyRulesToBatch, attachUnassignedPhotos, extractStoredFile, loadReview, repriceBatch, repriceVariant, verifyBatchImages, exportBatch, exportFileText, type ApplyMappingInput, type ReviewData } from "@/lib/catalog/pipeline";
+import { allocateBatchFreight, applyMappings, autoApplyMappings, applyRulesToBatch, attachUnassignedPhotos, extractStoredFile, loadReview, repriceBatch, repriceVariant, verifyBatchImages, exportBatch, exportFileText, type ApplyMappingInput, type ReviewData } from "@/lib/catalog/pipeline";
 import { logAudit } from "@/lib/catalog/audit";
 import { getSettings, saveSettings } from "@/lib/catalog/settings";
 import { checkImageUrl, recordLibraryImages } from "@/lib/catalog/images";
@@ -205,6 +205,33 @@ export async function deleteSourceFileAction(fileId: string): Promise<ActionResu
   await prisma.sourceFile.delete({ where: { id: fileId } });
   revalidatePath(`/batches/${file.batchId}`);
   return { ok: true };
+}
+
+/**
+ * Build the batch's products from its files, now — the way on from the upload page.
+ *
+ * Products are built by themselves after an upload, but only when there is something to build
+ * from, and when there is not the page used to offer no way forward at all. This says why.
+ */
+export async function buildProductsAction(batchId: string): Promise<ActionResult<{ products: number }>> {
+  const user = await requireUser();
+  try {
+    const files = await prisma.sourceFile.findMany({ where: { batchId }, select: { extractionStatus: true, detectedKind: true, kind: true, filename: true } });
+    const read = files.filter((f) => f.extractionStatus === "DONE");
+    if (read.length === 0) return { ok: false, error: files.some((f) => f.extractionStatus === "PENDING") ? "The files are still being read — give it a moment and try again." : "No file in this batch could be read. Upload the order form or invoice." };
+    const orders = read.filter((f) => (f.detectedKind ?? f.kind) !== "SPEC_SHEET" && (f.detectedKind ?? f.kind) !== "PRODUCT_PHOTO");
+    if (orders.length === 0) {
+      return { ok: false, error: `This batch only has reference sheets — ${read.map((f) => f.filename).join(", ")} — which say what things are, not what is arriving. Upload the order form or invoice as well (leave "These files are" on "Work it out").` };
+    }
+    const result = await autoApplyMappings(batchId, user.id);
+    if (result.products === 0) {
+      return { ok: false, error: result.unmapped.length > 0 ? `The columns of ${result.unmapped.join(", ")} could not be read on their own. Open Column mapping and say which column is the product's name.` : "Nothing on the order has a quantity or a price against it, so there was nothing to build." };
+    }
+    revalidatePath(`/batches/${batchId}`);
+    return { ok: true, data: { products: result.products } };
+  } catch (err) {
+    return { ok: false, error: `The products could not be built: ${said(err)}` };
+  }
 }
 
 export async function applyMappingsAction(batchId: string, inputs: ApplyMappingInput[]): Promise<ActionResult<{ products: number; variants: number; problems: string[] }>> {

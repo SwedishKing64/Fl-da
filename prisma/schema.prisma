@@ -134,6 +134,9 @@ model SourceFile {
   headers          String? // JSON string[] of detected source headers
   rawRows          String? // JSON array of { [header]: string }
   extractedText    String?
+  /// The supplier's price list off an order form — every priced row, ordered or not — as JSON.
+  /// Read once, from the upload itself: a package is priced from a binding nobody ordered.
+  priceList        String   @default("[]")
   createdAt        DateTime @default(now())
 
   batch     ImportBatch         @relation(fields: [batchId], references: [id], onDelete: Cascade)

@@ -476,3 +476,18 @@ model AuditLog {
   @@index([batchId])
   @@index([createdAt])
 }
+
+/// The shop's own listings, remembered from every Shopify export loaded into the app: what the
+/// shop has already decided about a model (its riding-style shelves), for next season's listing
+/// of the same model to carry. One row per handle, replaced whenever a newer export is loaded.
+model ShopListing {
+  id          String   @id @default(cuid())
+  handle      String   @unique
+  title       String
+  vendor      String   @default("")
+  productType String   @default("")
+  tags        String   @default("") // comma separated, as the export writes them
+  updatedAt   DateTime @updatedAt
+
+  @@index([vendor])
+}

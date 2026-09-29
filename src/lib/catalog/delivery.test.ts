@@ -42,7 +42,7 @@ describe("a delivery of carry-overs and new products", () => {
     const out = delivery();
     expect(out.fresh).toHaveLength(1);
     expect(out.fresh[0].title).toBe("M7 Mantra 2027");
-    expect(out.fresh[0].handle).toBe("volkl-m7-mantra-2027");
+    expect(out.fresh[0].handle).toBe("m7-mantra-2027");
     expect(out.fresh[0].vendor).toBe("Volkl");
     // Two lengths ordered, so two variant rows — and the barcodes travel with them.
     expect(out.fresh[0].variants.map((v) => v.option)).toEqual(["170", "177"]);
@@ -78,7 +78,7 @@ describe("a delivery of carry-overs and new products", () => {
     expect(fresh[0]["SEO Title"]).toBe("Volkl M7 Mantra 2027");
     expect(fresh[0]["Option1 Name"]).toBe("Length");
     // The second row of a product carries the handle and the variant, and nothing of the product.
-    expect(fresh[1].Handle).toBe("volkl-m7-mantra-2027");
+    expect(fresh[1].Handle).toBe("m7-mantra-2027");
     expect(fresh[1].Title).toBe("");
   });
 

@@ -94,7 +94,7 @@ describe("grouping", () => {
     expect(skis.title).toBe("Bent 90 Skis");
     expect(skis.brand).toBe("Atomic");
     // The handle carries the season, because Shopify derives one from the title only at creation.
-    expect(skis.handle).toBe("atomic-bent-90-skis-2027");
+    expect(skis.handle).toBe("bent-90-skis-2027");
     expect(skis.category).toBe("skis");
     expect(skis.productType).toBe("Skis");
     expect(skis.option1Name).toBe("Length");

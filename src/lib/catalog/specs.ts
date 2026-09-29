@@ -7,6 +7,7 @@
  */
 
 import { houseBody, isPlaceholderBody } from "./body";
+import { disciplinesFromTerrain, isDisciplineTag } from "./shop-memory";
 import { FEATURE_COLUMN, type CanonicalLineItem } from "./types";
 
 export const normKey = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -178,6 +179,11 @@ export function enrichFromSpecs<T extends { title: string; brand: string; descri
     for (const u of spec.imageUrls) if (!target.imageUrls.includes(u)) target.imageUrls.push(u);
     const fill: Array<[string, string]> = [["flex", spec.flex], ["ability_level", spec.abilityLevel], ["din_range", spec.dinRange], ["terrain", spec.terrain], ["waist_width", spec.width], ["gender", spec.gender], ["season", spec.season]];
     for (const [k, v] of fill) if (v && !target.metafields[k]) target.metafields[k] = v;
+    // The supplier's riding style, for a model with no shelf yet — the shop's own memory of the
+    // model, applied when it was grouped, always comes first. See shop-memory.
+    if (spec.terrain && !target.tags.some(isDisciplineTag)) {
+      for (const t of disciplinesFromTerrain((target as { productType?: string }).productType ?? "", spec.terrain)) if (!target.tags.includes(t)) target.tags.push(t);
+    }
     for (const [k, v] of Object.entries(forCustomers(spec.extras))) {
       const key = normKey(k).replace(/ /g, "_");
       if (key && !target.metafields[key]) target.metafields[key] = v;

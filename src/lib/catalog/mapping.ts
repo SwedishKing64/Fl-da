@@ -7,6 +7,7 @@ import { CANONICAL_FIELDS, FEATURE_COLUMN, emptyLineItem, type CanonicalLineItem
 export { FEATURE_COLUMN };
 import { parseIntSafe, parseMoney } from "./money";
 import { seasonFrom } from "./season";
+import { terrainColumn } from "./shop-memory";
 
 export { seasonFrom };
 
@@ -114,6 +115,19 @@ export function suggestMapping(headers: string[], rows: Array<Record<string, str
       mapping[header] = best.key;
       used.add(best.key);
     } else mapping[header] = "";
+  }
+  // Pass 3: the riding style, by what is written under it. Burton heads it "PH3" and Volkl
+  // "category"; under both are the words that name a shelf — ALL MOUNTAIN, Freeride, Freestyle —
+  // and that is what files a new model on the shop's riding-style shelves.
+  if (!used.has("terrain") && rows.length > 0) {
+    const styled = terrainColumn(
+      headers.filter((h) => mapping[h] === "" || mapping[h] === "category"),
+      (h) => rows.map((r) => (r[h] ?? "").toString()),
+    );
+    if (styled) {
+      mapping[styled] = "terrain";
+      used.add("terrain");
+    }
   }
   return mapping;
 }

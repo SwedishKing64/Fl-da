@@ -21,6 +21,7 @@
 
 import { detectHeaderRow } from "./extract/tabular";
 import { normaliseBarcode, type InvoiceLine } from "./reconcile";
+import { terrainColumn } from "./shop-memory";
 
 export interface InvoiceRead {
   lines: InvoiceLine[];
@@ -249,6 +250,8 @@ function readGrid(name: string, grid: string[][]): InvoiceRead | null {
   const colour = pick(headings, rows, COLOUR, null, (v) => v.length <= 30 && !/^\d+$/.test(v));
   const cost = pick(headings, rows, COST, NOT_COST, (v) => (readNumber(v) ?? -1) > 0);
   const gender = pick(headings, rows, GENDER, null, (v) => v.length <= 20 && !/\d/.test(v));
+  const styleHeading = terrainColumn(headings, (h) => { const i = headings.indexOf(h); return rows.map((r) => text(r[i])); });
+  const terrain = styleHeading === null ? -1 : headings.indexOf(styleHeading);
 
   const title = pick(headings, rows, TITLE, null, (v) => v.length >= 3 && !/^\d+$/.test(v))
     ?? (sku ? { index: sku.index + 1, heading: `the column beside "${sku.heading}"` } : null);
@@ -276,6 +279,7 @@ function readGrid(name: string, grid: string[][]): InvoiceRead | null {
       ...(size ? { size: text(row[size.index]) } : {}),
       ...(colour ? { colour: text(row[colour.index]) } : {}),
       ...(gender && text(row[gender.index]) ? { gender: text(row[gender.index]) } : {}),
+      ...(terrain >= 0 && text(row[terrain]) ? { terrain: text(row[terrain]) } : {}),
       costPrice: cost ? ((readNumber(text(row[cost.index])) ?? 0) > 0 ? readNumber(text(row[cost.index])) : null) : null,
       // A zero is not a price. Their order form prints 0 against the system bindings that come with
       // a ski, and writing that through would put "free" in front of a customer — which is exactly

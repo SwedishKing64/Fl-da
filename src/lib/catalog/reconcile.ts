@@ -51,6 +51,8 @@ export interface InvoiceLine {
    * trusted to name the product exactly, which a word off an order form is not.
    */
   named?: boolean;
+  /** The riding style the form gives it — Burton's PH3 "ALL MOUNTAIN" — for filing a new model. */
+  terrain?: string;
 }
 
 export type MatchKey = "barcode" | "sku" | "name";

@@ -293,6 +293,7 @@ export function resolveAgainstReference(
       season: line.season || (/^20\d{2}$/.test(seasonFrom(spec.season)) ? seasonFrom(spec.season) : ""),
       gender: tidyGender(line.gender) || tidyGender(genderOf(spec.title)),
       colour: line.colour || found.graphic || way?.colour || "",
+      terrain: line.terrain || spec.terrain,
     };
     // What kind of product this is, from the catalogue's full name rather than the short one.
     const rule = detectCategory({ ...next, title: spec.title, description: "" }, rules);

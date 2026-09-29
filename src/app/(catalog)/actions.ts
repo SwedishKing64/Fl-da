@@ -926,6 +926,30 @@ export async function readInvoiceAction(file: { name: string; type: string; base
 }
 
 /**
+ * Remember the shop's own listings from an export loaded on the Bulk page, so the next season's
+ * listing of a model — built from an order in an import batch, days later — carries the shelves
+ * the shop gave it. Only the handle, title, vendor, type and tags travel. See shop-memory.
+ */
+export async function rememberListingsAction(listings: Array<{ handle: string; title: string; vendor: string; productType: string; tags: string[] }>): Promise<ActionResult<{ remembered: number }>> {
+  await requireUser();
+  try {
+    const clean = listings.filter((l) => l.handle.trim() && l.title.trim()).slice(0, 20000);
+    for (let at = 0; at < clean.length; at += 500) {
+      const chunk = clean.slice(at, at + 500);
+      await prisma.$transaction([
+        prisma.shopListing.deleteMany({ where: { handle: { in: chunk.map((l) => l.handle.trim()) } } }),
+        prisma.shopListing.createMany({
+          data: chunk.map((l) => ({ handle: l.handle.trim(), title: l.title.trim(), vendor: l.vendor.trim(), productType: l.productType.trim(), tags: l.tags.join(", ") })),
+        }),
+      ]);
+    }
+    return { ok: true, data: { remembered: clean.length } };
+  } catch (err) {
+    return { ok: false, error: said(err) };
+  }
+}
+
+/**
  * Order lines the rules could not find on the spec sheet, put to the model — when a key is set.
  *
  * The Bulk page joins an order to its spec sheet in the browser (see joinToReference), and a line

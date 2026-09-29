@@ -439,7 +439,10 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
   // discount on all of it. A directive applies to every product in the batch by design.
   const directives = parseDirectives(batch.directives);
 
-  const grouped = enrichFromSpecs(groupLineItems(items.map((i) => i.item), categoryRules, { builtBy: batch.builtBy }), specItems).map((raw) => {
+  // The shop's listings as last remembered, for the shelves it gave each model before.
+  const listings = (await prisma.shopListing.findMany({ select: { handle: true, title: true, vendor: true, productType: true, tags: true } }).catch(() => []))
+    .map((l) => ({ ...l, tags: l.tags.split(",").map((t) => t.trim()).filter(Boolean) }));
+  const grouped = enrichFromSpecs(groupLineItems(items.map((i) => i.item), categoryRules, { builtBy: batch.builtBy, listings }), specItems).map((raw) => {
     const told = directives.vendor.trim();
     // A brand filled in here, after the tags were made, never became one — and every listing the
     // shop has carries its brand as a tag ("burton" on all of its Burton boards).

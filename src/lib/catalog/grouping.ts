@@ -6,6 +6,7 @@ import { normaliseOptionName, optionNamesFor } from "./options";
 import { catalogTags } from "./product-tags";
 import { productTitle, seasonTagFrom, withoutVendor } from "./titles";
 import type { CanonicalLineItem } from "./types";
+import { disciplinesFromTerrain, rememberedDisciplines, type Listing } from "./shop-memory";
 
 export interface GroupedVariant {
   item: CanonicalLineItem;
@@ -80,7 +81,7 @@ function commonPrefix(values: string[]): string {
   return prefix;
 }
 
-export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRuleLike[], opts: { builtBy?: string } = {}): GroupedProduct[] {
+export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRuleLike[], opts: { builtBy?: string; listings?: Listing[] } = {}): GroupedProduct[] {
   const groups = new Map<string, { rule: CategoryRuleLike | null; entries: Array<{ item: CanonicalLineItem; index: number }> }>();
 
   const enriched = rawItems.map((raw) => {
@@ -133,7 +134,12 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
       variants.push({ item: e.item, sourceIndex: e.index, option1Value: values[0] ?? null, option2Value: values[1] ?? null, option3Value: values[2] ?? null });
     }
     const description = items.map((i) => i.description.trim()).find(Boolean) ?? "";
-    const tags = catalogTags({ productType, brand, items, ruleTags: tagsFor(group.rule, items, brand), describedAs: `${title} ${description}`, ...(opts.builtBy ? { builtBy: opts.builtBy } : {}) });
+    const general = catalogTags({ productType, brand, items, ruleTags: tagsFor(group.rule, items, brand), describedAs: `${title} ${description}`, ...(opts.builtBy ? { builtBy: opts.builtBy } : {}) });
+    // The riding-style shelves: what the shop gave this model last season, and only for a model it
+    // has never listed, what the supplier calls it. See shop-memory.
+    const remembered = rememberedDisciplines({ title, brand }, opts.listings ?? []);
+    const styles = remembered.length > 0 ? remembered : disciplinesFromTerrain(productType, items.map((i) => i.terrain).join(" "));
+    const tags = [...general, ...styles.filter((t) => !general.includes(t))];
     products.push({
       key,
       // Built from the name the product will actually carry, season and all. Shopify derives a
@@ -141,7 +147,10 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
       // to the name afterwards leaves the URL a season behind for good, and it cannot be put right
       // by re-importing, because the importer matches on the handle. The shop's own catalogue
       // settles it: of the 259 products whose name carries a year, 242 carry it in the handle too.
-      handle: buildHandle({ brand, title: productTitle(baseTitle, seasonTagFrom(tags)) }),
+      // And not the brand: 845 of its 928 products with a vendor have no vendor in the handle
+      // ("custom-2027", "m7-mantra"), and a handle is how Shopify and the reconciler recognise a
+      // listing the shop already has — "burton-custom-2027" was a duplicate of custom-2027.
+      handle: buildHandle({ title: productTitle(title, seasonTagFrom(tags)) }),
       title,
       brand,
       category: group.rule?.category ?? (first.category || "other"),

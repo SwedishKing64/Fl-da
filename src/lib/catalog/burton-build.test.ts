@@ -206,3 +206,46 @@ describe.skipIf(!existsSync(ORDER) || !existsSync(LIST) || !existsSync(SHOP))("B
     expect(built["Custom 2027"].variants[0].price).toBe("999.99");
   }, 60_000);
 });
+
+describe.skipIf(!existsSync(ORDER) || !existsSync(LIST) || !existsSync(SHOP))("what the Bulk page writes for Burton", () => {
+  async function run(csv: string, withMemory: boolean) {
+    const { sheetGrids } = await import("./extract/tabular");
+    const { readInvoiceGrids } = await import("./invoice");
+    const { buildDelivery } = await import("./delivery");
+    const { listingsFromCsv } = await import("./shop-memory");
+    const invoice = readInvoiceGrids(await sheetGrids(readFileSync(ORDER)))!;
+    const specs = (await read(LIST)).items;
+    const shop = readFileSync(SHOP, "utf8");
+    return buildDelivery(csv, invoice.lines, { season: "2027", vendor: "Burton", specs, ...(withMemory ? { listings: listingsFromCsv(shop) } : {}) });
+  }
+
+  it("builds with the shop's handles, body, category and riding-style tags", async () => {
+    const header = readFileSync(SHOP, "utf8").split(/\r?\n/)[0] + "\r\n";
+    const result = await run(header, true);
+    const byHandle = Object.fromEntries(result.fresh.map((f) => [f.handle, f]));
+    expect(Object.keys(byHandle).sort()).toEqual(["custom-2027", "custom-x-2027", "feelgood-2027", "process-2027", "yeasayer-2027"]);
+    // What the shop gave the Custom last time: all-mountain AND park, which Burton's copy never says.
+    expect(byHandle["custom-2027"].tags).toEqual(expect.arrayContaining(["2027", "burton", "mens", "snowboard", "snowboards", "freestyle and all-mountain boards", "park boards"]));
+    expect(byHandle["yeasayer-2027"].tags).toContain("freestyle and all-mountain boards");
+    expect(byHandle["yeasayer-2027"].tags).not.toContain("park boards");
+    // A model the shop has never listed takes the order form's own PH3: ALL MOUNTAIN.
+    expect(byHandle["feelgood-2027"].tags).toContain("freestyle and all-mountain boards");
+    const rows = parseCsv(result.csv);
+    const h = rows[0];
+    const custom = rows.find((r) => r[h.indexOf("Handle")] === "custom-2027" && r[h.indexOf("Title")])!;
+    expect(custom[h.indexOf("Body (HTML)")]).toMatch(/^<p>From its humble/);
+    expect(custom[h.indexOf("Body (HTML)")]).not.toMatch(/<p><p>|<p><h2>/);
+    expect(custom[h.indexOf("Product Category")]).toMatch(/Skiing & Snowboarding > Snowboards$/);
+  }, 60_000);
+
+  it("adds a new length under Length, not under Colour, at the order's cost", async () => {
+    const result = await run(readFileSync(SHOP, "utf8"), false);
+    const rows = parseCsv(result.csv);
+    const h = rows[0];
+    const added = rows.slice(-3).filter((r) => r[h.indexOf("Handle")] === "process-2027");
+    expect(added.map((r) => [r[h.indexOf("Option1 Value")], r[h.indexOf("Option2 Value")], r[h.indexOf("Cost per item")]])).toEqual([
+      ["Bad Dog", "152", "503.99"],
+      ["Bad Dog", "155", "503.99"],
+    ]);
+  }, 60_000);
+});

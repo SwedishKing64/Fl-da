@@ -1,11 +1,12 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { joinOrderAction, logAdjustmentAction, planAdjustmentAction, readInstructionSheetAction, readInvoiceAction, readReferenceAction, readSheetAgainstFilesAction } from "@/app/(catalog)/actions";
+import { joinOrderAction, rememberListingsAction, logAdjustmentAction, planAdjustmentAction, readInstructionSheetAction, readInvoiceAction, readReferenceAction, readSheetAgainstFilesAction } from "@/app/(catalog)/actions";
 import { applyPlan, describeFile, foldPlans, isWholeFile, whyNoMatch, type AdjustResult, type FoldStep, type Plan } from "@/lib/catalog/adjust";
 import { csvFilename } from "@/lib/catalog/csv";
 import { reconcile, type InvoiceFields, type Reconciliation } from "@/lib/catalog/reconcile";
 import { buildDelivery, joinToReference } from "@/lib/catalog/delivery";
+import { listingsFromCsv } from "@/lib/catalog/shop-memory";
 import type { CanonicalLineItem } from "@/lib/catalog/types";
 import type { InvoiceRead } from "@/lib/catalog/invoice";
 import { fitsUpload, looksLikeImage, shrinkImage, tooBig } from "@/app/(catalog)/shrink";
@@ -223,6 +224,9 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
       if (rejected.length) setError(`Skipped ${rejected.join(", ")} — no products in ${rejected.length === 1 ? "it" : "them"}.`);
       // Replacing a file already loaded rather than holding two copies of it.
       if (added.length > 0) {
+        // Remembered, so a model listed here keeps its shelves next season. Not waited on: the
+        // page works the same whether or not it lands.
+        void rememberListingsAction(added.flatMap((a) => listingsFromCsv(a.csv))).catch(() => undefined);
         setSheets((s) => [...s.filter((x) => !added.some((a) => a.name === x.name)), ...added]);
         setFeed([]);
         // The sheet was matched against the files that were loaded then, so it no longer holds.
@@ -450,6 +454,8 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
 
     const specs = references.flatMap((r) => r.rows);
     const sourceOf = specSources(references);
+    // Every loaded export, so a new product finds last season's listing of its model in any of them.
+    const listings = sheets.flatMap((s) => listingsFromCsv(s.csv));
     /**
      * The lines the rules could not find on the spec sheet, asked about once before anything is
      * written. With no API key, or if the call fails, the rules' answer stands as it is.
@@ -483,7 +489,7 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
     const results = sheets.map((s) => ({
       name: s.name,
       result: buildDelivery(s.csv, invoice.lines, {
-        season, vendor, specs, decided, sourceOf,
+        season, vendor, specs, decided, sourceOf, listings,
         fields: { ...fields, stock },
         reorderOnly: s.name !== home,
       }),

@@ -23,6 +23,26 @@ export function csvType(productType: string, collections: string[]): string {
   return named ?? headings[0];
 }
 
+/**
+ * Shopify's Product Category, where the shop fills one in.
+ *
+ * Read off the shop's own exports: most of the catalogue is left "Uncategorized", but its boards,
+ * downhill skis and sleeping bags mostly carry the full path, and a new board written as
+ * Uncategorized sat beside twelve that were not. Only those are filled in; everything else stays
+ * as the shop leaves it.
+ */
+const PRODUCT_CATEGORY: Record<string, string> = {
+  Snowboards: "Sporting Goods > Outdoor Recreation > Winter Sports & Activities > Skiing & Snowboarding > Snowboards",
+  Skis: "Sporting Goods > Outdoor Recreation > Winter Sports & Activities > Skiing & Snowboarding > Skis > Downhill Skis",
+  "Sleeping Bags": "Sporting Goods > Outdoor Recreation > Camping & Hiking > Sleeping Bags",
+};
+
+export function productCategoryFor(csvProductType: string, title = ""): string | undefined {
+  // A package is a board or ski with bindings on it; the shop leaves those uncategorised.
+  if (/\binc\b|\bpackage\b/i.test(title)) return undefined;
+  return PRODUCT_CATEGORY[csvProductType.trim()];
+}
+
 export function toCsvProducts(products: ReviewProduct[]): CsvProduct[] {
   return products.map((p) => {
     const productImages = p.images; // every image belongs to the product gallery; variant images also link via Variant Image
@@ -33,6 +53,7 @@ export function toCsvProducts(products: ReviewProduct[]): CsvProduct[] {
       bodyHtml: p.bodyHtml,
       vendor: p.vendor,
       productType: csvType(p.productType, p.collections.split(",")),
+      productCategory: productCategoryFor(csvType(p.productType, p.collections.split(",")), p.title),
       tags: p.tags.split(",").map((t) => t.trim()).filter(Boolean),
       published: false, // drafts, always — see csv.ts
       status: "draft",

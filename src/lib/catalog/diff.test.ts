@@ -109,7 +109,7 @@ describe.skipIf(!existsSync(ORDER) || !existsSync(SKIS))("a real delivery, read 
     expect(added.map((r) => `${r.option} of ${r.handle}`)).toEqual([
       "158 of blaze-94-2027",
       "138 of mantra-junior-2025",
-      "Default Title of volkl-griffon-13-mn-100mm-2027",
+      "Default Title of griffon-13-mn-100mm-2027",
     ]);
   });
 });

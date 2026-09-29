@@ -28,12 +28,14 @@ import { DEFAULT_CATEGORY_RULES, detectCategory, metafieldColumns, type Category
 import { buildRows, parseCsv, type CsvProduct } from "./csv";
 import { groupLineItems, type GroupedProduct } from "./grouping";
 import { quote, verifyOnlyIntended, type Change } from "./adjust";
-import { csvType } from "./pipeline-pure";
+import { csvType, productCategoryFor } from "./pipeline-pure";
+import { houseBody } from "./body";
 import { enrichFromSpecs } from "./specs";
 import { productTitle, seasonTagFrom, seoTitle } from "./titles";
 import { buildHandle } from "./handle";
 import { applyInvoice, reconcile, type InvoiceFields, type InvoiceLine, type Match, type Reconciliation } from "./reconcile";
 import { resolveAgainstReference } from "./reference-match";
+import { listingsFromCsv, type Listing } from "./shop-memory";
 import type { CanonicalLineItem } from "./types";
 
 export interface DeliveryOptions {
@@ -60,6 +62,8 @@ export interface DeliveryOptions {
   decided?: Map<number, CanonicalLineItem>;
   /** Which loaded file a spec row came from, so a line joined to one file is not filled in from lines joined to another. */
   sourceOf?: (spec: CanonicalLineItem) => string;
+  /** The shop's listings, from every loaded export, for what it decided about a model last season. */
+  listings?: Listing[];
   /** Leave the new products off the end, and only add the stock. Default: both. */
   reorderOnly?: boolean;
 }
@@ -219,21 +223,39 @@ function appendSizes(
     return { csv, added: [], appended: 0, wanted: wanted.length, warnings: ["The invoice orders sizes this listing does not have, and this export has no Option1 Value column to add them under, so they were left out."] };
   }
 
+  /**
+   * Which option holds the size on this product. Not always the first: the shop's Process 2027 is
+   * Colour then Length, and writing the new length into Option1 gave it Colour "152" with the
+   * sibling's Length "157W" copied beside it.
+   */
+  const sizeColumn = (first: string[] | undefined): number => {
+    for (const n of [1, 2, 3]) {
+      const name = at.get(`Option${n} Name`);
+      const value = at.get(`Option${n} Value`);
+      if (name !== undefined && value !== undefined && /length|size|mondo|width/i.test(first?.[name] ?? "")) return value;
+    }
+    return optionValue;
+  };
+
   const rows: string[] = [];
   const added: FreshSize[] = [];
   for (const m of wanted) {
     const size = (m.line.size ?? "").trim();
+    const sizeAt = sizeColumn(grid[m.productRows[0]]);
     // A row of this product that is NOT its first: it carries the variant and nothing of the
     // product, which is exactly the shape a new variant needs. Its first row will do otherwise.
     const template = m.productRows.find((r) => r > (m.productRows[0] ?? 0)) ?? m.productRows[0];
     const source = grid[template];
     if (!source) continue;
     // Never twice, and never a size the product turns out to have after all.
-    const existing = new Set(m.productRows.map((r) => (grid[r]?.[optionValue] ?? "").trim().toLowerCase()));
+    const existing = new Set(m.productRows.map((r) => (grid[r]?.[sizeAt] ?? "").trim().toLowerCase()));
     if (existing.has(size.toLowerCase()) || added.some((a) => a.handle === m.handle && a.option.toLowerCase() === size.toLowerCase())) continue;
 
     const row = header.map((column, i) => (VARIANT_COLUMNS.has(column) ? (source[i] ?? "") : ""));
-    row[optionValue] = size;
+    row[sizeAt] = size;
+    // The sibling's own SKU and cost are the sibling's. The order's go on, or nothing.
+    const skuAt = at.get("Variant SKU");
+    if (skuAt !== undefined) row[skuAt] = m.line.sku.trim();
     // Shopify writes an option's NAME on a product's first row only, so a template taken from a
     // later row has none. The importer does not need it for a product that already exists, but a
     // variant row with a value and no name is a thing somebody reading the file has to work out.
@@ -253,6 +275,7 @@ function appendSizes(
       if (fields.price) write("Variant Price", m.line.rrp.toFixed(2));
       if (fields.rrp) write("Variant Compare At Price", m.line.rrp.toFixed(2));
     }
+    if (m.line.costPrice !== null && m.line.costPrice > 0) write("Cost per item", m.line.costPrice.toFixed(2));
     const barcode = m.line.barcode.trim();
     if (barcode) { write("Variant Barcodes", barcode); write("Variant Barcode", barcode); }
     else { const b = at.get("Variant Barcodes") ?? at.get("Variant Barcode"); if (b !== undefined) row[b] = ""; }
@@ -310,7 +333,7 @@ function appendFresh(
   const rules = options.rules ?? DEFAULT_CATEGORY_RULES;
   const fallback = typeFromCarryOver(grid, at, carryOver, rules);
   const grouped = enrichFromSpecs(
-    groupLineItems(items, fallback ? [...rules, fallback] : rules),
+    groupLineItems(items, fallback ? [...rules, fallback] : rules, { listings: [...(options.listings ?? []), ...listingsFromCsv(csv)] }),
     options.specs ?? [],
   );
   if (fallback) {
@@ -516,7 +539,7 @@ function canonical(line: InvoiceLine, vendor: string, season: string): Canonical
     category: "",
     productType: "",
     description: "",
-    flex: "", abilityLevel: "", dinRange: "", terrain: "",
+    flex: "", abilityLevel: "", dinRange: "", terrain: (line.terrain ?? "").trim(),
     imageUrls: [],
     collections: "",
     tags: "",
@@ -537,9 +560,11 @@ function toProduct(g: GroupedProduct, vendor: string): CsvProduct {
   return {
     handle: g.handle,
     title,
-    bodyHtml: g.description.trim() ? `<p>${g.description.trim()}</p>` : "",
+    // Already the house body when the spec sheet wrote it; wrapping it again gave "<p><p>…".
+    bodyHtml: !g.description.trim() ? "" : /^\s*</.test(g.description) ? g.description : houseBody(g.description, []),
     vendor: brand,
     productType: csvType(g.productType, g.collections),
+    productCategory: productCategoryFor(csvType(g.productType, g.collections), title),
     tags: g.tags,
     published: false,
     status: "draft",

@@ -19,6 +19,9 @@ export interface MappingOptions {
   costIsLineTotal?: boolean;
 }
 
+/** What a saved template stores beside its mapping: the options, and the suggestion it was saved against. */
+export type SavedOptions = MappingOptions & { suggestedAtSave?: Mapping };
+
 function norm(h: string): string {
   // "#" is "number". Kept as a symbol, "Model #" read as the bare word "model" and was taken as
   // the product's NAME — on Burton's description list that put 10688 in the title and the real
@@ -116,45 +119,49 @@ export function suggestMapping(headers: string[], rows: Array<Record<string, str
 }
 
 /**
- * A saved mapping, kept where it holds and corrected where the file disproves it.
+ * A saved mapping, set against a fresh reading of the file.
  *
- * A template is saved when somebody ticks Save on the mapping screen, and from then on it wins for
- * every file with the same headings — which is how a Burton mapping with no price column in it went
- * on producing boards with no prices, long after the columns could be read properly. A deliberate
- * choice still stands. What it may no longer do:
+ * A template is saved when Save is ticked on the mapping screen — and it is ticked by default — and
+ * from then on it was applied to every file with the same headings, without the screen being shown
+ * again. So the first reading of Burton's W27 form, made before its columns could be read properly,
+ * went on being used after they could: cost from TOTAL $, and the description list with "Model #"
+ * as the name, which matched no line and gave no board a description. Fixing the reader changed
+ * nothing, because the reader was no longer being asked.
  *
- *   - leave out a field the fresh reading finds, that the template does not map anywhere else —
- *     so a template saved before AUD-WHSL was recognised as the cost now gets the cost;
- *   - keep a choice the data under it rules out: a column of bare numbers is never a product NAME
- *     (Burton's "Model #", 10688), and a price or a quantity has to be a number.
+ * So the fresh reading wins, and the template keeps only what somebody actually CHOSE: a column
+ * they changed from what was suggested to them. A template records the suggestion it was saved
+ * against (`suggestedAtSave`); where the saved choice differs from it, that is a person's decision
+ * and it stands, unless the data under the column rules it out. A template saved before that was
+ * recorded has no decisions anyone can point to, and fills in only the columns the fresh reading
+ * leaves blank.
  */
-export function repairTemplate(saved: Mapping, fresh: Mapping, rows: Array<Record<string, string>>): Mapping {
-  const out: Mapping = { ...saved };
+export function repairTemplate(saved: Mapping, fresh: Mapping, rows: Array<Record<string, string>>, suggestedAtSave?: Mapping): Mapping {
   const values = (header: string) => rows.map((r) => (r[header] ?? "").toString().trim()).filter(Boolean);
   const mostly = (header: string, test: (v: string) => boolean) => {
     const v = values(header);
     return v.length > 0 && v.filter(test).length / v.length >= 0.8;
   };
+  // Bare numbers are never a product's name; a price or a count has to be a number.
   const disproved = (header: string, key: string): boolean => {
     if (key === "title") return mostly(header, (v) => /^\d+$/.test(v));
     if (["costPrice", "rrp", "quantity", "grams"].includes(key)) return mostly(header, (v) => parseMoney(v) === null);
     if (key === "barcode") return mostly(header, (v) => !/^'?\d{8,14}$/.test(v));
     return false;
   };
-  for (const [header, key] of Object.entries(saved)) {
-    if (key && disproved(header, key)) out[header] = fresh[header] ?? "";
+  const out: Mapping = { ...fresh };
+  const deliberate = suggestedAtSave
+    ? Object.entries(saved).filter(([header, key]) => (key ?? "") !== (suggestedAtSave[header] ?? "") && !(key && disproved(header, key)))
+    : [];
+  for (const [header, key] of deliberate) {
+    // The field goes where the person put it, and nowhere else.
+    if (key) for (const other of Object.keys(out)) if (other !== header && out[other] === key) out[other] = "";
+    out[header] = key;
   }
+  const chosen = new Set(deliberate.map(([header]) => header));
   const used = () => new Set(Object.values(out).filter(Boolean));
-  for (const [header, key] of Object.entries(fresh)) {
-    if (!key || out[header]) continue;
-    if (!used().has(key)) out[header] = key;
-  }
-  // Two headings on one field after the corrections: the saved one keeps it.
-  const seen = new Set<string>();
-  for (const [header, key] of Object.entries(out)) {
-    if (!key) continue;
-    if (seen.has(key) && !(saved[header] === key)) out[header] = "";
-    seen.add(key);
+  for (const [header, key] of Object.entries(saved)) {
+    if (!key || chosen.has(header) || out[header] || used().has(key) || disproved(header, key)) continue;
+    out[header] = key;
   }
   return out;
 }

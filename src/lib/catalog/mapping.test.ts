@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyMapping, headerHash, looksLikeReference, mappingProblems, suggestMapping, seasonFrom, repairTemplate } from "./mapping";
+import { applyMapping, headerHash, looksLikeReference, mappingProblems, suggestMapping, seasonFrom, repairTemplate, type Mapping } from "./mapping";
 import { DEFAULT_CATEGORY_RULES, chooseOptions, detectCategory, enrichFromTitle } from "./categorize";
 import { groupLineItems } from "./grouping";
 import { emptyLineItem } from "./types";
@@ -200,7 +200,27 @@ describe("a saved mapping, kept where it holds", () => {
   });
 
   it("leaves a deliberate choice alone when nothing disproves it", () => {
-    const saved = { Description: "title", Code: "sku" } as const;
-    expect(repairTemplate({ ...saved }, suggestMapping(["Description", "Code"]), [{ Description: "Custom", Code: "ABC-123" }])).toEqual(saved);
+    const rows = [{ Description: "Custom", Code: "ABC-123" }];
+    const suggested = suggestMapping(["Description", "Code"], rows);
+    // Somebody changed Code to the SKU on the mapping screen, and the template recorded that.
+    const saved: Mapping = { Description: "title", Code: suggested.Code === "sku" ? "modelCode" : "sku" };
+    expect(repairTemplate({ ...saved }, suggested, rows, suggested)).toEqual(saved);
+  });
+
+  it("does not let a template saved from a bad reading override a good one", () => {
+    // What the shop's first Burton run saved, with Save ticked by default: cost from the line
+    // total, and the description list with the model NUMBER as the name.
+    const orderHeaders = ["MATERIAL", "SKU", "DESCRIPTION ", "SIZE", "GENDER", "AUD-WHSL", "AUD-RETAIL", "NZD-WHSL", "NZD-RETAIL", "EAN", "ORDER QTY", "TOTAL $"];
+    const orderRows = [{ MATERIAL: "", SKU: "", "DESCRIPTION ": "CUSTOM NEW GRAPHIC", SIZE: "154", GENDER: "MENS", "AUD-WHSL": "572.72", "AUD-RETAIL": "999.99", "NZD-WHSL": "570.65", "NZD-RETAIL": "1049.99", EAN: "", "ORDER QTY": "1", "TOTAL $": "572.72" }];
+    const oldOrder: Mapping = { SKU: "sku", "DESCRIPTION ": "title", SIZE: "size", GENDER: "gender", EAN: "barcode", "ORDER QTY": "quantity", "AUD-RETAIL": "rrp", "TOTAL $": "costPrice" };
+    const order = repairTemplate(oldOrder, suggestMapping(orderHeaders, orderRows), orderRows);
+    expect(order["AUD-WHSL"]).toBe("costPrice");
+    expect(order["TOTAL $"]).toBe("");
+    expect(order["AUD-RETAIL"]).toBe("rrp");
+
+    const listRows = [{ "Model #": "10688", "Model name": "Men's Custom Camber Snowboard", "Long Description": "From its humble beginnings…" }];
+    const oldList: Mapping = { "Long Description": "description", "Model #": "title", "Model name": "modelCode" };
+    const list = repairTemplate(oldList, suggestMapping(["Model #", "Model name", "Long Description"], listRows), listRows);
+    expect(list).toMatchObject({ "Model #": "modelCode", "Model name": "title", "Long Description": "description" });
   });
 });

@@ -5,7 +5,7 @@ import { productTitle, seasonTagFrom, seoTitle } from "./titles";
 import { parseDirectives } from "./instructions";
 import { prisma, parseJson } from "./db";
 import { extractFile, type UploadKind } from "./extract";
-import { applyMapping, headerHash, looksLikeReference, mappingProblems, repairTemplate, suggestMapping, suggestOptions, type Mapping, type MappingOptions } from "./mapping";
+import { applyMapping, headerHash, looksLikeReference, mappingProblems, repairTemplate, suggestMapping, suggestOptions, type Mapping, type MappingOptions, type SavedOptions } from "./mapping";
 import { groupLineItems } from "./grouping";
 import { houseTags } from "./product-tags";
 import { DEFAULT_CATEGORY_RULES, type CategoryRuleLike } from "./categorize";
@@ -264,6 +264,11 @@ export async function mappingState(batchId: string): Promise<HeaderGroup[]> {
     if (!group) {
       const isCanonical = headers.every((h) => (AI_HEADERS as readonly string[]).includes(h));
       const template = templates.find((t) => t.headerHash === hash) ?? null;
+      const saved = template ? parseJson<SavedOptions>(template.options, {}) : null;
+      const fresh = suggestMapping(headers, rows);
+      const suggestion = template
+        ? repairTemplate(parseJson<Mapping>(template.mappings, {}), fresh, rows, saved?.suggestedAtSave)
+        : isCanonical ? Object.fromEntries(headers.map((h) => [h, h])) as Mapping : fresh;
       group = {
         hash,
         headers,
@@ -271,12 +276,16 @@ export async function mappingState(batchId: string): Promise<HeaderGroup[]> {
         filenames: [],
         rowCount: 0,
         sampleRows: [],
-        suggestion: template
-          ? repairTemplate(parseJson<Mapping>(template.mappings, {}), suggestMapping(headers, rows), rows)
-          : isCanonical ? Object.fromEntries(headers.map((h) => [h, h])) as Mapping : suggestMapping(headers, rows),
-        options: template
-          ? parseJson<MappingOptions>(template.options, {})
-          : { ...(isCanonical ? {} : suggestOptions(suggestMapping(headers, rows))), ...(batch.supplier?.defaultBrand ? { fixed: { brand: batch.supplier.defaultBrand } } : {}) },
+        suggestion,
+        // A template's fixed values stand. Whether cost is a line total is worked out again from
+        // the mapping in use, unless somebody set it on a template that records what they chose:
+        // an old one said "TOTAL $ is the cost, and it is a line total", and the cost is AUD-WHSL.
+        options: template && saved
+          ? {
+              ...(saved.fixed ? { fixed: saved.fixed } : {}),
+              ...(saved.suggestedAtSave ? (saved.costIsLineTotal ? { costIsLineTotal: true } : {}) : suggestOptions(suggestion)),
+            }
+          : { ...(isCanonical ? {} : suggestOptions(fresh)), ...(batch.supplier?.defaultBrand ? { fixed: { brand: batch.supplier.defaultBrand } } : {}) },
         templateId: template?.id ?? null,
         templateName: template?.name ?? null,
         isCanonical,
@@ -407,7 +416,12 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
     for (const input of inputs) {
       if (!input.saveTemplate?.name) continue;
       const existing = await prisma.mappingTemplate.findFirst({ where: { supplierId: batch.supplierId, headerHash: input.hash } });
-      const data = { name: input.saveTemplate.name, mappings: JSON.stringify(input.mapping), options: JSON.stringify(input.options), headerHash: input.hash };
+      // What the app itself suggested for these columns, so a later reading can tell a person's
+      // choice from a suggestion that was merely accepted. See repairTemplate.
+      const file = batch.files.find((f) => headerHash(parseJson<string[]>(f.headers, [])) === input.hash);
+      const suggestedAtSave = file ? suggestMapping(parseJson<string[]>(file.headers, []), parseJson<Record<string, string>[]>(file.rawRows, [])) : undefined;
+      const options: SavedOptions = { ...input.options, ...(suggestedAtSave ? { suggestedAtSave } : {}) };
+      const data = { name: input.saveTemplate.name, mappings: JSON.stringify(input.mapping), options: JSON.stringify(options), headerHash: input.hash };
       if (existing) await prisma.mappingTemplate.update({ where: { id: existing.id }, data });
       else await prisma.mappingTemplate.create({ data: { ...data, supplierId: batch.supplierId } });
     }

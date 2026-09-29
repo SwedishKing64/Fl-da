@@ -192,3 +192,23 @@ export function rememberedVendor(title: string, listings: Listing[]): string {
   const vendors = new Set(listings.filter((l) => l.vendor.trim() && modelKey(l.title, l.vendor) === key).map((l) => l.vendor.trim()));
   return vendors.size === 1 ? [...vendors][0] : "";
 }
+
+/**
+ * The handle the shop already sells this product under, if it does: same brand, same model, same
+ * season, and flat against flat, package against package. Their M7 Mantra 2027 is "m7-mantra" —
+ * built as "m7-mantra-2027" and imported, it would have been a second M7 Mantra. Only an answer one
+ * listing gives.
+ */
+export function existingHandle(product: { title: string; brand: string; season: string }, listings: Listing[]): string {
+  const key = modelKey(product.title, product.brand);
+  if (!key) return "";
+  const brand = product.brand.trim().toLowerCase();
+  const packaged = isPackageTitle(product.title);
+  const season = Number(product.season) || 0;
+  const hits = listings.filter((l) =>
+    l.vendor.trim().toLowerCase() === brand
+    && isPackageTitle(l.title) === packaged
+    && modelKey(l.title, l.vendor) === key
+    && (season === 0 || yearOf(l) === season));
+  return hits.length === 1 ? hits[0].handle : "";
+}

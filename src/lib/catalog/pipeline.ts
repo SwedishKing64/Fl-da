@@ -14,7 +14,7 @@ import { houseBody } from "./body";
 import { keepOrderedLines, resolveAgainstReference } from "./reference-match";
 import { isFlatSki, isPackageBinding, packageProducts } from "./packages";
 import { readInvoiceGrids, type PriceRow } from "./invoice";
-import { asShopPrice, rememberedVendor } from "./shop-memory";
+import { asShopPrice, existingHandle, rememberedVendor } from "./shop-memory";
 import { brandIn, isBrand } from "./brands";
 import { askToJoin } from "./reference-ai";
 import { aiAvailable } from "./extract/ai";
@@ -179,6 +179,24 @@ export async function ingestFile(batchId: string, file: { filename: string; mime
         data: { batchId, filename: file.filename, mimeType: file.mimeType || "application/octet-stream", sizeBytes: file.buffer.length, storagePath: await saveFile("invoices", file.filename, file.buffer), kind: requested },
       });
   try {
+    /**
+     * The shop's own export, dropped in beside the supplier's files. It is not a delivery and not a
+     * reference sheet: it is what the shop already sells — its handles, its prices ending in .99,
+     * its riding-style shelves, which binding it packaged each ski with. Remembered, and nothing is
+     * built from it. The Bulk page learns the same way from the exports loaded on it.
+     */
+    if (/\.csv$/i.test(file.filename)) {
+      const { parseCsv } = await import("./csv");
+      const text = file.buffer.toString("utf8");
+      const { isShopifyExport, rememberListings } = await import("./shop-memory-store");
+      if (isShopifyExport(parseCsv(text.slice(0, 20000))[0] ?? [])) {
+        const { listingsFromCsv } = await import("./shop-memory");
+        const remembered = await rememberListings(listingsFromCsv(text));
+        const note = `Your shop's own export: ${remembered} products remembered — their handles, prices, tags and binding packages are what new listings follow, and a product the shop already has keeps its handle. Nothing is built from this file.`;
+        await prisma.sourceFile.update({ where: { id: record.id }, data: { extractionStatus: "DONE", extractionMethod: "CSV", detectedKind: "SHOP_EXPORT", headers: "[]", rawRows: "[]", extractionError: note } });
+        return { id: record.id, rows: 0, method: "CSV", kind: requested, warnings: [note] };
+      }
+    }
     const { table, meta } = await extractFile(file.buffer, file.filename, file.mimeType, requested);
     const detected = meta?.documentType ?? null;
     // A spreadsheet never reached the model, so nothing classified it and everything came through
@@ -514,11 +532,24 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
    */
   // The order's own lines too: the Griffons on it carry their price and cost, whatever else fails.
   const priceList = [
-    ...(await orderPriceLists(batch.files.filter((f) => f.extractionStatus === "DONE"))),
+    ...(await orderPriceLists(batch.files.filter((f) => f.extractionStatus === "DONE" && f.detectedKind !== "SHOP_EXPORT"))),
     ...items.map((i) => ({ sku: i.item.sku, title: i.item.title, colour: i.item.colour, rrp: i.item.rrp, costPrice: i.item.costPrice })),
   ];
   const { packages, skipped } = packageProducts(grouped, priceList, listings);
   grouped.push(...(packages as typeof grouped));
+  // A product the shop already sells keeps the handle it sells it under, so importing the file
+  // updates it rather than listing it twice. See existingHandle.
+  const kept: string[] = [];
+  for (const g of grouped) {
+    const handle = existingHandle({ title: productTitle(g.title, seasonTagFrom(g.tags)), brand: g.brand, season: seasonTagFrom(g.tags) ?? "" }, listings);
+    if (handle && handle !== g.handle) { g.handle = handle; kept.push(handle); }
+    else if (handle) kept.push(handle);
+  }
+  if (kept.length > 0) {
+    for (const fileId of [...new Set(items.map((i) => i.fileId))]) {
+      await noteOnFile(fileId, `Already in the shop, so written under the handle it has there, and imported they update those listings instead of adding them twice: ${kept.join(", ")}. Shopify's import REPLACES what it updates — the stock becomes this order's quantity rather than being added to what is on the shelf, and the description is the one here. To add the stock to what is there and leave the listings as they are, run the order through Bulk uploads instead.`);
+    }
+  }
   // The package bindings ordered with the skis go on the skis, not on the shelf. See isPackageBinding.
   const setAside = grouped.some((g) => isFlatSki(g)) ? grouped.filter((g) => isPackageBinding(g)) : [];
   for (const g of setAside) grouped.splice(grouped.indexOf(g), 1);

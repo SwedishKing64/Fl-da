@@ -219,7 +219,7 @@ export async function buildProductsAction(batchId: string): Promise<ActionResult
     const files = await prisma.sourceFile.findMany({ where: { batchId }, select: { extractionStatus: true, detectedKind: true, kind: true, filename: true } });
     const read = files.filter((f) => f.extractionStatus === "DONE");
     if (read.length === 0) return { ok: false, error: files.some((f) => f.extractionStatus === "PENDING") ? "The files are still being read — give it a moment and try again." : "No file in this batch could be read. Upload the order form or invoice." };
-    const orders = read.filter((f) => (f.detectedKind ?? f.kind) !== "SPEC_SHEET" && (f.detectedKind ?? f.kind) !== "PRODUCT_PHOTO");
+    const orders = read.filter((f) => !["SPEC_SHEET", "PRODUCT_PHOTO", "SHOP_EXPORT"].includes(f.detectedKind ?? f.kind));
     if (orders.length === 0) {
       return { ok: false, error: `This batch only has reference sheets — ${read.map((f) => f.filename).join(", ")} — which say what things are, not what is arriving. Upload the order form or invoice as well (leave "These files are" on "Work it out").` };
     }
@@ -960,17 +960,9 @@ export async function readInvoiceAction(file: { name: string; type: string; base
 export async function rememberListingsAction(listings: Array<{ handle: string; title: string; vendor: string; productType: string; tags: string[]; price?: number | null; bindingOption?: string }>): Promise<ActionResult<{ remembered: number }>> {
   await requireUser();
   try {
-    const clean = listings.filter((l) => l.handle.trim() && l.title.trim()).slice(0, 20000);
-    for (let at = 0; at < clean.length; at += 500) {
-      const chunk = clean.slice(at, at + 500);
-      await prisma.$transaction([
-        prisma.shopListing.deleteMany({ where: { handle: { in: chunk.map((l) => l.handle.trim()) } } }),
-        prisma.shopListing.createMany({
-          data: chunk.map((l) => ({ handle: l.handle.trim(), title: l.title.trim(), vendor: l.vendor.trim(), productType: l.productType.trim(), tags: l.tags.join(", "), price: typeof l.price === "number" ? l.price : null, bindingOption: (l.bindingOption ?? "").trim() })),
-        }),
-      ]);
-    }
-    return { ok: true, data: { remembered: clean.length } };
+    const { rememberListings } = await import("@/lib/catalog/shop-memory-store");
+    const remembered = await rememberListings(listings);
+    return { ok: true, data: { remembered } };
   } catch (err) {
     return { ok: false, error: said(err) };
   }

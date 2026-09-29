@@ -1,11 +1,11 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { logAdjustmentAction, planAdjustmentAction, readInstructionSheetAction, readInvoiceAction, readReferenceAction, readSheetAgainstFilesAction } from "@/app/(catalog)/actions";
+import { joinOrderAction, logAdjustmentAction, planAdjustmentAction, readInstructionSheetAction, readInvoiceAction, readReferenceAction, readSheetAgainstFilesAction } from "@/app/(catalog)/actions";
 import { applyPlan, describeFile, foldPlans, isWholeFile, whyNoMatch, type AdjustResult, type FoldStep, type Plan } from "@/lib/catalog/adjust";
 import { csvFilename } from "@/lib/catalog/csv";
 import { reconcile, type InvoiceFields, type Reconciliation } from "@/lib/catalog/reconcile";
-import { buildDelivery } from "@/lib/catalog/delivery";
+import { buildDelivery, joinToReference } from "@/lib/catalog/delivery";
 import type { CanonicalLineItem } from "@/lib/catalog/types";
 import type { InvoiceRead } from "@/lib/catalog/invoice";
 import { fitsUpload, looksLikeImage, shrinkImage, tooBig } from "@/app/(catalog)/shrink";
@@ -101,8 +101,15 @@ const measure = (row: Row, csvs: Array<{ name: string; csv: string }>): Array<{ 
  */
 const placedLines = (against: Against): number =>
   new Set(against.flatMap((a) => a.reconciliation.matched.map(
-    (m) => [m.line.barcode, m.line.sku, m.line.size ?? "", m.line.colour ?? ""].join("\u0000"),
+    (m) => [m.line.barcode, m.line.sku, m.line.barcode || m.line.sku ? "" : m.line.title, m.line.size ?? "", m.line.colour ?? ""].join("\u0000"),
   ))).size;
+
+/** Which loaded spec sheet each row came from. */
+function specSources(references: Reference[]): (spec: CanonicalLineItem) => string {
+  const from = new Map<CanonicalLineItem, string>();
+  for (const r of references) for (const row of r.rows) from.set(row, r.filename);
+  return (spec) => from.get(spec) ?? "";
+}
 
 /** Lines that found their product but a size it does not list — a variant to be added, not a product. */
 const sizesMissing = (r: Reconciliation) => r.matched.filter((m) => m.sizeMissing);
@@ -390,7 +397,7 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
    * a file or is new to all of them — and a product is only built onto a file that the delivery
    * actually touched, so a Volkl order never appends skis to the goggles export.
    */
-  function applyDeliveryNow() {
+  async function applyDeliveryNow() {
     if (!invoice) return;
     if (!fields.rrp && !fields.price && !fields.quantity && !buildNew) {
       setError("Nothing was applied — tick at least one of the numbers to write, or let it build the products that are not in the shop yet.");
@@ -399,6 +406,26 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
     setBusy("applying"); setError(null); setSaved(null);
 
     const specs = references.flatMap((r) => r.rows);
+    const sourceOf = specSources(references);
+    /**
+     * The lines the rules could not find on the spec sheet, asked about once before anything is
+     * written. With no API key, or if the call fails, the rules' answer stands as it is.
+     */
+    let decided: Map<number, CanonicalLineItem> | undefined;
+    const first = specs.length > 0 ? joinToReference(invoice.lines, { season, vendor, specs, sourceOf }) : null;
+    if (first && first.unjoined.length > 0) {
+      setProgress(`Looking up ${first.unjoined.length} line${first.unjoined.length === 1 ? "" : "s"} on the spec sheet…`);
+      const byCode = new Map<string, CanonicalLineItem>();
+      for (const s of specs) if (s.modelCode.trim() && s.title.trim() && !byCode.has(s.modelCode.trim())) byCode.set(s.modelCode.trim(), s);
+      const asked = await joinOrderAction({
+        lines: first.unjoined.map((i) => ({ index: i, title: invoice.lines[i].title, gender: invoice.lines[i].gender ?? "", modelCode: invoice.lines[i].sku })),
+        specs: [...byCode.values()].map((s) => ({ modelCode: s.modelCode.trim(), title: s.title })),
+      }).catch(() => null);
+      if (asked?.ok && asked.data && asked.data.length > 0) {
+        decided = new Map(asked.data.flatMap((d) => (byCode.has(d.code) ? [[d.index, byCode.get(d.code)!] as [number, CanonicalLineItem]] : [])));
+      }
+      setProgress("");
+    }
     /**
      * Which file the new products go on: the one this delivery has the most to do with.
      *
@@ -413,7 +440,7 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
     const results = sheets.map((s) => ({
       name: s.name,
       result: buildDelivery(s.csv, invoice.lines, {
-        season, vendor, specs,
+        season, vendor, specs, decided, sourceOf,
         fields: { ...fields, stock },
         reorderOnly: s.name !== home,
       }),
@@ -638,8 +665,14 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
   // in state it would have to be put back in step after every load, removal, apply and undo, and
   // the one time it was missed it would show yesterday's match count over today's file.
   // No useMemo: the compiler memoizes this, and writing it by hand only stops it doing so.
+  // Matched as the delivery will be: each line under the spec sheet's name for it, where one is
+  // loaded. Burton's "CUSTOM NEW GRAPHIC" is nothing to the shop; "Custom" is Custom 2027.
+  const loadedSpecs = references.flatMap((r) => r.rows);
+  const invoiceLines = invoice
+    ? (loadedSpecs.length > 0 ? joinToReference(invoice.lines, { season, vendor, specs: loadedSpecs, sourceOf: specSources(references) }).lines : invoice.lines)
+    : [];
   const against: Against = invoice
-    ? sheets.map((s) => ({ name: s.name, reconciliation: reconcile(s.csv, invoice.lines, { season }) }))
+    ? sheets.map((s) => ({ name: s.name, reconciliation: reconcile(s.csv, invoiceLines, { season }) }))
     : [];
   const placed = placedLines(against);
   // What the delivery would build, counted once across the loaded files: a line is new only if no
@@ -938,7 +971,7 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
                 <div className="mt-0.5 text-xs text-[var(--ink-soft)]">
                   {invoice.lines.length} line{invoice.lines.length === 1 ? "" : "s"}, {invoice.source}.
                   {invoice.columns.rrp || invoice.columns.quantity
-                    ? <> Prices from <strong>{invoice.columns.rrp || "nowhere"}</strong>, counts from <strong>{invoice.columns.quantity || "nowhere"}</strong>, matched on <strong>{invoice.columns.barcode || invoice.columns.sku || "barcode"}</strong>.</>
+                    ? <> Prices from <strong>{invoice.columns.rrp || "nowhere"}</strong>, counts from <strong>{invoice.columns.quantity || "nowhere"}</strong>, matched on <strong>{invoice.columns.barcode || invoice.columns.sku || "the product's name"}</strong>.</>
                     : null}
                 </div>
                 {invoice.warnings.map((w, i) => <p key={i} className="mt-1.5 text-xs text-[var(--ink-soft)]">{w}</p>)}
@@ -1024,7 +1057,7 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <span className="font-medium">Spec sheets and barcode lists</span>
-                    <span className="ml-2 text-xs text-[var(--ink-soft)]">Optional, and only for the products that have to be built. Burton&rsquo;s spec sheet is where their descriptions come from; a barcode list is where the EAN for each size is. Add the order first, then these &mdash; they are searched for what it named.</span>
+                    <span className="ml-2 text-xs text-[var(--ink-soft)]">Burton&rsquo;s description list or Volkl&rsquo;s spec export: each order line is found on it first, so the order&rsquo;s shorthand (&ldquo;CUSTOM NEW GRAPHIC 58W&rdquo;) is matched to the shop under the catalogue&rsquo;s name (Custom, 158W), and anything that has to be built takes its description from it. A barcode list is where the EAN for each size is. Add the order first, then these.</span>
                   </div>
                   <Button size="sm" disabled={busy !== null} onClick={() => referenceRef.current?.click()}>{busy === "reference" ? "Reading…" : references.length > 0 ? "Add another" : "Add a spec sheet"}</Button>
                   <input ref={referenceRef} type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void takeReference(f); e.target.value = ""; }} />

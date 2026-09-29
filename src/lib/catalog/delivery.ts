@@ -33,6 +33,7 @@ import { enrichFromSpecs } from "./specs";
 import { productTitle, seasonTagFrom, seoTitle } from "./titles";
 import { buildHandle } from "./handle";
 import { applyInvoice, reconcile, type InvoiceFields, type InvoiceLine, type Match, type Reconciliation } from "./reconcile";
+import { resolveAgainstReference } from "./reference-match";
 import type { CanonicalLineItem } from "./types";
 
 export interface DeliveryOptions {
@@ -52,6 +53,13 @@ export interface DeliveryOptions {
    * wrote that listing last season — so these only ever reach the new products.
    */
   specs?: CanonicalLineItem[];
+  /**
+   * Lines the rules could not place on the spec sheet, placed by the model: order line index to
+   * reference row. See askToJoin.
+   */
+  decided?: Map<number, CanonicalLineItem>;
+  /** Which loaded file a spec row came from, so a line joined to one file is not filled in from lines joined to another. */
+  sourceOf?: (spec: CanonicalLineItem) => string;
   /** Leave the new products off the end, and only add the stock. Default: both. */
   reorderOnly?: boolean;
 }
@@ -109,7 +117,10 @@ export interface FreshSize {
  * going up, a variant being added and a product being added can never claim the same row, and a
  * pass that cannot be written leaves the ones before it standing.
  */
-export function buildDelivery(csv: string, lines: InvoiceLine[], options: DeliveryOptions = {}): DeliveryResult {
+export function buildDelivery(csv: string, ordered: InvoiceLine[], options: DeliveryOptions = {}): DeliveryResult {
+  // The order's wording, put into the shop's before anything is matched: see joinToReference.
+  const joined = joinToReference(ordered, options);
+  const lines = joined.lines;
   const reconciliation = reconcile(csv, lines, { season: options.season });
   // A delivery ADDS by default. It is the whole point of this path: the goods are arriving.
   const fields: InvoiceFields = { rrp: true, quantity: true, stock: "add", ...options.fields };
@@ -122,7 +133,7 @@ export function buildDelivery(csv: string, lines: InvoiceLine[], options: Delive
   }
 
   const heldBack: Array<{ line: InvoiceLine; reason: string }> = reconciliation.ambiguous.map((a) => ({ line: a.line, reason: a.reason }));
-  const warnings = [...reorder.warnings];
+  const warnings = [...joined.warnings, ...reorder.warnings];
   let csvSoFar = reorder.csv;
   let appended = 0;
 
@@ -146,7 +157,7 @@ export function buildDelivery(csv: string, lines: InvoiceLine[], options: Delive
     return { csv: csvSoFar, changes: reorder.changes, carryOver: reconciliation.matched, fresh: [], freshSizes: sizes.added, appended, heldBack, reconciliation, warnings };
   }
 
-  const built = appendFresh(csvSoFar, reconciliation.unmatched, options, reconciliation.matched);
+  const built = appendFresh(csvSoFar, reconciliation.unmatched, options, reconciliation.matched, joined.items);
   if (built.refused) {
     // The passes before this one stand on their own and are already proved, so they are kept.
     // Losing a good half because the other half could not be written means doing it all by hand.
@@ -279,6 +290,7 @@ function appendFresh(
   lines: InvoiceLine[],
   options: DeliveryOptions,
   carryOver: Match[],
+  resolved: Map<InvoiceLine, CanonicalLineItem> = new Map(),
 ): { csv: string; fresh: FreshProduct[]; appended: number; heldBack: Array<{ line: InvoiceLine; reason: string }>; warnings: string[]; refused?: boolean } {
   const grid = parseCsv(csv).filter((r) => r.some((c) => c.trim() !== ""));
   const header = grid[0] ?? [];
@@ -294,7 +306,7 @@ function appendFresh(
   const taken = new Set(grid.slice(1).map((r) => (r[handleColumn] ?? "").trim()).filter(Boolean));
   const vendor = (options.vendor ?? "").trim();
   const season = (options.season ?? "").trim();
-  const items = lines.map((line) => canonical(line, vendor, season));
+  const items = lines.map((line) => resolved.get(line) ?? canonical(line, vendor, season));
   const rules = options.rules ?? DEFAULT_CATEGORY_RULES;
   const fallback = typeFromCarryOver(grid, at, carryOver, rules);
   const grouped = enrichFromSpecs(
@@ -425,6 +437,55 @@ function handlesFor(product: GroupedProduct, vendor: string): string[] {
 }
 
 /**
+ * The order's lines, joined to the spec sheet or description list that came with them.
+ *
+ * Burton's amended W27 lines say "CUSTOM NEW GRAPHIC", "PROCES NEW GRAHIC", "58W" — no material
+ * number, no SKU, no EAN. The shop calls the first one "Custom 2027" in 158W, and the description
+ * list calls it "Men's Custom Camber Snowboard" under model 10688. Matching the order's wording
+ * straight to the shop found nothing, so all twelve were built as new products, and building them
+ * looked the description up by a code the order never had: no descriptions at all, with a sheet
+ * of them loaded.
+ *
+ * So the join runs first, the same one the importer uses (see reference-match): each line takes
+ * the catalogue's name as the shop titles it, the board length in full, and the reference row it
+ * belongs to — which is how the carry-overs then match the shop by name, and how the new products
+ * get their description, Type and options from the sheet.
+ */
+export function joinToReference(
+  lines: InvoiceLine[],
+  options: DeliveryOptions,
+): { lines: InvoiceLine[]; items: Map<InvoiceLine, CanonicalLineItem>; warnings: string[]; unjoined: number[] } {
+  const specs = (options.specs ?? []).filter((s) => s.title.trim());
+  if (specs.length === 0 || lines.length === 0) return { lines, items: new Map(), warnings: [], unjoined: [] };
+  const vendor = (options.vendor ?? "").trim();
+  const season = (options.season ?? "").trim();
+  const rules = options.rules ?? DEFAULT_CATEGORY_RULES;
+  const base = lines.map((line) => canonical(line, vendor, season));
+  const resolution = resolveAgainstReference(base, specs, rules, options.decided ?? new Map(), options.sourceOf);
+  const items = new Map<InvoiceLine, CanonicalLineItem>();
+  const unjoined: number[] = [];
+  const out = lines.map((line, i) => {
+    const how = resolution.joined[i];
+    const item = resolution.items[i];
+    if (!how || !("to" in how)) {
+      unjoined.push(i);
+      // Still what the lines around it agreed it is — a 2027 snowboard — for when it is built.
+      const next = { ...line };
+      items.set(next, item);
+      return next;
+    }
+    const size = (item.length || item.size || line.size || "").trim();
+    const next: InvoiceLine = { ...line, title: item.title, named: true, ...(size ? { size } : {}), ...(item.colour ? { colour: line.colour || item.colour } : {}) };
+    items.set(next, item);
+    return next;
+  });
+  const placed = lines.length - unjoined.length;
+  const missing = [...new Set(unjoined.map((i) => lines[i].title || lines[i].sku))];
+  const warnings = [`Joined to the spec sheet: ${placed} of ${lines.length} line${lines.length === 1 ? "" : "s"}${missing.length ? `. Not on it: ${missing.slice(0, 6).join(", ")}${missing.length > 6 ? ` and ${missing.length - 6} more` : ""}` : ""}.`];
+  return { lines: out, items, warnings, unjoined };
+}
+
+/**
  * One order line as the importer's own line item.
  *
  * Only two judgements are made here. A size that is two or three bare digits is a ski or board
@@ -450,7 +511,7 @@ function canonical(line: InvoiceLine, vendor: string, season: string): Canonical
     size: isLength ? "" : size,
     width: "",
     colour: (line.colour ?? "").trim(),
-    gender: "",
+    gender: (line.gender ?? "").trim(),
     season,
     category: "",
     productType: "",

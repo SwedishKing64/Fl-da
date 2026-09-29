@@ -43,6 +43,14 @@ export interface InvoiceLine {
    * Package", at different prices. Without it a line is two products and neither can be picked.
    */
   form?: "flat" | "package";
+  /** Who it is for, where the order says: "MENS", "WOMENS". Tells the men's and women's model of one name apart. */
+  gender?: string;
+  /**
+   * True when the title is the catalogue's own name for the model, taken from the spec sheet the
+   * order came with — "Custom", not the form's "CUSTOM NEW GRAPHIC". A one-word name is then
+   * trusted to name the product exactly, which a word off an order form is not.
+   */
+  named?: boolean;
 }
 
 export type MatchKey = "barcode" | "sku" | "name";
@@ -200,6 +208,9 @@ function nameKeysOf(line: InvoiceLine): string[] {
   // Wording is a last resort and only when there is enough of it to mean something. One common
   // word would match half the shelf, and be refused — but slowly, and for every line.
   if (words.length >= 2) keys.push(words.join(" "));
+  // The catalogue's own name, however short: "Custom" is a whole model name on Burton's range.
+  // Marked so placeByName compares it with the product's name exactly, not as a run of words.
+  else if (line.named && words.length === 1) keys.push(`=${words[0]}`);
   const trimmed = withoutFormWords(words);
   if (trimmed.length >= 2 && trimmed.length < words.length) keys.push(trimmed.join(" "));
   return keys;
@@ -245,18 +256,20 @@ function placeByName(
     const seen = index.nameCounts.get(`${key}\u0000${index.variant}`) ?? 0;
     const repeated = seen > 1;
     const words = key.split(" ");
-    let handles = words.length === 1
-      ? index.byCode.get(key) ?? []
-      : [...index.wordsOf].filter(([, title]) => hasRun(title, words) || hasRun(words, title)).map(([handle]) => handle);
+    let handles = key.startsWith("=")
+      ? [...index.titleOf].filter(([, title]) => withoutYear(title) === key.slice(1)).map(([handle]) => handle)
+      : words.length === 1
+        ? index.byCode.get(key) ?? []
+        : [...index.wordsOf].filter(([, title]) => hasRun(title, words) || hasRun(words, title)).map(([handle]) => handle);
     if (handles.length === 0) continue;
     handles = sift(handles, line, index);
     if (repeated) {
-      return { ...miss, reason: `"${key}" is on ${seen} lines of the invoice for the same size, so it cannot say which is which` };
+      return { ...miss, reason: `"${key.replace(/^=/, "")}" is on ${seen} lines of the invoice for the same size, so it cannot say which is which` };
     }
     if (handles.length > 1) {
-      return { ...miss, reason: `"${key}" matches ${handles.length} products — ${handles.slice(0, 3).join(", ")}${handles.length > 3 ? ", …" : ""}` };
+      return { ...miss, reason: `"${key.replace(/^=/, "")}" matches ${handles.length} products — ${handles.slice(0, 3).join(", ")}${handles.length > 3 ? ", …" : ""}` };
     }
-    return { handle: handles[0], on: key, reason: "" };
+    return { handle: handles[0], on: key.replace(/^=/, ""), reason: "" };
   }
   return miss;
 }
@@ -290,8 +303,12 @@ function sift(handles: string[], line: InvoiceLine, index: { seasonOf: Map<strin
     // NNNBC Binding Package" and the Rebels "Skis with Freeflex Pro 11 Binding Package". Whether a
     // ski has a binding on it should not have two answers in one codebase. See isPackage.
     const packaged = (h: string) => isPackage(index.titleOf.get(h) ?? "");
-    const wantsFlat = line.form === "flat" || /\bflat\b/i.test(line.title);
-    const wantsPackage = line.form === "package";
+    // A line that does not say it comes with a binding is the thing on its own. The shop's rule:
+    // a package says so in its title ("inc … Binding Package"), so a line that names no binding,
+    // package or system — Burton's "CUSTOM X NEW GRAPHIC" — is the board, not the board and bindings.
+    const saysPackage = isPackage(line.title) || /\b(system|package|binding|bindings|inc)\b/i.test(line.title);
+    const wantsFlat = line.form === "flat" || /\bflat\b/i.test(line.title) || (line.form === undefined && !saysPackage);
+    const wantsPackage = line.form === "package" || (line.form === undefined && saysPackage && !/\bflat\b/i.test(line.title));
     if (wantsFlat || wantsPackage) {
       const sorted = kept.filter((h) => (wantsFlat ? !packaged(h) : packaged(h)));
       if (sorted.length > 0) kept = sorted;
@@ -371,8 +388,11 @@ function missingSize(productRows: number[], line: InvoiceLine, grid: string[][],
  * Some products carry only the letter — the SX-44AM mitt is S, M, ML, L, XL, 2XL with no
  * mondopoint at all — so whichever of the two both sides have is what is compared.
  */
-function sizeParts(value: string): { letter: string; number: number | null } {
+function sizeParts(value: string): { letter: string; number: number | null; wide?: boolean } {
   const up = value.toUpperCase();
+  // A wide board: "158W", "158 Wide". Not the same board as the 158 — a different width of deck —
+  // and not a letter size either, so it is its own flag rather than a "W" to compare.
+  if (/^\s*\d{2,3}(\.\d)?\s*(W|WIDE)\s*$/.test(up)) return { letter: "", number: Number(up.match(/\d+(?:\.\d+)?/)![0]), wide: true };
   const number = up.match(/\d+(?:\.\d+)?/);
   const word = up.match(/\b(EXTRA SMALL|SMALL|MEDIUM|LARGE)\b/);
   const letter = up.match(/(?<![A-Z])(XXS|XS|2XL|3XL|XXL|XL|ML|S|M|L)(?![A-Z])/);
@@ -381,7 +401,8 @@ function sizeParts(value: string): { letter: string; number: number | null } {
 }
 
 /** Same size when everything both sides state agrees, and they state at least one thing. */
-function sameSize(a: { letter: string; number: number | null }, b: { letter: string; number: number | null }): boolean {
+function sameSize(a: { letter: string; number: number | null; wide?: boolean }, b: { letter: string; number: number | null; wide?: boolean }): boolean {
+  if (Boolean(a.wide) !== Boolean(b.wide) && a.number !== null && b.number !== null) return false;
   const letters = a.letter && b.letter ? a.letter === b.letter : null;
   const numbers = a.number !== null && b.number !== null ? Math.abs(a.number - b.number) < 0.01 : null;
   if (letters === false || numbers === false) return false;

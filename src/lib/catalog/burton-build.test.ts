@@ -147,3 +147,62 @@ describe.skipIf(!existsSync(ORDER) || !existsSync(LIST))("every description on t
     expect(r.items.map((i) => i.colour)).toEqual(["Jungle", "", "Spray Paint"]);
   }, 60_000);
 });
+
+/**
+ * The same two files through the Bulk page, which reads the order with its own reader and matches
+ * it to the shop's export rather than building a batch.
+ *
+ * Reported from the shop floor after the importer was fixed: the Bulk page still built the wrong
+ * boards, found "no descriptions" with the list loaded, and read no cost. Its reader dropped every
+ * line with no code or barcode — which is all twelve amended lines — and built the price list's
+ * coded rows instead, none of which were ordered.
+ */
+describe.skipIf(!existsSync(ORDER) || !existsSync(LIST) || !existsSync(SHOP))("Burton's W27 order through the Bulk page", () => {
+  async function bulk() {
+    const { sheetGrids } = await import("./extract/tabular");
+    const { readInvoiceGrids } = await import("./invoice");
+    const { buildDelivery } = await import("./delivery");
+    const invoice = readInvoiceGrids(await sheetGrids(readFileSync(ORDER)))!;
+    const list = await read(LIST);
+    return { invoice, specs: list.items, buildDelivery };
+  }
+
+  it("reads the twelve ordered boards, with the AUD retail and the AUD wholesale", async () => {
+    const { invoice } = await bulk();
+    expect(invoice.lines).toHaveLength(12);
+    expect(invoice.shape).toBe("flat");
+    expect(invoice.columns.rrp).toBe("AUD-RETAIL");
+    const custom = invoice.lines[0];
+    expect(custom).toMatchObject({ title: "CUSTOM NEW GRAPHIC", size: "154", quantity: 1, rrp: 999.99, costPrice: 572.72, gender: "MENS" });
+    expect(invoice.lines.every((l) => l.quantity === 1 && l.rrp !== null && l.costPrice !== null)).toBe(true);
+  }, 60_000);
+
+  it("puts the four boards the shop lists onto their listings, and builds only the Feelgood", async () => {
+    const { invoice, specs, buildDelivery } = await bulk();
+    const result = buildDelivery(readFileSync(SHOP, "utf8"), invoice.lines, { season: "2027", vendor: "Burton", specs });
+    expect(result.heldBack).toEqual([]);
+    const placed = result.reconciliation.matched.map((m) => `${m.handle} ${m.line.size}`);
+    expect(placed).toEqual([
+      "custom-2027 154", "custom-2027 156", "custom-2027 158W", "custom-2027 162W",
+      // The board, not "Custom X 2027 inc Burton Cartel Binding Package": the line names no binding.
+      "custom-x-2027 156", "custom-x-2027 158W",
+      "process-2027 152", "process-2027 155", "process-2027 157W",
+      "yeasayer-2027 140", "yeasayer-2027 144",
+    ]);
+    // The shop lists the Process in 155W and 157W. A 155 is not a 155W, so it is a new size.
+    expect(result.freshSizes.map((s) => s.option).sort()).toEqual(["152", "155"]);
+    expect(result.fresh.map((f) => f.title)).toEqual(["Feelgood 2027"]);
+  }, 60_000);
+
+  it("describes the new boards from the list", async () => {
+    const { invoice, specs, buildDelivery } = await bulk();
+    const empty = "Handle,Title,Body (HTML),Vendor,Type,Tags,Option1 Name,Option1 Value,Variant Price,Cost per item,Variant Inventory Qty\r\n";
+    const result = buildDelivery(empty, invoice.lines, { season: "2027", vendor: "Burton", specs });
+    const built = Object.fromEntries(result.fresh.map((f) => [f.title, f]));
+    expect(Object.keys(built).sort()).toEqual(["Custom 2027", "Custom X 2027", "Feelgood 2027", "Process 2027", "Yeasayer 2027"]);
+    for (const name of ["Custom 2027", "Custom X 2027", "Process 2027", "Yeasayer 2027"]) expect(built[name].described).toBe(true);
+    expect(built["Custom 2027"].type).toBe("Snowboards");
+    expect(built["Custom 2027"].variants.map((v) => v.option)).toEqual(["154", "156", "158W", "162W"]);
+    expect(built["Custom 2027"].variants[0].price).toBe("999.99");
+  }, 60_000);
+});

@@ -152,7 +152,10 @@ export async function extractXlsx(buffer: Buffer, sheetName?: string): Promise<E
    */
   if (!sheetName) {
     const order = readInvoiceGrids(sheets);
-    if (order && order.lines.some((l) => l.quantity !== null)) {
+    // A flat order form — a row per line with an ORDER QTY column, as Burton's is — is already a
+    // table, and read as one it keeps its cost, gender and every other column; the pipeline keeps
+    // only the rows with a quantity (keepOrderedLines). Only a size grid needs turning into rows.
+    if (order && order.shape === "grid" && order.lines.some((l) => l.quantity !== null)) {
       return orderToTable(order);
     }
   }

@@ -28,6 +28,11 @@ export interface InvoiceRead {
   sheet: string;
   columns: { barcode: string; sku: string; rrp: string; quantity: string; title: string; size: string; colour: string };
   warnings: string[];
+  /**
+   * "grid" when the quantities were read off a size grid — a column per length, a number in the
+   * box — which has no row-per-line table of its own; "flat" when each line is a row.
+   */
+  shape?: "grid" | "flat";
 }
 
 const text = (value: unknown): string => (value ?? "").toString().trim();
@@ -67,7 +72,11 @@ function pick(
   const candidates = headings
     .map((h, index) => ({ index, heading: h }))
     .filter((c) => hint.test(norm(c.heading)) && !(veto && veto.test(norm(c.heading))));
-  const best = candidates.map((c) => ({ ...c, score: share(c.index) })).filter((c) => c.score > 0.5).sort((a, b) => b.score - a.score)[0];
+  // A column in another currency only when there is nothing else. Burton's form has AUD-RETAIL and
+  // NZD-RETAIL side by side, both full of prices; the shop sells in Australian dollars.
+  const foreign = (heading: string) => FOREIGN.test(norm(heading)) ? 1 : 0;
+  const best = candidates.map((c) => ({ ...c, score: share(c.index) })).filter((c) => c.score > 0.5)
+    .sort((a, b) => foreign(a.heading) - foreign(b.heading) || b.score - a.score)[0];
   if (best) return { index: best.index, heading: best.heading };
   if (!fallbackScan) return null;
   // Nothing was headed usefully. A column can still be unmistakable by its contents — a whole
@@ -82,6 +91,11 @@ const SKU = /\bsku\b|item no|item code|item number|article no|article code|suppl
 const RRP = /\brrp\b|recommended|retail|\bmsrp\b|\bsrp\b/;
 const NOT_RRP = /\bw s\b|wholesale|cost|indent|total|margin|gst/;
 const QTY = /^qty|quantity|units|ordered|order qty/;
+// What the shop pays. "AUD-WHSL" on Burton's form; "W/S" on the Marker one.
+const COST = /whsl|wholesale|\bw s\b|\bcost\b|\bdealer\b|\bnet price\b|\bbuy price\b/;
+const NOT_COST = /total|margin|retail|\brrp\b|gst|incl/;
+const FOREIGN = /\b(nzd|usd|eur|gbp|chf|cad|jpy|sek|nok)\b/;
+const GENDER = /^gender$|^sex$|^men women$|^suitable for$/;
 // Their order forms head it "Sizes", "size (ski length)" or "Size". Not "sizes" as a LIST of the
 // lengths a ski comes in, which is a different column with the same name — that is why the values
 // have to look like one size rather than five.
@@ -233,19 +247,36 @@ function readGrid(name: string, grid: string[][]): InvoiceRead | null {
   const size = pick(headings, rows, SIZE, null, (v) => v.length <= 12 && !v.includes("/") && !v.includes(","));
 
   const colour = pick(headings, rows, COLOUR, null, (v) => v.length <= 30 && !/^\d+$/.test(v));
+  const cost = pick(headings, rows, COST, NOT_COST, (v) => (readNumber(v) ?? -1) > 0);
+  const gender = pick(headings, rows, GENDER, null, (v) => v.length <= 20 && !/\d/.test(v));
 
   const title = pick(headings, rows, TITLE, null, (v) => v.length >= 3 && !/^\d+$/.test(v))
     ?? (sku ? { index: sku.index + 1, heading: `the column beside "${sku.heading}"` } : null);
 
+  /**
+   * An order form, read flat: a quantity column that somebody has filled in on SOME rows.
+   *
+   * Burton's W27 form is their whole price list, 125 boards, with an ORDER QTY column that has a 1
+   * against twelve of them. Every row of it was being read as a line of the delivery — 125 boards,
+   * and the twelve that were actually bought were dropped altogether, because the amended lines
+   * somebody typed in at the top carry no material number, no SKU and no EAN. On an order form the
+   * quantity is what makes a row part of the delivery, and a description is enough to say what it
+   * is: the name is matched to the shop, or to the description list, afterwards.
+   */
+  const orderedRows = quantity ? rows.filter((row) => orderedQuantity(text(row[quantity.index])) !== null) : [];
+  const asOrder = orderedRows.length > 0 && orderedRows.length < rows.length;
+
   const lines: InvoiceLine[] = [];
-  for (const row of rows) {
+  let footers = 0;
+  for (const row of asOrder ? orderedRows : rows) {
     const line: InvoiceLine = {
       sku: sku ? text(row[sku.index]) : "",
       barcode: barcode ? text(row[barcode.index]) : "",
       title: title ? text(row[title.index]) : "",
       ...(size ? { size: text(row[size.index]) } : {}),
       ...(colour ? { colour: text(row[colour.index]) } : {}),
-      costPrice: null,
+      ...(gender && text(row[gender.index]) ? { gender: text(row[gender.index]) } : {}),
+      costPrice: cost ? ((readNumber(text(row[cost.index])) ?? 0) > 0 ? readNumber(text(row[cost.index])) : null) : null,
       // A zero is not a price. Their order form prints 0 against the system bindings that come with
       // a ski, and writing that through would put "free" in front of a customer — which is exactly
       // why the rest of this app leaves a price cell empty rather than filling it with 0.00.
@@ -253,18 +284,24 @@ function readGrid(name: string, grid: string[][]): InvoiceRead | null {
       quantity: quantity ? readNumber(text(row[quantity.index])) : null,
     };
     // A row with no way to be matched is a subtotal, a section heading or a blank — not a line.
-    if (!normaliseBarcode(line.barcode) && !line.sku) continue;
+    // On an order form a description will do; "TOTAL ORDER QTY 12" has not even that.
+    if (!normaliseBarcode(line.barcode) && !line.sku && !(asOrder && /[a-z]{3}/i.test(line.title))) { footers++; continue; }
     if (line.rrp === null && line.quantity === null) continue;
     lines.push(line);
   }
   if (lines.length === 0) return null;
 
   const heading = (c: Column | null) => c?.heading ?? "";
+  // A column the kept lines leave empty is not what they are matched on: Burton's amended lines
+  // have no EAN though the form has an EAN column.
+  const used = (c: Column | null, of: (l: InvoiceLine) => string) => (lines.some((l) => of(l).trim()) ? heading(c) : "");
   return {
     lines,
     sheet: name,
-    columns: { barcode: heading(barcode), sku: heading(sku), rrp: heading(rrp), quantity: heading(quantity), title: heading(title), size: heading(size), colour: heading(colour) },
-    warnings: [],
+    columns: { barcode: used(barcode, (l) => l.barcode), sku: used(sku, (l) => l.sku), rrp: heading(rrp), quantity: heading(quantity), title: heading(title), size: heading(size), colour: heading(colour) },
+    warnings: asOrder
+      ? [`Read as an order: ${lines.length} of ${rows.length - footers} rows on "${name}" have a quantity in ${quantity!.heading.trim()}, and only those are this delivery — the rest is the supplier's price list.${cost ? ` Cost from ${cost.heading.trim()}` : ""}${rrp ? `${cost ? "," : ""} retail from ${rrp.heading.trim()}` : ""}.`]
+      : [],
   };
 }
 
@@ -295,6 +332,7 @@ export function readInvoiceGrids(grids: Array<{ name: string; grid: string[][] }
     const lines = ordered.flatMap((o) => o.lines);
     return {
       lines,
+      shape: "grid",
       sheet: ordered.map((o) => o.sheet).join(", "),
       columns: ordered[0].columns,
       warnings: [`Read as an order: ${lines.length} line${lines.length === 1 ? "" : "s"} from the quantities written on ${ordered.length === 1 ? `the "${ordered[0].sheet}" tab` : `${ordered.length} tabs`}. The rest of the form is the supplier's price list, not this delivery, so it was left alone.`],
@@ -318,7 +356,7 @@ export function readInvoiceGrids(grids: Array<{ name: string; grid: string[][] }
   }
 
   const first = kept[0];
-  const warnings: string[] = [];
+  const warnings: string[] = kept.flatMap((k) => k.warnings);
   if (kept.length > 1) {
     warnings.push(`Read from ${kept.length} tabs: ${kept.map((k) => `"${k.sheet}" (${k.lines.length})`).join(", ")}.`);
   }
@@ -327,6 +365,7 @@ export function readInvoiceGrids(grids: Array<{ name: string; grid: string[][] }
   }
   return {
     lines: kept.flatMap((k) => k.lines),
+    shape: "flat",
     sheet: kept.map((k) => k.sheet).join(", "),
     columns: first.columns,
     warnings,

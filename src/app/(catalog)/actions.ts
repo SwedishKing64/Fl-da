@@ -12,7 +12,7 @@ import { checkImageUrl, recordLibraryImages } from "@/lib/catalog/images";
 import { pushBatch, reconcileBatch, rollbackBatch, syncCatalog, ShopifyError } from "@/lib/catalog/shopify";
 import { enrichBatchSeo } from "@/lib/catalog/seo";
 import { slugify } from "@/lib/catalog/handle";
-import { CURRENCIES, type AppSettings } from "@/lib/catalog/types";
+import { CURRENCIES, emptyLineItem, type AppSettings } from "@/lib/catalog/types";
 import { seedDefaults } from "@/lib/catalog/seed";
 import { planAdjustment, planAdjustments, screenInstructions, planningAvailable, describePlan, splitInstructions, type SplitInstructions } from "@/lib/catalog/adjust-plan";
 import type { Plan } from "@/lib/catalog/adjust";
@@ -917,6 +917,33 @@ export async function readInvoiceAction(file: { name: string; type: string; base
       return { ok: false, error: `Reading ${file.name} took longer than the page allows. Upload the order as a spreadsheet if you have one — that is read instantly.` };
     }
     return { ok: false, error: `Could not read ${file.name}: ${message}` };
+  }
+}
+
+/**
+ * Order lines the rules could not find on the spec sheet, put to the model — when a key is set.
+ *
+ * The Bulk page joins an order to its spec sheet in the browser (see joinToReference), and a line
+ * whose wording the rules have never seen is left out of it. Only the names and codes travel: the
+ * descriptions stay in the browser, and the answer is a code from the sheet or nothing.
+ */
+export async function joinOrderAction(input: {
+  lines: Array<{ index: number; title: string; gender: string; modelCode: string }>;
+  specs: Array<{ modelCode: string; title: string }>;
+}): Promise<ActionResult<Array<{ index: number; code: string }>>> {
+  await requireUser();
+  if (!aiAvailable() || input.lines.length === 0) return { ok: true, data: [] };
+  try {
+    const { askToJoin } = await import("@/lib/catalog/reference-ai");
+    const item = (fields: Partial<CanonicalLineItem>): CanonicalLineItem => ({ ...emptyLineItem(), ...fields });
+    const decided = await askToJoin(
+      input.lines.slice(0, 200).map((l) => ({ index: l.index, line: item({ title: l.title, gender: l.gender, modelCode: l.modelCode }) })),
+      input.specs.slice(0, 3000).map((s) => item({ modelCode: s.modelCode, title: s.title })),
+    );
+    return { ok: true, data: [...decided].map(([index, spec]) => ({ index, code: spec.modelCode })) };
+  } catch (err) {
+    // The rules' answer stands on its own; the model only ever adds to it.
+    return { ok: false, error: said(err) };
   }
 }
 

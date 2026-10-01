@@ -139,19 +139,35 @@ describe("the binding's price off a supplier's price list", () => {
   it("takes one cost however many decimals it is written to", async () => {
     const { bindingFrom, DEFAULT_PACKAGE_BINDINGS } = await import("./packages");
     // The order form's INDENT is 208.6363…; the same Griffon, read off the order's own line, 208.64.
-    const found = bindingFrom(DEFAULT_PACKAGE_BINDINGS.mens, [
-      { title: "GRIFFON 13 MN; 90MM", colour: "BLACK", rrp: 459, costPrice: 208.63636363636363 },
-      { title: "GRIFFON 13 MN 100MM BLACK", colour: "BLACK", rrp: 459, costPrice: 208.64 },
+    const found = bindingFrom(DEFAULT_PACKAGE_BINDINGS.womens, [
+      { title: "SQUIRE 11; 90MM", colour: "WHITE", rrp: 349, costPrice: 158.63636363636363 },
+      { title: "SQUIRE 11 100MM WHITE", colour: "WHITE", rrp: 349, costPrice: 158.64 },
     ]);
-    expect(found).toMatchObject({ label: "Marker Griffon - Black", rrp: 459, cost: 208.64 });
+    expect(found).toMatchObject({ label: "Marker Squire - White", rrp: 349, cost: 158.64 });
   });
 
   it("refuses a binding priced two different ways", async () => {
     const { bindingFrom, DEFAULT_PACKAGE_BINDINGS } = await import("./packages");
-    expect(bindingFrom(DEFAULT_PACKAGE_BINDINGS.mens, [
-      { title: "GRIFFON 13 MN; 90MM", colour: "BLACK", rrp: 459, costPrice: 208.64 },
-      { title: "GRIFFON 13 MN; 100MM", colour: "BLACK", rrp: 479, costPrice: 208.64 },
+    expect(bindingFrom(DEFAULT_PACKAGE_BINDINGS.womens, [
+      { title: "SQUIRE 11; 90MM", colour: "WHITE", rrp: 349, costPrice: 158.64 },
+      { title: "SQUIRE 11; 100MM", colour: "WHITE", rrp: 379, costPrice: 158.64 },
     ])).toBeNull();
+  });
+
+  /** The shop's own figures: $450 recommended retail, $241 cost, whatever any supplier's list says. */
+  it("gives the Griffon the shop's own price, with or without a list", async () => {
+    const { bindingFrom, DEFAULT_PACKAGE_BINDINGS } = await import("./packages");
+    expect(bindingFrom(DEFAULT_PACKAGE_BINDINGS.mens, [])).toEqual({ label: "Marker Griffon - Black", shortName: "Marker Griffon", rrp: 450, cost: 241 });
+    expect(bindingFrom(DEFAULT_PACKAGE_BINDINGS.mens, [{ title: "GRIFFON 13 MN; 90MM", colour: "BLACK", rrp: 459, costPrice: 208.64 }])).toMatchObject({ rrp: 450, cost: 241 });
+  });
+
+  it("adds 55 to the retail of Please Mount My Bindings, and not to the cost", async () => {
+    const { buildPackage, DEFAULT_PACKAGE_BINDINGS, bindingFrom, FITTING_MOUNT, FITTING_NO_MOUNT } = await import("./packages");
+    const griffon = bindingFrom(DEFAULT_PACKAGE_BINDINGS.mens, [])!;
+    const pack = buildPackage({ title: "QST 94", season: "2027", brand: "Salomon", tags: [], lengths: [{ length: "174", rrp: 949.99, cost: 500 }] } as never, [griffon]);
+    const by = Object.fromEntries(pack.variants.map((v) => [v.bindingFitting, v]));
+    expect(by[FITTING_NO_MOUNT]).toMatchObject({ rrp: 1399.99, cost: 741 });
+    expect(by[FITTING_MOUNT]).toMatchObject({ rrp: 1454.99, cost: 741 });
   });
 });
 
@@ -165,7 +181,7 @@ describe("a binding as somebody names it in the instruction chat", () => {
       { title: "SQUIRE 11; 90MM", colour: "BLACK", rrp: 349, costPrice: 158.64 },
     ];
     // "the griffon" is the Griffon 13 MN the shop packages with — not every Griffon on the tab.
-    expect(bindingFrom(specFromName("the griffon")!, list)).toMatchObject({ label: "Marker Griffon - Black", rrp: 459 });
+    expect(bindingFrom(specFromName("the griffon")!, list)).toMatchObject({ label: "Marker Griffon - Black", rrp: 450, cost: 241 });
     expect(bindingFrom(specFromName("Squire")!, list)).toMatchObject({ label: "Marker Squire - White" });
     expect(bindingFrom(specFromName("squire black")!, list)).toMatchObject({ label: "Marker Squire - Black", rrp: 349 });
   });

@@ -40,21 +40,24 @@ describe("a delivery of carry-overs and new products", () => {
 
   it("puts the products the shop does not have on the end of the same file", () => {
     const out = delivery();
-    expect(out.fresh).toHaveLength(1);
+    // The ski, and its package with the Marker Griffon: every flat ski is built both ways.
+    expect(out.fresh.map((f) => f.title)).toEqual(["M7 Mantra 2027", "M7 Mantra 2027 inc Marker Griffon Binding Package"]);
     expect(out.fresh[0].title).toBe("M7 Mantra 2027");
     expect(out.fresh[0].handle).toBe("m7-mantra-2027");
     expect(out.fresh[0].vendor).toBe("Volkl");
     // Two lengths ordered, so two variant rows — and the barcodes travel with them.
     expect(out.fresh[0].variants.map((v) => v.option)).toEqual(["170", "177"]);
     expect(out.fresh[0].variants.map((v) => v.barcode)).toEqual(["4064264900011", "4064264900028"]);
-    expect(out.appended).toBe(2);
+    // Two rows for the ski, and two lengths × Do Not Mount / Please Mount for the package.
+    expect(out.appended).toBe(6);
+    expect(out.fresh[1].variants.map((v) => v.price)).toEqual(["2099.00", "2154.00", "2099.00", "2154.00"]);
   });
 
   it("leaves every row that was already there exactly as it was, bar the cells it names", () => {
     const out = delivery();
     const before = parseCsv(EXPORT).filter((r) => r.some((c) => c.trim()));
     const after = parseCsv(out.csv).filter((r) => r.some((c) => c.trim()));
-    expect(after).toHaveLength(before.length + 2);
+    expect(after).toHaveLength(before.length + 6);
     expect(after[0]).toEqual(before[0]);                                  // the header, untouched
     expect(after[2]).toEqual(before[2]);                                  // the 177, nothing arriving
     // The 170 moved in exactly two cells, and both are on the change list: the count going up and
@@ -68,7 +71,7 @@ describe("a delivery of carry-overs and new products", () => {
     const out = delivery();
     const rows = parseCsv(out.csv).filter((r) => r.some((c) => c.trim()));
     const header = rows[0];
-    const fresh = rows.slice(-2).map((r) => Object.fromEntries(header.map((h, i) => [h, r[i] ?? ""])));
+    const fresh = rows.slice(3, 5).map((r) => Object.fromEntries(header.map((h, i) => [h, r[i] ?? ""])));
     expect(fresh[0].Status).toBe("draft");
     expect(fresh[0].Published).toBe("FALSE");
     expect(fresh[0]["Variant Price"]).toBe("1649.00");

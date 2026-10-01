@@ -152,7 +152,10 @@ export function buildPackage(ski: FlatSki, bindings: BindingChoice[]): SkiPackag
  * binding the order has to name, so none is chosen for it here.
  */
 export const DEFAULT_PACKAGE_BINDINGS: { mens: BindingSpec; womens: BindingSpec } = {
-  mens: { label: "Marker Griffon - Black", shortName: "Marker Griffon", model: /\bGRIFFON\s*13\s*MN\b/i, colour: /\bBLACK\b/i },
+  // The Griffon's price is the shop's own, not whatever a supplier's list happens to say: $450
+  // recommended retail, $241 cost, on every package, and so a package is built for every flat ski
+  // whether or not the order carried the binding's price at all.
+  mens: { label: "Marker Griffon - Black", shortName: "Marker Griffon", model: /\bGRIFFON\s*13\s*MN\b/i, colour: /\bBLACK\b/i, fixed: { rrp: 450, cost: 241 } },
   womens: { label: "Marker Squire - White", shortName: "Marker Squire", model: /\bSQUIRE\s*11\b/i, colour: /\bWHITE\b/i },
 };
 
@@ -162,6 +165,8 @@ export interface BindingSpec {
   shortName: string;
   model: RegExp;
   colour: RegExp;
+  /** A price the shop has fixed for this binding, which stands in place of any supplier's list. */
+  fixed?: { rrp: number; cost: number };
 }
 
 /** Which of the defaults a ski takes, from its gender and name. Null for a kids' ski. */
@@ -180,6 +185,7 @@ export function bindingSpecFor(gender: string, title: string): BindingSpec | nul
  * model disagree on price, none is taken: a guessed binding price is a wrong package price.
  */
 export function bindingFrom(spec: BindingSpec, priceList: Array<{ title: string; colour?: string; rrp: number | null; costPrice: number | null }>): BindingChoice | null {
+  if (spec.fixed) return { label: spec.label, shortName: spec.shortName, rrp: spec.fixed.rrp, cost: spec.fixed.cost };
   // The colour column where the list has one; the name only where it does not.
   const rows = priceList.filter((r) => spec.model.test(r.title) && spec.colour.test((r.colour ?? "").trim() || r.title) && r.rrp !== null && r.rrp > 0);
   if (rows.length === 0) return null;

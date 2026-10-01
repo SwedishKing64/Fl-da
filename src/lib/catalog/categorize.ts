@@ -50,7 +50,9 @@ export const DEFAULT_CATEGORY_RULES: CategoryRuleLike[] = [
   { category: "apparel", pattern: String.raw`\bpants?\b|\bbibs?\b`, productType: "Snow Pants", collections: "Snow Clothing", tags: "snow pants", option1: "size", option2: "colour", option3: null, priority: 77, active: true },
   { category: "apparel", pattern: String.raw`\bbase ?layer|\bthermal`, productType: "Baselayers", collections: "Snow Clothing", tags: "baselayers", option1: "size", option2: "colour", option3: null, priority: 76, active: true },
   { category: "apparel", pattern: String.raw`\bmidlayer|\bfleece|\bhoodie`, productType: "Midlayers", collections: "Snow Clothing", tags: "midlayers", option1: "size", option2: "colour", option3: null, priority: 75, active: true },
-  { category: "apparel", pattern: String.raw`\bgloves?\b|\bmitts?\b`, productType: "Gloves", collections: "Clothing Accessories", tags: "gloves", option1: "size", option2: "colour", option3: null, priority: 74, active: true },
+  // Gloves hang under three headings on the site; the shop types 127 of its 129 pairs Ski
+  // Accessories, so that is the collection that decides the Type. See csvType.
+  { category: "apparel", pattern: String.raw`\bgloves?\b|\bmitts?\b`, productType: "Gloves", collections: "Ski Accessories", tags: "gloves", option1: "size", option2: "colour", option3: null, priority: 74, active: true },
   { category: "accessories", pattern: ACCESSORIES_PATTERN, productType: "Accessories", collections: "Accessories", tags: "accessories", option1: "size", option2: "colour", option3: null, priority: 70, active: true },
   { category: "skis", pattern: String.raw`\bskis?\b|\bmantra\b|\bbent\b|\benforcer\b|\brustler\b|\bkore\b|\bexperience\b|\bmaverick\b`, productType: "Skis", collections: "Skis", tags: "skis", option1: "length", option2: "colour", option3: null, priority: 60, active: true },
 ];

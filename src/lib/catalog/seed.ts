@@ -159,6 +159,8 @@ async function repairCategoryRulesNow(): Promise<number> {
   await prisma.categoryRule.updateMany({ where: { category: "bindings", pattern: OLD_BINDINGS_PATTERN }, data: { pattern: BINDINGS_PATTERN } }).catch(() => undefined);
   // Likewise an accessories rule still on the old default learns the kinds suppliers write.
   await prisma.categoryRule.updateMany({ where: { category: "accessories", pattern: OLD_ACCESSORIES_PATTERN }, data: { pattern: ACCESSORIES_PATTERN } }).catch(() => undefined);
+  // And the gloves rule files gloves where the shop does (Ski Accessories, not Clothing Accessories).
+  await prisma.categoryRule.updateMany({ where: { category: "apparel", productType: "Gloves", collections: "Clothing Accessories" }, data: { collections: "Ski Accessories" } }).catch(() => undefined);
   const rows = await prisma.categoryRule.findMany();
   const broken = rows.filter((r) => r.productType && !isValidType(r.productType));
   if (broken.length === 0) return 0;

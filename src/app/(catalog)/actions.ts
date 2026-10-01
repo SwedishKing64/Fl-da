@@ -213,6 +213,24 @@ export async function deleteSourceFileAction(fileId: string): Promise<ActionResu
  * Products are built by themselves after an upload, but only when there is something to build
  * from, and when there is not the page used to offer no way forward at all. This says why.
  */
+/**
+ * The build, checked by the model against the shop's conventions and the instruction chat, with
+ * what is plainly wrong put right and the rest asked. See batch-agent.ts.
+ */
+export async function reviewBatchAction(batchId: string): Promise<ActionResult<{ summary: string; changed: number; questions: string[] }>> {
+  const user = await requireUser();
+  try {
+    const { reviewBatch } = await import("@/lib/catalog/batch-agent");
+    const review = await reviewBatch(batchId, user.id);
+    if (!review) return { ok: false, error: "No API key is set, so the build cannot be checked. Add ANTHROPIC_API_KEY in Settings." };
+    revalidatePath(`/batches/${batchId}`);
+    revalidatePath(`/batches/${batchId}/review`);
+    return { ok: true, data: { summary: review.summary, changed: review.applied.length, questions: review.questions } };
+  } catch (err) {
+    return { ok: false, error: `The build could not be checked: ${said(err)}` };
+  }
+}
+
 export async function buildProductsAction(batchId: string): Promise<ActionResult<{ products: number }>> {
   const user = await requireUser();
   try {
@@ -1220,6 +1238,12 @@ export async function sendInstructionAction(batchId: string, message: string): P
           if (await untouchedSinceBuilt(batchId)) {
             const rebuilt = await autoApplyMappings(batchId, user.id);
             outcome = rebuilt.products > 0 ? ` Rebuilt the ${rebuilt.products} products with this.` : "";
+            // And checked again, so an instruction that is not a directive — "drop the kids'
+            // gloves", "that one is a jacket" — is acted on or answered. See batch-agent.ts.
+            if (rebuilt.products > 0) {
+              const { reviewBatch } = await import("@/lib/catalog/batch-agent");
+              await reviewBatch(batchId, user.id).catch(() => null);
+            }
           } else {
             await repriceBatch(batchId);
             outcome = " The products have been edited by hand, so they were only re-priced: open Column mapping and build again to apply the rest (that replaces the edits).";

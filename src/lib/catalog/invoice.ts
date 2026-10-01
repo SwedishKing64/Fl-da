@@ -297,9 +297,27 @@ export function foldQuantityColumns(grid: string[][], headerAt: number): { grid:
   const totals = cols.find((c) => /^totals?$/i.test(text(above[c])));
   const windows = cols.filter((c) => c !== totals);
   const sum = (row: string[], from: number[]): number => from.reduce((n, c) => { const v = readNumber(text(row[c])); return n + (v !== null && v > 0 ? v : 0); }, 0);
+  /**
+   * Each delivery's own quantity is kept beside the total, under the delivery it is for — "Due
+   * 2026-12", from the date the form writes above the column, or "Due OCT" from the heading, or
+   * "Due 3" when the form says nothing — so that "only the December delivery" can be obeyed
+   * later. Headed "Due", not "Units" or "Delivery", so nothing reads one as THE quantity or a date.
+   */
+  const label = (c: number, n: number): string => {
+    const over = text(above[c]);
+    const date = /^(\d{4})-(\d{2})/.exec(over);
+    if (date) return `${date[1]}-${date[2]}`;
+    const inHeading = /^(?:units?|qty|quantity)\s+([A-Za-z]{3,9}(?:\s*\d{2,4})?)$/i.exec(text(heads[c]).trim());
+    if (inHeading) return inHeading[1].toUpperCase();
+    if (over && !/^(?:units?|qty|quantity)$/i.test(over)) return over;
+    return String(n + 1);
+  };
+  // The per-delivery columns go on the end of every row, past the widest row, so they line up.
+  const width = Math.max(...grid.map((row) => row.length));
   const out = grid.map((row, r) => {
     if (r < headerAt) return row;
     const copy = [...row];
+    while (copy.length < width) copy.push("");
     const heading = r === headerAt;
     const first = cols[0];
     if (!heading) {
@@ -310,6 +328,10 @@ export function foldQuantityColumns(grid: string[][], headerAt: number): { grid:
     }
     // The others are gone: blank headings and cells, so nothing else reads a month as a quantity.
     for (const c of cols.slice(1)) copy[c] = "";
+    windows.forEach((c, n) => {
+      if (heading) copy[width + n] = `Due ${label(c, n)}`;
+      else { const v = readNumber(text(row[c])); copy[width + n] = v !== null && v > 0 ? String(v) : ""; }
+    });
     return copy;
   });
   return {

@@ -564,7 +564,8 @@ export function gendersFromText(...parts: (string | undefined)[]): Gender[] {
   if (/\b(kids?|junior|jnr|jr|youth|boys?|girls?|child(ren)?|grom|toddler)\b/.test(text)) return ["kids"];
   const mens = /\b(mens?|men's|man's|male|m)\b/.test(text);
   const womens = /\b(womens?|women's|woman's|ladies|ladys|lady|female|w|wmns)\b/.test(text);
-  if (mens && womens) return ["mens", "womens"];
+  // The shop has no unisex tag: a unisex product is on both the men's and the women's page.
+  if ((mens && womens) || /\bunisex\b/.test(text)) return ["mens", "womens"];
   if (mens) return ["mens"];
   if (womens) return ["womens"];
   return [];

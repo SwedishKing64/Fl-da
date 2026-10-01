@@ -6,6 +6,8 @@ import { describeDirectives, parseDirectives } from "@/lib/catalog/instructions"
 import { Steps } from "./Steps";
 import { UploadPanel } from "./UploadPanel";
 import { InstructionChat } from "./InstructionChat";
+import { BuildCheck } from "./BuildCheck";
+import { reviewedSinceBuilt } from "@/lib/catalog/batch-agent";
 import { BatchSettingsForm } from "./BatchSettingsForm";
 import { BuildProductsButton, DeleteFileButton, DeleteBatchButton, RetryExtractionButton } from "./BatchButtons";
 import { ExtractedRows } from "./ExtractedRows";
@@ -14,7 +16,7 @@ export default async function BatchPage(props: PageProps<"/batches/[id]">) {
   const { id } = await props.params;
   const batch = await prisma.importBatch.findUnique({ where: { id }, include: { supplier: true, files: { orderBy: { createdAt: "asc" } }, instructions: { orderBy: { createdAt: "asc" } }, _count: { select: { products: true } } } });
   if (!batch) notFound();
-  const [suppliers, settings] = await Promise.all([prisma.supplier.findMany({ orderBy: { name: "asc" } }), getSettings()]);
+  const [suppliers, settings, reviewed] = await Promise.all([prisma.supplier.findMany({ orderBy: { name: "asc" } }), getSettings(), reviewedSinceBuilt(id)]);
   const locked = ["EXPORTED", "PUSHED"].includes(batch.status);
   const extracted = batch.files.filter((f) => f.extractionStatus === "DONE");
 
@@ -33,6 +35,7 @@ export default async function BatchPage(props: PageProps<"/batches/[id]">) {
       <Steps batchId={id} current="upload" status={batch.status} />
       <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <div className="min-w-0 space-y-6">
+          {batch._count.products > 0 && <BuildCheck batchId={id} needed={!reviewed} aiEnabled={Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN)} locked={locked} />}
           <InstructionChat
             batchId={id}
             locked={locked}

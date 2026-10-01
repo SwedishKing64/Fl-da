@@ -28,6 +28,8 @@ const DirectivesSchema = z.object({
     for: z.enum(["mens", "womens", "kids", "all"]).describe("Which skis this binding goes with."),
     binding: z.string().describe("The binding as they named it, e.g. 'Marker Griffon', 'Squire', 'Look Pivot 12'."),
   })).describe("Which binding the packages are made with, when they say. 'Griffon for the men's and Squire for the women's' is two entries. Empty when they have not said."),
+  deliveries: z.string().describe("Only the lines due in one delivery window, when they say so: a month as YYYY-MM ('only the December 2026 delivery' is 2026-12), a span as YYYY-MM..YYYY-MM, or an ordinal ('first delivery only' is 'first'). Empty when they have not said, and every line is built."),
+  onlyNew: z.boolean().describe("True when they say to only add products the shop does not already have, and leave out the ones it already lists."),
   notes: z.string().describe("Anything else worth knowing that is not one of the fields above — kept with the batch and used when copy is written. Empty when there is nothing."),
 });
 
@@ -42,6 +44,8 @@ export const NO_DIRECTIVES: BatchDirectives = {
   season: "",
   packages: "",
   packageBindings: [],
+  deliveries: "",
+  onlyNew: false,
   notes: "",
 };
 
@@ -51,9 +55,11 @@ Turn what they say into directives that apply to every product in the batch. Tak
 
 Skis are built twice as a matter of course: flat, and as a package with a binding (men's with the Marker Griffon, women's with the Marker Squire), priced from the binding on the supplier's own price list. When they talk about packaging, partnering or selling skis with a binding, that is the packages and packageBindings fields.
 
+An order form can span several deliveries — a column of quantities per month, or a delivery date per line. "Only the December 2026 delivery" or "just the April order" is the deliveries field. "Only add the new products" / "leave out what we already have" is onlyNew.
+
 Only fill a field they actually asked for. Everything else stays empty, null or false — a directive changes every product in the batch, so inventing one is expensive. Anything they say that is not one of the fields goes in notes, where it reaches the writing without changing a field.
 
-Then write one short line back confirming what you will do, in their terms, so they can see you understood before the invoice is read. If they said something you cannot act on, say so plainly in that line.`;
+Then write one short line back confirming what you will do, in their terms, so they can see you understood before the invoice is read. If they said something you cannot act on — a stock update, a change to one product, anything outside these fields — say so plainly in that line and say what they can do instead; never imply it will be done.`;
 
 let client: Anthropic | null = null;
 function getClient(): Anthropic {
@@ -112,6 +118,8 @@ export function describeDirectives(d: BatchDirectives): string[] {
   if (d.packages === "none") out.push("No binding packages");
   if (d.packageBindings.length) out.push(`Packages with: ${d.packageBindings.map((b) => `${b.binding} (${b.for === "all" ? "all skis" : b.for})`).join(", ")}`);
   else if (d.packages === "build") out.push("Every ski also as a binding package");
+  if (d.deliveries.trim()) out.push(`Only the ${/^\d{4}-\d{2}/.test(d.deliveries.trim()) ? d.deliveries.trim().replace("..", " to ") : `${d.deliveries.trim()}`} delivery`);
+  if (d.onlyNew) out.push("Only products the shop does not already list");
   if (d.notes.trim()) out.push(d.notes.trim());
   return out;
 }

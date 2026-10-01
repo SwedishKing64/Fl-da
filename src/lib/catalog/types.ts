@@ -51,6 +51,12 @@ export interface CanonicalLineItem {
    * quantity booked stock for 162 units that were never coming.
    */
   cancelled?: number | null;
+  /**
+   * When this line is due, as the supplier wrote it ("2026-04-01", "Apr 26"), when the sheet says.
+   * An order can span two deliveries — Burton's RDD sheet has lines for November and for April —
+   * and "only the April delivery" needs the date on each line to go by.
+   */
+  deliveryDate?: string;
   grams: number | null;
   length: string; // ski/snowboard length e.g. "172"
   size: string; // boot size / apparel size
@@ -101,6 +107,7 @@ export const CANONICAL_FIELDS: CanonicalFieldDef[] = [
   { key: "quantity", label: "Quantity", kind: "number", synonyms: ["qty", "quantity", "units", "ordered", "qty ordered", "order qty", "pcs", "pieces", "count", "no of units"] },
   { key: "rrp", label: "RRP / MSRP", kind: "number", synonyms: ["rrp", "msrp", "retail", "retail price", "srp", "rec retail", "recommended retail", "list price", "map"] },
   { key: "cancelled", label: "Quantity cancelled", kind: "number", synonyms: ["cancel", "cancelled", "canceled", "cancelled qty", "cancel qty", "qty cancelled", "cancelled quantity", "cancellations", "cancelled units"] },
+  { key: "deliveryDate", label: "Delivery date", kind: "text", synonyms: ["delivery date", "requested delivery date", "rdd", "delivery", "delivery month", "del date", "ship date", "shipping date", "eta", "due date", "despatch date", "dispatch date", "delivery window"] },
   { key: "grams", label: "Weight (grams)", kind: "number", synonyms: ["weight", "grams", "weight g", "weight (g)", "unit weight", "mass"] },
   { key: "length", label: "Length (cm)", kind: "text", synonyms: ["length", "len", "ski length", "size ski length", "board length", "size cm", "length cm", "cm"] },
   { key: "size", label: "Size", kind: "text", synonyms: ["size", "sizes", "sz", "sz.", "size range", "garment size", "apparel size", "clothing size", "size name", "size code", "size desc", "size description", "boot size", "mondo", "mondopoint", "mp", "shoe size", "size us", "us size", "eu size", "uk size"] },

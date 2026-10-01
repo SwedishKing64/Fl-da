@@ -4,6 +4,8 @@ import { buildHandle } from "./handle";
 import { chooseOptions, collectionsFor, detectCategory, enrichFromTitle, metafieldsFor, OPTION_LABELS, snowboardType, tagsFor, type CategoryRuleLike } from "./categorize";
 import { resolveType } from "./taxonomy";
 import { withFit } from "./mapping";
+import { classifyAccessory } from "./accessories";
+import { isSnowboardBrand } from "./brands";
 import { normaliseOptionName, optionNamesFor } from "./options";
 import { catalogTags } from "./product-tags";
 import { asShopWritesIt, productTitle, seasonTagFrom, withoutVendor } from "./titles";
@@ -136,8 +138,15 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
       : title;
     // A snowboard brand's boots are snowboard boots, whatever the boots rule says. See snowboardType.
     const snowboard = snowboardType(group.rule, items);
+    // "Accessories" is a rule's word, not a Type the shop has: an accessory is filed under the
+    // heading of the sport it serves — a Burton board bag or stomp pad under Snowboard Accessories,
+    // a glove or a goggle under Ski Accessories whoever made it, which is where the shop keeps all
+    // 27 of its goggles and 127 of its 129 gloves. See classifyAccessory.
+    const accessory = group.rule?.category === "accessories"
+      ? classifyAccessory(items.some((i) => isSnowboardBrand(i.brand) || /\bsnowboard/i.test(`${i.category} ${i.productType} ${i.title}`)) ? "Snowboard" : "Ski", title, first.description, first.category, first.productType).type
+      : null;
     // A supplier's own kind word is a Type only when it is one the shop uses: "FREERIDE" is not.
-    const productType = snowboard ?? group.rule?.productType ?? resolveType(first.productType) ?? "";
+    const productType = snowboard ?? accessory ?? group.rule?.productType ?? resolveType(first.productType) ?? "";
     // What varies decides which options exist; the shop's own habit decides the order they are
     // read in. A jacket is colour then size on forty-one of forty-three products, a ski is length
     // first, and a sleeping bag is size, loft, then which side the zip is on.

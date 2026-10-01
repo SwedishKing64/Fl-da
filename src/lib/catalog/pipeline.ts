@@ -15,6 +15,7 @@ import { keepOrderedLines, resolveAgainstReference } from "./reference-match";
 import { isFlatSki, isPackageBinding, packageProducts, specFromName, type ChosenBindings } from "./packages";
 import { readInvoiceGrids, type PriceRow } from "./invoice";
 import { asShopPrice, existingHandle, listingsAsReference, rememberedVendor } from "./shop-memory";
+import { dueInWindow, parseWindow } from "./deliveries";
 import { brandIn, isBrand } from "./brands";
 import { askToJoin } from "./reference-ai";
 import { aiAvailable } from "./extract/ai";
@@ -496,6 +497,31 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
     for (const entry of items) entry.item = { ...entry.item, season: directives.season.trim() };
   }
 
+  /**
+   * "Only the December delivery": each line's quantity becomes what is due in that window, and a
+   * line with nothing due then is not built. A sheet that never says when its lines are due cannot
+   * obey, and says so on the file rather than quietly building everything. See deliveries.ts.
+   */
+  const window = parseWindow(directives.deliveries);
+  if (directives.deliveries.trim() && items.length > 0) {
+    const fileIds = [...new Set(items.map((i) => i.fileId))];
+    if (!window) {
+      for (const fileId of fileIds) await noteOnFile(fileId, `The delivery asked for, "${directives.deliveries}", could not be read as a month (2026-12), a span (2026-12..2027-01) or an ordinal (first), so every line was built.`);
+    } else {
+      const shares = items.map((entry) => dueInWindow(entry.item, window).quantity);
+      const unknown = shares.filter((q) => q === null).length;
+      if (unknown === items.length) {
+        for (const fileId of fileIds) await noteOnFile(fileId, `Nothing on this sheet says when a line is due — no delivery date and no quantity column per delivery — so "only the ${directives.deliveries} delivery" could not be applied and every line was built.`);
+      } else {
+        const before = items.length;
+        const kept = items.filter((entry, k) => (shares[k] ?? entry.item.quantity ?? 0) > 0);
+        kept.forEach((entry) => { const q = shares[items.indexOf(entry)]; if (q !== null) entry.item = { ...entry.item, quantity: q }; });
+        items.splice(0, items.length, ...kept);
+        for (const fileId of fileIds) await noteOnFile(fileId, `Only the ${directives.deliveries} delivery: ${items.length} of ${before} lines are due then, and their quantities are that delivery's${unknown > 0 ? ` (${unknown} lines say nothing about when they are due and were kept as they are)` : ""}.`);
+      }
+    }
+  }
+
   // The shop's listings as last remembered, for the shelves it gave each model before.
   const listings = (await prisma.shopListing.findMany({ select: { handle: true, title: true, vendor: true, productType: true, tags: true, price: true, bindingOption: true } }).catch(() => []))
     .map((l) => ({ ...l, tags: l.tags.split(",").map((t) => t.trim()).filter(Boolean) }));
@@ -609,6 +635,15 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
     const handle = existingHandle({ title: productTitle(g.title, seasonTagFrom(g.tags)), brand: g.brand, season: seasonTagFrom(g.tags) ?? "" }, listings);
     if (handle && handle !== g.handle) { g.handle = handle; kept.push(handle); }
     else if (handle) kept.push(handle);
+  }
+  // "Only the new products": what the shop already lists is left out of the build altogether.
+  if (directives.onlyNew && kept.length > 0) {
+    const already = grouped.filter((g) => kept.includes(g.handle));
+    for (const g of already) grouped.splice(grouped.indexOf(g), 1);
+    for (const fileId of [...new Set(items.map((i) => i.fileId))]) {
+      await noteOnFile(fileId, `Only new products: ${already.length} the shop already lists were left out (${already.map((g) => g.handle).slice(0, 8).join(", ")}${already.length > 8 ? ", …" : ""}). To add this order's stock to those listings, run it through Bulk uploads.`);
+    }
+    kept.length = 0;
   }
   if (kept.length > 0) {
     for (const fileId of [...new Set(items.map((i) => i.fileId))]) {

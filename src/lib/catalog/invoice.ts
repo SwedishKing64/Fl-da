@@ -23,6 +23,7 @@ import { detectHeaderRow } from "./extract/tabular";
 import { normaliseBarcode, type InvoiceLine } from "./reconcile";
 import { terrainColumn } from "./shop-memory";
 import { brandIn } from "./brands";
+import { colourName } from "./colour";
 
 export interface InvoiceRead {
   lines: InvoiceLine[];
@@ -74,6 +75,8 @@ function pick(
   veto: RegExp | null,
   proves: (value: string) => boolean,
   fallbackScan = false,
+  /** Among columns that all pass, the heading to take first: "Style Name" before "Style Code". */
+  prefer: RegExp | null = null,
 ): Column | null {
   const share = (i: number): number => {
     const values = rows.map((r) => text(r[i])).filter(Boolean);
@@ -86,8 +89,9 @@ function pick(
   // A column in another currency only when there is nothing else. Burton's form has AUD-RETAIL and
   // NZD-RETAIL side by side, both full of prices; the shop sells in Australian dollars.
   const foreign = (heading: string) => FOREIGN.test(norm(heading)) ? 1 : 0;
+  const preferred = (heading: string) => (prefer && !prefer.test(norm(heading)) ? 1 : 0);
   const best = candidates.map((c) => ({ ...c, score: share(c.index) })).filter((c) => c.score > 0.5)
-    .sort((a, b) => foreign(a.heading) - foreign(b.heading) || b.score - a.score)[0];
+    .sort((a, b) => foreign(a.heading) - foreign(b.heading) || preferred(a.heading) - preferred(b.heading) || b.score - a.score)[0];
   if (best) return { index: best.index, heading: best.heading };
   if (!fallbackScan) return null;
   // Nothing was headed usefully. A column can still be unmistakable by its contents — a whole
@@ -100,17 +104,22 @@ const BARCODE = /\bean\b|\bgtin\b|barcode|\bupc\b/;
 const NOT_BARCODE = /rental|internal/;
 const SKU = /\bsku\b|item no|item code|item number|article no|article code|supplier code|style no|style code|product code|model code|\bcode\b/;
 const RRP = /\brrp\b|recommended|retail|\bmsrp\b|\bsrp\b/;
-const NOT_RRP = /\bw s\b|wholesale|cost|indent|total|margin|gst/;
+// GST is no reason to refuse a price: Australian retail IS GST-inclusive ("RRP inc GST"), and
+// Helly Hansen's wholesale is headed "Wholesale Price (EX GST)". Only an inclusive WHOLESALE is not
+// the cost the shop pays, which "incl" below covers.
+const NOT_RRP = /\bw s\b|wholesale|cost|indent|total|margin/;
 const QTY = /^qty|quantity|units|ordered|order qty/;
 // What the shop pays. "AUD-WHSL" on Burton's form; "W/S" on the Marker one.
 const COST = /whsl|wholesale|\bw s\b|\bcost\b|\bdealer\b|\bnet price\b|\bbuy price\b/;
-const NOT_COST = /total|margin|retail|\brrp\b|gst|incl/;
+const NOT_COST = /total|margin|retail|\brrp\b|\binc(l|luding)?\b|\bincl/;
 const FOREIGN = /\b(nzd|usd|eur|gbp|chf|cad|jpy|sek|nok)\b/;
 const GENDER = /^gender$|^sex$|^men women$|^suitable for$/;
 // Their order forms head it "Sizes", "size (ski length)" or "Size". Not "sizes" as a LIST of the
 // lengths a ski comes in, which is a different column with the same name — that is why the values
 // have to look like one size rather than five.
 const SIZE = /^size|^sizes$|length|mondo/;
+// "Size Order" is a sort key (200, 240, 270), not the size.
+const NOT_SIZE = /\border\b|\bsort\b|\brank\b|\bsequence\b|\bseq\b/;
 const COLOUR = /colou?r|^options?$/;
 const TITLE = /descri|product|title|\bname\b|model|style/;
 
@@ -265,9 +274,55 @@ function readOrderPrices(grid: string[][]): PriceRow[] {
   return out;
 }
 
+/**
+ * A quantity column per delivery window, folded into one.
+ *
+ * Helly Hansen's order form has a "Units" and a "W/S $" column for each month from November to
+ * June, and the quantities are written in whichever months the shop wants the goods: Dec 26 and
+ * Jun 27 here. The reader took the FIRST "Units" column — which holds a single 0 — and saw no
+ * quantities in a form with 64 ordered lines. Their own TOTALS column says what was ordered; where
+ * there is none, the windows are added together. Either way the result is one "Units" column.
+ *
+ * Only headings that are plainly a quantity (Units, Qty, "Units OCT"), and only when there are two
+ * or more of them; one quantity column is left exactly as it is.
+ */
+const QUANTITY_HEADING = /^(units?|qty|quantity|order qty)(\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec|\d{1,2}|\d{4}))?(\s*\(\d+\))?$/i;
+
+export function foldQuantityColumns(grid: string[][], headerAt: number): { grid: string[][]; note: string } {
+  const heads = (grid[headerAt] ?? []).map(text);
+  const cols = heads.map((h, i) => [h, i] as const).filter(([h]) => QUANTITY_HEADING.test(norm(h).replace(/\s+/g, " ")) || QUANTITY_HEADING.test(h.trim())).map(([, i]) => i);
+  if (cols.length < 2) return { grid, note: "" };
+  // A TOTALS column is named by the row above the headings, where the months are.
+  const above = grid[headerAt - 1] ?? [];
+  const totals = cols.find((c) => /^totals?$/i.test(text(above[c])));
+  const windows = cols.filter((c) => c !== totals);
+  const sum = (row: string[], from: number[]): number => from.reduce((n, c) => { const v = readNumber(text(row[c])); return n + (v !== null && v > 0 ? v : 0); }, 0);
+  const out = grid.map((row, r) => {
+    if (r < headerAt) return row;
+    const copy = [...row];
+    const heading = r === headerAt;
+    const first = cols[0];
+    if (!heading) {
+      const n = totals !== undefined ? sum(row, [totals]) || sum(row, windows) : sum(row, cols);
+      copy[first] = n > 0 ? String(n) : "";
+    } else {
+      copy[first] = "Units";
+    }
+    // The others are gone: blank headings and cells, so nothing else reads a month as a quantity.
+    for (const c of cols.slice(1)) copy[c] = "";
+    return copy;
+  });
+  return {
+    grid: out,
+    note: `${cols.length} quantity columns (one per delivery month) were added into one${totals !== undefined ? ", taking the form's own TOTALS column" : ""}.`,
+  };
+}
+
 /** Read one sheet as an invoice, or decide it is not one. */
-function readGrid(name: string, grid: string[][]): InvoiceRead | null {
-  if (grid.length < 2) return null;
+function readGrid(name: string, source: string[][]): InvoiceRead | null {
+  if (source.length < 2) return null;
+  const folded = foldQuantityColumns(source, detectHeaderRow(source));
+  const grid = folded.grid;
   const headerAt = detectHeaderRow(grid);
   const headings = (grid[headerAt] ?? []).map(text);
   const rows = grid.slice(headerAt + 1).filter((r) => (r ?? []).some((c) => text(c) !== ""));
@@ -288,15 +343,18 @@ function readGrid(name: string, grid: string[][]): InvoiceRead | null {
   // would otherwise be shown as if it meant something.
   // One size per line, not the list of sizes a model comes in: "168/173/178/183" is the second,
   // and a line that says all four is not a line about one of them.
-  const size = pick(headings, rows, SIZE, null, (v) => v.length <= 12 && !v.includes("/") && !v.includes(","));
+  const size = pick(headings, rows, SIZE, NOT_SIZE, (v) => v.length <= 12 && !v.includes("/") && !v.includes(","));
 
-  const colour = pick(headings, rows, COLOUR, null, (v) => v.length <= 30 && !/^\d+$/.test(v));
+  // The colour's NAME ("627 BRIGHT BLUE"), not its code ("627", or the style-colour code).
+  const colour = pick(headings, rows, COLOUR, null, (v) => v.length <= 30 && !/^\d+$/.test(v), false, /descri|\bname\b/);
   const cost = pick(headings, rows, COST, NOT_COST, (v) => (readNumber(v) ?? -1) > 0);
   const gender = pick(headings, rows, GENDER, null, (v) => v.length <= 20 && !/\d/.test(v));
   const styleHeading = terrainColumn(headings, (h) => { const i = headings.indexOf(h); return rows.map((r) => text(r[i])); });
   const terrain = styleHeading === null ? -1 : headings.indexOf(styleHeading);
 
-  const title = pick(headings, rows, TITLE, null, (v) => v.length >= 3 && !/^\d+$/.test(v))
+  // The product's NAME: not a number, and not a code ("66094_627-S") however its column is headed.
+  const isCode = (v: string) => !/\s/.test(v) && /\d/.test(v) && /^[A-Za-z0-9_.\-/]+$/.test(v);
+  const title = pick(headings, rows, TITLE, null, (v) => v.length >= 3 && !/^\d+$/.test(v) && !isCode(v), false, /\bname\b|^descri/)
     ?? (sku ? { index: sku.index + 1, heading: `the column beside "${sku.heading}"` } : null);
 
   /**
@@ -330,7 +388,7 @@ function readGrid(name: string, grid: string[][]): InvoiceRead | null {
       barcode: barcode ? text(row[barcode.index]) : "",
       title: title ? text(row[title.index]) : "",
       ...(size ? { size: text(row[size.index]) } : {}),
-      ...(colour ? { colour: text(row[colour.index]) } : {}),
+      ...(colour ? { colour: colourName(text(row[colour.index])) } : {}),
       ...(gender && text(row[gender.index]) ? { gender: text(row[gender.index]) } : {}),
       ...(terrain >= 0 && text(row[terrain]) ? { terrain: text(row[terrain]) } : {}),
       costPrice: cost ? ((readNumber(text(row[cost.index])) ?? 0) > 0 ? readNumber(text(row[cost.index])) : null) : null,
@@ -408,11 +466,15 @@ export function readInvoiceGrids(grids: Array<{ name: string; grid: string[][] }
   const keysOf = (r: InvoiceRead) => new Set(r.lines.map((l) => normaliseBarcode(l.barcode) || l.sku.toUpperCase()).filter(Boolean));
   const taken = new Set<string>();
   const kept: InvoiceRead[] = [];
-  const dropped: Array<{ sheet: string; lines: number }> = [];
+  const dropped: Array<{ sheet: string; lines: number; summary?: boolean }> = [];
   for (const sheet of read) {
     const keys = keysOf(sheet);
     const seen = [...keys].filter((k) => taken.has(k)).length;
     if (kept.length > 0 && keys.size > 0 && seen / keys.size > 0.5) { dropped.push({ sheet: sheet.sheet, lines: sheet.lines.length }); continue; }
+    // A pivot of the order — "Sum of Units AUG", a tab called "Style Breakdown" — restates the goods
+    // by style and month. Helly Hansen's workbook has one, and it was counted as a second order of
+    // eleven lines on top of the sixty-four.
+    if (kept.length > 0 && (/^sum of\b/i.test(sheet.columns.quantity) || /\b(summary|breakdown|pivot)\b/i.test(sheet.sheet))) { dropped.push({ sheet: sheet.sheet, lines: sheet.lines.length, summary: true }); continue; }
     for (const k of keys) taken.add(k);
     kept.push(sheet);
   }
@@ -422,8 +484,13 @@ export function readInvoiceGrids(grids: Array<{ name: string; grid: string[][] }
   if (kept.length > 1) {
     warnings.push(`Read from ${kept.length} tabs: ${kept.map((k) => `"${k.sheet}" (${k.lines.length})`).join(", ")}.`);
   }
-  if (dropped.length > 0) {
-    warnings.push(`${dropped.map((d) => `"${d.sheet}"`).join(", ")} ${dropped.length === 1 ? "was" : "were"} left out — ${dropped.length === 1 ? "its" : "their"} item codes are already on the tabs above, so ${dropped.length === 1 ? "it is" : "they are"} the same order written a second way.`);
+  const restated = dropped.filter((d) => !d.summary);
+  const pivots = dropped.filter((d) => d.summary);
+  if (restated.length > 0) {
+    warnings.push(`${restated.map((d) => `"${d.sheet}"`).join(", ")} ${restated.length === 1 ? "was" : "were"} left out — ${restated.length === 1 ? "its" : "their"} item codes are already on the tabs above, so ${restated.length === 1 ? "it is" : "they are"} the same order written a second way.`);
+  }
+  if (pivots.length > 0) {
+    warnings.push(`${pivots.map((d) => `"${d.sheet}"`).join(", ")} ${pivots.length === 1 ? "is a summary" : "are summaries"} of the order by style and month, not an order of ${pivots.length === 1 ? "its" : "their"} own, so ${pivots.length === 1 ? "it was" : "they were"} left out.`);
   }
   return {
     lines: kept.flatMap((k) => k.lines),

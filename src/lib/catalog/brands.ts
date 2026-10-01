@@ -21,7 +21,22 @@ const TRADE_BRANDS = [
   "Bataleon", "Rome", "Flux", "Now", "Vans", "ThirtyTwo", "DC", "Smith", "Oakley", "Giro", "POC", "Anon",
   "Sweet Protection", "Leki", "Komperdell", "Kjus", "Spyder", "Picture", "Rip Curl", "Swany", "Hestra",
   "Black Diamond", "Mammut", "Ortovox", "Pieps", "BCA", "Nemo", "Sea to Summit", "Rab", "Patagonia", "ID One",
+  "Helly Hansen", "Arcteryx", "Mountain Hardwear", "Norrona", "Haglofs", "Salewa", "Deuter", "Osprey", "Gregory", "Thule",
+  "Camelbak", "Hydro Flask", "Nalgene", "Jetboil", "MSR", "Big Agnes", "Therm-a-Rest", "One Planet", "Columbia", "The North Face",
+  "Obermeyer", "Roxy", "Quiksilver", "Billabong", "Dakine", "Swix", "Toko", "Gerry",
 ];
+
+/**
+ * Who sends the goods, as against whose goods they are. The shop buys Völkl and Marker through
+ * Sportrade; a vendor typed as "Sportrade" is a mistake worth refusing, while any other name a
+ * person types is a decision worth keeping — a brand new to the shop is not on any list.
+ */
+const DISTRIBUTORS = ["Sportrade", "Sportrade Australia", "Amer Sports Australia", "Outdoor Gear Australia"];
+
+export function isDistributor(name: string): boolean {
+  const n = fold(name);
+  return n !== "" && DISTRIBUTORS.some((d) => fold(d) === n);
+}
 
 const fold = (s: string): string =>
   s.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/[^A-Z0-9]+/g, " ").trim();

@@ -1,7 +1,7 @@
 import Papa from "papaparse";
 import ExcelJS from "exceljs";
 import type { ExtractedTable } from "./types";
-import { readInvoiceGrids } from "../invoice";
+import { foldQuantityColumns, readInvoiceGrids } from "../invoice";
 import type { InvoiceLine } from "../reconcile";
 
 /**
@@ -89,7 +89,11 @@ export function orderToTable(order: { lines: InvoiceLine[]; sheet: string; warni
   };
 }
 
-export function gridToTable(grid: string[][], method: ExtractedTable["method"], warnings: string[] = []): ExtractedTable {
+export function gridToTable(source: string[][], method: ExtractedTable["method"], warnings: string[] = []): ExtractedTable {
+  // A quantity column per delivery month is one quantity: see foldQuantityColumns.
+  const folded = foldQuantityColumns(source, detectHeaderRow(source));
+  if (folded.note) warnings.push(folded.note);
+  const grid = folded.grid;
   const headerIndex = detectHeaderRow(grid);
   const headers = uniqueHeaders(grid[headerIndex] ?? []);
   const rows: Record<string, string>[] = [];

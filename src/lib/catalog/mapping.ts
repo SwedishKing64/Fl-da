@@ -7,6 +7,7 @@ import { CANONICAL_FIELDS, FEATURE_COLUMN, emptyLineItem, type CanonicalLineItem
 export { FEATURE_COLUMN };
 import { parseIntSafe, parseMoney } from "./money";
 import { seasonFrom } from "./season";
+import { colourName } from "./colour";
 import { terrainColumn } from "./shop-memory";
 
 export { seasonFrom };
@@ -240,6 +241,7 @@ export function applyMapping(row: Record<string, string>, mapping: Mapping, opti
   if (item.quantity === null && !Object.values(mapping).includes("quantity")) item.quantity = 1;
   item.imageUrls = Array.from(new Set(item.imageUrls));
   item.season = seasonFrom(item.season);
+  item.colour = colourName(item.colour);
 
   /**
    * Keep the columns nothing canonical claimed.

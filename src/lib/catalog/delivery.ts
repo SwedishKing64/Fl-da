@@ -36,7 +36,7 @@ import { buildHandle } from "./handle";
 import { applyInvoice, reconcile, sameSizeText, type InvoiceFields, type InvoiceLine, type Match, type Reconciliation } from "./reconcile";
 import { resolveAgainstReference } from "./reference-match";
 import { asShopPrice, listingsFromCsv, rememberedVendor, type Listing } from "./shop-memory";
-import { brandIn, isBrand } from "./brands";
+import { brandIn, isDistributor } from "./brands";
 import { isFlatSki, isPackageBinding, packageProducts } from "./packages";
 import type { PriceRow } from "./invoice";
 import type { CanonicalLineItem } from "./types";
@@ -134,7 +134,9 @@ export function buildDelivery(csv: string, invoiced: InvoiceLine[], options: Del
   // Each line then takes its own brand where the form or the shop says one. See brands.ts.
   const vendors = [...new Set(shop.map((l) => l.vendor).filter(Boolean))];
   const typed = (options.vendor ?? "").trim();
-  options = { ...options, vendor: isBrand(typed, vendors) ? typed : "" };
+  // A name typed on the page is a decision, kept unless it is the distributor's: Helly Hansen is not
+  // on any list the first time the shop buys it. See brands.ts.
+  options = { ...options, vendor: isDistributor(typed) ? "" : typed };
   const ordered = invoiced.map((line) => {
     const brand = (line.brand ?? "").trim() || rememberedVendor(line.title, shop) || brandIn(line.title, vendors) || options.vendor || "";
     return withBarcode({ ...line, ...(brand ? { brand } : {}), rrp: asShopPrice(line.rrp, brand, shop) }, options.specs ?? []);

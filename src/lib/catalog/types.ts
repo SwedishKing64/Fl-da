@@ -96,7 +96,7 @@ export const CANONICAL_FIELDS: CanonicalFieldDef[] = [
   { key: "length", label: "Length (cm)", kind: "text", synonyms: ["length", "len", "ski length", "size ski length", "board length", "size cm", "length cm", "cm"] },
   { key: "size", label: "Size", kind: "text", synonyms: ["size", "sizes", "sz", "sz.", "size range", "garment size", "apparel size", "clothing size", "size name", "size code", "size desc", "size description", "boot size", "mondo", "mondopoint", "mp", "shoe size", "size us", "us size", "eu size", "uk size"] },
   { key: "width", label: "Width", kind: "text", synonyms: ["width", "last", "last width", "waist", "waist width", "last mm"] },
-  { key: "colour", label: "Colour", kind: "text", synonyms: ["colour", "color", "col", "colour name", "color name", "basic colour", "basic color", "colourway", "colorway", "farbe"] },
+  { key: "colour", label: "Colour", kind: "text", synonyms: ["colour", "color", "col", "colour name", "color name", "colour description", "color description", "basic colour", "basic color", "colourway", "colorway", "farbe"] },
   { key: "gender", label: "Gender", kind: "text", synonyms: ["gender", "sex", "suitable for", "mens/womens", "m/w", "unisex"] },
   { key: "season", label: "Season", kind: "text", synonyms: ["season", "yr", "year", "model year", "collection", "season indicator", "sap season indicator", "season code"] },
   { key: "category", label: "Category", kind: "text", synonyms: ["category", "cat", "product category", "department", "group", "product group", "class"] },

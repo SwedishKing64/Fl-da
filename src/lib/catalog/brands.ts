@@ -33,6 +33,18 @@ const TRADE_BRANDS = [
  */
 const DISTRIBUTORS = ["Sportrade", "Sportrade Australia", "Amer Sports Australia", "Outdoor Gear Australia"];
 
+/**
+ * Brands that make snowboard gear and no ski gear. Their boots are snowboard boots and their
+ * bindings snowboard bindings, whatever a category rule written for ski boots makes of the word
+ * "boot" — Burton's whole W26 order came out as Ski Boots and Ski Bindings.
+ */
+const SNOWBOARD_BRANDS = ["Burton", "Anon", "Jones", "Nitro", "Union", "Lib Tech", "GNU", "Never Summer", "Ride", "Arbor", "Capita", "Yes", "Bataleon", "Rome", "Flux", "Now", "Vans", "ThirtyTwo", "DC", "Nidecker", "Slash", "Korua", "Endeavor", "Roxy"];
+
+export function isSnowboardBrand(name: string): boolean {
+  const n = fold(name);
+  return n !== "" && SNOWBOARD_BRANDS.some((b) => fold(b) === n);
+}
+
 export function isDistributor(name: string): boolean {
   const n = fold(name);
   return n !== "" && DISTRIBUTORS.some((d) => fold(d) === n);

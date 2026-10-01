@@ -43,6 +43,14 @@ export interface CanonicalLineItem {
   costPrice: number | null;
   quantity: number | null;
   rrp: number | null; // supplier recommended retail (becomes Compare At Price when higher than retail)
+  /**
+   * How many of the quantity the supplier has since cancelled, when the sheet says.
+   *
+   * Burton's "RDD or Cancel" sheet lists the whole season's order with a Cancel column against the
+   * lines that will not be shipped; what arrives is the quantity less that. Read on its own the
+   * quantity booked stock for 162 units that were never coming.
+   */
+  cancelled?: number | null;
   grams: number | null;
   length: string; // ski/snowboard length e.g. "172"
   size: string; // boot size / apparel size
@@ -92,10 +100,11 @@ export const CANONICAL_FIELDS: CanonicalFieldDef[] = [
   { key: "costPrice", label: "Unit cost price", kind: "number", synonyms: ["cost", "cost price", "unit cost", "unit price", "wholesale", "wholesale price", "whsl", "whsl price", "price", "net price", "trade price", "dealer price", "whs", "w/s", "each", "unit", "amount", "line total", "total", "ext price", "extended price", "net amount", "value"] },
   { key: "quantity", label: "Quantity", kind: "number", synonyms: ["qty", "quantity", "units", "ordered", "qty ordered", "order qty", "pcs", "pieces", "count", "no of units"] },
   { key: "rrp", label: "RRP / MSRP", kind: "number", synonyms: ["rrp", "msrp", "retail", "retail price", "srp", "rec retail", "recommended retail", "list price", "map"] },
+  { key: "cancelled", label: "Quantity cancelled", kind: "number", synonyms: ["cancel", "cancelled", "canceled", "cancelled qty", "cancel qty", "qty cancelled", "cancelled quantity", "cancellations", "cancelled units"] },
   { key: "grams", label: "Weight (grams)", kind: "number", synonyms: ["weight", "grams", "weight g", "weight (g)", "unit weight", "mass"] },
   { key: "length", label: "Length (cm)", kind: "text", synonyms: ["length", "len", "ski length", "size ski length", "board length", "size cm", "length cm", "cm"] },
   { key: "size", label: "Size", kind: "text", synonyms: ["size", "sizes", "sz", "sz.", "size range", "garment size", "apparel size", "clothing size", "size name", "size code", "size desc", "size description", "boot size", "mondo", "mondopoint", "mp", "shoe size", "size us", "us size", "eu size", "uk size"] },
-  { key: "width", label: "Width", kind: "text", synonyms: ["width", "last", "last width", "waist", "waist width", "last mm"] },
+  { key: "width", label: "Width / fit", kind: "text", synonyms: ["width", "last", "last width", "waist", "waist width", "last mm", "fit", "fit type", "fitting"] },
   { key: "colour", label: "Colour", kind: "text", synonyms: ["colour", "color", "col", "colour name", "color name", "colour description", "color description", "basic colour", "basic color", "colourway", "colorway", "farbe"] },
   { key: "gender", label: "Gender", kind: "text", synonyms: ["gender", "sex", "suitable for", "mens/womens", "m/w", "unisex"] },
   { key: "season", label: "Season", kind: "text", synonyms: ["season", "yr", "year", "model year", "collection", "season indicator", "sap season indicator", "season code"] },

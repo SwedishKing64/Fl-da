@@ -47,8 +47,12 @@ const tokens = (text: string): string[] =>
 
 /** Who a model is for, which is not part of its name. */
 const GENDER = new Set(["MEN", "MENS", "WOMEN", "WOMENS", "KID", "KIDS", "BOY", "BOYS", "GIRL", "GIRLS", "YOUTH", "UNISEX", "JUNIOR", "JR"]);
-/** What kind of thing it is, which the order form never repeats. */
-const KIND = new Set(["SNOWBOARD", "SNOWBOARDS", "BOARD"]);
+/**
+ * What kind of thing it is, which the order form never repeats. A catalogue says "Men's Highshot
+ * Step On Snowboard Boots" and "Gondy GORE-TEX Leather Gloves"; the order says "HIGHSHOT STEP ON"
+ * and "GONDY GORE LTHR GL".
+ */
+const KIND = new Set(["SNOWBOARD", "SNOWBOARDS", "BOARD", "BOOT", "BOOTS", "BINDING", "BINDINGS", "GLOVE", "GLOVES", "MITT", "MITTS", "MITTEN", "MITTENS", "SOCK", "SOCKS", "BAG", "JACKET", "PANT", "PANTS", "GOGGLE", "GOGGLES", "HELMET", "BEANIE", "SKI", "SKIS"]);
 /**
  * A board's bend, which a catalogue name includes and an order form leaves out.
  *
@@ -61,7 +65,7 @@ const OPTIONAL = new Set(["CAMBER", "DIRECTIONAL", "FLAT", "TOP", "PUREPOP", "PU
 /** A graphic that has not been named yet, which is not a colour. */
 const PLACEHOLDER = ["NEW", "GRAPHIC", "NO", "COLOR", "COLOUR", "TBC", "TBA"];
 /** Order-form shorthand for a model word. */
-const SHORTHAND: Record<string, string[]> = { FV: ["FLYING", "V"] };
+const SHORTHAND: Record<string, string[]> = { FV: ["FLYING", "V"], SO: ["STEP", "ON"] };
 
 /** Letters without the vowels, which is how an order form abbreviates: COUNTRBLNCE, COUNTERBALANCE. */
 const skeleton = (word: string): string => word[0] + word.slice(1).replace(/[AEIOU]/g, "");
@@ -177,7 +181,7 @@ export interface LineMatch {
  * over is a word from another model's name, so it is not that board. The most specific match wins,
  * and a tie is refused rather than guessed.
  */
-export function matchLine(line: CanonicalLineItem, refs: Reference[], vocabulary: Set<string>, sharedCodes = true): LineMatch | { reason: string } {
+export function matchLine(line: CanonicalLineItem, refs: Reference[], vocabulary: Set<string>, sharedCodes = true, strict = false): LineMatch | { reason: string } {
   const code = (line.modelCode || line.sku).replace(/\s+/g, "").toUpperCase();
   const coded = refs.filter((r) => r.code);
   if (code && coded.length > 0) {
@@ -219,6 +223,9 @@ export function matchLine(line: CanonicalLineItem, refs: Reference[], vocabulary
     // Whatever is left must be graphic words, not another model's name.
     const left = words.filter((x) => !ref.required.some((w) => sameWord(x, w)) && !ref.optional.some((w) => sameWord(x, w)));
     if (left.some((x) => [...vocabulary].some((v) => sameWord(x, v)))) continue;
+    // Against the shop's own listings nothing is a graphic: "HIGHSHOT XPRO SO" is not the Highshot,
+    // whatever XPRO might be, and the price of a wrong match there is the wrong listing updated.
+    if (strict && left.some((x) => !isPlaceholder(x) && !COLOUR_WORDS.has(x) && !KIND.has(x) && !GENDER.has(x))) continue;
     // A women's board is not a kids' one. Only where both sides say: a catalogue name with no
     // gender on it is a unisex model, and fits a line of any gender.
     if (lineGender && ref.gender && ref.gender !== lineGender) continue;
@@ -275,6 +282,8 @@ export function resolveAgainstReference(
   decided: Map<number, CanonicalLineItem> = new Map(),
   /** Which file a reference row came from. Lines are only filled in from lines joined to the same one. */
   sourceOf: (spec: CanonicalLineItem) => string = () => "",
+  /** Refuse a name match with any word left over. For the shop's own listings; see matchLine. */
+  strict = false,
 ): Resolution {
   const sources: string[] = [];
   const refs = specs.filter((s) => s.title.trim()).map(referenceOf);
@@ -291,7 +300,7 @@ export function resolveAgainstReference(
   const named = colourways(refs.map((r) => shopName(r.spec.title)));
   const out = items.map((line, index) => {
     const pre = decided.get(index);
-    const found = pre ? { spec: pre, how: "model" as const, graphic: graphicOf(line.title, referenceOf(pre), vocabulary) } : matchLine(line, refs, vocabulary, sharedCodes);
+    const found = pre ? { spec: pre, how: "model" as const, graphic: graphicOf(line.title, referenceOf(pre), vocabulary) } : matchLine(line, refs, vocabulary, sharedCodes, strict);
     if ("reason" in found) {
       joined.push({ line: line.title || line.sku, reason: found.reason });
       return widen(line, rules);

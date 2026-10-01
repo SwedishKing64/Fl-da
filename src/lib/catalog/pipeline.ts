@@ -14,7 +14,7 @@ import { houseBody } from "./body";
 import { keepOrderedLines, resolveAgainstReference } from "./reference-match";
 import { isFlatSki, isPackageBinding, packageProducts, specFromName, type ChosenBindings } from "./packages";
 import { readInvoiceGrids, type PriceRow } from "./invoice";
-import { asShopPrice, existingHandle, rememberedVendor } from "./shop-memory";
+import { asShopPrice, existingHandle, listingsAsReference, rememberedVendor } from "./shop-memory";
 import { brandIn, isBrand } from "./brands";
 import { askToJoin } from "./reference-ai";
 import { aiAvailable } from "./extract/ai";
@@ -509,6 +509,50 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
       entry.item = { ...entry.item, brand: found };
     }
   }
+  /**
+   * No reference sheet in the batch: the shop's own listings are one.
+   *
+   * An order joined to the shop's catalogue takes the catalogue's name, Type and price for every
+   * model the shop has sold before — "M HIGHSHOT SO" becomes "Men's Highshot Step On® Snowboard
+   * Boots" — and so updates that listing rather than standing beside it. See listingsAsReference.
+   * Lines the rules cannot place go to the model where the API is available, as with a reference
+   * file, and only models of the line's own brand are offered.
+   */
+  const shopRefs: CanonicalLineItem[] = [];
+  if (specItems.length === 0 && items.length > 0) {
+    const brands = [...new Set(items.map((i) => i.item.brand.trim()).filter(Boolean))];
+    shopRefs.push(...brands.flatMap((b) => listingsAsReference(listings, b)));
+    if (shopRefs.length > 0) {
+      const lines = items.map((i) => i.item);
+      const none = () => "";
+      let resolved = resolveAgainstReference(lines, shopRefs, categoryRules, new Map(), none, true);
+      const left = resolved.joined.map((j, i) => ("reason" in j ? i : -1)).filter((i) => i >= 0);
+      if (left.length > 0 && aiAvailable()) {
+        const decided = await askToJoin(left.map((i) => ({ index: i, line: lines[i] })), shopRefs).catch(() => new Map<number, CanonicalLineItem>());
+        if (decided.size > 0) resolved = resolveAgainstReference(lines, shopRefs, categoryRules, decided, none, true);
+      }
+      // The listing's handle served as its code for the join; it is not the supplier's model code.
+      // And the name is the listing's, word for word — the shop's title is not a catalogue name to
+      // be trimmed, it IS what the shop calls the product — as are its Type and, where the order
+      // gives none, its recommended retail.
+      resolved.items.forEach((item, k) => {
+        const join = resolved.joined[k];
+        const listing = "to" in join ? shopRefs.find((r) => r.title === join.to) : undefined;
+        items[k].item = {
+          ...item,
+          modelCode: lines[k].modelCode,
+          ...(listing ? { title: listing.title, productType: listing.productType || item.productType, rrp: item.rrp ?? listing.rrp } : {}),
+        };
+      });
+      const joined = resolved.joined.filter((j) => "to" in j).length;
+      if (joined > 0) {
+        for (const fileId of new Set(items.map((i) => i.fileId))) {
+          await noteOnFile(fileId, `${joined} of ${items.length} lines are models the shop already lists, and take the name, Type and price of the shop's listing.`);
+        }
+      }
+    }
+  }
+
   const grouped = enrichFromSpecs(groupLineItems(items.map((i) => i.item), categoryRules, { builtBy: batch.builtBy, listings }), specItems).map((raw) => {
     const told = directives.vendor.trim();
     // A brand filled in here, after the tags were made, never became one — and every listing the

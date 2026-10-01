@@ -17,6 +17,7 @@
 
 import { parseCsv } from "./csv";
 import { BOARD_DISCIPLINES, SKI_DISCIPLINES, TOURING_SKI_TAG, tagsFor } from "./tagging";
+import { emptyLineItem, type CanonicalLineItem } from "./types";
 
 export interface Listing {
   handle: string;
@@ -83,6 +84,58 @@ export function listingsFromCsv(csv: string): Listing[] {
     });
   }
   return out;
+}
+
+/**
+ * The shop's own listings of a brand, as a reference sheet an order can be joined to.
+ *
+ * Burton's SAP export names a boot "M HIGHSHOT SO" and a glove "M GORE GONDY LR GL"; the shop
+ * lists them as "Men's Highshot Step On® Snowboard Boots" and "Men's Gondy GORE-TEX Leather
+ * Gloves". Without the supplier's description list in the batch there was nothing to join the
+ * shorthand to, and every carry-over went out under its shorthand, as a second listing. The shop's
+ * catalogue is a reference sheet in all but name: a full name, a vendor, a Type and a price for
+ * every model it has sold. One row per listing, under its handle as the code, with the year taken
+ * off the name so that last season's listing names this season's product.
+ */
+export function listingsAsReference(listings: Listing[], brand: string): CanonicalLineItem[] {
+  const vendor = brand.trim().toLowerCase();
+  if (!vendor) return [];
+  // One row per model, the latest listing of it: the shop's "Wheelie Gig Bag" of some years back
+  // and its "Wheelie Gig Snowboard Bag 2026" are one model, and the order should land on the latter.
+  const byModel = new Map<string, Listing>();
+  for (const l of listings) {
+    if (l.vendor.trim().toLowerCase() !== vendor || !l.title.trim() || isPackageTitle(l.title)) continue;
+    const key = modelKey(l.title, l.vendor).split(" ").filter((w) => !KIND_WORD.test(w) && !AUDIENCE_WORD.test(w)).join(" ") + `|${genderOfListing(l)}`;
+    const had = byModel.get(key);
+    if (!had || yearOf(l) > yearOf(had)) byModel.set(key, l);
+  }
+  return [...byModel.values()].map((l) => ({
+    ...emptyLineItem(),
+    title: l.title.replace(/\s+\b20\d{2}\b\s*$/, "").trim(),
+    brand: l.vendor.trim(),
+    modelCode: l.handle,
+    productType: l.productType,
+    rrp: typeof l.price === "number" ? l.price : null,
+    gender: genderOfListing(l),
+    season: yearOf(l) ? String(yearOf(l)) : "",
+  }));
+}
+
+/** What kind of thing a listing's title says it is, which an order line leaves out. */
+const KIND_WORD = /^(SNOWBOARDS?|SKIS?|BOOTS?|BINDINGS?|GLOVES?|MITTS?|MITTENS?|SOCKS?|BAGS?|JACKETS?|PANTS?|GOGGLES?|HELMETS?|BEANIES?)$/;
+const AUDIENCE_WORD = /^(MENS|MEN|WOMENS|WOMEN|KIDS|YOUTH|JUNIOR|JR|UNISEX)$/;
+
+/** Who a listing is for, from its title or its tags. */
+function genderOfListing(l: Listing): string {
+  const first = l.title.trim().split(/\s+/)[0]?.toUpperCase().replace(/[^A-Z]/g, "") ?? "";
+  if (first === "MENS" || first === "MEN") return "MENS";
+  if (first === "WOMENS" || first === "WOMEN") return "WOMENS";
+  if (["KIDS", "KID", "BOYS", "GIRLS", "YOUTH", "JUNIOR"].includes(first)) return "KIDS";
+  const tags = new Set(l.tags.map((t) => t.toLowerCase()));
+  if (tags.has("womens") && !tags.has("mens")) return "WOMENS";
+  if (tags.has("mens") && !tags.has("womens")) return "MENS";
+  if (tags.has("kids") && !tags.has("mens") && !tags.has("womens")) return "KIDS";
+  return "";
 }
 
 /**

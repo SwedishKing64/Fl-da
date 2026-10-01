@@ -2,6 +2,7 @@
 // attributes become Shopify options vs metafields, and title clean-up.
 
 import { SKI_METAFIELDS, metafieldColumn, type CanonicalLineItem, type Category } from "./types";
+import { isSnowboardBrand } from "./brands";
 
 export interface CategoryRuleLike {
   category: string;
@@ -25,6 +26,14 @@ export interface CategoryRuleLike {
 export const OLD_BINDINGS_PATTERN = String.raw`\bbindings?\b|\bdin\b`;
 export const BINDINGS_PATTERN = String.raw`\bbindings?\b|\bdin\b|^(?![\s\S]*\b(inc|package|system|skis)\b)[\s\S]*\b(griffon|squire|jester|kingpin|duke pt|alpinist|pivot|strive|shift\s?2?|tyrolia attack|protector|vmotion|xpress|spx|nx\s?\d)\b`;
 
+/**
+ * An accessory, by the word. The supplier's own kind column is read against this as well as the
+ * name, so it has to know the kinds a supplier writes — Burton's HEADWEAR, NECKWEAR, TRACTION and
+ * IMPACT PROTECTION were filed nowhere, and went out with those words as their Type.
+ */
+export const OLD_ACCESSORIES_PATTERN = String.raw`\bbeanie|\bwax\b|\btune|\bbag\b|\block\b|\bleash|\bstrap|\bneck ?warmer|\bbalaclava|\btool\b`;
+export const ACCESSORIES_PATTERN = String.raw`\bbeanie|\bwax\b|\btune|\bbag\b|\block\b|\bleash|\bstrap|\bneck ?warmer|\bbalaclava|\btool\b|\bheadwear|\bneckwear|\baccessor|\btraction|\bstomp ?pad|\bimpact\b|\bwrist ?guard|\bknee ?pad|\bprotection\b|\bprotective\b`;
+
 /** Seeded defaults; editable in Settings. Order matters (boots before skis so "ski boot" wins). */
 export const DEFAULT_CATEGORY_RULES: CategoryRuleLike[] = [
   { category: "boots", pattern: String.raw`\bboots?\b|\bhawx\b|\bmondo`, productType: "Ski Boots", collections: "Ski Boots", tags: "boots", option1: "size", option2: "width", option3: "colour", priority: 100, active: true },
@@ -42,7 +51,7 @@ export const DEFAULT_CATEGORY_RULES: CategoryRuleLike[] = [
   { category: "apparel", pattern: String.raw`\bbase ?layer|\bthermal`, productType: "Baselayers", collections: "Snow Clothing", tags: "baselayers", option1: "size", option2: "colour", option3: null, priority: 76, active: true },
   { category: "apparel", pattern: String.raw`\bmidlayer|\bfleece|\bhoodie`, productType: "Midlayers", collections: "Snow Clothing", tags: "midlayers", option1: "size", option2: "colour", option3: null, priority: 75, active: true },
   { category: "apparel", pattern: String.raw`\bgloves?\b|\bmitts?\b`, productType: "Gloves", collections: "Clothing Accessories", tags: "gloves", option1: "size", option2: "colour", option3: null, priority: 74, active: true },
-  { category: "accessories", pattern: String.raw`\bbeanie|\bwax\b|\btune|\bbag\b|\block\b|\bleash|\bstrap|\bneck ?warmer|\bbalaclava|\btool\b`, productType: "Accessories", collections: "Accessories", tags: "accessories", option1: "size", option2: "colour", option3: null, priority: 70, active: true },
+  { category: "accessories", pattern: ACCESSORIES_PATTERN, productType: "Accessories", collections: "Accessories", tags: "accessories", option1: "size", option2: "colour", option3: null, priority: 70, active: true },
   { category: "skis", pattern: String.raw`\bskis?\b|\bmantra\b|\bbent\b|\benforcer\b|\brustler\b|\bkore\b|\bexperience\b|\bmaverick\b`, productType: "Skis", collections: "Skis", tags: "skis", option1: "length", option2: "colour", option3: null, priority: 60, active: true },
 ];
 
@@ -77,13 +86,32 @@ export function detectCategory(item: CanonicalLineItem, rules: CategoryRuleLike[
   return null;
 }
 
-/** A rule's pattern against some text, treating a rule with a bad regex as no match. */
+/**
+ * A rule's pattern against some text, treating a rule with a bad regex as no match.
+ *
+ * In the singular as well: a supplier's category column says BOARDS and BAGS where the rules say
+ * board and bag, and Burton's boards were filed nowhere for the one letter.
+ */
 function matches(rule: CategoryRuleLike, text: string): boolean {
   try {
-    return new RegExp(rule.pattern, "i").test(text);
+    const re = new RegExp(rule.pattern, "i");
+    return re.test(text) || re.test(text.replace(/(?<=[a-z])s\b/gi, ""));
   } catch {
     return false;
   }
+}
+
+/**
+ * Snowboard boots and bindings, which a rule for ski boots and bindings claims by the word.
+ *
+ * The rule says "Ski Boots"; the brand says otherwise. A Burton boot is a snowboard boot, as is any
+ * boot whose line says snowboard or Step On, and the shop files those under their own Types.
+ */
+export function snowboardType(rule: CategoryRuleLike | null, items: CanonicalLineItem[]): string | null {
+  if (!rule || (rule.category !== "boots" && rule.category !== "bindings")) return null;
+  const snowboard = items.some((i) => isSnowboardBrand(i.brand) || /\bsnowboard|\bstep[\s-]?on\b/i.test([i.category, i.productType, i.title, i.description].join(" ")));
+  if (!snowboard) return null;
+  return rule.category === "boots" ? "Snowboard Boots" : "Snowboard Bindings";
 }
 
 const LENGTH_IN_TITLE = /\b(1[0-9]{2}|2[01][0-9])\s?(?:cm)?\s*$|\b(1[0-9]{2}|2[01][0-9])\s?cm\b/i;
@@ -211,7 +239,9 @@ export function tagsFor(rule: CategoryRuleLike | null, items: CanonicalLineItem[
   for (const i of items) {
     for (const t of (i.tags ?? "").split(",")) if (t.trim()) tags.add(t.trim());
     if (i.season) tags.add(i.season);
-    if (i.gender) tags.add(i.gender);
+    // Not the gender word as written: the shop's gender tags come from catalogTags, which knows a
+    // unisex garment is tagged mens AND womens and a unisex stomp pad is tagged neither. The raw
+    // word put "unisex" — a tag the shop never uses — on every Burton bag.
     if (i.abilityLevel) tags.add(i.abilityLevel);
     // Not the terrain word itself ("Freeride"): it becomes the shop's riding-style shelf instead
     // ("freeride and powder skis") — see shop-memory — and the bare word is no tag the shop uses.

@@ -1,10 +1,12 @@
 // Group canonical line items into products with variants.
 
 import { buildHandle } from "./handle";
-import { chooseOptions, collectionsFor, detectCategory, enrichFromTitle, metafieldsFor, OPTION_LABELS, tagsFor, type CategoryRuleLike } from "./categorize";
+import { chooseOptions, collectionsFor, detectCategory, enrichFromTitle, metafieldsFor, OPTION_LABELS, snowboardType, tagsFor, type CategoryRuleLike } from "./categorize";
+import { resolveType } from "./taxonomy";
+import { withFit } from "./mapping";
 import { normaliseOptionName, optionNamesFor } from "./options";
 import { catalogTags } from "./product-tags";
-import { productTitle, seasonTagFrom, withoutVendor } from "./titles";
+import { asShopWritesIt, productTitle, seasonTagFrom, withoutVendor } from "./titles";
 import type { CanonicalLineItem } from "./types";
 import { disciplinesFromTerrain, rememberedDisciplines, rememberedType, type Listing } from "./shop-memory";
 
@@ -36,6 +38,15 @@ export interface GroupedProduct {
 
 function normTitle(title: string): string {
   return title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+/** Who a line is for, as one of the shop's three shelves, or nothing when the line does not say. */
+function audience(gender: string): string {
+  const g = gender.trim().toLowerCase();
+  if (/^(men|mens|men's|male|m)$/.test(g)) return "mens";
+  if (/^(women|womens|women's|ladies|female|w)$/.test(g)) return "womens";
+  if (/^(kids|kid|kids'|youth|junior|jr|boys|girls|children)$/.test(g)) return "kids";
+  return "";
 }
 
 function titleCase(s: string): string {
@@ -89,14 +100,16 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
     const remembered = rememberedType({ title: raw.title, brand: raw.brand }, opts.listings ?? []);
     const rule = detectCategory(raw, rules)
       ?? (remembered ? rules.find((r) => r.active && (r.productType === remembered || r.category === remembered.toLowerCase())) ?? null : null);
-    return { rule, item: enrichFromTitle(raw, rule?.category ?? "other") };
+    return { rule, item: withFit(enrichFromTitle(raw, rule?.category ?? "other")) };
   });
   normaliseCodes(enriched.map((e) => e.item));
 
   enriched.forEach(({ rule, item }, index) => {
     const brand = item.brand.trim();
     const keyBase = item.modelCode.trim() ? `model:${item.modelCode.trim().toLowerCase()}` : `title:${normTitle(item.title)}`;
-    const key = `${brand.toLowerCase()}|${keyBase}`;
+    // Who it is for is part of what it is: Burton's men's and women's Step On bindings share a name
+    // and a code prefix, and the shop lists them as two products. See audience.
+    const key = `${brand.toLowerCase()}|${keyBase}${audience(item.gender) ? `|${audience(item.gender)}` : ""}`;
     const group = groups.get(key) ?? { rule, entries: [] };
     group.entries.push({ item, index });
     groups.set(key, group);
@@ -113,7 +126,18 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
     // Without the punctuation a size left behind when it was lifted out: "GRIFFON 13 MN; 100MM".
     const title = withoutVendor(brand, baseTitle).replace(/[\s;,:–-]+$/, "");
     const items = entries.map((e) => e.item);
-    const productType = group.rule?.productType ?? (first.productType || "");
+    // Men's and women's of one model, under one shorthand name on the order, are two products that
+    // would otherwise share a title and so a handle. The shop's own way of telling them apart is on
+    // the front of the name: "Men's GORE-TEX Gloves", "Women's GORE-TEX Gloves", "Kids Gore-Tex Gloves".
+    const shared = [...groups.entries()].filter(([k, g]) => k !== key && (g.entries.map((e) => e.item.brand.trim()).find(Boolean) ?? "") === brand && normTitle(withoutVendor(brand, g.entries.map((e) => e.item.title.trim()).find(Boolean) ?? "")) === normTitle(title));
+    const who = audience(first.gender);
+    const titled = shared.length > 0 && who && !/^(men'?s|women'?s|kids|youth|junior)\b/i.test(title)
+      ? `${{ mens: "Men's", womens: "Women's", kids: "Kids" }[who]} ${asShopWritesIt(title)}`
+      : title;
+    // A snowboard brand's boots are snowboard boots, whatever the boots rule says. See snowboardType.
+    const snowboard = snowboardType(group.rule, items);
+    // A supplier's own kind word is a Type only when it is one the shop uses: "FREERIDE" is not.
+    const productType = snowboard ?? group.rule?.productType ?? resolveType(first.productType) ?? "";
     // What varies decides which options exist; the shop's own habit decides the order they are
     // read in. A jacket is colour then size on forty-one of forty-three products, a ski is length
     // first, and a sleeping bag is size, loft, then which side the zip is on.
@@ -138,10 +162,10 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
       variants.push({ item: e.item, sourceIndex: e.index, option1Value: values[0] ?? null, option2Value: values[1] ?? null, option3Value: values[2] ?? null });
     }
     const description = items.map((i) => i.description.trim()).find(Boolean) ?? "";
-    const general = catalogTags({ productType, brand, items, ruleTags: tagsFor(group.rule, items, brand), describedAs: `${title} ${description}`, ...(opts.builtBy ? { builtBy: opts.builtBy } : {}) });
+    const general = catalogTags({ productType, brand, items, ruleTags: tagsFor(group.rule, items, brand), describedAs: `${titled} ${description}`, ...(opts.builtBy ? { builtBy: opts.builtBy } : {}) });
     // The riding-style shelves: what the shop gave this model last season, and only for a model it
     // has never listed, what the supplier calls it. See shop-memory.
-    const remembered = rememberedDisciplines({ title, brand }, opts.listings ?? []);
+    const remembered = rememberedDisciplines({ title: titled, brand }, opts.listings ?? []);
     const styles = remembered.length > 0 ? remembered : disciplinesFromTerrain(productType, items.map((i) => i.terrain).join(" "));
     const tags = [...general, ...styles.filter((t) => !general.includes(t))];
     products.push({
@@ -154,13 +178,13 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
       // And not the brand: 845 of its 928 products with a vendor have no vendor in the handle
       // ("custom-2027", "m7-mantra"), and a handle is how Shopify and the reconciler recognise a
       // listing the shop already has — "burton-custom-2027" was a duplicate of custom-2027.
-      handle: buildHandle({ title: productTitle(title, seasonTagFrom(tags)) }),
-      title,
+      handle: buildHandle({ title: productTitle(titled, seasonTagFrom(tags)) }),
+      title: titled,
       brand,
       category: group.rule?.category ?? (first.category || "other"),
       productType,
       tags,
-      collections: collectionsFor(group.rule, items),
+      collections: snowboard ? [snowboard] : collectionsFor(group.rule, items),
       description,
       metafields: metafieldsFor(items),
       option1Name: names[0] ?? null,

@@ -490,6 +490,12 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
   // discount on all of it. A directive applies to every product in the batch by design.
   const directives = parseDirectives(batch.directives);
 
+  // A year said in the instruction chat wins over whatever the supplier's file calls the season:
+  // Burton's "27WIN" is 2027, and an April order for the 2026 range is still tagged 2026.
+  if (/^20\d{2}$/.test(directives.season.trim())) {
+    for (const entry of items) entry.item = { ...entry.item, season: directives.season.trim() };
+  }
+
   // The shop's listings as last remembered, for the shelves it gave each model before.
   const listings = (await prisma.shopListing.findMany({ select: { handle: true, title: true, vendor: true, productType: true, tags: true, price: true, bindingOption: true } }).catch(() => []))
     .map((l) => ({ ...l, tags: l.tags.split(",").map((t) => t.trim()).filter(Boolean) }));

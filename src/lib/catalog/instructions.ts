@@ -21,6 +21,7 @@ const DirectivesSchema = z.object({
   discountPct: z.number().nullable().describe("A percentage off every retail price, as a number: 30 for '30% off'. Null when no discount was mentioned."),
   vendor: z.string().describe("The brand every product in this batch is, when the invoice does not say and the person has. Empty otherwise."),
   productType: z.string().describe("The Type every product in this batch should carry, when the person has said. Empty otherwise."),
+  season: z.string().describe("The four-digit year every product in this batch belongs to, as 2026 — the year tag and the year in each title — when they say which year this is. Empty when they have not said, and the year is then read off the supplier's file."),
   evergreen: z.boolean().describe("True when they have said these products do not change year to year and should carry the evergreen marker instead of a season."),
   packages: z.enum(["", "build", "none"]).describe("Ski binding packages. 'build' when they ask for the skis to be packaged / partnered / sold with a binding; 'none' when they say not to make packages; empty when they have not mentioned it (packages are then built as usual)."),
   packageBindings: z.array(z.object({
@@ -38,6 +39,7 @@ export const NO_DIRECTIVES: BatchDirectives = {
   vendor: "",
   productType: "",
   evergreen: false,
+  season: "",
   packages: "",
   packageBindings: [],
   notes: "",
@@ -104,6 +106,7 @@ export function describeDirectives(d: BatchDirectives): string[] {
   if (d.vendor.trim()) out.push(`Brand: ${d.vendor.trim()}`);
   if (d.productType.trim()) out.push(`Type: ${d.productType.trim()}`);
   if (d.addTags.length) out.push(`Tags on every product: ${d.addTags.join(", ")}`);
+  if (/^20\d{2}$/.test(d.season.trim())) out.push(`Year tag ${d.season.trim()} on every product`);
   if (d.evergreen) out.push("Evergreen, not a season");
   if (d.discountPct !== null) out.push(`${d.discountPct}% off every price`);
   if (d.packages === "none") out.push("No binding packages");

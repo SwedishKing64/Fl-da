@@ -181,3 +181,11 @@ describe("directives saved before packages could be asked for", () => {
     expect(d.packageBindings).toEqual([]);
   });
 });
+
+describe("a year said in the instruction chat", () => {
+  it("is read, described, and absent from directives saved before it existed", async () => {
+    const { parseDirectives, describeDirectives } = await import("./instructions");
+    expect(describeDirectives(parseDirectives(JSON.stringify({ season: "2026" })))).toContain("Year tag 2026 on every product");
+    expect(describeDirectives(parseDirectives(JSON.stringify({ addTags: ["2998"] })))).not.toContain("Year tag");
+  });
+});

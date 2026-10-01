@@ -225,7 +225,8 @@ export async function reviewBatchAction(batchId: string): Promise<ActionResult<{
     if (!review) return { ok: false, error: "No API key is set, so the build cannot be checked. Add ANTHROPIC_API_KEY in Settings." };
     revalidatePath(`/batches/${batchId}`);
     revalidatePath(`/batches/${batchId}/review`);
-    return { ok: true, data: { summary: review.summary, changed: review.applied.length, questions: review.questions } };
+    const reading = review.audit ? `Files: ${review.audit.verdict === "right" ? "read right" : review.audit.verdict === "wrong" ? "read wrong" : "not sure"}${review.audit.remapped.length ? `, ${review.audit.remapped.length} column${review.audit.remapped.length === 1 ? "" : "s"} re-read${review.audit.rebuilt ? " and rebuilt" : ""}` : ""}. ` : "";
+    return { ok: true, data: { summary: `${reading}${review.summary}`, changed: review.applied.length, questions: [...(review.audit?.questions ?? []), ...review.questions] } };
   } catch (err) {
     return { ok: false, error: `The build could not be checked: ${said(err)}` };
   }

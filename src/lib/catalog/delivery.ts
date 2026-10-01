@@ -40,6 +40,7 @@ import { brandIn, isDistributor } from "./brands";
 import { isFlatSki, isPackageBinding, packageProducts } from "./packages";
 import type { PriceRow } from "./invoice";
 import type { CanonicalLineItem } from "./types";
+import type { PageDetails } from "./page-types";
 
 export interface DeliveryOptions {
   /** The season the delivery is for, which an order form never says and the matcher needs. */
@@ -71,6 +72,17 @@ export interface DeliveryOptions {
   priceList?: PriceRow[];
   /** Leave the new products off the end, and only add the stock. Default: both. */
   reorderOnly?: boolean;
+  /**
+   * What each new product's own web page said, keyed by the index of one of its lines on the
+   * invoice. Read beforehand, on the server, from the links somebody pasted under each product's
+   * name; a product with no entry is built exactly as it would have been without.
+   *
+   * By line, not by name: what a product is CALLED can change between the preview somebody typed a
+   * link under and the build (the model may place a line on the spec sheet and rename it), but the
+   * lines of the invoice do not. A ski's package is made from the ski's lines, so it takes the
+   * ski's page without being asked.
+   */
+  pages?: Record<number, PageDetails>;
 }
 
 /** A product the delivery had to build, as it will appear in the file. */
@@ -85,6 +97,8 @@ export interface FreshProduct {
   /** True when the spec sheet or the order form gave it something to say. */
   described: boolean;
   rows: number;
+  /** Which lines of the invoice it was built from, for matching a link to it. */
+  lines: number[];
 }
 
 export interface DeliveryResult {
@@ -513,6 +527,19 @@ function appendFresh(
   for (const k of skipped) warnings.push(`No binding package was built for ${k.title}: ${k.reason}.`);
   if (build.length === 0) return { csv, fresh: [], appended: 0, heldBack, warnings };
 
+  // The pages somebody linked: a description and details list, and the page's own pictures.
+  const withPages = options.pages ?? {};
+  const pageOf = (g: GroupedProduct): PageDetails | undefined => {
+    for (const v of g.variants) if (withPages[v.sourceIndex]) return withPages[v.sourceIndex];
+    return undefined;
+  };
+  for (const g of build) {
+    const page = pageOf(g);
+    if (!page) continue;
+    const body = houseBody(page.description, page.features);
+    if (body) g.description = body;
+    if (page.images.length > 0) g.imageUrls = [...new Set([...g.imageUrls, ...page.images])];
+  }
   const products = build.map((g) => toProduct(g, vendor));
   const rows = buildRows(products);
   const missing = new Set<string>();
@@ -553,6 +580,7 @@ function appendFresh(
       })),
       described: (product.bodyHtml ?? "").trim() !== "",
       rows: counted.get(product.handle) ?? g.variants.length,
+      lines: g.variants.map((v) => v.sourceIndex),
     };
   });
 
@@ -749,7 +777,7 @@ function toProduct(g: GroupedProduct, vendor: string): CsvProduct {
     option2Name: g.option2Name,
     option3Name: g.option3Name,
     metafields: metafieldColumns(g.metafields),
-    images: [],
+    images: g.imageUrls.map((url, i) => ({ url, position: i + 1, altText: title })),
     variants: g.variants.map((v) => ({
       sku: "",
       barcode: v.item.barcode,

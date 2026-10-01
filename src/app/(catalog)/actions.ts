@@ -641,6 +641,62 @@ export async function lookupProductsAction(batchId: string, opts: { productIds?:
 }
 
 /**
+ * The link beside a product: saved, or cleared when it is empty. Nothing is fetched yet.
+ * See page-link.ts.
+ */
+export async function setProductLinkAction(productId: string, url: string): Promise<ActionResult<{ url: string; shared: string[] }>> {
+  await requireUser();
+  try {
+    const { setProductLink } = await import("@/lib/catalog/page-link");
+    const data = await setProductLink(productId, url);
+    return { ok: true, data };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/**
+ * Read a product page that is not attached to any stored product — the Bulk page's, where the
+ * products are only a preview until the file is built. One page per call. A page that cannot be
+ * read comes back as an error with the reason, never as an empty success.
+ */
+export async function readPageAction(input: { url: string; title: string; brand?: string }): Promise<ActionResult<import("@/lib/catalog/page-types").PageDetails>> {
+  await requireUser();
+  try {
+    const { cleanProductUrl } = await import("@/lib/catalog/page-types");
+    const cleaned = cleanProductUrl(input.url);
+    if ("error" in cleaned) return { ok: false, error: cleaned.error || "No link." };
+    const { readProductPage, PageError } = await import("@/lib/catalog/extract/page");
+    try {
+      return { ok: true, data: await readProductPage(cleaned.url, { title: input.title, brand: input.brand }) };
+    } catch (err) {
+      if (err instanceof PageError) return { ok: false, error: err.message };
+      throw err;
+    }
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/**
+ * Read the page a product was linked to: its description, its details and its pictures go onto the
+ * product. One product per call, so each fits in the page's time limit however many are linked.
+ */
+export async function readProductLinkAction(productId: string): Promise<ActionResult<import("@/lib/catalog/page-link").PageRead>> {
+  const user = await requireUser();
+  try {
+    const { readProductLink } = await import("@/lib/catalog/page-link");
+    const data = await readProductLink(productId);
+    const product = await prisma.product.findUnique({ where: { id: productId }, select: { batchId: true } });
+    await logAudit("product.page_read", { batchId: product?.batchId ?? null, userId: user.id, details: { productId, ok: data.ok, description: data.description, details: data.details, images: data.images } });
+    if (product) revalidatePath(`/batches/${product.batchId}/review`);
+    return { ok: true, data };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/**
  * How many of a batch's files are still being read.
  *
  * One small query, so a page waiting on a scan can ask often without re-rendering itself and

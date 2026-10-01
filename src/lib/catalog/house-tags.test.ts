@@ -102,7 +102,7 @@ describe("where the lookup is called from", () => {
     const fn = enrich.slice(enrich.indexOf("export async function lookupBatch"));
     const body = fn.slice(0, fn.indexOf("\n}\n"));
     // FAILED is absent from the skip list on purpose: it is not an answer.
-    expect(body).toMatch(/in:\s*\["FOUND",\s*"UNSURE",\s*"NOT_FOUND"\]/);
+    expect(body).toMatch(/in:\s*\["FOUND",\s*"UNSURE",\s*"NOT_FOUND",\s*"LINKED",\s*"RELINKED",\s*"PAGE",\s*"PAGE_UNSURE"\]/);
     expect(body).not.toContain('not: "NONE"');
   });
 });

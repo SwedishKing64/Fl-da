@@ -1,11 +1,13 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { joinOrderAction, rememberListingsAction, logAdjustmentAction, planAdjustmentAction, readInstructionSheetAction, readInvoiceAction, readReferenceAction, readSheetAgainstFilesAction } from "@/app/(catalog)/actions";
+import { joinOrderAction, readPageAction, rememberListingsAction, logAdjustmentAction, planAdjustmentAction, readInstructionSheetAction, readInvoiceAction, readReferenceAction, readSheetAgainstFilesAction } from "@/app/(catalog)/actions";
 import { applyPlan, describeFile, foldPlans, isWholeFile, whyNoMatch, type AdjustResult, type FoldStep, type Plan } from "@/lib/catalog/adjust";
 import { csvFilename } from "@/lib/catalog/csv";
 import { reconcile, type InvoiceFields, type Reconciliation } from "@/lib/catalog/reconcile";
-import { buildDelivery, joinToReference } from "@/lib/catalog/delivery";
+import { buildDelivery, joinToReference, type FreshProduct } from "@/lib/catalog/delivery";
+import type { PageDetails } from "@/lib/catalog/page-types";
+import { BulkLinks } from "./BulkLinks";
 import { listingsFromCsv } from "@/lib/catalog/shop-memory";
 import type { CanonicalLineItem } from "@/lib/catalog/types";
 import type { InvoiceRead } from "@/lib/catalog/invoice";
@@ -183,6 +185,13 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
   const [vendor, setVendor] = useState("");
   /** Whether the lines that are not in the shop yet get built onto the end of the file. */
   const [buildNew, setBuildNew] = useState(true);
+  /**
+   * A link to each new product's own page, by the index of its first line on the invoice (a line's
+   * place does not change when the model renames the product it belongs to), and what happened to
+   * each one the last time the delivery was applied. See BulkLinks.
+   */
+  const [links, setLinks] = useState<Record<number, string>>({});
+  const [linkNotes, setLinkNotes] = useState<Record<number, { tone: "ok" | "warn" | "bad"; text: string }>>({});
   const referenceRef = useRef<HTMLInputElement>(null);
   const [references, setReferences] = useState<Reference[]>([]);
 
@@ -288,7 +297,7 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
       setError(`None of ${files.map((f) => f.name).join(", ")} reads as an order or invoice — it needs a column identifying each line and a column of prices or quantities. Add the order form, then these as its spec sheets.`);
       return;
     }
-    setInvoice(order.data);
+    setInvoice(order.data); setLinks({}); setLinkNotes({});
     const rest = readings.filter((r) => r !== order);
     const sheetsOnly = rest.filter((r) => /\.(xlsx?|csv)$/i.test(r.file.name));
     const skipped = rest.filter((r) => !sheetsOnly.includes(r));
@@ -404,9 +413,9 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
       if (!fitsUpload(sent.file.size)) { setError(tooBig(file, sent.file.size)); return; }
       setProgress(sent.note ? `Reading ${file.name} — ${sent.note}` : `Reading ${file.name}…`);
       const r = await readInvoiceAction({ name: file.name, type: sent.file.type, base64: await read(sent.file, file.name) });
-      if (!r.ok) { setError(r.error); setInvoice(null); return; }
+      if (!r.ok) { setError(r.error); setInvoice(null); setLinks({}); setLinkNotes({}); return; }
       const data = r.data!;
-      setInvoice({ ...data, filename: file.name });
+      setInvoice({ ...data, filename: file.name }); setLinks({}); setLinkNotes({});
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -476,6 +485,43 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
       setProgress("");
     }
     /**
+     * The pages somebody linked, read before anything is built. One request per page, two at a
+     * time, each with its own time limit; a page that cannot be read is said so and its product is
+     * built without it, like every product that was given no link at all.
+     */
+    const pages: Record<number, PageDetails> = {};
+    const linkFeed: string[] = [];
+    const asked = buildNew ? Object.entries(links).map(([k, url]) => ({ key: Number(k), url: url.trim() })).filter((l) => l.url) : [];
+    if (asked.length > 0) {
+      const nameOf = (key: number) => newProducts.find((p) => p.lines.includes(key))?.title ?? invoice.lines[key]?.title ?? "a product";
+      let done = 0, next = 0;
+      const notes: typeof linkNotes = {};
+      const worker = async () => {
+        for (let i = next++; i < asked.length; i = next++) {
+          const { key, url } = asked[i];
+          setProgress(`Reading the product pages — ${done} of ${asked.length}…`);
+          const r = await readPageAction({ url, title: nameOf(key), brand: vendor || undefined }).catch((err) => ({ ok: false as const, error: err instanceof Error ? err.message : String(err) }));
+          done++;
+          if (r.ok && r.data) {
+            pages[key] = r.data;
+            const got = [r.data.description.trim() ? "the description" : "", r.data.features.length > 0 ? `${r.data.features.length} detail${r.data.features.length === 1 ? "" : "s"}` : "", r.data.images.length > 0 ? `${r.data.images.length} picture${r.data.images.length === 1 ? "" : "s"}` : ""].filter(Boolean);
+            const unsure = r.data.confident ? "" : ` The page is titled "${r.data.pageTitle || "?"}", which does not clearly match — check it is the right one.`;
+            const text = `${got.length ? `Took ${got.join(", ")} from the page.` : "The page had nothing to take."}${unsure}${r.data.via === "basic" ? ` ${r.data.note}` : ""}`;
+            notes[key] = { tone: r.data.confident ? "ok" : "warn", text };
+            linkFeed.push(`${nameOf(key)}: ${text}`);
+          } else {
+            const text = `${r.ok ? "The page could not be read." : r.error} Built without it.`;
+            notes[key] = { tone: "bad", text };
+            linkFeed.push(`${nameOf(key)}: ${text}`);
+          }
+          setProgress(`Reading the product pages — ${done} of ${asked.length}…`);
+        }
+      };
+      await Promise.all([worker(), worker()]);
+      setLinkNotes(notes);
+      setProgress("");
+    }
+    /**
      * Which file the new products go on: the one this delivery has the most to do with.
      *
      * Appending them to every loaded export would import the same product several times over, and
@@ -492,6 +538,7 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
         season, vendor, specs, decided, sourceOf, listings, priceList: invoice.priceList ?? [],
         fields: { ...fields, stock },
         reorderOnly: s.name !== home,
+        pages,
       }),
     }));
     if (results.every((r) => r.result.refused)) {
@@ -521,7 +568,9 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
       lines: [
         `Matched ${matchedLines} of ${invoice.lines.length} line${invoice.lines.length === 1 ? "" : "s"} to products already in the shop${wrote.length ? `, and wrote ${wrote.join(", ")}` : ""}.`,
         ...builtSizes.map((x) => `Added ${x.option} to ${x.title || x.handle} — a size it has not stocked before.`),
-        ...builtProducts.map((x) => `Built ${x.title} as a draft: ${x.variants.length} variant${x.variants.length === 1 ? "" : "s"}, ${x.type || "no Type"}${x.described ? ", described from the spec sheet" : ", with no description yet"}.`),
+        ...builtProducts.map((x) => `Built ${x.title} as a draft: ${x.variants.length} variant${x.variants.length === 1 ? "" : "s"}, ${x.type || "no Type"}${x.lines.some((l) => pages[l]) ? ", described from its page" : x.described ? ", described from the spec sheet" : ", with no description yet"}.`),
+        ...linkFeed.map((l) => `Product page — ${l}`),
+        ...asked.filter((a) => !builtProducts.some((x) => x.lines.includes(a.key))).map((a) => `Product page — the link for ${invoice.lines[a.key]?.title ?? "a product"} was not used: it was not built as a new product.`),
         ...results.flatMap((r) => r.result.heldBack.map((h) => `Left alone: ${h.line.title || h.line.sku} — ${h.reason}.`)),
         ...[...new Set(results.flatMap((r) => r.result.warnings))],
       ],
@@ -732,6 +781,22 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
         .filter((line) => against.every((a) => a.reconciliation.unmatched.includes(line)))
         .map((line) => `${line.sku}\u0000${line.title}`),
   ).size;
+  /**
+   * The products the delivery would build, so each can have its own page pasted under its name.
+   * A ski and its binding package are the same lines and so one entry; the page is read once and
+   * both take it. Named as the rules name them now — the model may rename one on apply, which is
+   * why a link belongs to a product's lines and not to its name.
+   */
+  const homeName = buildNew ? [...against].sort((a, b) => b.reconciliation.matched.length - a.reconciliation.matched.length)[0]?.name ?? null : null;
+  const homeSheet = homeName ? sheets.find((s) => s.name === homeName) : undefined;
+  const seenLines = new Set<number>();
+  const newProducts: FreshProduct[] = invoice && homeSheet && toBuild > 0
+    ? buildDelivery(homeSheet.csv, invoice.lines, {
+        season, vendor, specs: loadedSpecs, sourceOf: specSources(references),
+        listings: sheets.flatMap((s) => listingsFromCsv(s.csv)), priceList: invoice.priceList ?? [],
+        fields: { ...fields, stock },
+      }).fresh.filter((p) => { const k = p.lines[0]; if (k === undefined || seenLines.has(k)) return false; seenLines.add(k); return true; })
+    : [];
 
   // The sheet, laid out by product group. A row that cannot touch anything loaded is set aside
   // rather than queued, which is the difference between thirty-nine to go through and three.
@@ -995,7 +1060,7 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
         */}
       <Card
           title="A delivery, or a supplier's invoice"
-          actions={invoice ? <Button size="sm" onClick={() => { setInvoice(null); setError(null); }}>Remove it</Button> : undefined}
+          actions={invoice ? <Button size="sm" onClick={() => { setInvoice(null); setLinks({}); setLinkNotes({}); setError(null); }}>Remove it</Button> : undefined}
         >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="text-sm">
@@ -1162,6 +1227,16 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
                 </label>
                 <p className="py-1 text-xs text-[var(--ink-soft)]">A size that is new to a product you already sell is always added, whether this is ticked or not: it is a variant of that product, not a product.</p>
               </fieldset>
+
+              {buildNew && newProducts.length > 0 && (
+                <BulkLinks
+                  products={newProducts.map((p) => ({ key: p.lines[0], title: p.title }))}
+                  links={links}
+                  onChange={(key, url) => setLinks((l) => { const { [key]: _gone, ...rest } = l; void _gone; return url ? { ...rest, [key]: url } : rest; })}
+                  notes={linkNotes}
+                  disabled={busy !== null}
+                />
+              )}
 
               <div className="flex flex-wrap items-center gap-2">
                 <Button variant="primary" disabled={busy !== null || (placed === 0 && !(buildNew && toBuild > 0))} onClick={applyDeliveryNow}>

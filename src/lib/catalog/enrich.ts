@@ -126,7 +126,7 @@ export async function lookupBatch(
   // for someone to ask for it explicitly.
   const answered = named || opts.retry
     ? []
-    : await prisma.product.findMany({ where: { batchId, lookupStatus: { in: ["FOUND", "UNSURE", "NOT_FOUND"] } }, select: { id: true } });
+    : await prisma.product.findMany({ where: { batchId, lookupStatus: { in: ["FOUND", "UNSURE", "NOT_FOUND", "LINKED", "RELINKED", "PAGE", "PAGE_UNSURE"] } }, select: { id: true } });
   const already = new Set(answered.map((p) => p.id));
   // A product with no price cannot be exported at all, while one with no description merely reads
   // poorly — so when a pass cannot finish everything, the ones without a price go first.

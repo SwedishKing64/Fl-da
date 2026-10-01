@@ -5,6 +5,7 @@ import { isPlaceholderBody } from "@/lib/catalog/extract/lookup";
 import { Alert, Badge, LinkButton, PageHeader, statusTone } from "@/app/(catalog)/ui";
 import { Steps } from "../Steps";
 import { ReviewGrid } from "./ReviewGrid";
+import { LinksPanel } from "./LinksPanel";
 import { LookupPanel } from "./LookupPanel";
 import { lookupEnabled } from "@/lib/catalog/enrich";
 
@@ -43,6 +44,11 @@ export default async function ReviewPage(props: PageProps<"/batches/[id]/review"
         <Alert tone="warning">No products yet — upload a supplier file first.</Alert>
       ) : (
         <>
+          <LinksPanel
+            batchId={id}
+            locked={["EXPORTED", "PUSHED"].includes(batch.status)}
+            products={review.products.map((p) => ({ id: p.id, title: p.title, handle: p.handle, url: ["LINKED", "RELINKED", "LINK_FAILED", "PAGE", "PAGE_UNSURE"].includes(p.lookupStatus) ? p.lookupSource : "", status: p.lookupStatus }))}
+          />
           <LookupPanel batchId={id} outstanding={outstanding} enabled={lookupEnabled()} states={states} />
           <ReviewGrid initial={review} batchId={id} />
         </>

@@ -537,6 +537,11 @@ const LOOKUP_SAID: Record<string, string> = {
   UNSURE: "Found a page, but not certainly this exact product — description only, no price or brand.",
   NOT_FOUND: "Searched, but the brand's website did not turn it up.",
   FAILED: "The search itself failed. Try it again.",
+  LINKED: "A link is saved for this product and has not been read yet.",
+  RELINKED: "A link is saved for this product and has not been read yet.",
+  LINK_FAILED: "The link could not be read — see Product pages above.",
+  PAGE: "Description, details and pictures taken from the page linked to this product.",
+  PAGE_UNSURE: "Taken from the linked page, but its title does not clearly match this product — check it is the right page.",
 };
 
 /** What a lookup pass found, said as a sentence rather than a row of counters. */

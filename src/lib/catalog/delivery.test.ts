@@ -85,6 +85,34 @@ describe("a delivery of carry-overs and new products", () => {
     expect(fresh[1].Title).toBe("");
   });
 
+  it("writes the description, details and pictures of a linked page onto the new product and its package", () => {
+    const pages = { 1: { description: "The M7 Mantra is for everything.", features: ["Radius: 20 m", "Core: Woodcore"], images: ["https://cdn.example.com/m7/a.jpg", "https://cdn.example.com/m7/b.jpg"], pageTitle: "M7 Mantra", confident: true, sourceUrl: "https://www.volkl.example.com/m7", via: "ai" as const, note: "" } };
+    // An export with the picture columns, as the shop's real ones have.
+    const withPictures = EXPORT.replace("SEO Title,Status", "SEO Title,Status,Image Src,Image Position");
+    const out = buildDelivery(withPictures, [
+      line({ barcode: "821264800133", title: "BLAZE 94", size: "170", quantity: 3, rrp: 1499.99 }),
+      line({ sku: "V2610112.000", barcode: "4064264900011", title: "M7 MANTRA", size: "170", quantity: 2, rrp: 1649 }),
+      line({ sku: "V2610112.000", barcode: "4064264900028", title: "M7 MANTRA", size: "177", quantity: 1, rrp: 1649 }),
+    ], { season: "2027", vendor: "Volkl", pages });
+    const rows = parseCsv(out.csv).filter((r) => r.some((c) => c.trim()));
+    const header = rows[0];
+    const col = (name: string) => header.indexOf(name);
+    const mine = rows.filter((r) => r[col("Handle")].startsWith("m7-mantra-2027"));
+    const first = (handle: string) => mine.find((r) => r[col("Handle")] === handle && r[col("Title")])!;
+    for (const handle of ["m7-mantra-2027", "m7-mantra-2027-inc-marker-griffon-binding-package"]) {
+      const row = first(handle);
+      expect(row[col("Body (HTML)")]).toBe("<p>The M7 Mantra is for everything.</p>\n<h2>Tech Specs</h2>\n<ul>\n<li>Radius: 20 m</li>\n<li>Core: Woodcore</li>\n</ul>");
+      const pictures = mine.filter((r) => r[col("Handle")] === handle && r[col("Image Src")]).map((r) => r[col("Image Src")]);
+      expect(pictures).toEqual(["https://cdn.example.com/m7/a.jpg", "https://cdn.example.com/m7/b.jpg"]);
+    }
+    expect(out.fresh.every((f) => f.described)).toBe(true);
+    // And without a page, exactly as before: nothing described, no pictures.
+    const bare = parseCsv(buildDelivery(withPictures, [
+      line({ sku: "V2610112.000", barcode: "4064264900011", title: "M7 MANTRA", size: "170", quantity: 2, rrp: 1649 }),
+    ], { season: "2027", vendor: "Volkl" }).csv).filter((r) => r.some((c) => c.trim()));
+    expect(bare.slice(1).filter((r) => r[col("Image Src")]).length).toBe(0);
+  });
+
   it("holds back a product whose URL the file already uses, rather than editing that product", () => {
     // A one-word name is the case the matcher cannot place: it needs two words or a model code, so
     // "REVOLT" matches nothing and arrives here as new. Its URL is not new — the shop writes

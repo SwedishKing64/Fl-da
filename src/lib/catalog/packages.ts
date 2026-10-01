@@ -21,7 +21,7 @@
 import { money } from "./adjust";
 import { slugify } from "./handle";
 import type { GroupedProduct } from "./grouping";
-import { productTitle, seasonTagFrom } from "./titles";
+import { asShopWritesIt, productTitle, seasonTagFrom } from "./titles";
 import { rememberedBinding, type Listing } from "./shop-memory";
 import { COLOUR_WORDS } from "./types";
 
@@ -192,6 +192,34 @@ export function bindingFrom(spec: BindingSpec, priceList: Array<{ title: string;
 
 /** Why a ski was not given a package, for the page to say. */
 export interface PackageSkip { title: string; reason: string }
+
+/**
+ * A ski named with the binding it is sold on: "HERO FIS GS FAC SPX15", "HERO GS PRO R21 NX7".
+ *
+ * Rossignol's race and junior skis arrive from the supplier already mounted with their binding, so
+ * the binding is on the end of the ski's name — and it IS a binding, not part of the model. The shop
+ * lists a ski sold with a binding as a package, and writes it the same way every time: the ski, its
+ * season, "inc", the binding, "Binding Package" ("Arcade 82 2027 inc Xpress 11 Binding Package").
+ * Left as "Hero Fis GS Fac Spx15 2026" it read as a model called Spx15, with no sign there was a
+ * binding in the box.
+ *
+ * Only the bindings whose names say what they are — SPX, NX and Xpress with their number — and only
+ * at the end of the name, where a supplier puts it.
+ */
+const INTEGRATED_BINDING = /^(.*?\S)\s+(SPX|NX|XPRESS)\s?(\d{1,2})(?:\s+(GW|TCX))?\s*$/i;
+
+export function integratedBinding(skiTitle: string, season: string): { title: string; binding: string } | null {
+  const text = skiTitle.trim().replace(/\s+/g, " ");
+  if (/\binc\b|\bpackage\b/i.test(text)) return null;
+  const m = INTEGRATED_BINDING.exec(text);
+  if (!m) return null;
+  const maker = m[2].toUpperCase();
+  const name = maker === "XPRESS" ? "Xpress" : maker;
+  const binding = `${name} ${m[3]}${m[4] ? ` ${m[4].toUpperCase()}` : ""}`;
+  const base = asShopWritesIt(m[1]);
+  const withSeason = season && !new RegExp(`\\b${season}\\b`).test(base) ? `${base} ${season}` : base;
+  return { title: `${withSeason} inc ${binding} Binding Package`, binding };
+}
 
 /** Is this grouped product a flat ski — the thing a package is built from? */
 export function isFlatSki(g: { productType: string; title: string; tags: string[] }): boolean {

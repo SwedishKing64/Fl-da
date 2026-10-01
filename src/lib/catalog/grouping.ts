@@ -5,6 +5,7 @@ import { chooseOptions, collectionsFor, detectCategory, enrichFromTitle, metafie
 import { resolveType } from "./taxonomy";
 import { withFit } from "./mapping";
 import { classifyAccessory } from "./accessories";
+import { integratedBinding } from "./packages";
 import { isSnowboardBrand } from "./brands";
 import { normaliseOptionName, optionNamesFor } from "./options";
 import { catalogTags } from "./product-tags";
@@ -147,6 +148,11 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
       : null;
     // A supplier's own kind word is a Type only when it is one the shop uses: "FREERIDE" is not.
     const productType = snowboard ?? accessory ?? group.rule?.productType ?? resolveType(first.productType) ?? "";
+    // A ski the supplier sends already mounted — "HERO FIS GS FAC SPX15" — is a package, and is
+    // named as one: "Hero FIS GS Fac 2026 inc SPX 15 Binding Package". See integratedBinding.
+    const season = items.map((i) => i.season).find((s) => /^20\d{2}$/.test(s)) ?? "";
+    const mounted = /^skis?$/i.test(productType) ? integratedBinding(titled, season) : null;
+    const shown = mounted ? mounted.title : titled;
     // What varies decides which options exist; the shop's own habit decides the order they are
     // read in. A jacket is colour then size on forty-one of forty-three products, a ski is length
     // first, and a sleeping bag is size, loft, then which side the zip is on.
@@ -171,12 +177,14 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
       variants.push({ item: e.item, sourceIndex: e.index, option1Value: values[0] ?? null, option2Value: values[1] ?? null, option3Value: values[2] ?? null });
     }
     const description = items.map((i) => i.description.trim()).find(Boolean) ?? "";
-    const general = catalogTags({ productType, brand, items, ruleTags: tagsFor(group.rule, items, brand), describedAs: `${titled} ${description}`, ...(opts.builtBy ? { builtBy: opts.builtBy } : {}) });
+    const general = catalogTags({ productType, brand, items, ruleTags: tagsFor(group.rule, items, brand), describedAs: `${shown} ${description}`, ...(opts.builtBy ? { builtBy: opts.builtBy } : {}) });
     // The riding-style shelves: what the shop gave this model last season, and only for a model it
     // has never listed, what the supplier calls it. See shop-memory.
-    const remembered = rememberedDisciplines({ title: titled, brand }, opts.listings ?? []);
+    const remembered = rememberedDisciplines({ title: shown, brand }, opts.listings ?? []);
     const styles = remembered.length > 0 ? remembered : disciplinesFromTerrain(productType, items.map((i) => i.terrain).join(" "));
     const tags = [...general, ...styles.filter((t) => !general.includes(t))];
+    // The shop tags a ski sold with a binding "ski packages".
+    if (mounted && !tags.includes("ski packages")) tags.push("ski packages");
     products.push({
       key,
       // Built from the name the product will actually carry, season and all. Shopify derives a
@@ -187,8 +195,8 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
       // And not the brand: 845 of its 928 products with a vendor have no vendor in the handle
       // ("custom-2027", "m7-mantra"), and a handle is how Shopify and the reconciler recognise a
       // listing the shop already has — "burton-custom-2027" was a duplicate of custom-2027.
-      handle: buildHandle({ title: productTitle(titled, seasonTagFrom(tags)) }),
-      title: titled,
+      handle: buildHandle({ title: productTitle(shown, seasonTagFrom(tags)) }),
+      title: shown,
       brand,
       category: group.rule?.category ?? (first.category || "other"),
       productType,

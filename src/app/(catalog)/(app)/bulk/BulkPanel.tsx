@@ -235,6 +235,12 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
    * chooses: stock arriving is added, and the same document added twice is twice the stock.
    */
   const [applied, setApplied] = useState<string | null>(null);
+  /**
+   * The products the last delivery touched, so "the products you just edited, add the 2027 tag and
+   * put it in the title" in the box below has something to mean. Carry-overs, new sizes and the
+   * products built, by handle.
+   */
+  const [recent, setRecent] = useState<{ what: string; handles: string[] } | null>(null);
   const [againConfirmed, setAgainConfirmed] = useState(false);
   const [confirmWholeFile, setConfirmWholeFile] = useState(false);
   /** Which file's changes are open. One at a time: two diffs side by side is two files to read. */
@@ -605,6 +611,10 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
       fields.quantity ? (stock === "add" ? "the arriving stock onto the counts already there" : "the stock count, set to the invoice's own number") : "",
     ].filter(Boolean);
     setApplied(order.filename);
+    setRecent({
+      what: `the ${order.filename} delivery`,
+      handles: [...new Set(results.filter((r) => !r.result.refused).flatMap((r) => [...r.result.carryOver.map((m) => m.handle), ...r.result.freshSizes.map((x) => x.handle), ...r.result.fresh.map((p) => p.handle)]))],
+    });
     setFeed((f) => [...f, {
       title: `${order.filename} — ${cells} cell${cells === 1 ? "" : "s"} changed${rowsAdded > 0 ? ` and ${rowsAdded} row${rowsAdded === 1 ? "" : "s"} added` : ""}`,
       lines: [
@@ -655,6 +665,7 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
       const r = await planAdjustmentAction(text, {
         products: sheets.reduce((n, s) => n + s.products, 0),
         vendors: merge((s) => s.vendors), types: merge((s) => s.types), tags: merge((s) => s.tags),
+        recent,
       });
       if (!r.ok) { setError(r.error); return; }
       setPreview({
@@ -728,6 +739,9 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
       return { ...s, history: [...s.history, before[i]], csv: touched ? hit.result.csv : s.csv };
     });
     setSheets(nextSheets);
+    // What this change touched is what "those products" means next.
+    const touchedHandles = [...new Set(preview.results.flatMap((r) => r.result.changes.map((c) => c.handle)))];
+    if (touchedHandles.length > 0) setRecent({ what: `"${preview.instruction}"`, handles: touchedHandles });
     setFeed((f) => [...f, {
       title: preview.instruction,
       lines: preview.described,
@@ -1366,7 +1380,7 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
 
           <label className="block text-sm">
             <span className="mb-1 block font-medium text-[var(--ink-2)]">{feed.length > 0 ? "And then…" : "Say it the way you would say it to someone"}</span>
-            <textarea rows={2} value={instruction} onChange={(e) => { setInstruction(e.target.value); setPreview(null); }} className={INPUT} placeholder="Put all the Karbon jackets 30% off and into clearance" />
+            <textarea rows={2} value={instruction} onChange={(e) => { setInstruction(e.target.value); setPreview(null); }} className={INPUT} placeholder={recent ? "The products you just edited: add the 2027 tag and put it in the title" : "Put all the Karbon jackets 30% off and into clearance"} />
             <span className="mt-1 block text-xs text-[var(--ink-soft)]">Each one applies on top of the last, across every file, and any of them can be undone. Prices and tags, and also titles ({"\u201c"}make the Volkl skis 2027{"\u201d"}) and stock on hand. A title change never moves the product{"\u2019"}s URL.</span>
           </label>
           <div className="mt-3 flex flex-wrap gap-2">

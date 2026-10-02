@@ -760,7 +760,7 @@ export async function downloadCsvAction(fileId: string): Promise<ActionResult<{ 
  */
 export async function planAdjustmentAction(
   instruction: string,
-  file: { products: number; vendors: string[]; types: string[]; tags: string[] },
+  file: { products: number; vendors: string[]; types: string[]; tags: string[]; recent?: { what: string; handles: string[] } | null },
 ): Promise<ActionResult<{ plan: Plan; understood: string; unclear: string; blocked: string[]; described: string[] }>> {
   await requireUser();
   if (!planningAvailable()) return { ok: false, error: "Set ANTHROPIC_API_KEY to read instructions. Until then this page cannot work out what to change." };

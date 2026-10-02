@@ -75,6 +75,8 @@ Only ever name a vendor, type or tag that appears in the list of what the file c
 
 If the instruction does not narrow the products at all, leave every scope field empty and say so in "unclear". Never invent a scope to make an instruction fit, and NEVER fall back to an empty scope because the right one was hard to express — an empty scope edits the whole shop. If you cannot express the SCOPE, return no operations and say why in "unclear".
 
+"The products you just edited", "the ones you just added", "those products", "the delivery", "them" — said right after a delivery was applied on this page — means the products just touched, which the context lists by handle. Put exactly those handles in scope.handles and nothing in the other scope fields; the change then applies to them and to nothing else. If the context lists no such products, return no operations and say in "unclear" that nothing has been edited on this page yet.
+
 That last rule is about the scope and nothing else. When the instruction says plainly what to do — add a tag, take 30% off — always return that operation. Whether it turns out to change anything is not your decision: the products it matches may already be that way, and the page works that out for itself and says so.`;
 
 let client: Anthropic | null = null;
@@ -336,17 +338,24 @@ export function groundScope(
  * at what someone meant with a pile of regular expressions, which is how a price change becomes
  * the wrong price change.
  */
+/** What was just done on the page, so "the products you just edited" has something to mean. */
+export interface Recent { what: string; handles: string[] }
+
 export async function planAdjustment(
   instruction: string,
-  file: { products: number; vendors: string[]; types: string[]; tags: string[] },
+  file: { products: number; vendors: string[]; types: string[]; tags: string[]; recent?: Recent | null },
 ): Promise<PlannedChange | null> {
   if (!planningAvailable() || !instruction.trim()) return null;
 
+  const recent = file.recent && file.recent.handles.length > 0 ? file.recent : null;
   const context = [
     `The file holds ${file.products} products.`,
     `Vendors in it: ${file.vendors.join(", ") || "(none)"}`,
     `Types in it: ${file.types.join(", ") || "(none)"}`,
     `Tags in it: ${file.tags.slice(0, 400).join(", ") || "(none)"}`,
+    recent
+      ? `Products just touched on this page (${recent.what}), ${recent.handles.length} of them, by handle: ${recent.handles.slice(0, 400).join(", ")}`
+      : "Nothing has been edited on this page yet.",
     "",
     `Instruction: ${instruction.trim()}`,
   ].join("\n");

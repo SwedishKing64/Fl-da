@@ -20,6 +20,9 @@ const ORDINALS = ["first", "second", "third", "fourth", "fifth", "sixth"];
 /** "2026-12", "Dec 26", "December 2026", "2026-12-01", "DEC" (no year) as a year-month, or null. */
 export function yearMonth(text: string): { year: number | null; month: number } | null {
   const t = text.trim();
+  // A year with no month: "26", "2026", "W26". Month 0 says so.
+  const bare = /^(?:w|fw|aw|s|ss)?\s*(?:20)?(\d{2})$/i.exec(t);
+  if (bare && Number(bare[1]) >= 20 && Number(bare[1]) <= 40) return { year: 2000 + Number(bare[1]), month: 0 };
   const iso = /^(\d{4})-(\d{2})/.exec(t);
   if (iso) return { year: Number(iso[1]), month: Number(iso[2]) };
   const dmy = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})$/.exec(t);
@@ -47,6 +50,12 @@ export interface DeliveryWindow {
 export function parseWindow(text: string): DeliveryWindow | null {
   const t = text.trim().toLowerCase();
   if (!t) return null;
+  // A year on its own is the whole of it: "only what is due in 2026".
+  const year = /^(?:20)?(\d{2})$/.exec(t) ?? /^(20\d{2})$/.exec(t);
+  if (year) {
+    const y = year[1].length === 2 ? 2000 + Number(year[1]) : Number(year[1]);
+    return { from: { year: y, month: 1 }, to: { year: y, month: 12 } };
+  }
   const ord = ORDINALS.indexOf(t.replace(/\s+delivery$/, ""));
   if (ord >= 0) return { ordinal: ord + 1 };
   const num = /^(?:delivery\s*)?(\d)(?:st|nd|rd|th)?$/.exec(t);
@@ -65,6 +74,11 @@ const index = (ym: { year: number | null; month: number }, fallbackYear: number 
 
 function within(when: { year: number | null; month: number }, w: DeliveryWindow): boolean {
   if (!w.from || !w.to) return false;
+  // A line dated by year alone ("26", "2026") is in any window that spans part of that year.
+  if (when.month === 0) {
+    if (when.year === null || w.from.year === null || w.to.year === null) return false;
+    return when.year >= w.from.year && when.year <= w.to.year;
+  }
   // A month with no year on either side is matched by month alone.
   if (when.year === null || w.from.year === null || w.to.year === null) {
     const months = new Set<number>();

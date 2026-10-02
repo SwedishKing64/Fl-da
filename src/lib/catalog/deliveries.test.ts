@@ -11,6 +11,9 @@ describe("a delivery window as somebody says it", () => {
     expect(parseWindow("first")).toEqual({ ordinal: 1 });
     expect(parseWindow("second delivery")).toEqual({ ordinal: 2 });
     expect(parseWindow("whenever")).toBeNull();
+    // A year alone is the whole year.
+    expect(parseWindow("2026")).toEqual({ from: { year: 2026, month: 1 }, to: { year: 2026, month: 12 } });
+    expect(parseWindow("26")).toEqual({ from: { year: 2026, month: 1 }, to: { year: 2026, month: 12 } });
   });
 
   it("reads the dates suppliers write", () => {
@@ -20,6 +23,10 @@ describe("a delivery window as somebody says it", () => {
     expect(yearMonth("OCT")).toEqual({ year: null, month: 10 });
     expect(yearMonth("15/04/2026")).toEqual({ year: 2026, month: 4 });
     expect(yearMonth("TOTALS")).toBeNull();
+    // Burton's estimated-delivery column says "26" or "27" and nothing more.
+    expect(yearMonth("26")).toEqual({ year: 2026, month: 0 });
+    expect(yearMonth("2027")).toEqual({ year: 2027, month: 0 });
+    expect(yearMonth("W27")).toEqual({ year: 2027, month: 0 });
   });
 });
 
@@ -37,6 +44,16 @@ describe("how many of a line are due in the window", () => {
     const november = { ...emptyLineItem(), quantity: 2, deliveryDate: "2025-11-15" };
     expect(dueInWindow(april, parseWindow("2026-04")!).quantity).toBe(2);
     expect(dueInWindow(november, parseWindow("2026-04")!).quantity).toBe(0);
+  });
+
+  it("takes a year alone, against a whole-year window", () => {
+    const this26 = { ...emptyLineItem(), quantity: 4, deliveryDate: "26" };
+    const next27 = { ...emptyLineItem(), quantity: 4, deliveryDate: "27" };
+    expect(dueInWindow(this26, parseWindow("2026")!).quantity).toBe(4);
+    expect(dueInWindow(next27, parseWindow("2026")!).quantity).toBe(0);
+    // A line with a full date is still judged by its month against a whole-year window.
+    expect(dueInWindow({ ...emptyLineItem(), quantity: 1, deliveryDate: "2026-11-15" }, parseWindow("2026")!).quantity).toBe(1);
+    expect(dueInWindow({ ...emptyLineItem(), quantity: 1, deliveryDate: "2027-01-15" }, parseWindow("2026")!).quantity).toBe(0);
   });
 
   it("says so when the line does not say when it is due", () => {

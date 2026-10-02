@@ -212,9 +212,14 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
   const [brandsOff, setBrandsOff] = useState<string[]>([]);
   const brandsOnOrder = [...new Set((invoice?.lines ?? []).map((l) => (l.brand ?? "").trim()).filter(Boolean))].sort();
   const brandCount = (b: string) => (invoice?.lines ?? []).filter((l) => (l.brand ?? "").trim() === b).length;
+  // "Whose delivery this is: Burton" on a sheet that also carries Anon says which brand this run is
+  // for, so the other brands' lines are set aside as if unticked.
+  const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+  const vendorNames = brandsOnOrder.find((b) => same(b, vendor));
+  const brandsSetAside = [...new Set([...brandsOff, ...(vendorNames ? brandsOnOrder.filter((b) => !same(b, vendor)) : [])])];
   /** The invoice as this delivery: every line, or only the lines due in the window asked for, of the brands kept. */
   const order: Invoice | null = invoice
-    ? { ...invoice, lines: (narrowed ? narrowed.lines : invoice.lines).filter((l) => !brandsOff.includes((l.brand ?? "").trim())) }
+    ? { ...invoice, lines: (narrowed ? narrowed.lines : invoice.lines).filter((l) => !brandsSetAside.includes((l.brand ?? "").trim())) }
     : invoice;
   const referenceRef = useRef<HTMLInputElement>(null);
   const [references, setReferences] = useState<Reference[]>([]);
@@ -615,6 +620,8 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
     if (brandsKept) {
       const off = brandsOnOrder.filter((b) => !brandsKept.includes(b));
       setBrandsOff(off); setInstruction(""); setPreview(null); setError(null);
+      // One brand kept is also whose delivery this is, for whatever has to be built.
+      if (brandsKept.length === 1 && !vendor.trim()) setVendor(brandsKept[0]);
       setSaved(`Only ${brandsKept.join(" and ")}: ${off.join(" and ")} ${off.length === 1 ? "is" : "are"} set aside, and the delivery above is now the ${brandsKept.join(" and ")} lines`);
       return;
     }
@@ -1217,12 +1224,12 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
               {brandsOnOrder.length > 1 && (
                 <fieldset className="rounded-xl border border-[var(--line-soft)] px-3 py-2.5">
                   <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-[var(--ink-soft)]">Brands on this order</legend>
-                  <p className="mb-1 text-xs text-[var(--ink-soft)]">The sheet says whose each line is. Untick a brand to set its lines aside for another run.</p>
+                  <p className="mb-1 text-xs text-[var(--ink-soft)]">The sheet says whose each line is. Untick a brand to set its lines aside for another run, or name the brand this delivery is for above.</p>
                   <div className="flex flex-wrap gap-3">
                     {brandsOnOrder.map((b) => (
                       <label key={b} className="flex items-center gap-2 text-sm">
-                        <input type="checkbox" id={`invoice-brand-${b.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`} checked={!brandsOff.includes(b)} onChange={(e) => setBrandsOff((off) => (e.target.checked ? off.filter((x) => x !== b) : [...off, b]))} />
-                        <span>{b} <span className="text-xs text-[var(--ink-soft)]">· {brandCount(b)} line{brandCount(b) === 1 ? "" : "s"}</span></span>
+                        <input type="checkbox" id={`invoice-brand-${b.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`} checked={!brandsSetAside.includes(b)} disabled={Boolean(vendorNames) && !same(b, vendor)} onChange={(e) => setBrandsOff((off) => (e.target.checked ? off.filter((x) => x !== b) : [...off, b]))} />
+                        <span>{b} <span className="text-xs text-[var(--ink-soft)]">· {brandCount(b)} line{brandCount(b) === 1 ? "" : "s"}{Boolean(vendorNames) && !same(b, vendor) ? " · set aside while the delivery is " + vendor.trim() + "'s" : ""}</span></span>
                       </label>
                     ))}
                   </div>

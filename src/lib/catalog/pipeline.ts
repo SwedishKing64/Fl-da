@@ -535,17 +535,21 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
    * "Only Burton": a sheet that carries two brands is done one brand at a time, by the brand column
    * the sheet itself has. A sheet with no brand on any line cannot obey, and says so.
    */
-  const onlyBrands = directives.brands.map((b) => b.trim().toLowerCase()).filter(Boolean);
+  const lineBrands = [...new Set(items.map((entry) => entry.item.brand.trim().toLowerCase()).filter(Boolean))];
+  // "This is Burton's" said of a sheet that also carries Anon is the same ask as "only Burton".
+  const vendorAsked = directives.vendor.trim() && lineBrands.length > 1 && lineBrands.includes(directives.vendor.trim().toLowerCase()) ? [directives.vendor.trim()] : [];
+  const brandsAskedFor = directives.brands.length > 0 ? directives.brands : vendorAsked;
+  const onlyBrands = brandsAskedFor.map((b) => b.trim().toLowerCase()).filter(Boolean);
   if (onlyBrands.length > 0 && items.length > 0) {
     const fileIds = [...new Set(items.map((i) => i.fileId))];
     const branded = items.filter((entry) => entry.item.brand.trim());
     if (branded.length === 0) {
-      for (const fileId of fileIds) await noteOnFile(fileId, `No line on this sheet says its brand, so "only ${directives.brands.join(" and ")}" could not be applied and every line was built.`);
+      for (const fileId of fileIds) await noteOnFile(fileId, `No line on this sheet says its brand, so "only ${brandsAskedFor.join(" and ")}" could not be applied and every line was built.`);
     } else {
       const before = items.length;
       const kept = items.filter((entry) => !entry.item.brand.trim() || onlyBrands.includes(entry.item.brand.trim().toLowerCase()));
       items.splice(0, items.length, ...kept);
-      for (const fileId of fileIds) await noteOnFile(fileId, `Only ${directives.brands.join(" and ")}: ${items.length} of ${before} lines are, and the rest were left out${kept.some((e) => !e.item.brand.trim()) ? " (a line with no brand of its own was kept)" : ""}.`);
+      for (const fileId of fileIds) await noteOnFile(fileId, `Only ${brandsAskedFor.join(" and ")}: ${items.length} of ${before} lines are, and the rest were left out${kept.some((e) => !e.item.brand.trim()) ? " (a line with no brand of its own was kept)" : ""}.`);
     }
   }
 

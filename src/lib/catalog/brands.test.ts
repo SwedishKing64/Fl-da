@@ -5,6 +5,7 @@ describe("which of an order's brands an instruction keeps", () => {
   const onOrder = ["Burton", "Anon"];
   it("keeps the brand named with only / just / start with, and the others when one is left out", () => {
     expect(brandsAsked("only Burton", onOrder)).toEqual(["Burton"]);
+    expect(brandsAsked("burton", onOrder)).toEqual(["Burton"]);
     expect(brandsAsked("just the burton products for now", onOrder)).toEqual(["Burton"]);
     expect(brandsAsked("I want to start with Burton and do Anon separately", onOrder)).toEqual(["Burton"]);
     expect(brandsAsked("leave out the Anon", onOrder)).toEqual(["Burton"]);

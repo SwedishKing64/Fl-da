@@ -97,6 +97,9 @@ export function brandsAsked(instruction: string, onOrder: string[]): string[] | 
   const kept: string[] = [], dropped: string[] = [];
   // Each brand is judged by the words between it and its neighbours, so "only Burton, Anon
   // separately" does not read "separately" against Burton.
+  // The brand's name on its own — "burton" — is the whole instruction: do that one.
+  const alone = brands.find((b) => t.trim() === fold(b) || t.trim() === `${fold(b)} ONLY` || t.trim() === `ONLY ${fold(b)}`);
+  if (alone) return [alone];
   const found = brands.map((b) => ({ b, at: t.indexOf(` ${fold(b)} `), end: t.indexOf(` ${fold(b)} `) + fold(b).length + 1 })).filter((f) => f.at >= 0).sort((x, y) => x.at - y.at);
   found.forEach((f, i) => {
     const before = t.slice(i > 0 ? found[i - 1].end : 0, f.at + 1).trim().split(" ").slice(-3).join(" ");

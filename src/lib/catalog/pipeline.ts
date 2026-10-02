@@ -5,7 +5,7 @@ import { productTitle, seasonTagFrom, seoTitle } from "./titles";
 import { parseDirectives } from "./instructions";
 import { prisma, parseJson } from "./db";
 import { extractFile, type UploadKind } from "./extract";
-import { applyMapping, headerHash, looksLikeReference, mappingProblems, repairTemplate, suggestMapping, suggestOptions, type Mapping, type MappingOptions, type SavedOptions } from "./mapping";
+import { applyMapping, headerHash, looksLikeReference, mappingProblems, repairTemplate, seasonFrom, suggestMapping, suggestOptions, type Mapping, type MappingOptions, type SavedOptions } from "./mapping";
 import { groupLineItems } from "./grouping";
 import { houseTags } from "./product-tags";
 import { DEFAULT_CATEGORY_RULES, type CategoryRuleLike } from "./categorize";
@@ -14,7 +14,7 @@ import { houseBody } from "./body";
 import { keepOrderedLines, resolveAgainstReference } from "./reference-match";
 import { isFlatSki, isPackageBinding, packageProducts, specFromName, type ChosenBindings } from "./packages";
 import { readInvoiceGrids, type PriceRow } from "./invoice";
-import { asShopPrice, existingHandle, listingsAsReference, rememberedVendor } from "./shop-memory";
+import { asShopPrice, existingHandle, listingByBarcode, listingsAsReference, rememberedVendor } from "./shop-memory";
 import { dueInWindow, parseWindow } from "./deliveries";
 import { brandIn, isBrand } from "./brands";
 import { askToJoin } from "./reference-ai";
@@ -495,6 +495,14 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
   // Burton's "27WIN" is 2027, and an April order for the 2026 range is still tagged 2026.
   if (/^20\d{2}$/.test(directives.season.trim())) {
     for (const entry of items) entry.item = { ...entry.item, season: directives.season.trim() };
+  } else if (items.length > 0 && items.every((entry) => !/^20\d{2}$/.test(entry.item.season))) {
+    // No season on any line: the file's own name says it, where it does — Burton's confirmation
+    // sheet is "Alpsport_W27_Burton_Confirmed…" and its lines carry no season column at all.
+    const fromName = batch.files.flatMap((f) => f.filename.split(/[^A-Za-z0-9/]+/)).map(seasonFrom).find((y) => /^20[2-3]\d$/.test(y));
+    if (fromName) {
+      for (const entry of items) entry.item = { ...entry.item, season: fromName };
+      for (const fileId of [...new Set(items.map((i) => i.fileId))]) await noteOnFile(fileId, `No column on this sheet says the season, so it was taken from the file's name: ${fromName}. Say "year tags 2026" in the chat if that is wrong.`);
+    }
   }
 
   /**
@@ -523,8 +531,8 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
   }
 
   // The shop's listings as last remembered, for the shelves it gave each model before.
-  const listings = (await prisma.shopListing.findMany({ select: { handle: true, title: true, vendor: true, productType: true, tags: true, price: true, bindingOption: true } }).catch(() => []))
-    .map((l) => ({ ...l, tags: l.tags.split(",").map((t) => t.trim()).filter(Boolean) }));
+  const listings = (await prisma.shopListing.findMany({ select: { handle: true, title: true, vendor: true, productType: true, tags: true, price: true, bindingOption: true, barcodes: true } }).catch(() => []))
+    .map((l) => ({ ...l, tags: l.tags.split(",").map((t) => t.trim()).filter(Boolean), barcodes: (l.barcodes ?? "").split(",").map((b) => b.trim()).filter(Boolean) }));
   // A line with no brand of its own: the vendor the shop already sells this model under, or a brand
   // its own name or its file names — "PIM_Export_VolklSkis" — spell out.
   const fileNames = batch.files.map((f) => f.filename.replace(/[_\-.]+/g, " ")).join(" ");
@@ -551,12 +559,24 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
     if (shopRefs.length > 0) {
       const lines = items.map((i) => i.item);
       const none = () => "";
-      let resolved = resolveAgainstReference(lines, shopRefs, categoryRules, new Map(), none, true);
+      // By EAN first: a line whose barcode the shop already has on a listing IS that listing, before
+      // any name is compared. The supplier printed the code and the shop typed it in; nothing else
+      // on the order is that certain. See listingByBarcode.
+      const owner = listingByBarcode(listings);
+      const refByHandle = new Map(shopRefs.map((r) => [r.modelCode, r]));
+      const byCode = new Map<number, CanonicalLineItem>();
+      lines.forEach((line, k) => {
+        const found = owner.get(line.barcode.replace(/^'/, "").trim());
+        const ref = found ? refByHandle.get(found.handle) : undefined;
+        if (ref) byCode.set(k, ref);
+      });
+      let resolved = resolveAgainstReference(lines, shopRefs, categoryRules, byCode, none, true);
       const left = resolved.joined.map((j, i) => ("reason" in j ? i : -1)).filter((i) => i >= 0);
       if (left.length > 0 && aiAvailable()) {
         const decided = await askToJoin(left.map((i) => ({ index: i, line: lines[i] })), shopRefs).catch(() => new Map<number, CanonicalLineItem>());
-        if (decided.size > 0) resolved = resolveAgainstReference(lines, shopRefs, categoryRules, decided, none, true);
+        if (decided.size > 0) resolved = resolveAgainstReference(lines, shopRefs, categoryRules, new Map([...byCode, ...decided]), none, true);
       }
+      const byEan = byCode.size;
       // The listing's handle served as its code for the join; it is not the supplier's model code.
       // And the name is the listing's, word for word — the shop's title is not a catalogue name to
       // be trimmed, it IS what the shop calls the product — as are its Type and, where the order
@@ -573,7 +593,7 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
       const joined = resolved.joined.filter((j) => "to" in j).length;
       if (joined > 0) {
         for (const fileId of new Set(items.map((i) => i.fileId))) {
-          await noteOnFile(fileId, `${joined} of ${items.length} lines are models the shop already lists, and take the name, Type and price of the shop's listing.`);
+          await noteOnFile(fileId, `${joined} of ${items.length} lines are models the shop already lists${byEan > 0 ? ` (${byEan} placed by their EAN)` : ""}, and take the name, Type and price of the shop's listing.`);
         }
       }
     }

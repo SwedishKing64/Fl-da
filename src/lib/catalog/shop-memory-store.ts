@@ -16,6 +16,7 @@ export async function rememberListings(listings: Listing[]): Promise<number> {
         data: chunk.map((l) => ({
           handle: l.handle.trim(), title: l.title.trim(), vendor: l.vendor.trim(), productType: l.productType.trim(),
           tags: l.tags.join(", "), price: typeof l.price === "number" ? l.price : null, bindingOption: (l.bindingOption ?? "").trim(),
+          barcodes: (l.barcodes ?? []).map((b) => b.trim()).filter(Boolean).join(","),
         })),
       }),
     ]);

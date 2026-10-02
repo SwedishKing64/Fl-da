@@ -169,6 +169,18 @@ export function suggestMapping(headers: string[], rows: Array<Record<string, str
       used.add("title");
     }
   }
+  /**
+   * Between the exact pass and the loose one: a column that says it is the CONFIRMED quantity is
+   * the quantity, whatever other quantity columns the sheet has and wherever they sit.
+   *
+   * Burton's confirmation sheet carries Demand Quantity, Confirmed Quantity, Unconfirmed Quantity
+   * and Cancel side by side. What is coming is what the supplier confirmed; read by column order
+   * the demand was taken, which booked the lines Burton had not confirmed.
+   */
+  if (!used.has("quantity")) {
+    const confirmed = headers.find((h) => !mapping[h] && !skip.has(h) && /(^|\s)confirmed\s.*\b(qty|quantity|units|pcs|pieces)\b/.test(norm(h)) && !/unconfirmed/.test(norm(h)));
+    if (confirmed) { mapping[confirmed] = "quantity"; used.add("quantity"); }
+  }
   // Pass 2: header contains a synonym (longest synonym wins).
   for (const header of headers) {
     if (mapping[header]) continue;

@@ -492,6 +492,7 @@ model ShopListing {
   tags        String   @default("") // comma separated, as the export writes them
   price       Float?   // recommended retail as listed: Compare At where set, else Price
   bindingOption String @default("") // a package's binding, e.g. "Marker Squire - Black"
+  barcodes    String   @default("") // every variant's barcode, comma separated, so an order line can be placed by EAN
   updatedAt   DateTime @updatedAt
 
   @@index([vendor])

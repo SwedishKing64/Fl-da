@@ -29,6 +29,8 @@ export interface Listing {
   price?: number | null;
   /** A package's binding, as its Binding Option reads: "Marker Squire - Black". */
   bindingOption?: string;
+  /** Every variant's barcode, so an order line can be placed on the listing by its EAN alone. */
+  barcodes?: string[];
 }
 
 /** Every riding-style tag the shop uses, board and ski. */
@@ -64,16 +66,21 @@ export function listingsFromCsv(csv: string): Listing[] {
   const at = (name: string) => header.indexOf(name);
   const [H, T, V, Y, G] = [at("Handle"), at("Title"), at("Vendor"), at("Type"), at("Tags")];
   const [P, C] = [at("Variant Price"), at("Variant Compare At Price")];
+  const B = at("Variant Barcodes") >= 0 ? at("Variant Barcodes") : at("Variant Barcode");
   const bindingAt = [1, 2, 3].map((n) => [at(`Option${n} Name`), at(`Option${n} Value`)] as const);
   if (H < 0 || T < 0) return [];
   const out: Listing[] = [];
-  const seen = new Set<string>();
+  const seen = new Map<string, Listing>();
+  // Every row of a product carries its handle and its variant's barcode; the title is on the first.
   for (const row of grid.slice(1)) {
     const handle = (row[H] ?? "").trim();
+    if (!handle) continue;
+    const code = B >= 0 ? (row[B] ?? "").replace(/^'/, "").trim() : "";
+    const had = seen.get(handle);
+    if (had) { if (code && !had.barcodes!.includes(code)) had.barcodes!.push(code); continue; }
     const title = (row[T] ?? "").trim();
-    if (!handle || !title || seen.has(handle)) continue;
-    seen.add(handle);
-    out.push({
+    if (!title) continue;
+    const listing: Listing = {
       handle,
       title,
       vendor: V >= 0 ? (row[V] ?? "").trim() : "",
@@ -81,7 +88,29 @@ export function listingsFromCsv(csv: string): Listing[] {
       tags: G >= 0 ? (row[G] ?? "").split(",").map((t) => t.trim()).filter(Boolean) : [],
       price: priceOf(C >= 0 ? row[C] : "") ?? priceOf(P >= 0 ? row[P] : ""),
       bindingOption: bindingAt.map(([n, v]) => (n >= 0 && v >= 0 && /^binding option$/i.test((row[n] ?? "").trim()) ? (row[v] ?? "").trim() : "")).find(Boolean) ?? "",
-    });
+      barcodes: code ? [code] : [],
+    };
+    seen.set(handle, listing);
+    out.push(listing);
+  }
+  return out;
+}
+
+/**
+ * Which listing each barcode belongs to, where it belongs to exactly one.
+ *
+ * An EAN is the one key an order line and a listing share by construction: the supplier printed it
+ * on the order and the shop typed it into the variant. A barcode on two listings (a package shares
+ * its ski's) decides nothing on its own, so neither is returned for it.
+ */
+export function listingByBarcode(listings: Listing[]): Map<string, Listing> {
+  const owners = new Map<string, Listing[]>();
+  for (const l of listings) for (const code of l.barcodes ?? []) owners.set(code, [...(owners.get(code) ?? []), l]);
+  const out = new Map<string, Listing>();
+  for (const [code, ls] of owners) {
+    const flat = ls.filter((l) => !isPackageTitle(l.title));
+    if (flat.length === 1) out.set(code, flat[0]);
+    else if (ls.length === 1) out.set(code, ls[0]);
   }
   return out;
 }

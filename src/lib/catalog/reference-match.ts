@@ -54,6 +54,22 @@ const GENDER = new Set(["MEN", "MENS", "WOMEN", "WOMENS", "KID", "KIDS", "BOY", 
  */
 const KIND = new Set(["SNOWBOARD", "SNOWBOARDS", "BOARD", "BOOT", "BOOTS", "BINDING", "BINDINGS", "GLOVE", "GLOVES", "MITT", "MITTS", "MITTEN", "MITTENS", "SOCK", "SOCKS", "BAG", "JACKET", "PANT", "PANTS", "GOGGLE", "GOGGLES", "HELMET", "BEANIE", "SKI", "SKIS"]);
 /**
+ * Which kind of thing a kind word names, so that two names agreeing on everything but the kind are
+ * not the same product: "GORE-TEX Deluxe Gloves" is not "Deluxe GORE-TEX Mittens", though the
+ * words between them are. A kind word on only one side says nothing — a shop name often carries
+ * the kind where the order's shorthand does not.
+ */
+const KIND_FAMILY: Record<string, string> = {
+  SNOWBOARD: "board", SNOWBOARDS: "board", BOARD: "board", BOOT: "boot", BOOTS: "boot", BINDING: "binding", BINDINGS: "binding",
+  GLOVE: "glove", GLOVES: "glove", MITT: "mitten", MITTS: "mitten", MITTEN: "mitten", MITTENS: "mitten", SOCK: "sock", SOCKS: "sock",
+  BAG: "bag", JACKET: "jacket", PANT: "pants", PANTS: "pants", GOGGLE: "goggle", GOGGLES: "goggle", HELMET: "helmet", BEANIE: "beanie", SKI: "ski", SKIS: "ski",
+};
+const kindsIn = (words: string[]): Set<string> => new Set(words.map((w) => KIND_FAMILY[w]).filter(Boolean));
+const kindsDisagree = (a: string[], b: string[]): boolean => {
+  const x = kindsIn(a), y = kindsIn(b);
+  return x.size > 0 && y.size > 0 && ![...x].some((k) => y.has(k));
+};
+/**
  * A board's bend, which a catalogue name includes and an order form leaves out.
  *
  * "Men's Custom Camber Snowboard" is "CUSTOM" on the order: camber is the default and nobody writes
@@ -220,6 +236,8 @@ export function matchLine(line: CanonicalLineItem, refs: Reference[], vocabulary
   for (const ref of refs) {
     if (ref.required.length === 0) continue;
     if (!ref.required.every((w) => words.some((x) => sameWord(x, w)))) continue;
+    // A glove is never a mitten, whatever else the two names share.
+    if (kindsDisagree(words, tokens(ref.spec.title))) continue;
     // Whatever is left must be graphic words, not another model's name.
     const left = words.filter((x) => !ref.required.some((w) => sameWord(x, w)) && !ref.optional.some((w) => sameWord(x, w)));
     if (left.some((x) => [...vocabulary].some((v) => sameWord(x, v)))) continue;

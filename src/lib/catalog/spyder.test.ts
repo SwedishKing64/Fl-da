@@ -38,7 +38,9 @@ const INVOICE: CanonicalLineItem[] = [
 ];
 
 const built = groupLineItems(INVOICE, DEFAULT_CATEGORY_RULES);
-const find = (title: string): GroupedProduct => built.find((p) => p.title.startsWith(title))!;
+// The shop writes the audience on the front of a garment's name — "Men's Pinnacle Jacket" — so a
+// product is found by the name the invoice gave it, whichever audience went on the front.
+const find = (title: string): GroupedProduct => built.find((p) => p.title.replace(/^(Men's|Women's|Kids') /, "").startsWith(title))!;
 
 describe("a Spyder apparel invoice", () => {
   it("types a jacket as Snow Jackets and a pant as Snow Pants, never socks", () => {

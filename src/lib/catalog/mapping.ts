@@ -102,7 +102,7 @@ export const DEFAULT_FIT = /^(regular|standard|std|regular fit)$/i;
  * Burton's "PH2 Description" reads GOGGLES, HELMETS, BAGS, BINDINGS, BOOTS, BOARDS, SOCKS,
  * OUTERWEAR, GLOVES; its "PH3" the kind within that. Neither heading says what the column is for.
  */
-const KIND_VALUE = /\b(goggles?|helmets?|bags?|bindings?|boots?|boards?|snowboards?|skis?|socks?|outerwear|gloves?|mitts?|mittens?|headwear|beanies?|accessories|jackets?|pants?|bibs?|poles?|apparel|clothing|protection|luggage|packs?|footwear|baselayers?|midlayers?|fleece|hoodies?|neckwear|eyewear|sunglasses|skins|wax|tools?|locks?|straps?|leashes|shorts?|tops?|vests?|suits?)\b/i;
+export const KIND_VALUE = /\b(goggles?|helmets?|bags?|bindings?|boots?|boards?|snowboards?|skis?|socks?|outerwear|gloves?|mitts?|mittens?|headwear|beanies?|accessories|jackets?|pants?|bibs?|poles?|apparel|clothing|protection|luggage|packs?|footwear|base ?layers?|mid ?layers?|fleece|hoodies?|neckwear|eyewear|sunglasses|skins|wax|tools?|locks?|straps?|leashes|shorts?|tops?|vests?|suits?)\b/i;
 
 /** What is under a heading: its non-empty cells, and how many of them pass a test. */
 function share(header: string, rows: Array<Record<string, string>>, test: (v: string) => boolean): { values: string[]; share: number } {
@@ -318,6 +318,13 @@ const AUDIENCE_PREFIX: Array<[RegExp, RegExp]> = [
   [/^(women'?s?|ladies)$/i, /^(W|WB|WMS|WMNS|WOMENS|WOMEN'S|LADIES)\s+/i],
   [/^(kids?|youth|junior|jr)$/i, /^(K|KB|KD|KDS|KIDS|JR|YTH|YOUTH)\s+/i],
 ];
+/** Who a shouted name says it is for by its prefix — "M CARTEL X" is men's — or "" when it does not say. */
+export function audienceOfPrefix(title: string): string {
+  const names = ["Mens", "Womens", "Kids"];
+  const at = AUDIENCE_PREFIX.findIndex(([, prefix]) => prefix.test(title.trim()) && title.trim().replace(prefix, "").trim());
+  return at >= 0 ? names[at] : "";
+}
+
 export function withoutAudiencePrefix(title: string, gender: string): string {
   const g = gender.trim();
   if (!g) return title;

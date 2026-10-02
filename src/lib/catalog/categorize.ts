@@ -49,7 +49,11 @@ export const DEFAULT_CATEGORY_RULES: CategoryRuleLike[] = [
   { category: "apparel", pattern: String.raw`\bjackets?\b|\bshell\b|\banorak\b`, productType: "Snow Jackets", collections: "Snow Clothing", tags: "snow jackets", option1: "size", option2: "colour", option3: null, priority: 78, active: true },
   { category: "apparel", pattern: String.raw`\bpants?\b|\bbibs?\b`, productType: "Snow Pants", collections: "Snow Clothing", tags: "snow pants", option1: "size", option2: "colour", option3: null, priority: 77, active: true },
   { category: "apparel", pattern: String.raw`\bbase ?layer|\bthermal`, productType: "Baselayers", collections: "Snow Clothing", tags: "baselayers", option1: "size", option2: "colour", option3: null, priority: 76, active: true },
-  { category: "apparel", pattern: String.raw`\bmidlayer|\bfleece|\bhoodie`, productType: "Midlayers", collections: "Snow Clothing", tags: "midlayers", option1: "size", option2: "colour", option3: null, priority: 75, active: true },
+  { category: "apparel", pattern: String.raw`\bmid ?layer|\bfleece|\bhoodie`, productType: "Midlayers", collections: "Snow Clothing", tags: "midlayers", option1: "size", option2: "colour", option3: null, priority: 75, active: true },
+  // A supplier's "OUTERWEAR" with no garment word of its own is a jacket — Burton's "AK GORE SWASH INS"
+  // is the Swash insulated jacket; its pants and bibs say PT and BB. Below the garment rules, so a
+  // name that does say wins.
+  { category: "apparel", pattern: String.raw`\bouterwear\b`, productType: "Snow Jackets", collections: "Snow Clothing", tags: "snow jackets", option1: "size", option2: "colour", option3: null, priority: 60, active: true },
   // Gloves hang under three headings on the site; the shop types 127 of its 129 pairs Ski
   // Accessories, so that is the collection that decides the Type. See csvType.
   { category: "apparel", pattern: String.raw`\bgloves?\b|\bmitts?\b`, productType: "Gloves", collections: "Ski Accessories", tags: "gloves", option1: "size", option2: "colour", option3: null, priority: 74, active: true },

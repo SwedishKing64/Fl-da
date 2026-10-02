@@ -161,6 +161,11 @@ async function repairCategoryRulesNow(): Promise<number> {
   await prisma.categoryRule.updateMany({ where: { category: "accessories", pattern: OLD_ACCESSORIES_PATTERN }, data: { pattern: ACCESSORIES_PATTERN } }).catch(() => undefined);
   // And the gloves rule files gloves where the shop does (Ski Accessories, not Clothing Accessories).
   await prisma.categoryRule.updateMany({ where: { category: "apparel", productType: "Gloves", collections: "Clothing Accessories" }, data: { collections: "Ski Accessories" } }).catch(() => undefined);
+  // A default rule added since the shop's rules were seeded is added to them, once.
+  for (const d of DEFAULT_CATEGORY_RULES.filter((r) => r.category === "apparel" && /outerwear/.test(r.pattern))) {
+    const have = await prisma.categoryRule.count({ where: { category: d.category, pattern: d.pattern } }).catch(() => 1);
+    if (have === 0) await prisma.categoryRule.create({ data: { category: d.category, pattern: d.pattern, productType: d.productType, collections: d.collections, tags: d.tags, option1: d.option1 ?? null, option2: d.option2 ?? null, option3: d.option3 ?? null, priority: d.priority, active: d.active } }).catch(() => undefined);
+  }
   const rows = await prisma.categoryRule.findMany();
   const broken = rows.filter((r) => r.productType && !isValidType(r.productType));
   if (broken.length === 0) return 0;

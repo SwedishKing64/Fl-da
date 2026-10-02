@@ -132,11 +132,6 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
     // Men's and women's of one model, under one shorthand name on the order, are two products that
     // would otherwise share a title and so a handle. The shop's own way of telling them apart is on
     // the front of the name: "Men's GORE-TEX Gloves", "Women's GORE-TEX Gloves", "Kids Gore-Tex Gloves".
-    const shared = [...groups.entries()].filter(([k, g]) => k !== key && (g.entries.map((e) => e.item.brand.trim()).find(Boolean) ?? "") === brand && normTitle(withoutVendor(brand, g.entries.map((e) => e.item.title.trim()).find(Boolean) ?? "")) === normTitle(title));
-    const who = audience(first.gender);
-    const titled = shared.length > 0 && who && !/^(men'?s|women'?s|kids|youth|junior)\b/i.test(title)
-      ? `${{ mens: "Men's", womens: "Women's", kids: "Kids" }[who]} ${asShopWritesIt(title)}`
-      : title;
     // A snowboard brand's boots are snowboard boots, whatever the boots rule says. See snowboardType.
     const snowboard = snowboardType(group.rule, items);
     // "Accessories" is a rule's word, not a Type the shop has: an accessory is filed under the
@@ -148,6 +143,18 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
       : null;
     // A supplier's own kind word is a Type only when it is one the shop uses: "FREERIDE" is not.
     const productType = snowboard ?? accessory ?? group.rule?.productType ?? resolveType(first.productType) ?? "";
+    // The audience goes on the front of a gendered product's name, as the shop writes it: every one
+    // of its 20 snowboard bindings and 14 of its 15 boots is "Men's …" or "Women's …", and so are
+    // its jackets, gloves and socks. Not a ski, board or pole, which the shop names by model alone
+    // and genders in the tags. Men's and women's of one model also stop sharing a title this way.
+    const who = audience(first.gender);
+    const hardgoods = /^(skis?|snowboards?|poles?|ski poles?)$/i.test(productType) || /^(skis?|snowboards?|poles?)$/i.test(group.rule?.category ?? "");
+    // A name that is the shop's own — the line was joined to a listing — is left as the shop wrote
+    // it: "Impact Wrist Guards" and "[ak] Endurance Socks" carry no audience on the shop's shelf.
+    const shopNamed = (opts.listings ?? []).some((l) => normTitle(l.title.replace(/\s+20\d{2}$/, "")) === normTitle(title));
+    const titled = who && !hardgoods && !shopNamed && !/^(men'?s|women'?s|kids'?|youth|junior)\b/i.test(title)
+      ? `${{ mens: "Men's", womens: "Women's", kids: "Kids'" }[who]} ${asShopWritesIt(title)}`
+      : title;
     // A ski the supplier sends already mounted — "HERO FIS GS FAC SPX15" — is a package, and is
     // named as one: "Hero FIS GS Fac 2026 inc SPX 15 Binding Package". See integratedBinding.
     const season = items.map((i) => i.season).find((s) => /^20\d{2}$/.test(s)) ?? "";
@@ -185,6 +192,20 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
     const tags = [...general, ...styles.filter((t) => !general.includes(t))];
     // The shop tags a ski sold with a binding "ski packages".
     if (mounted && !tags.includes("ski packages")) tags.push("ski packages");
+    // The kind on the end of the name, where the order's shorthand left it off: the shop writes
+    // "Men's Cartel X Re:Flex Snowboard Bindings", "Men's Highshot Step On® Snowboard Boots",
+    // "Men's [ak] Cyclic GORE-TEX 2L Jacket" — on all 20 of its bindings, 14 of 15 boots and its
+    // jackets and pants. Only where the name has no kind word of its own, and only the kinds the
+    // shop's own listings show it does this for.
+    const kindSaid = /\b(snowboards?|boards?|boots?|bindings?|gloves?|mitts?|mittens?|socks?|bags?|jackets?|pants?|bibs?|goggles?|helmets?|beanies?|skis?|poles?|hoodies?|anoraks?|vests?|shorts?|fleece|pullovers?|onesies?|suits?)\b/i;
+    const kindSuffix = kindSaid.test(shown) ? "" :
+      /^snowboard bindings$/i.test(productType) ? "Snowboard Bindings" :
+      /^snowboard boots$/i.test(productType) ? "Snowboard Boots" :
+      tags.includes("snow jackets") ? "Jacket" :
+      tags.includes("snow pants") ? "Pants" :
+      tags.includes("midlayers") && /\binsulated\b/i.test(shown) ? "Jacket" :
+      tags.includes("socks") ? "Socks" : "";
+    const named = kindSuffix ? `${asShopWritesIt(shown)} ${kindSuffix}` : shown;
     products.push({
       key,
       // Built from the name the product will actually carry, season and all. Shopify derives a
@@ -195,8 +216,8 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
       // And not the brand: 845 of its 928 products with a vendor have no vendor in the handle
       // ("custom-2027", "m7-mantra"), and a handle is how Shopify and the reconciler recognise a
       // listing the shop already has — "burton-custom-2027" was a duplicate of custom-2027.
-      handle: buildHandle({ title: productTitle(shown, seasonTagFrom(tags)) }),
-      title: shown,
+      handle: buildHandle({ title: productTitle(named, seasonTagFrom(tags)) }),
+      title: named,
       brand,
       category: group.rule?.category ?? (first.category || "other"),
       productType,

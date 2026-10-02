@@ -22,7 +22,7 @@
 import { detectHeaderRow } from "./extract/tabular";
 import { normaliseBarcode, type InvoiceLine } from "./reconcile";
 import { yearMonth } from "./deliveries";
-import { PARTY } from "./mapping";
+import { KIND_VALUE, PARTY } from "./mapping";
 import { terrainColumn } from "./shop-memory";
 import { brandIn, isBrand } from "./brands";
 import { colourName } from "./colour";
@@ -126,7 +126,7 @@ const NOT_DELIVERY = /qty|quantity|units|address|note|method|charge|fee|cost/;
 const COST = /whsl|wholesale|\bw s\b|\bcost\b|\bdealer\b|\bnet price\b|\bbuy price\b/;
 const NOT_COST = /total|margin|retail|\brrp\b|\binc(l|luding)?\b|\bincl/;
 const FOREIGN = /\b(nzd|usd|eur|gbp|chf|cad|jpy|sek|nok)\b/;
-const GENDER = /^gender$|^sex$|^men women$|^suitable for$/;
+const GENDER = /^gender( descr?(iption)?| desc)?$|^sex$|^men women$|^suitable for$|^audience$/;
 // Their order forms head it "Sizes", "size (ski length)" or "Size". Not "sizes" as a LIST of the
 // lengths a ski comes in, which is a different column with the same name — that is why the values
 // have to look like one size rather than five.
@@ -398,6 +398,9 @@ function readGrid(name: string, source: string[][]): InvoiceRead | null {
   const cost = pick(headings, rows, COST, NOT_COST, (v) => (readNumber(v) ?? -1) > 0);
   const gender = pick(headings, rows, GENDER, null, (v) => v.length <= 20 && !/\d/.test(v));
   const brandColumn = pick(headings, rows, BRAND, null, (v) => isBrand(v));
+  // What each line is, where a column says in a word or two — Burton's PH2 "BINDINGS", "BOOTS",
+  // "GLOVES" — so a shorthand name with no kind word in it is still filed, and named, right.
+  const kindColumn = pick(headings, rows, /category|class|type|group|family|^ph\d|division|department|product line|range/, /qty|price|date|code|size|colou?r|business area/, (v) => KIND_VALUE.test(v) && v.split(/\s+/).length <= 3 && !/^(hard|soft)goods$/i.test(v));
   const styleHeading = terrainColumn(headings, (h) => { const i = headings.indexOf(h); return rows.map((r) => text(r[i])); });
   const terrain = styleHeading === null ? -1 : headings.indexOf(styleHeading);
 
@@ -448,6 +451,7 @@ function readGrid(name: string, source: string[][]): InvoiceRead | null {
       ...(colour ? { colour: colourName(text(row[colour.index])) } : {}),
       ...(gender && text(row[gender.index]) ? { gender: text(row[gender.index]) } : {}),
       ...(brandColumn && isBrand(text(row[brandColumn.index])) ? { brand: text(row[brandColumn.index]) } : {}),
+      ...(kindColumn && KIND_VALUE.test(text(row[kindColumn.index])) ? { kind: text(row[kindColumn.index]) } : {}),
       ...(terrain >= 0 && text(row[terrain]) ? { terrain: text(row[terrain]) } : {}),
       costPrice: cost ? ((readNumber(text(row[cost.index])) ?? 0) > 0 ? readNumber(text(row[cost.index])) : null) : null,
       // A zero is not a price. Their order form prints 0 against the system bindings that come with

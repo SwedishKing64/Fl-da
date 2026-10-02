@@ -17,7 +17,7 @@ const SHORTHAND: Record<string, string> = {
   JK: "JACKET", JKT: "JACKET",
   PT: "PANTS", PNT: "PANTS",
   GL: "GLOVES", GLV: "GLOVES",
-  MT: "MITTS", MTT: "MITTS",
+  MT: "MITTENS", MTT: "MITTENS", MITT: "MITTENS", MITTS: "MITTENS",
   SK: "SOCKS", SOX: "SOCKS",
   BNIE: "BEANIE",
   NCKWMR: "NECK WARMER",
@@ -35,12 +35,17 @@ const SHORTHAND: Record<string, string> = {
   XPRO: "X PRO",
   CYCLC: "CYCLIC", CYCL: "CYCLIC",
   BB: "BIB",
+  // The shop writes the membrane as its maker does, and Burton's top line as Burton does.
+  GORE: "GORE-TEX", GORETEX: "GORE-TEX",
+  AK: "[AK]",
+  HD: "HOODED", HDD: "HOODED",
 };
 
 export function expandShorthand(title: string): string {
   const text = title.trim().replace(/\s+/g, " ");
   if (!text || /[a-z]/.test(text)) return text;
-  const words = text.split(" ").map((w) => SHORTHAND[w] ?? w);
+  // "GORE TEX" is one word to the shop, and "GORE-TEX" already is.
+  const words = text.replace(/\bGORE[\s-]TEX\b/g, "GORE-TEX").split(" ").map((w) => SHORTHAND[w] ?? w);
   // "STEP ON SO" says Step On twice.
   const out: string[] = [];
   for (const w of words.join(" ").split(" ")) {

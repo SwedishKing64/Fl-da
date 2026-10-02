@@ -76,7 +76,7 @@ describe.skipIf(!existsSync(FILE))("the Helly Hansen order, both ways in", () =>
     const read = readInvoiceGrids(await sheetGrids(readFileSync(FILE)))!;
     const out = buildDelivery(readFileSync(EXPORT, "utf8"), read.lines, { season: "2027", vendor: "Helly Hansen", priceList: read.priceList });
     expect(out.fresh).toHaveLength(13);
-    const jacket = out.fresh.find((f) => f.title === "Alpha Lifaloft Jacket 2027")!;
+    const jacket = out.fresh.find((f) => /^(Men's |Women's )?Alpha Lifaloft Jacket 2027$/.test(f.title))!;
     expect(jacket.type).toBe("Snow Clothing");
     expect(jacket.tags).toEqual(expect.arrayContaining(["helly-hansen", "mens", "2027", "snow jackets"]));
     expect(jacket.variants[0]).toMatchObject({ option: "Dark Blue / M", barcode: "7042040699045" });

@@ -20,6 +20,7 @@
  */
 
 import { parseCsv } from "./csv";
+import { siblingsOfPlaced } from "./siblings";
 import { COLOUR_WORDS } from "./types";
 import { isPackage, quote, verifyOnlyIntended, type AdjustResult, type Change } from "./adjust";
 
@@ -59,6 +60,8 @@ export interface InvoiceLine {
   deliveryDate?: string;
   /** How many are due in each delivery, by the form's own label for it, where it has a quantity column per delivery. */
   due?: Record<string, number>;
+  /** What kind of thing it is, where the form has a column that says — Burton's "BINDINGS", "BOOTS", "GLOVES". */
+  kind?: string;
 }
 
 export type MatchKey = "barcode" | "sku" | "name";
@@ -605,6 +608,27 @@ export function reconcile(csv: string, lines: InvoiceLine[], options: ReconcileO
       continue;
     }
     unmatched.push(line);
+  }
+  /**
+   * A new colourway of a model the shop already sells has no barcode in the file yet, while its
+   * other colourways on the same order do: it belongs on that listing, as a variant to add, not as
+   * a second product under the order's shorthand. Only where every barcode-matched sibling (same
+   * name on the order, same audience) sits on one listing. See siblingsOfPlaced.
+   */
+  const byBarcode_ = matched.filter((m) => m.key === "barcode");
+  if (byBarcode_.length > 0 && unmatched.length > 0) {
+    const all = [...byBarcode_.map((m) => m.line), ...unmatched];
+    const placed = new Map(byBarcode_.map((m, i) => [i, m.handle] as const));
+    const more = siblingsOfPlaced(all, placed);
+    for (const [k, handle] of more) {
+      const line = all[k];
+      const productRows = rowsOf.get(handle) ?? [];
+      if (productRows.length === 0) continue;
+      const rows = narrowToSize(productRows, line, grid, index);
+      const sizeMissing = missingSize(productRows, line, grid, index);
+      matched.push({ line, rows, productRows, handle, key: "name", on: `a colourway of ${titleOf.get(handle) ?? handle} the file has by barcode`, ...(sizeMissing ? { sizeMissing: true } : {}) });
+      unmatched.splice(unmatched.indexOf(line), 1);
+    }
   }
   return {
     matched, unmatched, ambiguous,

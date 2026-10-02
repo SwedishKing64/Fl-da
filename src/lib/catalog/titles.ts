@@ -35,7 +35,7 @@ export function productTitle(name: string, season?: string | number | null): str
 /** Words the shop keeps lower case inside a name, and the units it writes that way. */
 const LOWER_IN_NAME = new Set(["INC", "INCL", "AND", "THE", "OF", "WITH", "IN", "FOR", "TO", "CM", "MM", "KG"]);
 /** Codes and brands with a case of their own, which titling by rule would get wrong. */
-const OWN_CASE: Record<string, string> = { TI: "Ti", JR: "Jr", MR: "Mr", DEMO: "Demo", FIS: "FIS", MIPS: "MIPS", GW: "GW" };
+const OWN_CASE: Record<string, string> = { TI: "Ti", JR: "Jr", MR: "Mr", DEMO: "Demo", FIS: "FIS", MIPS: "MIPS", GW: "GW", GORE: "GORE", TEX: "TEX", BOA: "BOA", "[AK]": "[ak]", "RE:FLEX": "Re:Flex" };
 /** Markers the shop does shout, and keeps on the end of a name: "Blaze 94 2025 EX DEMO". */
 const SHOUTED_TAIL = /\s(EX DEMO|SUPERSEDED)$/;
 
@@ -65,8 +65,13 @@ export function asShopWritesIt(name: string): string {
   if (!text || /[a-z]/.test(text)) return text;
   const tail = SHOUTED_TAIL.exec(text);
   const body = tail ? text.slice(0, text.length - tail[0].length) : text;
-  const cased = body.split(" ").map((token) => token.split(/([/\-])/).map(casePart).join("")).join(" ");
+  const cased = withMarks(body.split(" ").map((token) => token.split(/([/\-])/).map(casePart).join("")).join(" "));
   return tail ? `${cased} ${tail[1]}` : cased;
+}
+
+/** The registered marks the shop writes on a name: every one of its Step On and BOA listings carries ®. */
+function withMarks(name: string): string {
+  return name.replace(/\bStep On\b(?!®)/g, "Step On®").replace(/\bBOA\b(?!®)/g, "BOA®");
 }
 
 function casePart(part: string): string {

@@ -27,6 +27,8 @@
 import { DEFAULT_CATEGORY_RULES, detectCategory, metafieldColumns, type CategoryRuleLike } from "./categorize";
 import { buildRows, parseCsv, type CsvProduct } from "./csv";
 import { groupLineItems, type GroupedProduct } from "./grouping";
+import { audienceOfPrefix, withoutAudiencePrefix } from "./mapping";
+import { expandShorthand } from "./shorthand";
 import { quote, verifyOnlyIntended, type Change } from "./adjust";
 import { csvType, productCategoryFor } from "./pipeline-pure";
 import { houseBody } from "./body";
@@ -727,8 +729,11 @@ export function joinToReference(
 function canonical(line: InvoiceLine, vendor: string, season: string): CanonicalLineItem {
   const size = (line.size ?? "").trim();
   const isLength = /^\d{2,3}(\.\d)?$/.test(size);
+  // The order's shorthand, read as an import batch reads it: "M HIGHSHOT SO" is a men's "Highshot
+  // Step On", with the audience in the gender and not the name. See expandShorthand.
+  const gender = (line.gender ?? "").trim() || audienceOfPrefix(line.title);
   return {
-    title: line.title.trim(),
+    title: expandShorthand(withoutAudiencePrefix(line.title.trim(), gender)),
     brand: (line.brand ?? "").trim() || vendor,
     modelCode: line.sku.trim(),
     sku: "",
@@ -741,10 +746,10 @@ function canonical(line: InvoiceLine, vendor: string, season: string): Canonical
     size: isLength ? "" : size,
     width: "",
     colour: (line.colour ?? "").trim(),
-    gender: (line.gender ?? "").trim(),
+    gender,
     season,
-    category: "",
-    productType: "",
+    category: (line.kind ?? "").trim(),
+    productType: (line.kind ?? "").trim(),
     description: "",
     flex: "", abilityLevel: "", dinRange: "", terrain: (line.terrain ?? "").trim(),
     imageUrls: [],

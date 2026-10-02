@@ -13,21 +13,23 @@
  * disagree and nothing is decided here; the name join still gets its turn.
  */
 
-import type { CanonicalLineItem } from "./types";
 import { audience } from "./grouping";
 import { normKey } from "./specs";
 
+/** What a sibling is told by: the supplier's name for it and who it is for. A line item or an invoice line. */
+export interface Named { title: string; gender?: string }
+
 /** The supplier's name for a model, for one audience — what makes two order lines siblings. */
-export function siblingKey(line: CanonicalLineItem): string {
+export function siblingKey(line: Named): string {
   const name = normKey(line.title);
-  return name ? `${name}|${audience(line.gender)}` : "";
+  return name ? `${name}|${audience(line.gender ?? "")}` : "";
 }
 
 /**
  * The lines not yet placed whose siblings all sit on one listing, each with that listing's handle.
  * `placed` is line index → handle of the listing it was placed on (by EAN).
  */
-export function siblingsOfPlaced(lines: CanonicalLineItem[], placed: Map<number, string>): Map<number, string> {
+export function siblingsOfPlaced(lines: Named[], placed: Map<number, string>): Map<number, string> {
   const handlesByKey = new Map<string, Set<string>>();
   for (const [k, handle] of placed) {
     const key = siblingKey(lines[k]);

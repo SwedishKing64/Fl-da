@@ -293,5 +293,10 @@ describe("Burton's W27 confirmation sheet, read flat", () => {
     expect(new Set(read.lines.map((l) => l.title)).size).toBeGreaterThan(50);
     // Column G says whose each line is, so the two brands on the one sheet can be done one at a time.
     expect(new Set(read.lines.map((l) => l.brand))).toEqual(new Set(["Burton", "Anon"]));
+    // The size is the size, not the fit beside it: a Photon BOA in 10.5 Wide is size 10.5, fit Wide.
+    const photon = read.lines.filter((l) => /PHOTON/.test(l.title));
+    expect(photon.every((l) => /^\d{1,2}(\.5)?$/.test(l.size ?? ""))).toBe(true);
+    expect(new Set(photon.map((l) => l.fit))).toEqual(new Set(["Wide", "Regular"]));
+    expect(read.lines.some((l) => l.kind === "BOOTS")).toBe(true);
   });
 });

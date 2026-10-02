@@ -17,12 +17,12 @@ import { audience } from "./grouping";
 import { normKey } from "./specs";
 
 /** What a sibling is told by: the supplier's name for it and who it is for. A line item or an invoice line. */
-export interface Named { title: string; gender?: string }
+export interface Named { title: string; gender?: string; fit?: string }
 
-/** The supplier's name for a model, for one audience — what makes two order lines siblings. */
+/** The supplier's name for a model, for one audience and one fit — what makes two order lines siblings. A wide boot is not its regular one. */
 export function siblingKey(line: Named): string {
   const name = normKey(line.title);
-  return name ? `${name}|${audience(line.gender ?? "")}` : "";
+  return name ? `${name}|${audience(line.gender ?? "")}|${normKey(line.fit ?? "")}` : "";
 }
 
 /**

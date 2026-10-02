@@ -83,8 +83,10 @@ export function detectCategory(item: CanonicalLineItem, rules: CategoryRuleLike[
       // otherwise fall through and let the patterns decide on their own merits.
       if (sharing.length === 1) return sharing[0];
     }
+    // A category named in a word — "OUTERWEAR" — is the broad answer; a garment word in the name
+    // is the narrow one, and wins: Burton's "SWASH PT" under OUTERWEAR is pants, not a jacket.
     const named = active.find((r) => matches(r, stated));
-    if (named) return named;
+    if (named) return active.find((r) => r.priority > named.priority && r.category === named.category && matches(r, haystack)) ?? named;
   }
   for (const rule of active) {
     if (matches(rule, haystack)) return rule;

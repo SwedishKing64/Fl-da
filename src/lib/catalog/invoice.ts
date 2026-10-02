@@ -22,7 +22,7 @@
 import { detectHeaderRow } from "./extract/tabular";
 import { normaliseBarcode, type InvoiceLine } from "./reconcile";
 import { yearMonth } from "./deliveries";
-import { KIND_VALUE, PARTY } from "./mapping";
+import { FIT_VALUE, KIND_VALUE, PARTY } from "./mapping";
 import { terrainColumn } from "./shop-memory";
 import { brandIn, isBrand } from "./brands";
 import { colourName } from "./colour";
@@ -391,7 +391,10 @@ function readGrid(name: string, source: string[][]): InvoiceRead | null {
   // would otherwise be shown as if it meant something.
   // One size per line, not the list of sizes a model comes in: "168/173/178/183" is the second,
   // and a line that says all four is not a line about one of them.
-  const size = pick(headings, rows, SIZE, NOT_SIZE, (v) => v.length <= 12 && !v.includes("/") && !v.includes(","));
+  // And not the fit: Burton's "Size Z Description" is Wide / Regular / Low Bridge beside a "Size
+  // Description" that is the size. A column of fits is the fit column, below.
+  const size = pick(headings, rows, SIZE, NOT_SIZE, (v) => v.length <= 12 && !v.includes("/") && !v.includes(",") && !FIT_VALUE.test(v), false, /^size( desc(ription)?)?$|^sizes?$/);
+  const fit = pick(headings, rows, /fit|width|^size z/, /qty|quantity|price|date|code|colou?r/, (v) => FIT_VALUE.test(v));
 
   // The colour's NAME ("627 BRIGHT BLUE"), not its code ("627", or the style-colour code).
   const colour = pick(headings, rows, COLOUR, null, (v) => v.length <= 30 && !/^\d+$/.test(v), false, /descri|\bname\b/);
@@ -448,6 +451,7 @@ function readGrid(name: string, source: string[][]): InvoiceRead | null {
       barcode: barcode ? text(row[barcode.index]) : "",
       title: title ? text(row[title.index]) : "",
       ...(size ? { size: text(row[size.index]) } : {}),
+      ...(fit && FIT_VALUE.test(text(row[fit.index])) ? { fit: text(row[fit.index]) } : {}),
       ...(colour ? { colour: colourName(text(row[colour.index])) } : {}),
       ...(gender && text(row[gender.index]) ? { gender: text(row[gender.index]) } : {}),
       ...(brandColumn && isBrand(text(row[brandColumn.index])) ? { brand: text(row[brandColumn.index]) } : {}),

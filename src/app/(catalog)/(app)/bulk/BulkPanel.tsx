@@ -230,6 +230,12 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
   const [progress, setProgress] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
+  /**
+   * The delivery already applied to the loaded files, so applying it again is a thing somebody
+   * chooses: stock arriving is added, and the same document added twice is twice the stock.
+   */
+  const [applied, setApplied] = useState<string | null>(null);
+  const [againConfirmed, setAgainConfirmed] = useState(false);
   const [confirmWholeFile, setConfirmWholeFile] = useState(false);
   /** Which file's changes are open. One at a time: two diffs side by side is two files to read. */
   const [opened, setOpened] = useState<string | null>(null);
@@ -326,7 +332,7 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
       setError(`None of ${files.map((f) => f.name).join(", ")} reads as an order or invoice — it needs a column identifying each line and a column of prices or quantities. Add the order form, then these as its spec sheets.`);
       return;
     }
-    setInvoice(order.data); setLinks({}); setLinkNotes({}); setBrandsOff([]);
+    setInvoice(order.data); setLinks({}); setLinkNotes({}); setBrandsOff([]); setApplied(null); setAgainConfirmed(false);
     const rest = readings.filter((r) => r !== order);
     const sheetsOnly = rest.filter((r) => /\.(xlsx?|csv)$/i.test(r.file.name));
     const skipped = rest.filter((r) => !sheetsOnly.includes(r));
@@ -444,7 +450,7 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
       const r = await readInvoiceAction({ name: file.name, type: sent.file.type, base64: await read(sent.file, file.name) });
       if (!r.ok) { setError(r.error); setInvoice(null); setLinks({}); setLinkNotes({}); return; }
       const data = r.data!;
-      setInvoice({ ...data, filename: file.name }); setLinks({}); setLinkNotes({}); setBrandsOff([]);
+      setInvoice({ ...data, filename: file.name }); setLinks({}); setLinkNotes({}); setBrandsOff([]); setApplied(null); setAgainConfirmed(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -484,6 +490,12 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
    */
   async function applyDeliveryNow() {
     if (!order) return;
+    if (applied === order.filename && !againConfirmed) {
+      setAgainConfirmed(true);
+      setError(`${order.filename} has already been applied to these files. Applying it again adds its stock again — three arriving on the three already counted makes six. If that is what you want, press the button once more; otherwise undo the last change first.`);
+      return;
+    }
+    setAgainConfirmed(false);
     if (!fields.rrp && !fields.price && !fields.quantity && !buildNew) {
       setError("Nothing was applied — tick at least one of the numbers to write, or let it build the products that are not in the shop yet.");
       return;
@@ -592,6 +604,7 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
       fields.price ? "the selling price" : "",
       fields.quantity ? (stock === "add" ? "the arriving stock onto the counts already there" : "the stock count, set to the invoice's own number") : "",
     ].filter(Boolean);
+    setApplied(order.filename);
     setFeed((f) => [...f, {
       title: `${order.filename} — ${cells} cell${cells === 1 ? "" : "s"} changed${rowsAdded > 0 ? ` and ${rowsAdded} row${rowsAdded === 1 ? "" : "s"} added` : ""}`,
       lines: [
@@ -739,6 +752,8 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
     const nextSheets = sheets.map((s) => (s.history.length ? { ...s, csv: s.history[s.history.length - 1], history: s.history.slice(0, -1) } : s));
     setSheets(nextSheets);
     setFeed((f) => f.slice(0, -1));
+    // Undone, the delivery is not applied any more, so applying it is not applying it again.
+    setApplied(null); setAgainConfirmed(false);
     // The files are what was undone. Rows already marked applied stay marked — reading the sheet
     // again is the clean way to start it over.
     setRows((current) => current.map((r) => ({ ...r, results: measure(r, nextSheets) })));
@@ -1320,7 +1335,7 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
 
               <div className="flex flex-wrap items-center gap-2">
                 <Button variant="primary" disabled={busy !== null || (placed === 0 && !(buildNew && toBuild > 0))} onClick={applyDeliveryNow}>
-                  {busy === "applying" ? "Working…" : `Apply the delivery — ${placed} carry-over${placed === 1 ? "" : "s"}${buildNew && toBuild > 0 ? `, ${toBuild} to build` : ""}`}
+                  {busy === "applying" ? "Working…" : `${applied === (order?.filename ?? "") && order ? "Apply the delivery again" : "Apply the delivery"} — ${placed} carry-over${placed === 1 ? "" : "s"}${buildNew && toBuild > 0 ? `, ${toBuild} to build` : ""}`}
                 </Button>
                 {placed === 0 && !buildNew && <span className="text-xs text-[var(--ink-soft)]">{whyNothing(invoice, against)}</span>}
                 {placed === 0 && buildNew && toBuild > 0 && <span className="text-xs text-[var(--ink-soft)]">Nothing on this invoice is in the loaded exports, so all of it is built. {whyNothing(invoice, against)}</span>}

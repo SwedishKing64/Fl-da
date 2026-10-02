@@ -27,7 +27,7 @@
 import { DEFAULT_CATEGORY_RULES, detectCategory, metafieldColumns, type CategoryRuleLike } from "./categorize";
 import { buildRows, parseCsv, type CsvProduct } from "./csv";
 import { groupLineItems, type GroupedProduct } from "./grouping";
-import { audienceOfPrefix, withoutAudiencePrefix } from "./mapping";
+import { audienceOfPrefix, withFit, withoutAudiencePrefix } from "./mapping";
 import { expandShorthand } from "./shorthand";
 import { quote, verifyOnlyIntended, type Change } from "./adjust";
 import { csvType, productCategoryFor } from "./pipeline-pure";
@@ -732,7 +732,8 @@ function canonical(line: InvoiceLine, vendor: string, season: string): Canonical
   // The order's shorthand, read as an import batch reads it: "M HIGHSHOT SO" is a men's "Highshot
   // Step On", with the audience in the gender and not the name. See expandShorthand.
   const gender = (line.gender ?? "").trim() || audienceOfPrefix(line.title);
-  return {
+  // A fit that is not the default is part of the name — "Photon BOA Wide" — not an option. See withFit.
+  return withFit({
     title: expandShorthand(withoutAudiencePrefix(line.title.trim(), gender)),
     brand: (line.brand ?? "").trim() || vendor,
     modelCode: line.sku.trim(),
@@ -744,7 +745,7 @@ function canonical(line: InvoiceLine, vendor: string, season: string): Canonical
     grams: null,
     length: isLength ? size : "",
     size: isLength ? "" : size,
-    width: "",
+    width: (line.fit ?? "").trim(),
     colour: (line.colour ?? "").trim(),
     gender,
     season,
@@ -755,7 +756,7 @@ function canonical(line: InvoiceLine, vendor: string, season: string): Canonical
     imageUrls: [],
     collections: "",
     tags: "",
-  };
+  });
 }
 
 /**

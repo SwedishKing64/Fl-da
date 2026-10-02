@@ -62,6 +62,8 @@ export interface InvoiceLine {
   due?: Record<string, number>;
   /** What kind of thing it is, where the form has a column that says — Burton's "BINDINGS", "BOOTS", "GLOVES". */
   kind?: string;
+  /** The fit, where the form has a column for it — "Wide", "Regular", "Low Bridge". A wide boot is its own product. */
+  fit?: string;
 }
 
 export type MatchKey = "barcode" | "sku" | "name";

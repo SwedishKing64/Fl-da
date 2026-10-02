@@ -25,7 +25,7 @@ import { yearMonth } from "./deliveries";
 import { FIT_VALUE, KIND_VALUE, PARTY } from "./mapping";
 import { terrainColumn } from "./shop-memory";
 import { brandIn, isBrand } from "./brands";
-import { colourName } from "./colour";
+import { colourName, writeOutColour } from "./colour";
 
 export interface InvoiceRead {
   lines: InvoiceLine[];
@@ -475,6 +475,12 @@ function readGrid(name: string, source: string[][]): InvoiceRead | null {
     lines.push(line);
   }
   if (lines.length === 0) return null;
+  // A two-tone colour the form abbreviates is written out with the names the form uses in full
+  // elsewhere — every row of it, ordered or not. See writeOutColour.
+  if (colour) {
+    const fullNames = rows.map((row) => text(row[colour.index])).filter((v) => v && !v.includes("/"));
+    for (const line of lines) if ((line.colour ?? "").includes("/")) line.colour = writeOutColour(line.colour!, fullNames);
+  }
 
   const heading = (c: Column | null) => c?.heading ?? "";
   // A column the kept lines leave empty is not what they are matched on: Burton's amended lines

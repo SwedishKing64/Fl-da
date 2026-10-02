@@ -17,6 +17,7 @@ import { readInvoiceGrids, type PriceRow } from "./invoice";
 import { asShopPrice, existingHandle, listingByBarcode, listingsAsReference, rememberedVendor } from "./shop-memory";
 import { dueInWindow, parseWindow } from "./deliveries";
 import { siblingsOfPlaced } from "./siblings";
+import { writeOutColour } from "./colour";
 import { brandIn, isBrand } from "./brands";
 import { askToJoin } from "./reference-ai";
 import { aiAvailable } from "./extract/ai";
@@ -395,6 +396,11 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
       else items.push({ item, fileId: file.id, rowIndex, raw });
     });
   }
+  // A two-tone colour the sheet abbreviates ("RUMRSN/CHLGRY") is written out with the names the
+  // sheet uses in full elsewhere ("Rum Raisin", "Chinchilla Gray"). See writeOutColour.
+  const colourNames = [...items.map((e) => e.item.colour), ...specItems.map((s) => s.colour)].filter((c) => c.trim() && !c.includes("/"));
+  for (const entry of items) if (entry.item.colour.includes("/")) entry.item = { ...entry.item, colour: writeOutColour(entry.item.colour, colourNames) };
+
   // A spec-sheet-only batch still builds products: one variant per listed length/size, no cost yet.
   if (items.length === 0 && specItems.length > 0) {
     const specFile = batch.files.find((f) => (f.detectedKind ?? f.kind) === "SPEC_SHEET")!;

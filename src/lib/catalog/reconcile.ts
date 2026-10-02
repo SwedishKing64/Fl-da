@@ -85,6 +85,8 @@ export interface Match {
   on: string;
   /** The line named a size this product does not have, so it could not be narrowed to one. */
   sizeMissing?: boolean;
+  /** The line named a colour this product does not have: a new colourway, to add as a variant, never a count on another colour's row. */
+  colourMissing?: boolean;
 }
 
 export interface Reconciliation {
@@ -363,12 +365,33 @@ function narrowToSize(rows: number[], line: InvoiceLine, grid: string[][], index
     const hit = kept.filter((r) => valuesOf(r).some((v) => sameSize(want, sizeParts(v))));
     if (hit.length > 0) kept = hit;
   }
-  if (kept.length > 1 && (line.colour ?? "").trim()) {
+  if ((line.colour ?? "").trim()) {
     const want = expandColour(line.colour as string);
     const hit = kept.filter((r) => valuesOf(r).some((v) => sameColour(want, v)));
+    // A colour the product is sold in but this line is not: no row is this line's, and a count on
+    // another colour's row is worse than none. The colourway is added instead — see missingColour.
     if (hit.length > 0) kept = hit;
+    else if (soldByColour(rows, grid, index)) kept = [];
   }
   return kept;
+}
+
+/** Whether colour is one of the things this product varies by, read off its option names. */
+function soldByColour(productRows: number[], grid: string[][], index: Map<string, number>): boolean {
+  const names = ["Option1 Name", "Option2 Name", "Option3 Name"].map((c) => index.get(c)).filter((i): i is number => i !== undefined);
+  return productRows.some((r) => names.some((i) => /colou?r/i.test((grid[r]?.[i] ?? "").trim())));
+}
+
+/**
+ * Whether the line names a colour this product does not list — a new colourway of a model the shop
+ * sells, to be added as a variant beside the others. Only where the product is sold by colour.
+ */
+function missingColour(productRows: number[], line: InvoiceLine, grid: string[][], index: Map<string, number>): boolean {
+  const colour = (line.colour ?? "").trim();
+  if (!colour || productRows.length === 0 || !soldByColour(productRows, grid, index)) return false;
+  const values = ["Option1 Value", "Option2 Value", "Option3 Value"].map((c) => index.get(c)).filter((i): i is number => i !== undefined);
+  const want = expandColour(colour);
+  return !productRows.some((r) => values.some((i) => { const v = (grid[r]?.[i] ?? "").trim(); return v !== "" && sameColour(want, v); }));
 }
 
 /**
@@ -451,8 +474,12 @@ const expandColour = (value: string): string => {
 
 function sameColour(want: string, optionValue: string): boolean {
   if (!want) return false;
-  const words = optionValue.toUpperCase().replace(/[^A-Z0-9]+/g, " ").trim().split(" ").filter(Boolean);
-  return words.includes(want) || words.some((w) => (COLOUR_ALIAS[w] ?? w) === want);
+  const words = optionValue.toUpperCase().replace(/[^A-Z0-9]+/g, " ").trim().split(" ").filter(Boolean).map((w) => COLOUR_ALIAS[w] ?? w);
+  // "True Black" is two words, and the option "True Black" has both of them; "Black" alone has one.
+  // Every word the line says has to be on the option, so "Black" fits "True Black" and "Black/Red"
+  // fits "Black / Red", but "Green Voltage" never fits "True Black".
+  const wanted = want.split(" ").filter(Boolean).map((w) => COLOUR_ALIAS[w] ?? w);
+  return wanted.length > 0 && wanted.every((w) => words.includes(w));
 }
 
 /**
@@ -599,9 +626,10 @@ export function reconcile(csv: string, lines: InvoiceLine[], options: ReconcileO
     if (byName.handle) {
       const productRows = rowsOf.get(byName.handle) ?? [];
       const rows = narrowToSize(productRows, line, grid, index);
-      if (rows.length > 0) {
+      const colourMissing = missingColour(productRows, line, grid, index);
+      if (rows.length > 0 || colourMissing) {
         const sizeMissing = missingSize(productRows, line, grid, index);
-        matched.push({ line, rows, productRows, handle: byName.handle, key: "name", on: byName.on, ...(sizeMissing ? { sizeMissing: true } : {}) });
+        matched.push({ line, rows, productRows, handle: byName.handle, key: "name", on: byName.on, ...(sizeMissing ? { sizeMissing: true } : {}), ...(colourMissing ? { colourMissing: true } : {}) });
         continue;
       }
     }
@@ -628,7 +656,8 @@ export function reconcile(csv: string, lines: InvoiceLine[], options: ReconcileO
       if (productRows.length === 0) continue;
       const rows = narrowToSize(productRows, line, grid, index);
       const sizeMissing = missingSize(productRows, line, grid, index);
-      matched.push({ line, rows, productRows, handle, key: "name", on: `a colourway of ${titleOf.get(handle) ?? handle} the file has by barcode`, ...(sizeMissing ? { sizeMissing: true } : {}) });
+      const colourMissing = missingColour(productRows, line, grid, index);
+      matched.push({ line, rows, productRows, handle, key: "name", on: `a colourway of ${titleOf.get(handle) ?? handle} the file has by barcode`, ...(sizeMissing ? { sizeMissing: true } : {}), ...(colourMissing ? { colourMissing: true } : {}) });
       unmatched.splice(unmatched.indexOf(line), 1);
     }
   }

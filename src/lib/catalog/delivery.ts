@@ -29,6 +29,7 @@ import { buildRows, parseCsv, type CsvProduct } from "./csv";
 import { groupLineItems, type GroupedProduct } from "./grouping";
 import { audienceOfPrefix, withFit, withoutAudiencePrefix } from "./mapping";
 import { expandShorthand } from "./shorthand";
+import { colourName } from "./colour";
 import { quote, verifyOnlyIntended, type Change } from "./adjust";
 import { csvType, productCategoryFor } from "./pipeline-pure";
 import { houseBody } from "./body";
@@ -367,7 +368,8 @@ function appendSizes(
   matched: Match[],
   fields: InvoiceFields,
 ): { csv: string; added: FreshSize[]; appended: number; warnings: string[]; wanted: number } {
-  const wanted = matched.filter((m) => m.sizeMissing && (m.line.size ?? "").trim() !== "");
+  // A size the listing has not got, or a colour it has not got: either is a variant to add.
+  const wanted = matched.filter((m) => (m.sizeMissing && (m.line.size ?? "").trim() !== "") || (m.colourMissing && (m.line.colour ?? "").trim() !== ""));
   if (wanted.length === 0) return { csv, added: [], appended: 0, warnings: [], wanted: 0 };
 
   const grid = parseCsv(csv).filter((r) => r.some((c) => c.trim() !== ""));
@@ -393,22 +395,41 @@ function appendSizes(
     return optionValue;
   };
 
+  /** Which option holds the colour, where the product has one. */
+  const colourColumn = (first: string[] | undefined): number | undefined => {
+    for (const n of [1, 2, 3]) {
+      const name = at.get(`Option${n} Name`);
+      const value = at.get(`Option${n} Value`);
+      if (name !== undefined && value !== undefined && /colou?r/i.test(first?.[name] ?? "")) return value;
+    }
+    return undefined;
+  };
+
   const rows: string[] = [];
   const added: FreshSize[] = [];
   for (const m of wanted) {
     const size = (m.line.size ?? "").trim();
     const sizeAt = sizeColumn(grid[m.productRows[0]]);
+    const colourAt = colourColumn(grid[m.productRows[0]]);
+    const colour = colourAt !== undefined ? colourName((m.line.colour ?? "").trim()) : "";
+    // The size spelled as this product spells its sizes — "Medium" beside "Medium", not "M".
+    const sizeSpelled = m.productRows.map((r) => (grid[r]?.[sizeAt] ?? "").trim()).find((v) => v && size && sameSizeText(size, v)) ?? size;
     // A row of this product that is NOT its first: it carries the variant and nothing of the
     // product, which is exactly the shape a new variant needs. Its first row will do otherwise.
     const template = m.productRows.find((r) => r > (m.productRows[0] ?? 0)) ?? m.productRows[0];
     const source = grid[template];
     if (!source) continue;
-    // Never twice, and never a size the product turns out to have after all.
-    const existing = new Set(m.productRows.map((r) => (grid[r]?.[sizeAt] ?? "").trim().toLowerCase()));
-    if (existing.has(size.toLowerCase()) || added.some((a) => a.handle === m.handle && a.option.toLowerCase() === size.toLowerCase())) continue;
+    // Never twice, and never a variant the product turns out to have after all. A variant is its
+    // size AND its colour where the product has both: True Black M is not Green Voltage M.
+    const variantOf = (sz: string, col: string) => `${sz.toLowerCase()}|${col.toLowerCase()}`;
+    const option = [colour, sizeSpelled].filter(Boolean).join(" / ");
+    const existing = new Set(m.productRows.map((r) => variantOf((grid[r]?.[sizeAt] ?? "").trim(), colourAt !== undefined ? (grid[r]?.[colourAt] ?? "").trim() : "")));
+    if (existing.has(variantOf(sizeSpelled, colour)) || added.some((a) => a.handle === m.handle && a.option.toLowerCase() === option.toLowerCase())) continue;
 
     const row = header.map((column, i) => (VARIANT_COLUMNS.has(column) ? (source[i] ?? "") : ""));
-    row[sizeAt] = size;
+    if (sizeSpelled) row[sizeAt] = sizeSpelled;
+    // The template row's colour is the template's; this variant's is the order's.
+    if (colourAt !== undefined && colour) row[colourAt] = colour;
     // The sibling's own SKU and cost are the sibling's. The order's go on, or nothing.
     const skuAt = at.get("Variant SKU");
     if (skuAt !== undefined) row[skuAt] = m.line.sku.trim();
@@ -437,7 +458,7 @@ function appendSizes(
     else { const b = at.get("Variant Barcodes") ?? at.get("Variant Barcode"); if (b !== undefined) row[b] = ""; }
 
     rows.push(header.map((_, i) => quote(row[i] ?? "")).join(","));
-    added.push({ handle: m.handle, title: (grid[m.productRows[0]]?.[titleAt ?? -1] ?? "").trim(), option: size, quantity: Math.max(0, Math.round(m.line.quantity ?? 0)) });
+    added.push({ handle: m.handle, title: (grid[m.productRows[0]]?.[titleAt ?? -1] ?? "").trim(), option, quantity: Math.max(0, Math.round(m.line.quantity ?? 0)) });
   }
   if (rows.length === 0) return { csv, added: [], appended: 0, warnings: [], wanted: wanted.length };
 

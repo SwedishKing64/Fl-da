@@ -52,6 +52,12 @@ export interface CanonicalLineItem {
    */
   cancelled?: number | null;
   /**
+   * The handle of the shop's listing this line was placed on by its barcode — the shop already has
+   * this very item, under that handle, so the product is written there as a quantity update rather
+   * than listed again for the new season. Set by the build, never read off a sheet.
+   */
+  shopHandle?: string;
+  /**
    * When this line is due, as the supplier wrote it ("2026-04-01", "Apr 26"), when the sheet says.
    * An order can span two deliveries — Burton's RDD sheet has lines for November and for April —
    * and "only the April delivery" needs the date on each line to go by.

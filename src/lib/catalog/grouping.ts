@@ -44,7 +44,7 @@ function normTitle(title: string): string {
 }
 
 /** Who a line is for, as one of the shop's three shelves, or nothing when the line does not say. */
-function audience(gender: string): string {
+export function audience(gender: string): string {
   const g = gender.trim().toLowerCase();
   if (/^(men|mens|men's|male|m)$/.test(g)) return "mens";
   if (/^(women|womens|women's|ladies|female|w)$/.test(g)) return "womens";

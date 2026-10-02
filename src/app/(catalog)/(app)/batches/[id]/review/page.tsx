@@ -32,6 +32,9 @@ export default async function ReviewPage(props: PageProps<"/batches/[id]/review"
     acc[p.lookupStatus] = (acc[p.lookupStatus] ?? 0) + 1;
     return acc;
   }, {});
+  // A product written under a handle the shop already lists is a quantity update of a listing that
+  // has its page already; only the new products are asked for one.
+  const inShop = new Set((await prisma.shopListing.findMany({ where: { handle: { in: review.products.map((p) => p.handle) } }, select: { handle: true } })).map((l) => l.handle));
   return (
     <>
       <PageHeader
@@ -47,7 +50,7 @@ export default async function ReviewPage(props: PageProps<"/batches/[id]/review"
           <LinksPanel
             batchId={id}
             locked={["EXPORTED", "PUSHED"].includes(batch.status)}
-            products={review.products.map((p) => ({ id: p.id, title: p.title, handle: p.handle, url: ["LINKED", "RELINKED", "LINK_FAILED", "PAGE", "PAGE_UNSURE"].includes(p.lookupStatus) ? p.lookupSource : "", status: p.lookupStatus }))}
+            products={review.products.map((p) => ({ id: p.id, title: p.title, handle: p.handle, url: ["LINKED", "RELINKED", "LINK_FAILED", "PAGE", "PAGE_UNSURE"].includes(p.lookupStatus) ? p.lookupSource : "", status: p.lookupStatus, inShop: inShop.has(p.handle) }))}
           />
           <LookupPanel batchId={id} outstanding={outstanding} enabled={lookupEnabled()} states={states} />
           <ReviewGrid initial={review} batchId={id} />

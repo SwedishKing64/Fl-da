@@ -11,9 +11,11 @@ import { flatHandleOf } from "@/lib/catalog/page-types";
  *
  * Paste a link and "Read the pages" takes the description, the details list and the pictures from
  * it. A product with nothing pasted is left exactly as it was, and the rest carry on. A ski's
- * package has no box of its own: it is the same ski, so it is read from the ski's page.
+ * package has no box of its own: it is the same ski, so it is read from the ski's page. Nor has a
+ * product the shop already lists: that is a quantity update of a listing with a page of its own,
+ * and only the new products are asked.
  */
-interface Row { id: string; title: string; handle: string; url: string; status: string }
+interface Row { id: string; title: string; handle: string; url: string; status: string; inShop: boolean }
 
 /** Where a product's link stands, on this page as it is now. */
 type Stand = "none" | "saved" | "read" | "failed";
@@ -23,9 +25,12 @@ const standOf = (status: string, url: string): Stand =>
 export function LinksPanel({ batchId, products, locked }: { batchId: string; products: Row[]; locked: boolean }) {
   const router = useRouter();
   void batchId;
-  // Packages are read from the ski they are made from, so only the ski is asked for a link.
+  // Packages are read from the ski they are made from, so only the ski is asked for a link; and a
+  // product the shop already lists keeps the page it has, so only the new products are asked.
   const handles = new Set(products.map((p) => p.handle));
-  const own = products.filter((p) => flatHandleOf(p.handle) === p.handle || !handles.has(flatHandleOf(p.handle)));
+  const fresh = products.filter((p) => !p.inShop);
+  const updates = products.length - fresh.length;
+  const own = fresh.filter((p) => flatHandleOf(p.handle) === p.handle || !handles.has(flatHandleOf(p.handle)));
 
   const [urls, setUrls] = useState<Record<string, string>>(() => Object.fromEntries(own.map((p) => [p.id, p.url])));
   const [stand, setStand] = useState<Record<string, Stand>>(() => Object.fromEntries(own.map((p) => [p.id, standOf(p.status, p.url)])));
@@ -85,7 +90,7 @@ export function LinksPanel({ batchId, products, locked }: { batchId: string; pro
   return (
     <Card
       className="mb-4"
-      title={<>Product pages <span className="font-normal text-[var(--ink-soft)]">· {linked.length} of {own.length} have a link</span></>}
+      title={<>Product pages <span className="font-normal text-[var(--ink-soft)]">· {linked.length} of {own.length} new product{own.length === 1 ? "" : "s"} have a link{updates > 0 ? ` · ${updates} quantity update${updates === 1 ? "" : "s"} keep the page they have` : ""}</span></>}
       actions={<>
         <Button size="sm" variant="primary" disabled={locked || progress !== null || linked.length === 0} onClick={() => void readAll()}>
           {progress ? `Reading ${progress.done} of ${progress.of}…` : unread.length > 0 ? `Read ${unread.length} page${unread.length === 1 ? "" : "s"}` : "Read the pages again"}
@@ -94,7 +99,9 @@ export function LinksPanel({ batchId, products, locked }: { batchId: string; pro
       </>}
     >
       <p className="mb-3 text-xs text-[var(--ink-soft)]">
-        Paste the product&rsquo;s own page under its name and its description, details and pictures are taken from it. A product with no link is left exactly as it is.
+        {own.length === 0
+          ? <>Every product here is one the shop already lists, so each keeps the page it has. Nothing to link.</>
+          : <>Paste each new product&rsquo;s own page under its name and its description, details and pictures are taken from it. A product with no link is left exactly as it is.</>}
         {read > 0 && <> {read} read so far.</>}
       </p>
       {open && (

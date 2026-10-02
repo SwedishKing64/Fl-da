@@ -12,7 +12,8 @@ describe("a supplier's shorthand, written out", () => {
   it("writes out the trade's garment shorthand", () => {
     expect(expandShorthand("WKND MWT 2PK SK")).toBe("WEEKEND MIDWEIGHT 2 PACK SOCKS");
     expect(expandShorthand("GORE DELUXE GL")).toBe("GORE DELUXE GLOVES");
-    expect(expandShorthand("AK GORE CYCLC JK")).toBe("AK GORE CYCLC JACKET");
+    expect(expandShorthand("AK GORE CYCLC JK")).toBe("AK GORE CYCLIC JACKET");
+    expect(expandShorthand("AK GORE CYCL BB")).toBe("AK GORE CYCLIC BIB");
     expect(expandShorthand("RSRV STRCH INS JK")).toBe("RESERVE STRETCH INSULATED JACKET");
     expect(expandShorthand("EMBER FLC NCKWMR")).toBe("EMBER FLEECE NECK WARMER");
   });

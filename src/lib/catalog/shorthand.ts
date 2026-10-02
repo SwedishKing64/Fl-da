@@ -33,6 +33,8 @@ const SHORTHAND: Record<string, string> = {
   FLC: "FLEECE",
   CLCH: "CLUTCH",
   XPRO: "X PRO",
+  CYCLC: "CYCLIC", CYCL: "CYCLIC",
+  BB: "BIB",
 };
 
 export function expandShorthand(title: string): string {

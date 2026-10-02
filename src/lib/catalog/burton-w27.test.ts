@@ -16,6 +16,7 @@ import { keepOrderedLines, resolveAgainstReference } from "./reference-match";
 import { dueInWindow, parseWindow } from "./deliveries";
 import { listingByBarcode, listingsAsReference, listingsFromCsv } from "./shop-memory";
 import { DEFAULT_CATEGORY_RULES } from "./categorize";
+import { siblingKey, siblingsOfPlaced } from "./siblings";
 import type { CanonicalLineItem } from "./types";
 
 const UP = "/root/.claude/uploads/94fb8bfb-35a9-5176-afe9-8fcc0dec9eb3/";
@@ -74,5 +75,31 @@ describe.skipIf(!existsSync(ORDER))("Burton's W27 confirmation sheet", () => {
       const join = resolved.joined[k];
       expect("to" in join ? join.to : join).toBe(decided.get(k)!.title);
     }
+  }, 60_000);
+
+  it.skipIf(!existsSync(SHOP))("places a new colourway beside the colourways of its model the shop already has", async () => {
+    const listings = listingsFromCsv(readFileSync(SHOP, "utf8"));
+    const owner = listingByBarcode(listings);
+    const { kept } = await read();
+    const placed = new Map<number, string>();
+    kept.forEach((line, k) => { const l = owner.get(line.barcode); if (l) placed.set(k, l.handle); });
+    const more = siblingsOfPlaced(kept, placed);
+    expect(more.size).toBeGreaterThan(0);
+    for (const [k, handle] of more) {
+      // Nothing placed twice, and every placed line is a sibling (same supplier name, same audience)
+      // of a line the shop has by EAN on that very listing.
+      expect(placed.has(k)).toBe(false);
+      const siblings = [...placed].filter(([j]) => siblingKey(kept[j]) === siblingKey(kept[k]));
+      expect(siblings.length).toBeGreaterThan(0);
+      expect(siblings.every(([, h]) => h === handle)).toBe(true);
+    }
+    // "M CARTEL X" in a new colour has no EAN in the shop, its other colours do: it is the same
+    // listing, not a second "Cartel X" product.
+    const cartel = kept.map((l, k) => k).filter((k) => /^CARTEL X$/i.test(kept[k].title));
+    const known = cartel.filter((k) => placed.has(k));
+    const fresh = cartel.filter((k) => !placed.has(k));
+    expect(known.length).toBeGreaterThan(0);
+    expect(fresh.length).toBeGreaterThan(0);
+    for (const k of fresh) expect(more.get(k)).toBe(placed.get(known[0]));
   }, 60_000);
 });

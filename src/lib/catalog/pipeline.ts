@@ -16,6 +16,7 @@ import { isFlatSki, isPackageBinding, packageProducts, specFromName, type Chosen
 import { readInvoiceGrids, type PriceRow } from "./invoice";
 import { asShopPrice, existingHandle, listingByBarcode, listingsAsReference, rememberedVendor } from "./shop-memory";
 import { dueInWindow, parseWindow } from "./deliveries";
+import { siblingsOfPlaced } from "./siblings";
 import { brandIn, isBrand } from "./brands";
 import { askToJoin } from "./reference-ai";
 import { aiAvailable } from "./extract/ai";
@@ -570,13 +571,21 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
         const ref = found ? refByHandle.get(found.handle) : undefined;
         if (ref) byCode.set(k, ref);
       });
+      const byEan = byCode.size;
+      // Then the siblings of those lines: a new colourway of a model whose other colourways the shop
+      // has by EAN belongs on that same listing. See siblingsOfPlaced.
+      const placed = new Map([...byCode].map(([k, ref]) => [k, ref.modelCode] as const));
+      for (const [k, handle] of siblingsOfPlaced(lines, placed)) {
+        const ref = refByHandle.get(handle);
+        if (ref) byCode.set(k, ref);
+      }
+      const bySibling = byCode.size - byEan;
       let resolved = resolveAgainstReference(lines, shopRefs, categoryRules, byCode, none, true);
       const left = resolved.joined.map((j, i) => ("reason" in j ? i : -1)).filter((i) => i >= 0);
       if (left.length > 0 && aiAvailable()) {
         const decided = await askToJoin(left.map((i) => ({ index: i, line: lines[i] })), shopRefs).catch(() => new Map<number, CanonicalLineItem>());
         if (decided.size > 0) resolved = resolveAgainstReference(lines, shopRefs, categoryRules, new Map([...byCode, ...decided]), none, true);
       }
-      const byEan = byCode.size;
       // The listing's handle served as its code for the join; it is not the supplier's model code.
       // And the name is the listing's, word for word — the shop's title is not a catalogue name to
       // be trimmed, it IS what the shop calls the product — as are its Type and, where the order
@@ -588,12 +597,16 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
           ...item,
           modelCode: lines[k].modelCode,
           ...(listing ? { title: listing.title, productType: listing.productType || item.productType, rrp: item.rrp ?? listing.rrp } : {}),
+          // Placed by its barcode, the line is an item the shop already has: it goes out under that
+          // listing's handle as a quantity update. A line joined by name alone is the new season's
+          // version of a model and is a new product — same name, new barcode, new listing.
+          ...(listing && byCode.has(k) ? { shopHandle: listing.modelCode } : {}),
         };
       });
       const joined = resolved.joined.filter((j) => "to" in j).length;
       if (joined > 0) {
         for (const fileId of new Set(items.map((i) => i.fileId))) {
-          await noteOnFile(fileId, `${joined} of ${items.length} lines are models the shop already lists${byEan > 0 ? ` (${byEan} placed by their EAN)` : ""}, and take the name, Type and price of the shop's listing.`);
+          await noteOnFile(fileId, `${joined} of ${items.length} lines are models the shop already lists${byEan > 0 ? ` (${byEan} placed by their EAN${bySibling > 0 ? `, ${bySibling} more beside a colourway the shop has` : ""})` : ""}, and take the name, Type and price of the shop's listing.`);
         }
       }
     }
@@ -652,7 +665,10 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
   // updates it rather than listing it twice. See existingHandle.
   const kept: string[] = [];
   for (const g of grouped) {
-    const handle = existingHandle({ title: productTitle(g.title, seasonTagFrom(g.tags)), brand: g.brand, season: seasonTagFrom(g.tags) ?? "" }, listings);
+    // First the listing the lines were placed on by barcode — the shop has these very items, and
+    // the handle is known for certain — then a listing with this very name and season.
+    const placedOn = [...new Set(g.variants.map((v) => v.item.shopHandle).filter((h): h is string => Boolean(h)))];
+    const handle = placedOn.length === 1 ? placedOn[0] : existingHandle({ title: productTitle(g.title, seasonTagFrom(g.tags)), brand: g.brand, season: seasonTagFrom(g.tags) ?? "" }, listings);
     if (handle && handle !== g.handle) { g.handle = handle; kept.push(handle); }
     else if (handle) kept.push(handle);
   }

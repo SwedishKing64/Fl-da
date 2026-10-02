@@ -55,6 +55,24 @@ export function normaliseOptionValue(value: string): string {
   return VALUE_DRIFT[trimmed.toLowerCase()] ?? trimmed;
 }
 
+/**
+ * A letter size written out as the shop writes it: Small, Medium, Large, Extra Large, 2X Large.
+ *
+ * The catalogue says so itself — 100 variants read "Medium" to 22 that read "M", 85 "Large" to 18
+ * "L", 49 "Small" to 18 "S" — and the few letters are the ones that came in off a supplier's sheet.
+ * Only a bare letter size is touched: a number, a combined "S/M", a sock's "SM" and a name a
+ * person wrote stay as they are. Matching is unaffected, since a size is compared by what it
+ * means, not how it is spelled (see sameSizeText).
+ */
+const SIZE_WORDS: Record<string, string> = {
+  XXS: "2X Small", "2XS": "2X Small", XS: "Extra Small", S: "Small", M: "Medium", L: "Large",
+  XL: "Extra Large", XXL: "2X Large", "2XL": "2X Large", XXXL: "3X Large", "3XL": "3X Large", "4XL": "4X Large",
+};
+export function writeOutSize(value: string): string {
+  const key = value.trim().toUpperCase().replace(/\s+/g, "");
+  return SIZE_WORDS[key] ?? value.trim();
+}
+
 export interface OptionContext {
   /** Sold with a binding on it, which makes the binding an option and raises who mounts it. */
   withBindings?: boolean;

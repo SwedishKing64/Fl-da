@@ -7,7 +7,7 @@
 //  - straight quotes, comma delimiter, UTF-8, prices as plain decimals
 //  - files are split so no part exceeds the size limit and a Handle never spans two parts
 
-import { NO_VARIANT_OPTION, normaliseOptionName, normaliseOptionValue } from "./options";
+import { NO_VARIANT_OPTION, normaliseOptionName, normaliseOptionValue, writeOutSize } from "./options";
 import { defaultGrams } from "./variant-rules";
 import { formatPrice } from "./money";
 import { isValidHandle } from "./handle";
@@ -197,14 +197,17 @@ export function buildRows(products: CsvProduct[], options: GenerateOptions = {})
         // Last gate on spelling: the shop is Australian and writes Colour, and asks for the Zip
         // Side however an invoice spelled it.
         row["Option1 Name"] = normaliseOptionName(product.option1Name ?? "");
-        row["Option1 Value"] = normaliseOptionValue(variant.option1Value ?? "");
+        // A size option's letters written out — Medium, not M — as the shop writes them. See writeOutSize.
+        const optionValue = (name: string | null | undefined, value: string | null | undefined) =>
+          /^size$/i.test(normaliseOptionName(name ?? "")) ? writeOutSize(normaliseOptionValue(value ?? "")) : normaliseOptionValue(value ?? "");
+        row["Option1 Value"] = optionValue(product.option1Name, variant.option1Value);
         if (product.option2Name) {
           row["Option2 Name"] = normaliseOptionName(product.option2Name);
-          row["Option2 Value"] = normaliseOptionValue(variant.option2Value ?? "");
+          row["Option2 Value"] = optionValue(product.option2Name, variant.option2Value);
         }
         if (product.option3Name) {
           row["Option3 Name"] = normaliseOptionName(product.option3Name);
-          row["Option3 Value"] = normaliseOptionValue(variant.option3Value ?? "");
+          row["Option3 Value"] = optionValue(product.option3Name, variant.option3Value);
         }
       } else {
         row["Option1 Name"] = NO_VARIANT_OPTION.name;

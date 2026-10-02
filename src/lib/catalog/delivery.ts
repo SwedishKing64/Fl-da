@@ -30,6 +30,7 @@ import { groupLineItems, type GroupedProduct } from "./grouping";
 import { audienceOfPrefix, withFit, withoutAudiencePrefix } from "./mapping";
 import { expandShorthand } from "./shorthand";
 import { colourName } from "./colour";
+import { writeOutSize } from "./options";
 import { quote, verifyOnlyIntended, type Change } from "./adjust";
 import { csvType, productCategoryFor } from "./pipeline-pure";
 import { houseBody } from "./body";
@@ -413,7 +414,7 @@ function appendSizes(
     const colourAt = colourColumn(grid[m.productRows[0]]);
     const colour = colourAt !== undefined ? colourName((m.line.colour ?? "").trim()) : "";
     // The size spelled as this product spells its sizes — "Medium" beside "Medium", not "M".
-    const sizeSpelled = m.productRows.map((r) => (grid[r]?.[sizeAt] ?? "").trim()).find((v) => v && size && sameSizeText(size, v)) ?? size;
+    const sizeSpelled = m.productRows.map((r) => (grid[r]?.[sizeAt] ?? "").trim()).find((v) => v && size && sameSizeText(size, v)) ?? writeOutSize(size);
     // A row of this product that is NOT its first: it carries the variant and nothing of the
     // product, which is exactly the shape a new variant needs. Its first row will do otherwise.
     const template = m.productRows.find((r) => r > (m.productRows[0] ?? 0)) ?? m.productRows[0];

@@ -437,9 +437,10 @@ function sizeParts(value: string): { letter: string; number: number | null; wide
   // and not a letter size either, so it is its own flag rather than a "W" to compare.
   if (/^\s*\d{2,3}(\.\d)?\s*(W|WIDE)\s*$/.test(up)) return { letter: "", number: Number(up.match(/\d+(?:\.\d+)?/)![0]), wide: true };
   const number = up.match(/\d+(?:\.\d+)?/);
-  const word = up.match(/\b(EXTRA SMALL|SMALL|MEDIUM|LARGE)\b/);
+  // The longer names first: "Extra Large" is XL, not the "Large" inside it; "2X Large" is 2XL.
+  const word = up.match(/\b(2X SMALL|EXTRA SMALL|2X LARGE|3X LARGE|EXTRA LARGE|SMALL|MEDIUM|LARGE)\b/);
   const letter = up.match(/(?<![A-Z])(XXS|XS|2XL|3XL|XXL|XL|ML|S|M|L)(?![A-Z])/);
-  const fromWord = word ? { "EXTRA SMALL": "XS", SMALL: "S", MEDIUM: "M", LARGE: "L" }[word[1]] ?? "" : "";
+  const fromWord = word ? { "2X SMALL": "XXS", "EXTRA SMALL": "XS", "2X LARGE": "2XL", "3X LARGE": "3XL", "EXTRA LARGE": "XL", SMALL: "S", MEDIUM: "M", LARGE: "L" }[word[1]] ?? "" : "";
   return { letter: fromWord || (letter ? letter[1] : ""), number: number ? Number(number[0]) : null };
 }
 

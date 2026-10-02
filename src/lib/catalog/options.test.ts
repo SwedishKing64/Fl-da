@@ -7,6 +7,7 @@ import {
   bindingFittingValues,
   normaliseOptionName,
   normaliseOptionValue,
+  writeOutSize,
   optionNamesFor,
   optionPlanFor,
 } from "./options";
@@ -98,6 +99,21 @@ describe("spelling", () => {
   it("fixes the one mistyped value in the catalogue", () => {
     expect(normaliseOptionValue("Do Not Mouny My Bindings")).toBe("Do Not Mount My Bindings");
     expect(normaliseOptionValue("Please Mount My Bindings")).toBe("Please Mount My Bindings");
+  });
+
+  it("writes a letter size out as the shop does, and leaves everything else alone", () => {
+    expect(writeOutSize("S")).toBe("Small");
+    expect(writeOutSize("m")).toBe("Medium");
+    expect(writeOutSize("L")).toBe("Large");
+    expect(writeOutSize("XL")).toBe("Extra Large");
+    expect(writeOutSize("XS")).toBe("Extra Small");
+    expect(writeOutSize("2XL")).toBe("2X Large");
+    expect(writeOutSize("XXL")).toBe("2X Large");
+    expect(writeOutSize("Medium")).toBe("Medium");
+    expect(writeOutSize("S/M")).toBe("S/M");
+    expect(writeOutSize("SM")).toBe("SM");
+    expect(writeOutSize("10.5")).toBe("10.5");
+    expect(writeOutSize("156W")).toBe("156W");
   });
 
   it("leaves everything else alone", () => {

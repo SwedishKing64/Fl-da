@@ -531,6 +531,24 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
     }
   }
 
+  /**
+   * "Only Burton": a sheet that carries two brands is done one brand at a time, by the brand column
+   * the sheet itself has. A sheet with no brand on any line cannot obey, and says so.
+   */
+  const onlyBrands = directives.brands.map((b) => b.trim().toLowerCase()).filter(Boolean);
+  if (onlyBrands.length > 0 && items.length > 0) {
+    const fileIds = [...new Set(items.map((i) => i.fileId))];
+    const branded = items.filter((entry) => entry.item.brand.trim());
+    if (branded.length === 0) {
+      for (const fileId of fileIds) await noteOnFile(fileId, `No line on this sheet says its brand, so "only ${directives.brands.join(" and ")}" could not be applied and every line was built.`);
+    } else {
+      const before = items.length;
+      const kept = items.filter((entry) => !entry.item.brand.trim() || onlyBrands.includes(entry.item.brand.trim().toLowerCase()));
+      items.splice(0, items.length, ...kept);
+      for (const fileId of fileIds) await noteOnFile(fileId, `Only ${directives.brands.join(" and ")}: ${items.length} of ${before} lines are, and the rest were left out${kept.some((e) => !e.item.brand.trim()) ? " (a line with no brand of its own was kept)" : ""}.`);
+    }
+  }
+
   // The shop's listings as last remembered, for the shelves it gave each model before.
   const listings = (await prisma.shopListing.findMany({ select: { handle: true, title: true, vendor: true, productType: true, tags: true, price: true, bindingOption: true, barcodes: true } }).catch(() => []))
     .map((l) => ({ ...l, tags: l.tags.split(",").map((t) => t.trim()).filter(Boolean), barcodes: (l.barcodes ?? "").split(",").map((b) => b.trim()).filter(Boolean) }));

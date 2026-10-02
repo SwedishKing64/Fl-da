@@ -24,7 +24,7 @@ import { normaliseBarcode, type InvoiceLine } from "./reconcile";
 import { yearMonth } from "./deliveries";
 import { PARTY } from "./mapping";
 import { terrainColumn } from "./shop-memory";
-import { brandIn } from "./brands";
+import { brandIn, isBrand } from "./brands";
 import { colourName } from "./colour";
 
 export interface InvoiceRead {
@@ -118,6 +118,9 @@ const CONFIRMED_QTY = /\bconfirmed\b/;
 const CANCELLED = /^cancel/;
 // When the line is due. Not a quantity headed "Delivery Qty", not a delivery address or note.
 const DELIVERY = /deliver|\brdd\b|\betd\b|\beta\b|due date|ship date|arrival/;
+// Whose goods each line is, where one sheet carries two brands: Burton's "Business Area Text" says
+// Burton or Anon on every row. Only a column whose values are brands the trade knows.
+const BRAND = /^brand$|^brands$|vendor|business area|^label$|^make$|manufacturer|^marque$|^brand name$/;
 const NOT_DELIVERY = /qty|quantity|units|address|note|method|charge|fee|cost/;
 // What the shop pays. "AUD-WHSL" on Burton's form; "W/S" on the Marker one.
 const COST = /whsl|wholesale|\bw s\b|\bcost\b|\bdealer\b|\bnet price\b|\bbuy price\b/;
@@ -394,6 +397,7 @@ function readGrid(name: string, source: string[][]): InvoiceRead | null {
   const colour = pick(headings, rows, COLOUR, null, (v) => v.length <= 30 && !/^\d+$/.test(v), false, /descri|\bname\b/);
   const cost = pick(headings, rows, COST, NOT_COST, (v) => (readNumber(v) ?? -1) > 0);
   const gender = pick(headings, rows, GENDER, null, (v) => v.length <= 20 && !/\d/.test(v));
+  const brandColumn = pick(headings, rows, BRAND, null, (v) => isBrand(v));
   const styleHeading = terrainColumn(headings, (h) => { const i = headings.indexOf(h); return rows.map((r) => text(r[i])); });
   const terrain = styleHeading === null ? -1 : headings.indexOf(styleHeading);
 
@@ -443,6 +447,7 @@ function readGrid(name: string, source: string[][]): InvoiceRead | null {
       ...(size ? { size: text(row[size.index]) } : {}),
       ...(colour ? { colour: colourName(text(row[colour.index])) } : {}),
       ...(gender && text(row[gender.index]) ? { gender: text(row[gender.index]) } : {}),
+      ...(brandColumn && isBrand(text(row[brandColumn.index])) ? { brand: text(row[brandColumn.index]) } : {}),
       ...(terrain >= 0 && text(row[terrain]) ? { terrain: text(row[terrain]) } : {}),
       costPrice: cost ? ((readNumber(text(row[cost.index])) ?? 0) > 0 ? readNumber(text(row[cost.index])) : null) : null,
       // A zero is not a price. Their order form prints 0 against the system bindings that come with

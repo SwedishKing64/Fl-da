@@ -7,6 +7,7 @@ import { csvFilename } from "@/lib/catalog/csv";
 import { reconcile, type InvoiceFields, type Reconciliation } from "@/lib/catalog/reconcile";
 import { buildDelivery, joinToReference, type FreshProduct } from "@/lib/catalog/delivery";
 import { deliveryAsked, narrowToWindow, parseWindow } from "@/lib/catalog/deliveries";
+import { brandsAsked } from "@/lib/catalog/brands";
 import type { PageDetails } from "@/lib/catalog/page-types";
 import { BulkLinks } from "./BulkLinks";
 import { listingsFromCsv } from "@/lib/catalog/shop-memory";
@@ -204,8 +205,17 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
   const [delivery, setDelivery] = useState("");
   const window = parseWindow(delivery);
   const narrowed = invoice && window ? narrowToWindow(invoice.lines, window) : null;
-  /** The invoice as this delivery: every line, or only the lines due in the window asked for. */
-  const order: Invoice | null = invoice && narrowed ? { ...invoice, lines: narrowed.lines } : invoice;
+  /**
+   * The brands on the order, where the sheet says one per line, and which of them are set aside.
+   * Burton's confirmation carries Burton and Anon; the shop does one, then the other.
+   */
+  const [brandsOff, setBrandsOff] = useState<string[]>([]);
+  const brandsOnOrder = [...new Set((invoice?.lines ?? []).map((l) => (l.brand ?? "").trim()).filter(Boolean))].sort();
+  const brandCount = (b: string) => (invoice?.lines ?? []).filter((l) => (l.brand ?? "").trim() === b).length;
+  /** The invoice as this delivery: every line, or only the lines due in the window asked for, of the brands kept. */
+  const order: Invoice | null = invoice
+    ? { ...invoice, lines: (narrowed ? narrowed.lines : invoice.lines).filter((l) => !brandsOff.includes((l.brand ?? "").trim())) }
+    : invoice;
   const referenceRef = useRef<HTMLInputElement>(null);
   const [references, setReferences] = useState<Reference[]>([]);
 
@@ -311,7 +321,7 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
       setError(`None of ${files.map((f) => f.name).join(", ")} reads as an order or invoice — it needs a column identifying each line and a column of prices or quantities. Add the order form, then these as its spec sheets.`);
       return;
     }
-    setInvoice(order.data); setLinks({}); setLinkNotes({});
+    setInvoice(order.data); setLinks({}); setLinkNotes({}); setBrandsOff([]);
     const rest = readings.filter((r) => r !== order);
     const sheetsOnly = rest.filter((r) => /\.(xlsx?|csv)$/i.test(r.file.name));
     const skipped = rest.filter((r) => !sheetsOnly.includes(r));
@@ -429,7 +439,7 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
       const r = await readInvoiceAction({ name: file.name, type: sent.file.type, base64: await read(sent.file, file.name) });
       if (!r.ok) { setError(r.error); setInvoice(null); setLinks({}); setLinkNotes({}); return; }
       const data = r.data!;
-      setInvoice({ ...data, filename: file.name }); setLinks({}); setLinkNotes({});
+      setInvoice({ ...data, filename: file.name }); setLinks({}); setLinkNotes({}); setBrandsOff([]);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -601,13 +611,20 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
     if (sheets.length === 0 || !text.trim()) return;
     // "Only the 2026 delivery" is about the delivery loaded above, not a change to the files: it
     // narrows the order, and is said so, rather than being sent off to be read as an adjustment.
+    const brandsKept = invoice ? brandsAsked(text, brandsOnOrder) : null;
+    if (brandsKept) {
+      const off = brandsOnOrder.filter((b) => !brandsKept.includes(b));
+      setBrandsOff(off); setInstruction(""); setPreview(null); setError(null);
+      setSaved(`Only ${brandsKept.join(" and ")}: ${off.join(" and ")} ${off.length === 1 ? "is" : "are"} set aside, and the delivery above is now the ${brandsKept.join(" and ")} lines`);
+      return;
+    }
     const asked = invoice ? deliveryAsked(text) : null;
     if (asked) {
       const w = parseWindow(asked);
       if (w) {
         setDelivery(asked); setInstruction(""); setPreview(null); setError(null);
         const share = narrowToWindow(invoice!.lines, w);
-        setSaved(`Only the ${asked} delivery: ${share.lines.length} of ${invoice!.lines.length} lines on ${invoice!.filename} are due then, and the delivery above is now those.${share.undated > 0 ? ` ${share.undated} of them give no date, so they are kept.` : ""}`);
+        setSaved(`Only the ${asked} delivery: ${share.lines.length} of ${invoice!.lines.length} lines on ${invoice!.filename} are due then, and the delivery above is now those${share.undated > 0 ? ` (${share.undated} of them give no date, so they are kept)` : ""}`);
         return;
       }
     }
@@ -1197,6 +1214,21 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
                 </span>
               </label>
 
+              {brandsOnOrder.length > 1 && (
+                <fieldset className="rounded-xl border border-[var(--line-soft)] px-3 py-2.5">
+                  <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-[var(--ink-soft)]">Brands on this order</legend>
+                  <p className="mb-1 text-xs text-[var(--ink-soft)]">The sheet says whose each line is. Untick a brand to set its lines aside for another run.</p>
+                  <div className="flex flex-wrap gap-3">
+                    {brandsOnOrder.map((b) => (
+                      <label key={b} className="flex items-center gap-2 text-sm">
+                        <input type="checkbox" id={`invoice-brand-${b.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`} checked={!brandsOff.includes(b)} onChange={(e) => setBrandsOff((off) => (e.target.checked ? off.filter((x) => x !== b) : [...off, b]))} />
+                        <span>{b} <span className="text-xs text-[var(--ink-soft)]">· {brandCount(b)} line{brandCount(b) === 1 ? "" : "s"}</span></span>
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+              )}
+
               <label className="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--line-soft)] px-3 py-2.5 text-sm">
                 <span className="font-medium">Whose delivery this is</span>
                 <input
@@ -1316,7 +1348,7 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
             <span className="mt-1 block text-xs text-[var(--ink-soft)]">Each one applies on top of the last, across every file, and any of them can be undone. Prices and tags, and also titles ({"\u201c"}make the Volkl skis 2027{"\u201d"}) and stock on hand. A title change never moves the product{"\u2019"}s URL.</span>
           </label>
           <div className="mt-3 flex flex-wrap gap-2">
-            <Button variant="primary" disabled={!aiEnabled || busy !== null || !instruction.trim()} onClick={() => void workOut()}>
+            <Button variant="primary" disabled={(!aiEnabled && !(invoice && (deliveryAsked(instruction) || brandsAsked(instruction, brandsOnOrder)))) || busy !== null || !instruction.trim()} onClick={() => void workOut()}>
               {busy === "planning" ? "Working it out…" : "Work out what would change"}
             </Button>
           </div>

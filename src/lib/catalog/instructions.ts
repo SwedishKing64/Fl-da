@@ -30,6 +30,7 @@ const DirectivesSchema = z.object({
   })).describe("Which binding the packages are made with, when they say. 'Griffon for the men's and Squire for the women's' is two entries. Empty when they have not said."),
   deliveries: z.string().describe("Only the lines due in one delivery window, when they say so: a month as YYYY-MM ('only the December 2026 delivery' is 2026-12), a span as YYYY-MM..YYYY-MM, a whole year as YYYY ('only what has an estimated delivery of 26' is 2026), or an ordinal ('first delivery only' is 'first'). Empty when they have not said, and every line is built."),
   onlyNew: z.boolean().describe("True when they say to only add products the shop does not already have, and leave out the ones it already lists."),
+  brands: z.array(z.string()).describe("Only the lines of these brands, when a sheet carries more than one brand and they say which to do: 'only Burton', 'start with Burton and do Anon separately', 'leave out Anon' (then the brands to keep are the others they named). Empty when they have not said."),
   notes: z.string().describe("Anything else worth knowing that is not one of the fields above — kept with the batch and used when copy is written. Empty when there is nothing."),
 });
 
@@ -46,6 +47,7 @@ export const NO_DIRECTIVES: BatchDirectives = {
   packageBindings: [],
   deliveries: "",
   onlyNew: false,
+  brands: [],
   notes: "",
 };
 
@@ -55,7 +57,7 @@ Turn what they say into directives that apply to every product in the batch. Tak
 
 Skis are built twice as a matter of course: flat, and as a package with a binding (men's with the Marker Griffon, women's with the Marker Squire), priced from the binding on the supplier's own price list. When they talk about packaging, partnering or selling skis with a binding, that is the packages and packageBindings fields.
 
-An order form can span several deliveries — a column of quantities per month, or a delivery date per line. "Only the December 2026 delivery", "just the April order" or "only the lines with an estimated delivery of 26" is the deliveries field. "Only add the new products" / "leave out what we already have" is onlyNew.
+An order form can span several deliveries — a column of quantities per month, or a delivery date per line. "Only the December 2026 delivery", "just the April order" or "only the lines with an estimated delivery of 26" is the deliveries field. "Only add the new products" / "leave out what we already have" is onlyNew. A sheet can carry two brands (Burton and Anon on one Burton order): "only Burton" / "start with Burton, Anon later" is the brands field.
 
 Only fill a field they actually asked for. Everything else stays empty, null or false — a directive changes every product in the batch, so inventing one is expensive. Anything they say that is not one of the fields goes in notes, where it reaches the writing without changing a field.
 
@@ -120,6 +122,7 @@ export function describeDirectives(d: BatchDirectives): string[] {
   else if (d.packages === "build") out.push("Every ski also as a binding package");
   if (d.deliveries.trim()) out.push(`Only the ${/^\d{4}-\d{2}/.test(d.deliveries.trim()) ? d.deliveries.trim().replace("..", " to ") : `${d.deliveries.trim()}`} delivery`);
   if (d.onlyNew) out.push("Only products the shop does not already list");
+  if (d.brands.length) out.push(`Only ${d.brands.join(" and ")}`);
   if (d.notes.trim()) out.push(d.notes.trim());
   return out;
 }

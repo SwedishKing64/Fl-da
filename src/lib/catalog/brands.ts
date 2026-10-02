@@ -78,3 +78,38 @@ export function isBrand(name: string, vendors: string[] = []): boolean {
   const n = fold(name);
   return n !== "" && [...TRADE_BRANDS, ...vendors].some((b) => fold(b) === n);
 }
+
+/**
+ * Which of an order's brands an instruction keeps, or null when it is not about that.
+ *
+ * Burton's confirmation carries Burton and Anon on the one sheet, and the shop does them one at a
+ * time: "only Burton", "just the Burton for now", "start with Burton", "leave out Anon", "not the
+ * Anon". Read against the brands actually on the order, so "only Burton" on an all-Burton order is
+ * nothing to do, and a brand the order does not carry is not a filter.
+ */
+export function brandsAsked(instruction: string, onOrder: string[]): string[] | null {
+  const t = ` ${fold(instruction)} `;
+  const brands = onOrder.map((b) => b.trim()).filter(Boolean);
+  if (brands.length < 2) return null;
+  const KEEP = /\b(ONLY|JUST|START WITH|STARTING WITH|BEGIN WITH|FIRST|SOLELY|NOTHING BUT)\b/;
+  const DROP = /\b(LEAVE OUT|LEAVE|WITHOUT|SKIP|NOT|EXCLUDE|EXCEPT|DROP|IGNORE|MINUS|THEN)\b/;
+  const LATER = /\b(LATER|SEPARATELY|AFTERWARDS|AFTER|NEXT TIME|ANOTHER TIME|SECOND)\b/;
+  const kept: string[] = [], dropped: string[] = [];
+  // Each brand is judged by the words between it and its neighbours, so "only Burton, Anon
+  // separately" does not read "separately" against Burton.
+  const found = brands.map((b) => ({ b, at: t.indexOf(` ${fold(b)} `), end: t.indexOf(` ${fold(b)} `) + fold(b).length + 1 })).filter((f) => f.at >= 0).sort((x, y) => x.at - y.at);
+  found.forEach((f, i) => {
+    const before = t.slice(i > 0 ? found[i - 1].end : 0, f.at + 1).trim().split(" ").slice(-3).join(" ");
+    const after = t.slice(f.end, i + 1 < found.length ? found[i + 1].at + 1 : undefined).trim().split(" ").slice(0, 3).join(" ");
+    // What is said just before the brand decides: "only Burton", "leave out Anon"; what follows it
+    // can too: "Anon separately", "Anon later", "Burton first".
+    if (DROP.test(before) || LATER.test(after)) dropped.push(f.b);
+    else if (KEEP.test(before) || /\b(FIRST|ONLY)\b/.test(after)) kept.push(f.b);
+    // "only Burton and Anon", "leave out Anon and Burton": the second goes the way of the first.
+    else if (i > 0 && /^(AND|PLUS|WITH|ALSO|OR|)$/.test(before)) (kept.includes(found[i - 1].b) ? kept : dropped.includes(found[i - 1].b) ? dropped : []).push(f.b);
+  });
+  if (kept.length === 0 && dropped.length === 0) return null;
+  const keep = kept.length > 0 ? kept : brands.filter((b) => !dropped.includes(b));
+  const out = keep.filter((b) => !dropped.includes(b));
+  return out.length === 0 || out.length === brands.length ? null : out;
+}

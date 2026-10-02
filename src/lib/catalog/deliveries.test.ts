@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dueInWindow, parseWindow, yearMonth } from "./deliveries";
+import { deliveryAsked, dueInWindow, narrowToWindow, parseWindow, yearMonth } from "./deliveries";
 import { foldQuantityColumns } from "./invoice";
 import { applyMapping, suggestMapping } from "./mapping";
 import { emptyLineItem } from "./types";
@@ -80,5 +80,33 @@ describe("a form with a quantity column per delivery month", () => {
     const item = applyMapping(rows[1], mapping);
     expect(item.quantity).toBe(2);
     expect(dueInWindow(item, parseWindow("2026-12")!).quantity).toBe(1);
+  });
+});
+
+describe("a delivery asked for in an instruction", () => {
+  it("hears which delivery, and only when a delivery is what is being spoken about", () => {
+    expect(deliveryAsked("only the December 2026 delivery")).toBe("december 2026");
+    expect(deliveryAsked("I only want what has an estimated delivery of 26")).toBe("2026");
+    expect(deliveryAsked("just the lines due in 2026")).toBe("2026");
+    expect(deliveryAsked("first delivery only")).toBe("first");
+    expect(deliveryAsked("only the Nov to Dec 26 deliveries")).toBe("2026-11..2026-12");
+    // A year said about something else is not a delivery window.
+    expect(deliveryAsked("put the 2026 jackets 30% off")).toBeNull();
+    expect(deliveryAsked("tag everything 2998")).toBeNull();
+    for (const said of ["only the December 2026 delivery", "only what has an estimated delivery of 26", "first delivery only", "only the Nov to Dec 26 deliveries"]) {
+      expect(parseWindow(deliveryAsked(said)!)).not.toBeNull();
+    }
+  });
+
+  it("narrows an order to the lines due, at that delivery's quantity, keeping the lines that give no date", () => {
+    const lines = [
+      { title: "a", quantity: 3, deliveryDate: "2026-11-15" },
+      { title: "b", quantity: 2, deliveryDate: "2027-04-01" },
+      { title: "c", quantity: 5, due: { "2026-12": 2, "2027-01": 3 } },
+      { title: "d", quantity: 1 },
+    ];
+    const out = narrowToWindow(lines, parseWindow("2026")!);
+    expect(out.lines.map((l) => [l.title, l.quantity])).toEqual([["a", 3], ["c", 2], ["d", 1]]);
+    expect(out.undated).toBe(1);
   });
 });

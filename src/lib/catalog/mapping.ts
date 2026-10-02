@@ -74,7 +74,7 @@ const NEEDS_CODE_VALUES = /^(material|style|model)( description| desc| name| tex
  * on every line, all reading "Alpsport" or a code, and "Payer Name" was taken as the product's name:
  * four hundred lines, all called Alpsport, built as one product.
  */
-const PARTY = /\b(payer|customer|buyer|account|sold to|ship to|bill to|dealer|retailer|client|rep|sales ?person|agent|consignee|store|warehouse)\b/;
+export const PARTY = /\b(payer|customer|buyer|account|sold to|ship to|bill to|dealer|retailer|client|rep|sales ?person|agent|consignee|store|warehouse)\b/;
 
 /**
  * A heading without the word that says it is a description of something: "Gender Description" is

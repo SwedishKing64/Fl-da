@@ -6,7 +6,7 @@
  * export. Two of the three must NOT read as invoices, which is half of what this is for.
  */
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { readInvoiceGrids, readNumber } from "./invoice";
 import { applyInvoice, reconcile } from "./reconcile";
@@ -278,5 +278,18 @@ describe("the Volkl order against the shop's ski export", () => {
     // One length in the order is of a ski the shop sells and has never had in that length.
     expect(r.matched.filter((m) => m.sizeMissing).map((m) => `${m.line.size} of ${m.handle}`))
       .toEqual(["158 of blaze-94-2027"]);
+  });
+});
+
+describe("Burton's W27 confirmation sheet, read flat", () => {
+  const W27 = "/root/.claude/uploads/94fb8bfb-35a9-5176-afe9-8fcc0dec9eb3/8b3f8c87-Alpsport_W27_Burton_Confirmed_and_Cancel_FINAL_.xlsx";
+  it.skipIf(!existsSync(W27))("takes the confirmed quantity, the style as the name — never the customer — and the date each line is due", { timeout: 60_000 }, async () => {
+    const read = readInvoiceGrids(await sheetGrids(readFileSync(W27)))!;
+    expect(read.columns.quantity).toBe("Confirmed Quantity MLL");
+    expect(read.columns.title).toBe("Style Description");
+    expect(read.lines).toHaveLength(318);
+    expect(read.lines.every((l) => (l.quantity ?? 0) > 0)).toBe(true);
+    expect(read.lines.filter((l) => (l.deliveryDate ?? "").startsWith("2026-"))).toHaveLength(165);
+    expect(new Set(read.lines.map((l) => l.title)).size).toBeGreaterThan(50);
   });
 });

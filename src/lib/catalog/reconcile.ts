@@ -55,6 +55,10 @@ export interface InvoiceLine {
   terrain?: string;
   /** The brand, where the form says — Völkl's order keeps skis on "Volkl Ski" and bindings on "Marker Inline". */
   brand?: string;
+  /** When the line is due, as the form writes it ("2026-11-15", "Apr 27"), where it has a date per line. */
+  deliveryDate?: string;
+  /** How many are due in each delivery, by the form's own label for it, where it has a quantity column per delivery. */
+  due?: Record<string, number>;
 }
 
 export type MatchKey = "barcode" | "sku" | "name";

@@ -6,6 +6,7 @@ import { applyPlan, describeFile, foldPlans, isWholeFile, whyNoMatch, type Adjus
 import { csvFilename } from "@/lib/catalog/csv";
 import { reconcile, type InvoiceFields, type Reconciliation } from "@/lib/catalog/reconcile";
 import { buildDelivery, joinToReference, type FreshProduct } from "@/lib/catalog/delivery";
+import { deliveryAsked, narrowToWindow, parseWindow } from "@/lib/catalog/deliveries";
 import type { PageDetails } from "@/lib/catalog/page-types";
 import { BulkLinks } from "./BulkLinks";
 import { listingsFromCsv } from "@/lib/catalog/shop-memory";
@@ -192,6 +193,19 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
    */
   const [links, setLinks] = useState<Record<number, string>>({});
   const [linkNotes, setLinkNotes] = useState<Record<number, { tone: "ok" | "warn" | "bad"; text: string }>>({});
+  /**
+   * Which of the order's deliveries this is, when the form spans more than one.
+   *
+   * Burton's confirmation sheet has November 2026 and April 2027 on the one sheet, with a delivery
+   * date per line; Helly Hansen's has a quantity column per month. "Only the 2026 delivery" narrows
+   * the order to the lines due then, at that delivery's quantity — a line the form gives no date
+   * for is kept, and said. Written as parseWindow reads it: "2026", "2026-12", "Dec 26", "first".
+   */
+  const [delivery, setDelivery] = useState("");
+  const window = parseWindow(delivery);
+  const narrowed = invoice && window ? narrowToWindow(invoice.lines, window) : null;
+  /** The invoice as this delivery: every line, or only the lines due in the window asked for. */
+  const order: Invoice | null = invoice && narrowed ? { ...invoice, lines: narrowed.lines } : invoice;
   const referenceRef = useRef<HTMLInputElement>(null);
   const [references, setReferences] = useState<Reference[]>([]);
 
@@ -454,7 +468,7 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
    * actually touched, so a Volkl order never appends skis to the goggles export.
    */
   async function applyDeliveryNow() {
-    if (!invoice) return;
+    if (!order) return;
     if (!fields.rrp && !fields.price && !fields.quantity && !buildNew) {
       setError("Nothing was applied — tick at least one of the numbers to write, or let it build the products that are not in the shop yet.");
       return;
@@ -470,13 +484,13 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
      * written. With no API key, or if the call fails, the rules' answer stands as it is.
      */
     let decided: Map<number, CanonicalLineItem> | undefined;
-    const first = specs.length > 0 ? joinToReference(invoice.lines, { season, vendor, specs, sourceOf }) : null;
+    const first = specs.length > 0 ? joinToReference(order.lines, { season, vendor, specs, sourceOf }) : null;
     if (first && first.unjoined.length > 0) {
       setProgress(`Looking up ${first.unjoined.length} line${first.unjoined.length === 1 ? "" : "s"} on the spec sheet…`);
       const byCode = new Map<string, CanonicalLineItem>();
       for (const s of specs) if (s.modelCode.trim() && s.title.trim() && !byCode.has(s.modelCode.trim())) byCode.set(s.modelCode.trim(), s);
       const asked = await joinOrderAction({
-        lines: first.unjoined.map((i) => ({ index: i, title: invoice.lines[i].title, gender: invoice.lines[i].gender ?? "", modelCode: invoice.lines[i].sku })),
+        lines: first.unjoined.map((i) => ({ index: i, title: order.lines[i].title, gender: order.lines[i].gender ?? "", modelCode: order.lines[i].sku })),
         specs: [...byCode.values()].map((s) => ({ modelCode: s.modelCode.trim(), title: s.title })),
       }).catch(() => null);
       if (asked?.ok && asked.data && asked.data.length > 0) {
@@ -493,7 +507,7 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
     const linkFeed: string[] = [];
     const asked = buildNew ? Object.entries(links).map(([k, url]) => ({ key: Number(k), url: url.trim() })).filter((l) => l.url) : [];
     if (asked.length > 0) {
-      const nameOf = (key: number) => newProducts.find((p) => p.lines.includes(key))?.title ?? invoice.lines[key]?.title ?? "a product";
+      const nameOf = (key: number) => newProducts.find((p) => p.lines.includes(key))?.title ?? order.lines[key]?.title ?? "a product";
       let done = 0, next = 0;
       const notes: typeof linkNotes = {};
       const worker = async () => {
@@ -534,8 +548,8 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
 
     const results = sheets.map((s) => ({
       name: s.name,
-      result: buildDelivery(s.csv, invoice.lines, {
-        season, vendor, specs, decided, sourceOf, listings, priceList: invoice.priceList ?? [],
+      result: buildDelivery(s.csv, order.lines, {
+        season, vendor, specs, decided, sourceOf, listings, priceList: order.priceList ?? [],
         fields: { ...fields, stock },
         reorderOnly: s.name !== home,
         pages,
@@ -564,13 +578,13 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
       fields.quantity ? (stock === "add" ? "the arriving stock onto the counts already there" : "the stock count, set to the invoice's own number") : "",
     ].filter(Boolean);
     setFeed((f) => [...f, {
-      title: `${invoice.filename} — ${cells} cell${cells === 1 ? "" : "s"} changed${rowsAdded > 0 ? ` and ${rowsAdded} row${rowsAdded === 1 ? "" : "s"} added` : ""}`,
+      title: `${order.filename} — ${cells} cell${cells === 1 ? "" : "s"} changed${rowsAdded > 0 ? ` and ${rowsAdded} row${rowsAdded === 1 ? "" : "s"} added` : ""}`,
       lines: [
-        `Matched ${matchedLines} of ${invoice.lines.length} line${invoice.lines.length === 1 ? "" : "s"} to products already in the shop${wrote.length ? `, and wrote ${wrote.join(", ")}` : ""}.`,
+        `Matched ${matchedLines} of ${order.lines.length} line${order.lines.length === 1 ? "" : "s"} to products already in the shop${wrote.length ? `, and wrote ${wrote.join(", ")}` : ""}.`,
         ...builtSizes.map((x) => `Added ${x.option} to ${x.title || x.handle} — a size it has not stocked before.`),
         ...builtProducts.map((x) => `Built ${x.title} as a draft: ${x.variants.length} variant${x.variants.length === 1 ? "" : "s"}, ${x.type || "no Type"}${x.lines.some((l) => pages[l]) ? ", described from its page" : x.described ? ", described from the spec sheet" : ", with no description yet"}.`),
         ...linkFeed.map((l) => `Product page — ${l}`),
-        ...asked.filter((a) => !builtProducts.some((x) => x.lines.includes(a.key))).map((a) => `Product page — the link for ${invoice.lines[a.key]?.title ?? "a product"} was not used: it was not built as a new product.`),
+        ...asked.filter((a) => !builtProducts.some((x) => x.lines.includes(a.key))).map((a) => `Product page — the link for ${order.lines[a.key]?.title ?? "a product"} was not used: it was not built as a new product.`),
         ...results.flatMap((r) => r.result.heldBack.map((h) => `Left alone: ${h.line.title || h.line.sku} — ${h.reason}.`)),
         ...[...new Set(results.flatMap((r) => r.result.warnings))],
       ],
@@ -585,6 +599,18 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
 
   async function workOut(text = instruction) {
     if (sheets.length === 0 || !text.trim()) return;
+    // "Only the 2026 delivery" is about the delivery loaded above, not a change to the files: it
+    // narrows the order, and is said so, rather than being sent off to be read as an adjustment.
+    const asked = invoice ? deliveryAsked(text) : null;
+    if (asked) {
+      const w = parseWindow(asked);
+      if (w) {
+        setDelivery(asked); setInstruction(""); setPreview(null); setError(null);
+        const share = narrowToWindow(invoice!.lines, w);
+        setSaved(`Only the ${asked} delivery: ${share.lines.length} of ${invoice!.lines.length} lines on ${invoice!.filename} are due then, and the delivery above is now those.${share.undated > 0 ? ` ${share.undated} of them give no date, so they are kept.` : ""}`);
+        return;
+      }
+    }
     setBusy("planning"); setError(null); setPreview(null); setSaved(null); setConfirmWholeFile(false);
     try {
       // One reading, grounded in everything across all the loaded files.
@@ -766,8 +792,8 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
   // Matched as the delivery will be: each line under the spec sheet's name for it, where one is
   // loaded. Burton's "CUSTOM NEW GRAPHIC" is nothing to the shop; "Custom" is Custom 2027.
   const loadedSpecs = references.flatMap((r) => r.rows);
-  const invoiceLines = invoice
-    ? (loadedSpecs.length > 0 ? joinToReference(invoice.lines, { season, vendor, specs: loadedSpecs, sourceOf: specSources(references) }).lines : invoice.lines)
+  const invoiceLines = order
+    ? (loadedSpecs.length > 0 ? joinToReference(order.lines, { season, vendor, specs: loadedSpecs, sourceOf: specSources(references) }).lines : order.lines)
     : [];
   const against: Against = invoice
     ? sheets.map((s) => ({ name: s.name, reconciliation: reconcile(s.csv, invoiceLines, { season }) }))
@@ -790,10 +816,10 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
   const homeName = buildNew ? [...against].sort((a, b) => b.reconciliation.matched.length - a.reconciliation.matched.length)[0]?.name ?? null : null;
   const homeSheet = homeName ? sheets.find((s) => s.name === homeName) : undefined;
   const seenLines = new Set<number>();
-  const newProducts: FreshProduct[] = invoice && homeSheet && toBuild > 0
-    ? buildDelivery(homeSheet.csv, invoice.lines, {
+  const newProducts: FreshProduct[] = order && homeSheet && toBuild > 0
+    ? buildDelivery(homeSheet.csv, order.lines, {
         season, vendor, specs: loadedSpecs, sourceOf: specSources(references),
-        listings: sheets.flatMap((s) => listingsFromCsv(s.csv)), priceList: invoice.priceList ?? [],
+        listings: sheets.flatMap((s) => listingsFromCsv(s.csv)), priceList: order.priceList ?? [],
         fields: { ...fields, stock },
       }).fresh.filter((p) => { const k = p.lines[0]; if (k === undefined || seenLines.has(k)) return false; seenLines.add(k); return true; })
     : [];
@@ -1083,7 +1109,7 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
               <div className="rounded-xl border border-[var(--line-soft)] px-3 py-2.5 text-sm">
                 <div className="font-medium">{invoice.filename}</div>
                 <div className="mt-0.5 text-xs text-[var(--ink-soft)]">
-                  {invoice.lines.length} line{invoice.lines.length === 1 ? "" : "s"}, {invoice.source}.
+                  {(order ?? invoice).lines.length} line{(order ?? invoice).lines.length === 1 ? "" : "s"}, {invoice.source}.
                   {invoice.columns.rrp || invoice.columns.quantity
                     ? <> Prices from <strong>{invoice.columns.rrp || "nowhere"}</strong>, counts from <strong>{invoice.columns.quantity || "nowhere"}</strong>, matched on <strong>{invoice.columns.barcode || invoice.columns.sku || "the product's name"}</strong>.</>
                     : null}
@@ -1154,6 +1180,21 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
                   placeholder="2027" inputMode="numeric" className={cx(INPUT, "w-24 tabular-nums")}
                 />
                 <span className="text-xs text-[var(--ink-soft)]">An order form never says which, and the shop lists three at once — without it, &ldquo;M7 Mantra&rdquo; is eight products and gets refused.</span>
+              </label>
+
+              <label className="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--line-soft)] px-3 py-2.5 text-sm">
+                <span className="font-medium">Only this delivery</span>
+                <input
+                  id="invoice-delivery" value={delivery} onChange={(e) => setDelivery(e.target.value)}
+                  placeholder="2026, Dec 26, 2026-11..2026-12, first" className={cx(INPUT, "w-44")}
+                />
+                <span className="text-xs text-[var(--ink-soft)]">
+                  {delivery.trim() && !window
+                    ? <span className="text-red-700">Not read as a delivery — write a year (2026), a month (Dec 26), a span (Nov 26..Dec 26) or an ordinal (first).</span>
+                    : narrowed
+                      ? <>{narrowed.lines.length} of {invoice!.lines.length} lines are due then, at that delivery&rsquo;s quantity; the rest are left out.{narrowed.undated > 0 ? ` ${narrowed.undated} give no date and are kept.` : ""}</>
+                      : <>An order can span deliveries — a date per line, or a quantity column per month. Leave empty for all of it.</>}
+                </span>
               </label>
 
               <label className="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--line-soft)] px-3 py-2.5 text-sm">

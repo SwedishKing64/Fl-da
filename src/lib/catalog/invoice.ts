@@ -21,6 +21,8 @@
 
 import { detectHeaderRow } from "./extract/tabular";
 import { normaliseBarcode, type InvoiceLine } from "./reconcile";
+import { yearMonth } from "./deliveries";
+import { PARTY } from "./mapping";
 import { terrainColumn } from "./shop-memory";
 import { brandIn } from "./brands";
 import { colourName } from "./colour";
@@ -109,6 +111,14 @@ const RRP = /\brrp\b|recommended|retail|\bmsrp\b|\bsrp\b/;
 // the cost the shop pays, which "incl" below covers.
 const NOT_RRP = /\bw s\b|wholesale|cost|indent|total|margin/;
 const QTY = /^qty|quantity|units|ordered|order qty/;
+// A confirmation sheet has Demand, Confirmed and Unconfirmed quantities side by side; what is coming
+// is the confirmed one. "Unconfirmed" is not it.
+const CONFIRMED_QTY = /\bconfirmed\b/;
+// The quantity the supplier has since cancelled, to come off the count: Burton's Cancel column.
+const CANCELLED = /^cancel/;
+// When the line is due. Not a quantity headed "Delivery Qty", not a delivery address or note.
+const DELIVERY = /deliver|\brdd\b|\betd\b|\beta\b|due date|ship date|arrival/;
+const NOT_DELIVERY = /qty|quantity|units|address|note|method|charge|fee|cost/;
 // What the shop pays. "AUD-WHSL" on Burton's form; "W/S" on the Marker one.
 const COST = /whsl|wholesale|\bw s\b|\bcost\b|\bdealer\b|\bnet price\b|\bbuy price\b/;
 const NOT_COST = /total|margin|retail|\brrp\b|\binc(l|luding)?\b|\bincl/;
@@ -355,9 +365,22 @@ function readGrid(name: string, source: string[][]): InvoiceRead | null {
   if (!barcode && !sku) return null;
 
   const rrp = pick(headings, rows, RRP, NOT_RRP, (v) => (readNumber(v) ?? -1) > 0);
-  const quantity = pick(headings, rows, QTY, null, (v) => readNumber(v) !== null);
+  const quantity = pick(headings, rows, QTY, null, (v) => readNumber(v) !== null, false, CONFIRMED_QTY);
   // Nothing to write is not an invoice. A list of barcodes and descriptions is a catalogue.
   if (!rrp && !quantity) return null;
+  const cancelled = quantity ? pick(headings, rows, CANCELLED, null, (v) => readNumber(v) !== null) : null;
+  // When each line is due, and the quantity due in each delivery where the form has a column per
+  // delivery (see foldQuantityColumns) — so "only the December delivery" can be obeyed on apply.
+  const delivery = pick(headings, rows, DELIVERY, NOT_DELIVERY, (v) => yearMonth(v) !== null || /^\d{4}-\d{2}-\d{2}/.test(v));
+  const dueColumns = headings.map((h, index) => ({ index, label: h.trim().replace(/^Due\s+/i, "") })).filter((c, i) => /^Due\s+\S/i.test(headings[i].trim()));
+  // What is coming on a line: the quantity less what was cancelled, never below nothing.
+  const netQuantity = (row: string[]): number | null => {
+    if (!quantity) return null;
+    const q = readNumber(text(row[quantity.index]));
+    if (q === null) return null;
+    const off = cancelled ? readNumber(text(row[cancelled.index])) ?? 0 : 0;
+    return Math.max(0, q - Math.max(0, off));
+  };
 
   // Their order forms head the product-name column with the section it belongs to — "COMPETITION &
   // RACE", "PLATES", "UNIVERSAL Line" — so there is nothing to match on and the column beside the
@@ -376,8 +399,16 @@ function readGrid(name: string, source: string[][]): InvoiceRead | null {
 
   // The product's NAME: not a number, and not a code ("66094_627-S") however its column is headed.
   const isCode = (v: string) => !/\s/.test(v) && /\d/.test(v) && /^[A-Za-z0-9_.\-/]+$/.test(v);
-  const title = pick(headings, rows, TITLE, null, (v) => v.length >= 3 && !/^\d+$/.test(v) && !isCode(v), false, /\bname\b|^descri/)
-    ?? (sku ? { index: sku.index + 1, heading: `the column beside "${sku.heading}"` } : null);
+  // Not a party to the order — "Customer Name" is the shop's own name on every row of Burton's
+  // confirmation, and taken as the title it made the whole order one product — and not a column
+  // that says the same thing on every line, whatever it is headed.
+  const distinct = (c: Column | null): number => (c ? new Set(rows.map((r) => text(r[c.index])).filter(Boolean)).size : 0);
+  const constant = (c: Column | null): boolean => rows.length > 3 && distinct(c) <= 1;
+  const titleVeto = (more: RegExp | null) => new RegExp([PARTY.source, more?.source].filter(Boolean).join("|"));
+  let title = pick(headings, rows, TITLE, titleVeto(null), (v) => v.length >= 3 && !/^\d+$/.test(v) && !isCode(v), false, /\bname\b|^descri|^style descri|^product descri|^item descri/);
+  if (title && constant(title)) title = pick(headings, rows, TITLE, titleVeto(new RegExp(`^${title.heading.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i")), (v) => v.length >= 3 && !/^\d+$/.test(v) && !isCode(v), false, /\bname\b|^descri/);
+  if (title && constant(title)) title = null;
+  title ??= sku ? { index: sku.index + 1, heading: `the column beside "${sku.heading}"` } : null;
 
   /**
    * An order form, read flat: a quantity column that somebody has filled in on SOME rows.
@@ -389,7 +420,7 @@ function readGrid(name: string, source: string[][]): InvoiceRead | null {
    * quantity is what makes a row part of the delivery, and a description is enough to say what it
    * is: the name is matched to the shop, or to the description list, afterwards.
    */
-  const orderedRows = quantity ? rows.filter((row) => orderedQuantity(text(row[quantity.index])) !== null) : [];
+  const orderedRows = quantity ? rows.filter((row) => { const n = netQuantity(row); return n !== null && orderedQuantity(String(n)) !== null; }) : [];
   const money = (c: Column | null, row: string[]) => (c && (readNumber(text(row[c.index])) ?? 0) > 0 ? readNumber(text(row[c.index])) : null);
   const priceList: PriceRow[] = rrp
     ? rows.filter((row) => money(rrp, row) !== null).map((row) => ({
@@ -418,7 +449,11 @@ function readGrid(name: string, source: string[][]): InvoiceRead | null {
       // a ski, and writing that through would put "free" in front of a customer — which is exactly
       // why the rest of this app leaves a price cell empty rather than filling it with 0.00.
       rrp: rrp ? ((readNumber(text(row[rrp.index])) ?? 0) > 0 ? readNumber(text(row[rrp.index])) : null) : null,
-      quantity: quantity ? readNumber(text(row[quantity.index])) : null,
+      quantity: netQuantity(row),
+      ...(delivery && text(row[delivery.index]) ? { deliveryDate: text(row[delivery.index]) } : {}),
+      ...(dueColumns.some((c) => (readNumber(text(row[c.index])) ?? 0) > 0)
+        ? { due: Object.fromEntries(dueColumns.map((c) => [c.label, Math.max(0, readNumber(text(row[c.index])) ?? 0)])) }
+        : {}),
     };
     // A row with no way to be matched is a subtotal, a section heading or a blank — not a line.
     // On an order form a description will do; "TOTAL ORDER QTY 12" has not even that.

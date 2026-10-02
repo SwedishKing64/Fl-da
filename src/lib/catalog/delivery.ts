@@ -201,7 +201,9 @@ export function buildDelivery(csv: string, invoiced: InvoiceLine[], options: Del
     return { csv: csvSoFar, changes: reorder.changes, carryOver: reconciliation.matched, fresh: [], freshSizes: sizes.added, appended, heldBack, reconciliation, warnings };
   }
 
-  const built = appendFresh(csvSoFar, reconciliation.unmatched, options, reconciliation.matched, joined.items);
+  // The new products' lines are told by their place on the invoice, which is how a page linked to
+  // a product on the screen finds it here: the unmatched lines are a subset, so their own order is not it.
+  const built = appendFresh(csvSoFar, reconciliation.unmatched, options, reconciliation.matched, joined.items, (line) => lines.indexOf(line));
   if (built.refused) {
     // The passes before this one stand on their own and are already proved, so they are kept.
     // Losing a good half because the other half could not be written means doing it all by hand.
@@ -466,6 +468,8 @@ function appendFresh(
   options: DeliveryOptions,
   carryOver: Match[],
   resolved: Map<InvoiceLine, CanonicalLineItem> = new Map(),
+  /** A line's place on the invoice as a whole — what a product's `lines` and a linked page are keyed by. */
+  placeOf: (line: InvoiceLine) => number = (line) => lines.indexOf(line),
 ): { csv: string; fresh: FreshProduct[]; appended: number; heldBack: Array<{ line: InvoiceLine; reason: string }>; warnings: string[]; refused?: boolean } {
   const grid = parseCsv(csv).filter((r) => r.some((c) => c.trim() !== ""));
   const header = grid[0] ?? [];
@@ -530,7 +534,7 @@ function appendFresh(
   // The pages somebody linked: a description and details list, and the page's own pictures.
   const withPages = options.pages ?? {};
   const pageOf = (g: GroupedProduct): PageDetails | undefined => {
-    for (const v of g.variants) if (withPages[v.sourceIndex]) return withPages[v.sourceIndex];
+    for (const v of g.variants) { const page = withPages[placeOf(lines[v.sourceIndex])]; if (page) return page; }
     return undefined;
   };
   for (const g of build) {
@@ -580,7 +584,7 @@ function appendFresh(
       })),
       described: (product.bodyHtml ?? "").trim() !== "",
       rows: counted.get(product.handle) ?? g.variants.length,
-      lines: g.variants.map((v) => v.sourceIndex),
+      lines: g.variants.map((v) => placeOf(lines[v.sourceIndex])),
     };
   });
 

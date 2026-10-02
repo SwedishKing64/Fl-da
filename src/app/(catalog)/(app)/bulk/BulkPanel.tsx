@@ -538,9 +538,14 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
      */
     const pages: Record<number, PageDetails> = {};
     const linkFeed: string[] = [];
-    const asked = buildNew ? Object.entries(links).map(([k, url]) => ({ key: Number(k), url: url.trim() })).filter((l) => l.url) : [];
+    const colourwayKeys = new Set(newColourways.map((c) => c.key));
+    const asked = Object.entries(links).map(([k, url]) => ({ key: Number(k), url: url.trim() })).filter((l) => l.url && (buildNew || colourwayKeys.has(l.key)));
     if (asked.length > 0) {
-      const nameOf = (key: number) => newProducts.find((p) => p.lines.includes(key))?.title ?? order.lines[key]?.title ?? "a product";
+      const nameOf = (key: number) => {
+        const colourway = newColourways.find((c) => c.key === key);
+        if (colourway) return `${colourway.title} in ${colourway.colour}`;
+        return newProducts.find((p) => p.lines.includes(key))?.title ?? order.lines[key]?.title ?? "a product";
+      };
       let done = 0, next = 0;
       const notes: typeof linkNotes = {};
       const worker = async () => {
@@ -866,16 +871,36 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
    * both take it. Named as the rules name them now — the model may rename one on apply, which is
    * why a link belongs to a product's lines and not to its name.
    */
-  const homeName = buildNew ? [...against].sort((a, b) => b.reconciliation.matched.length - a.reconciliation.matched.length)[0]?.name ?? null : null;
+  const homeName = [...against].sort((a, b) => b.reconciliation.matched.length - a.reconciliation.matched.length)[0]?.name ?? null;
   const homeSheet = homeName ? sheets.find((s) => s.name === homeName) : undefined;
-  const seenLines = new Set<number>();
-  const newProducts: FreshProduct[] = order && homeSheet && toBuild > 0
-    ? buildDelivery(homeSheet.csv, order.lines, {
+  // The delivery as it would go on, file by file, so what it would build and what it would add can
+  // be shown before anything is written. New products go on the home file only; a new colourway
+  // goes on whichever file holds its listing.
+  const previewed = order && homeSheet
+    ? sheets.map((s) => buildDelivery(s.csv, order.lines, {
         season, vendor, specs: loadedSpecs, sourceOf: specSources(references),
-        listings: sheets.flatMap((s) => listingsFromCsv(s.csv)), priceList: order.priceList ?? [],
-        fields: { ...fields, stock },
-      }).fresh.filter((p) => { const k = p.lines[0]; if (k === undefined || seenLines.has(k)) return false; seenLines.add(k); return true; })
+        listings: sheets.flatMap((x) => listingsFromCsv(x.csv)), priceList: order.priceList ?? [],
+        fields: { ...fields, stock }, reorderOnly: s.name !== homeSheet.name,
+      }))
     : [];
+  const seenLines = new Set<number>();
+  const newProducts: FreshProduct[] = buildNew && toBuild > 0
+    ? previewed.flatMap((r) => r.fresh).filter((p) => { const k = p.lines[0]; if (k === undefined || seenLines.has(k)) return false; seenLines.add(k); return true; })
+    : [];
+  /**
+   * A colour a listing has not had before, arriving on this delivery. It goes on as a variant of
+   * the listing, whose pictures are of its other colours — so, like a new product, it is asked for
+   * its own page. One entry per listing and colour, keyed by its first line.
+   */
+  const newColourways = (() => {
+    const byKey = new Map<string, { key: number; title: string; handle: string; colour: string }>();
+    for (const x of previewed.flatMap((r) => r.freshSizes)) {
+      if (!x.newColour || !x.colour) continue;
+      const k = `${x.handle}|${x.colour.toLowerCase()}`;
+      if (!byKey.has(k) || x.line < byKey.get(k)!.key) byKey.set(k, { key: x.line, title: x.title || x.handle, handle: x.handle, colour: x.colour });
+    }
+    return [...byKey.values()];
+  })();
 
   // The sheet, laid out by product group. A row that cannot touch anything loaded is set aside
   // rather than queued, which is the difference between thirty-nine to go through and three.
@@ -1337,9 +1362,12 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
                 <p className="py-1 text-xs text-[var(--ink-soft)]">A size that is new to a product you already sell is always added, whether this is ticked or not: it is a variant of that product, not a product.</p>
               </fieldset>
 
-              {buildNew && newProducts.length > 0 && (
+              {((buildNew && newProducts.length > 0) || newColourways.length > 0) && (
                 <BulkLinks
-                  products={newProducts.map((p) => ({ key: p.lines[0], title: p.title }))}
+                  products={[
+                    ...(buildNew ? newProducts.map((p) => ({ key: p.lines[0], title: p.title })) : []),
+                    ...newColourways.map((c) => ({ key: c.key, title: `${c.title} — ${c.colour}`, note: "a new colour on a listing you have; its pictures come from this page" })),
+                  ]}
                   links={links}
                   onChange={(key, url) => setLinks((l) => { const { [key]: _gone, ...rest } = l; void _gone; return url ? { ...rest, [key]: url } : rest; })}
                   notes={linkNotes}

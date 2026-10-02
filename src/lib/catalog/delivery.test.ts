@@ -225,3 +225,37 @@ describe.skipIf(!existsSync(ORDER) || !existsSync(SKIS))("against the real order
     ]);
   });
 });
+
+describe("a new colourway of a listing the shop has", () => {
+  const HEADER = "Handle,Title,Vendor,Type,Option1 Name,Option1 Value,Option2 Name,Option2 Value,Variant SKU,Variant Inventory Qty,Variant Price,Variant Barcodes,Image Src,Image Position,Image Alt Text,Variant Image";
+  const csv = [
+    HEADER,
+    `cartel-x-2026,Men's Cartel X Snowboard Bindings 2026,Burton,Snowboard Bindings,Colour,Black,Size,Medium,,2,449.99,9010000000001,https://img/black-1.jpg,1,,https://img/black-1.jpg`,
+    `cartel-x-2026,,,,,Black,,Large,,1,449.99,9010000000002,https://img/black-2.jpg,2,,https://img/black-1.jpg`,
+  ].join("\n");
+  const line = (over: Partial<InvoiceLine>): InvoiceLine => ({ sku: "", barcode: "", title: "CARTEL X", costPrice: 269.99, rrp: null, quantity: 1, gender: "MENS", kind: "BINDINGS", ...over });
+  const lines = [
+    line({ barcode: "9010000000001", colour: "Black", size: "M" }),
+    line({ barcode: "9010000000003", colour: "White", size: "M" }),
+    line({ barcode: "9010000000004", colour: "White", size: "L" }),
+  ];
+
+  it("adds the colour as variants of the listing — never a count on another colour's row — spelled as the listing spells its sizes", () => {
+    const out = buildDelivery(csv, lines, { vendor: "Burton", fields: { rrp: true, quantity: true, stock: "add" } });
+    const grid = parseCsv(out.csv); const h = grid[0]; const at = (n: string) => h.indexOf(n);
+    const rows = grid.slice(1).filter((r) => r[at("Handle")] === "cartel-x-2026").map((r) => [r[at("Option1 Value")], r[at("Option2 Value")], r[at("Variant Inventory Qty")]]);
+    expect(rows).toEqual(expect.arrayContaining([["Black", "Medium", "3"], ["Black", "Large", "1"], ["White", "Medium", "1"], ["White", "Large", "1"]]));
+    expect(out.fresh).toHaveLength(0);
+    expect(out.freshSizes.map((x) => [x.option, x.newColour, x.line])).toEqual([["White / Medium", true, 1], ["White / Large", true, 2]]);
+  });
+
+  it("gives the new colour its own pictures from the page linked to it, after the listing's own", () => {
+    const page = { description: "", features: [], images: ["https://img/white-1.jpg", "https://img/white-2.jpg"], confident: true, pageTitle: "Cartel X", via: "page" as const, note: "" };
+    const out = buildDelivery(csv, lines, { vendor: "Burton", fields: { rrp: true, quantity: true, stock: "add" }, pages: { 1: page } });
+    const grid = parseCsv(out.csv); const h = grid[0]; const at = (n: string) => h.indexOf(n);
+    const white = grid.slice(1).find((r) => r[at("Option1 Value")] === "White" && r[at("Option2 Value")] === "Medium")!;
+    expect(white[at("Variant Image")]).toBe("https://img/white-1.jpg");
+    const pictures = grid.slice(1).filter((r) => r[at("Handle")] === "cartel-x-2026" && /white-/.test(r[at("Image Src")])).map((r) => [r[at("Image Src")], r[at("Image Position")]]);
+    expect(pictures).toEqual([["https://img/white-1.jpg", "3"], ["https://img/white-2.jpg", "4"]]);
+  });
+});

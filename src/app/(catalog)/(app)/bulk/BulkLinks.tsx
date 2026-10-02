@@ -11,7 +11,7 @@ import { Alert } from "@/app/(catalog)/ui";
  * the products with what they say. A product with nothing pasted is built exactly as it would have
  * been — it is optional on every one.
  */
-export interface LinkProduct { key: number; title: string }
+export interface LinkProduct { key: number; title: string; /** Why this one is asked, when it is not a new product. */ note?: string }
 
 export function BulkLinks({ products, links, onChange, notes, disabled }: {
   products: LinkProduct[];
@@ -39,14 +39,14 @@ export function BulkLinks({ products, links, onChange, notes, disabled }: {
     <fieldset className="rounded-xl border border-[var(--line-soft)] px-3 py-2.5">
       <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-[var(--ink-soft)]">Product pages · {given} of {products.length} have a link</legend>
       <p className="mb-3 text-xs text-[var(--ink-soft)]">
-        Paste a product&rsquo;s own page under its name and its description, details and pictures are taken from it when you apply the delivery. A product with no link is built as it is.
+        Paste a product&rsquo;s own page under its name and its description, details and pictures are taken from it when you apply the delivery. A new colour of a listing you already have takes its pictures the same way. A product with no link is built as it is.
       </p>
       <ul className="max-h-[26rem] space-y-3 overflow-auto pr-1">
         {products.map((p) => {
           const note = notes[p.key];
           return (
             <li key={p.key}>
-              <div className="text-sm font-medium">{p.title}</div>
+              <div className="text-sm font-medium">{p.title}{p.note && <span className="ml-2 text-xs font-normal text-[var(--ink-soft)]">{p.note}</span>}</div>
               <input
                 id={`bulk-link-${p.key}`}
                 type="url"

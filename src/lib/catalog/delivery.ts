@@ -129,6 +129,12 @@ export interface FreshSize {
   title: string;
   option: string;
   quantity: number;
+  /** The line's place on the invoice as a whole — what a page linked to this variant is keyed by. */
+  line: number;
+  /** The colour, where the product is sold by colour. */
+  colour?: string;
+  /** A colour the listing did not have: pictures of it are wanted, as for a new product. */
+  newColour?: boolean;
 }
 
 /**
@@ -182,7 +188,7 @@ export function buildDelivery(csv: string, invoiced: InvoiceLine[], options: Del
   // anywhere — applyInvoice says so and leaves it, and this is what to do about it.
   const sizes = options.reorderOnly
     ? { csv: csvSoFar, added: [] as FreshSize[], appended: 0, warnings: [] as string[], wanted: 0 }
-    : appendSizes(csvSoFar, reconciliation.matched, fields);
+    : appendSizes(csvSoFar, reconciliation.matched, fields, options.pages ?? {}, (line) => lines.indexOf(line));
   csvSoFar = sizes.csv;
   appended += sizes.appended;
   // applyInvoice says a size the listing has not got has to be added in Shopify first, which is
@@ -368,6 +374,9 @@ function appendSizes(
   csv: string,
   matched: Match[],
   fields: InvoiceFields,
+  /** The pages somebody linked, by the line's place on the invoice: a new colourway takes its pictures from one. */
+  pages: Record<number, PageDetails> = {},
+  placeOf: (line: InvoiceLine) => number = () => -1,
 ): { csv: string; added: FreshSize[]; appended: number; warnings: string[]; wanted: number } {
   // A size the listing has not got, or a colour it has not got: either is a variant to add.
   const wanted = matched.filter((m) => (m.sizeMissing && (m.line.size ?? "").trim() !== "") || (m.colourMissing && (m.line.colour ?? "").trim() !== ""));
@@ -458,8 +467,34 @@ function appendSizes(
     if (barcode) { write("Variant Barcodes", barcode); write("Variant Barcode", barcode); }
     else { const b = at.get("Variant Barcodes") ?? at.get("Variant Barcode"); if (b !== undefined) row[b] = ""; }
 
+    /**
+     * A new colourway's pictures. The listing's own pictures are of its other colours, so a page
+     * linked to this variant gives it its own: the first as the variant's picture, all of them on
+     * the product, after the pictures it has. A new size of a colour the listing has needs none.
+     */
+    const place = placeOf(m.line);
+    const page = m.colourMissing ? pages[place] : undefined;
+    const imageRows: string[][] = [];
+    if (page && page.images.length > 0) {
+      const variantImage = at.get("Variant Image");
+      if (variantImage !== undefined) row[variantImage] = page.images[0];
+      const src = at.get("Image Src"), position = at.get("Image Position"), alt = at.get("Image Alt Text");
+      if (src !== undefined) {
+        const have = new Set(m.productRows.map((r) => (grid[r]?.[src] ?? "").trim()).filter(Boolean));
+        const last = Math.max(0, ...m.productRows.map((r) => Number(grid[r]?.[position ?? -1] ?? 0) || 0));
+        let n = 0;
+        for (const image of page.images.filter((u) => !have.has(u))) {
+          const picture = header.map((column, i) => (column === "Handle" ? (row[i] ?? "") : ""));
+          picture[src] = image;
+          if (position !== undefined) picture[position] = String(last + ++n);
+          if (alt !== undefined) picture[alt] = `${(grid[m.productRows[0]]?.[titleAt ?? -1] ?? "").trim()} ${colour}`.trim();
+          imageRows.push(picture);
+        }
+      }
+    }
     rows.push(header.map((_, i) => quote(row[i] ?? "")).join(","));
-    added.push({ handle: m.handle, title: (grid[m.productRows[0]]?.[titleAt ?? -1] ?? "").trim(), option, quantity: Math.max(0, Math.round(m.line.quantity ?? 0)) });
+    for (const picture of imageRows) rows.push(header.map((_, i) => quote(picture[i] ?? "")).join(","));
+    added.push({ handle: m.handle, title: (grid[m.productRows[0]]?.[titleAt ?? -1] ?? "").trim(), option, quantity: Math.max(0, Math.round(m.line.quantity ?? 0)), line: place, ...(colour ? { colour } : {}), ...(m.colourMissing ? { newColour: true } : {}) });
   }
   if (rows.length === 0) return { csv, added: [], appended: 0, warnings: [], wanted: wanted.length };
 

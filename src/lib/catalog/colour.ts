@@ -24,9 +24,21 @@ export function colourName(value: string): string {
  * GRAY). Only a part that fits exactly one name is written out; the rest is left as the supplier
  * wrote it, cased, rather than guessed. The shop writes the result "Rum Raisin / Chinchilla Gray".
  */
+/**
+ * The trade's own shorthand inside a colour, which no sheet spells out: Anon's lenses are "PRCV SUN
+ * ONYX" and "PRCV VRBL BLUE" on every row, and Perceive Sunny Onyx and Perceive Variable Blue on
+ * the shop's shelf. Whole words only, and "Sun" is "Sunny" only in a Perceive lens name.
+ */
+const COLOUR_SHORTHAND: Record<string, string> = { PRCV: "PERCEIVE", VRBL: "VARIABLE", TRUBLK: "TRUE BLACK", BLK: "BLACK", WHT: "WHITE", GRY: "GRAY", BLU: "BLUE", GRN: "GREEN", PRPL: "PURPLE", ORG: "ORANGE", YLW: "YELLOW" };
+function writeOutWords(part: string): string {
+  if (/[a-z]/.test(part)) return part;
+  const words = part.trim().split(/\s+/).map((w) => COLOUR_SHORTHAND[w] ?? w);
+  return words.map((w, i) => (w === "SUN" && words[i - 1] === "PERCEIVE" ? "SUNNY" : w)).join(" ");
+}
+
 export function writeOutColour(value: string, fullNames: string[]): string {
-  const parts = value.split("/").map((p) => p.trim()).filter(Boolean);
-  if (parts.length < 2) return colourName(value);
+  const parts = value.split("/").map((p) => writeOutWords(p.trim())).filter(Boolean);
+  if (parts.length < 2) return colourName(parts[0] ?? value);
   const names = [...new Set(fullNames.map((n) => n.trim()).filter((n) => n && !n.includes("/")))];
   const letters = (s: string) => s.toUpperCase().replace(/[^A-Z]/g, "");
   const abbreviates = (abbr: string, name: string): boolean => {

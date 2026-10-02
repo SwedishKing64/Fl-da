@@ -22,7 +22,7 @@
 import { detectHeaderRow } from "./extract/tabular";
 import { normaliseBarcode, type InvoiceLine } from "./reconcile";
 import { yearMonth } from "./deliveries";
-import { FIT_VALUE, KIND_VALUE, PARTY } from "./mapping";
+import { FIT_VALUE, KIND_VALUE, NOT_A_VALUE, PARTY } from "./mapping";
 import { terrainColumn } from "./shop-memory";
 import { brandIn, isBrand } from "./brands";
 import { colourName, writeOutColour } from "./colour";
@@ -450,9 +450,9 @@ function readGrid(name: string, source: string[][]): InvoiceRead | null {
       sku: sku ? text(row[sku.index]) : "",
       barcode: barcode ? text(row[barcode.index]) : "",
       title: title ? text(row[title.index]) : "",
-      ...(size ? { size: text(row[size.index]) } : {}),
+      ...(size && !NOT_A_VALUE.test(text(row[size.index])) ? { size: text(row[size.index]) } : {}),
       ...(fit && FIT_VALUE.test(text(row[fit.index])) ? { fit: text(row[fit.index]) } : {}),
-      ...(colour ? { colour: colourName(text(row[colour.index])) } : {}),
+      ...(colour && !NOT_A_VALUE.test(text(row[colour.index])) ? { colour: colourName(text(row[colour.index])) } : {}),
       ...(gender && text(row[gender.index]) ? { gender: text(row[gender.index]) } : {}),
       ...(brandColumn && isBrand(text(row[brandColumn.index])) ? { brand: text(row[brandColumn.index]) } : {}),
       ...(kindColumn && KIND_VALUE.test(text(row[kindColumn.index])) ? { kind: text(row[kindColumn.index]) } : {}),

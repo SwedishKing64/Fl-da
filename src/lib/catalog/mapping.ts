@@ -93,7 +93,7 @@ const AUDIENCE = /^(mens?|womens?|ladies|kids?|youth|junior|jr|boys?|girls?|unis
  */
 export const FIT_VALUE = /^(regular|standard|std|wide|extra wide|x-?wide|narrow|low bridge( fit)?|asian fit|round fit|oval fit|regular fit|slim( fit)?|relaxed( fit)?|short|long|tall|petite|plus)$/i;
 /** A cell that says there is nothing to say. */
-const NOT_A_VALUE = /^(na|n\/a|n\.a\.|none|noc|nil|null|tbc|tba|-|\.|x)$/i;
+export const NOT_A_VALUE = /^(na|n\/a|n\.a\.|none|noc|nil|null|tbc|tba|-|\.|x)$/i;
 /** A fit that is simply the default, and says nothing. */
 export const DEFAULT_FIT = /^(regular|standard|std|regular fit)$/i;
 

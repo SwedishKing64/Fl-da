@@ -6,8 +6,9 @@ describe("a two-tone colour written out from the sheet's own full names", () => 
   it("writes out each part it can place on exactly one name, and leaves the rest as written", () => {
     expect(writeOutColour("RUMRSN/CHLGRY", names)).toBe("Rum Raisin / Chinchilla Gray");
     expect(writeOutColour("NTSHPR/PRPVLT", names)).toBe("Nightshade Purple / Prpvlt");
+    expect(writeOutColour("ARSTBL/PRCV SUN ONYX", names)).toBe("Airstream Blue / Perceive Sunny Onyx");
+    expect(writeOutColour("BLACK/PRCV VRBL BLUE", names)).toBe("Black / Perceive Variable Blue");
     expect(writeOutColour("TRUBLK/DRDMSS", names)).toBe("True Black / Drdmss");
-    expect(writeOutColour("ARSTBL/PRCV SUN ONYX", names)).toBe("Airstream Blue / Prcv Sun Onyx");
     expect(writeOutColour("BLACK/WHITE", names)).toBe("Black / White");
   });
   it("leaves a plain colour to colourName", () => {

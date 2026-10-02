@@ -250,7 +250,7 @@ describe("a new colourway of a listing the shop has", () => {
   });
 
   it("gives the new colour its own pictures from the page linked to it, after the listing's own", () => {
-    const page = { description: "", features: [], images: ["https://img/white-1.jpg", "https://img/white-2.jpg"], confident: true, pageTitle: "Cartel X", via: "page" as const, note: "" };
+    const page = { sourceUrl: "https://example.com/cartel-x", description: "", features: [], images: ["https://img/white-1.jpg", "https://img/white-2.jpg"], confident: true, pageTitle: "Cartel X", via: "ai" as const, note: "" };
     const out = buildDelivery(csv, lines, { vendor: "Burton", fields: { rrp: true, quantity: true, stock: "add" }, pages: { 1: page } });
     const grid = parseCsv(out.csv); const h = grid[0]; const at = (n: string) => h.indexOf(n);
     const white = grid.slice(1).find((r) => r[at("Option1 Value")] === "White" && r[at("Option2 Value")] === "Medium")!;

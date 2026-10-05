@@ -261,7 +261,7 @@ const SYSTEM = `You read one product's web page for a ski and snowboard retailer
 
 You are given the product the retailer ordered, then the page: its title, what it declares about itself, its visible text with headings and lists kept as lines, and a numbered list of the pictures on it.
 
-Report only what the page carries. Quote the manufacturer's wording; do not paraphrase it and do not write marketing copy of your own. The details section is often headed "Details", "Specs", "Technical specifications", "Features" or "Product information" — take its lines exactly as written, keeping each label with its value. Choose pictures by number from the list given and from nothing else.
+Report only what the page carries. Quote the manufacturer's wording; do not paraphrase it and do not write marketing copy of your own. If the fetched page shows addresses of the product's own pictures (links ending .jpg, .jpeg, .png or .webp that are photographs of this product, not icons, logos or other products), list them at the end under the heading "Pictures:", one per line, exactly as written. The details section is often headed "Details", "Specs", "Technical specifications", "Features" or "Product information" — take its lines exactly as written, keeping each label with its value. Choose pictures by number from the list given and from nothing else.
 
 If the page is not for this product, say so with confident false and report nothing from it that you would not stand behind.`;
 
@@ -383,15 +383,20 @@ export async function readViaModelFetch(link: string, hint: PageHint): Promise<P
   const parsed = FetchedSchema.safeParse(JSON.parse(text));
   if (!parsed.success || (!parsed.data.description.trim() && parsed.data.features.length === 0)) return null;
   const r = parsed.data;
+  // Whatever picture addresses the fetched page showed: usually none, since the fetch returns the
+  // page's words, but a page that lists them in its text gives the pictures too.
+  const pictures = [...new Set((notes.split(/\bPictures:\s*/i)[1] ?? "").match(/https?:\/\/[^\s)"'<>]+\.(?:jpe?g|png|webp)(?:\?[^\s)"'<>]*)?/gi) ?? [])].slice(0, 10);
   return {
     description: r.description.trim(),
     features: r.features.map((f) => f.replace(/\s+/g, " ").trim()).filter(Boolean).slice(0, 30),
-    images: [],
+    images: pictures,
     pageTitle: r.pageTitle.trim(),
     confident: r.confident,
     sourceUrl: link,
     via: "ai",
-    note: "The site would not show its page to this server, so it was read through the API instead; that gives the description and details but not the pictures.",
+    note: pictures.length > 0
+      ? "The site would not show its page to this server, so it was read through the API instead."
+      : "The site would not show its page to this server, so it was read through the API instead; that gives the description and details but not the pictures.",
   };
 }
 

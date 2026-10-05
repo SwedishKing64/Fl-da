@@ -29,14 +29,25 @@ export function colourName(value: string): string {
  * ONYX" and "PRCV VRBL BLUE" on every row, and Perceive Sunny Onyx and Perceive Variable Blue on
  * the shop's shelf. Whole words only, and "Sun" is "Sunny" only in a Perceive lens name.
  */
-const COLOUR_SHORTHAND: Record<string, string> = { PRCV: "PERCEIVE", VRBL: "VARIABLE", TRUBLK: "TRUE BLACK", BLK: "BLACK", WHT: "WHITE", GRY: "GRAY", BLU: "BLUE", GRN: "GREEN", PRPL: "PURPLE", ORG: "ORANGE", YLW: "YELLOW" };
+const COLOUR_SHORTHAND: Record<string, string> = { TRUBLK: "TRUE BLACK", BLK: "BLACK", WHT: "WHITE", GRY: "GRAY", BLU: "BLUE", GRN: "GREEN", PRPL: "PURPLE", ORG: "ORANGE", YLW: "YELLOW" };
 function writeOutWords(part: string): string {
   if (/[a-z]/.test(part)) return part;
-  const words = part.trim().split(/\s+/).map((w) => COLOUR_SHORTHAND[w] ?? w);
-  return words.map((w, i) => (w === "SUN" && words[i - 1] === "PERCEIVE" ? "SUNNY" : w)).join(" ");
+  return part.trim().split(/\s+/).map((w) => COLOUR_SHORTHAND[w] ?? w).join(" ");
 }
 
-export function writeOutColour(value: string, fullNames: string[]): string {
+/**
+ * A goggle's colour is its frame, then its lens, the way the shop writes it: "Black w/ Prcv Sun
+ * Onyx". The lens is written as the sheet writes it — the shop keeps Anon's own lens shorthand.
+ */
+export function goggleColour(value: string): string {
+  const parts = value.split("/").map((p) => p.trim()).filter(Boolean);
+  if (parts.length < 2) return colourName(value);
+  const [frame, ...lens] = parts;
+  return `${colourName(writeOutWords(frame))} w/ ${colourName(lens.join(" "))}`;
+}
+
+export function writeOutColour(value: string, fullNames: string[], lens = false): string {
+  if (lens) return goggleColour(value);
   const parts = value.split("/").map((p) => writeOutWords(p.trim())).filter(Boolean);
   if (parts.length < 2) return colourName(parts[0] ?? value);
   const names = [...new Set(fullNames.map((n) => n.trim()).filter((n) => n && !n.includes("/")))];

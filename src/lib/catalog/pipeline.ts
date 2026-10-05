@@ -399,7 +399,7 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
   // A two-tone colour the sheet abbreviates ("RUMRSN/CHLGRY") is written out with the names the
   // sheet uses in full elsewhere ("Rum Raisin", "Chinchilla Gray"). See writeOutColour.
   const colourNames = [...items.map((e) => e.item.colour), ...specItems.map((s) => s.colour)].filter((c) => c.trim() && !c.includes("/"));
-  for (const entry of items) if (entry.item.colour.includes("/")) entry.item = { ...entry.item, colour: writeOutColour(entry.item.colour, colourNames) };
+  for (const entry of items) if (entry.item.colour.includes("/")) entry.item = { ...entry.item, colour: writeOutColour(entry.item.colour, colourNames, /goggle/i.test(`${entry.item.category} ${entry.item.productType} ${entry.item.title}`)) };
 
   // A spec-sheet-only batch still builds products: one variant per listed length/size, no cost yet.
   if (items.length === 0 && specItems.length > 0) {

@@ -45,6 +45,14 @@ export function cleanProductUrl(raw: string): { url: string } | { error: string 
   return { url: u.toString() };
 }
 
+/**
+ * The model's name without its fit, so the fits of one model share a page: "M4 Cylindrical Low
+ * Bridge" and "M4 Cylindrical" are one page on Anon's site, as are "Photon BOA Wide" and "Photon BOA".
+ */
+export function fitlessOf(title: string): string {
+  return title.replace(/\b(wide|extra wide|narrow|low bridge( fit)?|asian fit|round fit|oval fit|regular( fit)?)\b/gi, " ").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
 /** The flat ski's handle for a package's: "m7-mantra-2027-inc-marker-griffon-binding-package" → "m7-mantra-2027". */
 export function flatHandleOf(handle: string): string {
   return handle.replace(/-inc-.*binding-package(-\d+)?$/, "").replace(/-inc-.*$/, "");

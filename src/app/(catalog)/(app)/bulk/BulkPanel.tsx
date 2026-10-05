@@ -8,7 +8,7 @@ import { reconcile, type InvoiceFields, type Reconciliation } from "@/lib/catalo
 import { buildDelivery, joinToReference, type FreshProduct } from "@/lib/catalog/delivery";
 import { deliveryAsked, narrowToWindow, parseWindow } from "@/lib/catalog/deliveries";
 import { brandsAsked } from "@/lib/catalog/brands";
-import type { PageDetails } from "@/lib/catalog/page-types";
+import { fitlessOf, type PageDetails } from "@/lib/catalog/page-types";
 import { BulkLinks } from "./BulkLinks";
 import { listingsFromCsv } from "@/lib/catalog/shop-memory";
 import type { CanonicalLineItem } from "@/lib/catalog/types";
@@ -539,7 +539,16 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
     const pages: Record<number, PageDetails> = {};
     const linkFeed: string[] = [];
     const colourwayKeys = new Set(newColourways.map((c) => c.key));
-    const asked = Object.entries(links).map(([k, url]) => ({ key: Number(k), url: url.trim() })).filter((l) => l.url && (buildNew || colourwayKeys.has(l.key)));
+    // A model's other fits share its page: a link under "M4 Cylindrical" reads for "M4 Cylindrical
+    // Low Bridge" too, unless that one was given a page of its own.
+    const implied: Record<number, string> = {};
+    for (const p of newProducts) {
+      const key = p.lines[0];
+      if (key === undefined || (links[key] ?? "").trim()) continue;
+      const from = newProducts.find((q) => q !== p && (links[q.lines[0]] ?? "").trim() && fitlessOf(q.title) === fitlessOf(p.title));
+      if (from) implied[key] = links[from.lines[0]].trim();
+    }
+    const asked = Object.entries({ ...implied, ...links }).map(([k, url]) => ({ key: Number(k), url: url.trim() })).filter((l) => l.url && (buildNew || colourwayKeys.has(l.key)));
     if (asked.length > 0) {
       const nameOf = (key: number) => {
         const colourway = newColourways.find((c) => c.key === key);
@@ -1365,7 +1374,10 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
               {((buildNew && newProducts.length > 0) || newColourways.length > 0) && (
                 <BulkLinks
                   products={[
-                    ...(buildNew ? newProducts.map((p) => ({ key: p.lines[0], title: p.title })) : []),
+                    ...(buildNew ? newProducts.map((p) => {
+                      const from = !(links[p.lines[0]] ?? "").trim() ? newProducts.find((q) => q !== p && (links[q.lines[0]] ?? "").trim() && fitlessOf(q.title) === fitlessOf(p.title)) : undefined;
+                      return { key: p.lines[0], title: p.title, ...(from ? { note: `takes the page under ${from.title}` } : {}) };
+                    }) : []),
                     ...newColourways.map((c) => ({ key: c.key, title: `${c.title} — ${c.colour}`, note: "a new colour on a listing you have; its pictures come from this page" })),
                   ]}
                   links={links}

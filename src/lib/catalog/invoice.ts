@@ -479,7 +479,8 @@ function readGrid(name: string, source: string[][]): InvoiceRead | null {
   // elsewhere — every row of it, ordered or not. See writeOutColour.
   if (colour) {
     const fullNames = rows.map((row) => text(row[colour.index])).filter((v) => v && !v.includes("/"));
-    for (const line of lines) if ((line.colour ?? "").includes("/")) line.colour = writeOutColour(line.colour!, fullNames);
+    const goggle = (line: InvoiceLine) => /goggle/i.test(`${line.kind ?? ""} ${line.title}`);
+    for (const line of lines) if ((line.colour ?? "").includes("/")) line.colour = writeOutColour(line.colour!, fullNames, goggle(line));
   }
 
   const heading = (c: Column | null) => c?.heading ?? "";

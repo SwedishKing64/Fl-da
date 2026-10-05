@@ -17,7 +17,7 @@
 
 import { prisma } from "./db";
 import { houseBody, isPlaceholderBody } from "./body";
-import { cleanProductUrl, flatHandleOf, type PageDetails } from "./page-types";
+import { cleanProductUrl, fitlessOf, flatHandleOf, type PageDetails } from "./page-types";
 import { readProductPage, PageError } from "./extract/page";
 
 /** A package is read from its ski's page: "… inc Marker Griffon Binding Package" is the ski's name with a binding added. */
@@ -29,7 +29,7 @@ const linkedFrom = (status: string): string => (MACHINE_FILLED.includes(status) 
 
 /** Save, or clear, the link beside a product. The package of a ski gets the ski's link when it has none of its own. */
 export async function setProductLink(productId: string, raw: string): Promise<{ url: string; shared: string[] }> {
-  const product = await prisma.product.findUniqueOrThrow({ where: { id: productId }, select: { id: true, batchId: true, handle: true, lookupStatus: true, lookupSource: true } });
+  const product = await prisma.product.findUniqueOrThrow({ where: { id: productId }, select: { id: true, batchId: true, handle: true, title: true, lookupStatus: true, lookupSource: true } });
   const cleaned = cleanProductUrl(raw);
   if ("error" in cleaned) {
     if (cleaned.error) throw new Error(cleaned.error);
@@ -41,8 +41,11 @@ export async function setProductLink(productId: string, raw: string): Promise<{ 
   }
   await prisma.product.update({ where: { id: productId }, data: { lookupSource: cleaned.url, lookupStatus: linkedFrom(product.lookupStatus), lookupAt: null } });
   const flat = flatHandleOf(product.handle);
-  const siblings = (await prisma.product.findMany({ where: { batchId: product.batchId, id: { not: productId } }, select: { id: true, handle: true, lookupSource: true, lookupStatus: true } }))
-    .filter((p) => flatHandleOf(p.handle) === flat && (!p.lookupSource.trim() || WAITING.includes(p.lookupStatus)));
+  // The ski's package, and the model's other fits — "M4 Cylindrical Low Bridge" beside "M4
+  // Cylindrical" — are the same page, so they take this link unless they already have one.
+  const sameModel = (p: { handle: string; title: string }) => flatHandleOf(p.handle) === flat || fitlessOf(p.title) === fitlessOf(product.title);
+  const siblings = (await prisma.product.findMany({ where: { batchId: product.batchId, id: { not: productId } }, select: { id: true, handle: true, title: true, lookupSource: true, lookupStatus: true } }))
+    .filter((p) => sameModel(p) && (!p.lookupSource.trim() || WAITING.includes(p.lookupStatus)));
   for (const s of siblings) await prisma.product.update({ where: { id: s.id }, data: { lookupSource: cleaned.url, lookupStatus: linkedFrom(s.lookupStatus), lookupAt: null } });
   return { url: cleaned.url, shared: siblings.map((s) => s.id) };
 }
@@ -78,8 +81,8 @@ export async function readProductLink(productId: string, deps: { read?: typeof r
 
   // The same page for the ski's package(s), in one read.
   const flat = flatHandleOf(product.handle);
-  const waiting = (await prisma.product.findMany({ where: { batchId: product.batchId, id: { not: productId } }, select: { id: true, handle: true, lookupSource: true, lookupStatus: true } }))
-    .filter((p) => flatHandleOf(p.handle) === flat && p.lookupSource === url && WAITING.includes(p.lookupStatus));
+  const waiting = (await prisma.product.findMany({ where: { batchId: product.batchId, id: { not: productId } }, select: { id: true, handle: true, title: true, lookupSource: true, lookupStatus: true } }))
+    .filter((p) => (flatHandleOf(p.handle) === flat || fitlessOf(p.title) === fitlessOf(product.title)) && p.lookupSource === url && WAITING.includes(p.lookupStatus));
   const targets = [productId, ...waiting.map((p) => p.id)];
   const out = { ...empty, ok: true, also: waiting.map((p) => p.id) };
   const notes: string[] = [];

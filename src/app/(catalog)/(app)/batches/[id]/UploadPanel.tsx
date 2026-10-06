@@ -17,7 +17,7 @@ const KINDS = [
 ];
 
 /** A read still marked as running this long after the upload is one the host cut off. Matches the page. */
-const STALL_MS = 150_000;
+const STALL_MS = 330_000;
 
 /** How many times a read that ran out of time is tried again before it is left to the person. */
 const RETRIES = 2;
@@ -29,7 +29,7 @@ export function UploadPanel({ batchId, aiEnabled, reading, productCount, pending
 
   /**
    * A read that ran out of time is tried again from here, without anyone pressing anything: each
-   * try is a request with a minute of its own, and the read stops itself inside that minute and
+   * try is a request with five minutes of its own, and the read stops itself inside that time and
    * says so, so a try never hangs. Twice, then the file says what happened and Read again stays.
    */
   useEffect(() => {
@@ -54,8 +54,8 @@ export function UploadPanel({ batchId, aiEnabled, reading, productCount, pending
 
   /**
    * The products are built from here, not behind the upload: reading a photograph is one long
-   * model call and building can be another, and together they outran the minute the upload had
-   * after it answered — the file sat on "reading…" for ever. This request has a minute of its own.
+   * model call and building can be another, and together they outran the time the upload had
+   * after it answered — the file sat on "reading…" for ever. This request has its own time.
    */
   const build = async () => {
     if (built.current) return;
@@ -239,7 +239,7 @@ export function UploadPanel({ batchId, aiEnabled, reading, productCount, pending
         <Alert tone="info">
           <div className="flex items-center gap-3">
             <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-blue-300 border-t-blue-700" aria-hidden />
-            <span>Reading {reading === 1 ? "the file" : `${reading} files`} now — columns are matched for you. A spreadsheet takes seconds; a scanned or photographed invoice is read by the model and takes up to a minute. This page updates itself as each one is read, and then builds the products.</span>
+            <span>Reading {reading === 1 ? "the file" : `${reading} files`} now — columns are matched for you. A spreadsheet takes seconds; a scanned or photographed invoice is read by the model and usually takes under a minute. This page updates itself as each one is read, and then builds the products.</span>
           </div>
         </Alert>
       )}
@@ -247,7 +247,7 @@ export function UploadPanel({ batchId, aiEnabled, reading, productCount, pending
         <Alert tone="info">
           <div className="flex items-center gap-3">
             <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-blue-300 border-t-blue-700" aria-hidden />
-            <span>The read of {rereading.filename} ran out of time, so it is being read again (try {rereading.attempt + 1} of {RETRIES + 1}) — a photograph is read at the model&apos;s fast speed and stops itself inside the minute rather than hanging.</span>
+            <span>The read of {rereading.filename} ran out of time, so it is being read again (try {rereading.attempt + 1} of {RETRIES + 1}) — a photograph is read at the model&apos;s fast speed and stops itself in time rather than hanging.</span>
           </div>
         </Alert>
       )}
@@ -255,7 +255,7 @@ export function UploadPanel({ batchId, aiEnabled, reading, productCount, pending
         <Alert tone="info">
           <div className="flex items-center gap-3">
             <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-blue-300 border-t-blue-700" aria-hidden />
-            <span>Files read. Building the products — matched against what the shop already sells, named and tagged the way it lists them. Usually seconds; up to a minute when lines have to be put to the model to place.</span>
+            <span>Files read. Building the products — matched against what the shop already sells, named and tagged the way it lists them. Usually seconds; longer when lines have to be put to the model to place.</span>
           </div>
         </Alert>
       )}

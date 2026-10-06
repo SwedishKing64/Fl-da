@@ -91,7 +91,7 @@ Rules:
 - costPrice is the UNIT price for one item, never the line total. Strip currency symbols.
 - Never invent values. Leave a string empty or a number null when the document does not state it.
 - Ignore freight, deposit, discount, subtotal and tax summary lines - they are not products.
-- On an INVOICE or PRICE_LIST, leave description, flex, abilityLevel, dinRange, terrain, tags and imageUrls empty on every item and keep summary to one short sentence: the shop fills those in from the brand's own pages, and a photographed invoice has to be read inside a minute.
+- On an INVOICE or PRICE_LIST, leave description, flex, abilityLevel, dinRange, terrain, tags and imageUrls empty on every item and keep summary to one short sentence: the shop fills those in from the brand's own pages, and a photographed invoice has to be read quickly.
 - gstTreatment: EXCLUSIVE when prices are marked ex GST / plus GST, INCLUSIVE when marked inc GST, NONE when the supplier is overseas and no GST applies, otherwise UNKNOWN.`;
 
 let client: Anthropic | null = null;
@@ -109,15 +109,16 @@ type ContentBlocks = Anthropic.MessageParam["content"];
 /**
  * How long one read may take, all attempts together.
  *
- * A read runs inside a request the host allows a minute: the upload's background work, a page's
- * Read again, the Bulk page's invoice box. A read that outlasts the minute is killed silently —
- * nothing recorded, the file "reading…" for ever — which is worse than a read that stops itself a
- * little earlier and says so, because a read that said so is tried again on its own.
+ * A read runs inside a request the host allows five minutes (maxDuration = 300 on the pages and
+ * the upload route): the upload's background work, a page's Read again, the Bulk page's invoice
+ * box. A read that outlasts the request is killed silently — nothing recorded, the file
+ * "reading…" for ever — which is worse than a read that stops itself a little earlier and says
+ * so, because a read that said so is tried again on its own.
  */
-export const READ_BUDGET_MS = 50_000;
+export const READ_BUDGET_MS = 240_000;
 
 /** Said by a read that stopped itself at the budget. The page tries such a read again by itself. */
-export const RAN_OUT_OF_TIME = "Ran out of time: the read did not finish inside the minute the host allows.";
+export const RAN_OUT_OF_TIME = "Ran out of time: the read did not finish inside the time a request is allowed.";
 
 export function ranOutOfTime(message: string | null | undefined): boolean {
   return Boolean(message && message.startsWith("Ran out of time"));

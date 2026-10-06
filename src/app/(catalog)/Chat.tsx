@@ -53,7 +53,7 @@ export function Chat({
         // never thrown — thrown, it took the whole page down.
         const m = err instanceof Error ? err.message : String(err);
         failed = /timed? ?out|504|gateway|fetch failed|failed to fetch|unexpected response/i.test(m)
-          ? "The request was cut off before it answered — the host gives it about a minute. What was said is kept; reload to see what it did, then send it again if it did nothing."
+          ? "The request was cut off before it answered — the host gives it five minutes. What was said is kept; reload to see what it did, then send it again if it did nothing."
           : m;
       }
       if (failed) {

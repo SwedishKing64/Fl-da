@@ -10,7 +10,7 @@ import { Button } from "@/app/(catalog)/ui";
 const said = (err: unknown): string => {
   const m = err instanceof Error ? err.message : String(err);
   return /timed? ?out|504|gateway|fetch failed|failed to fetch|unexpected response/i.test(m)
-    ? "The request was cut off before it answered — the host gives it about a minute. Whatever it had done is saved; press again to carry on."
+    ? "The request was cut off before it answered — the host gives it five minutes. Whatever it had done is saved; press again to carry on."
     : m;
 };
 

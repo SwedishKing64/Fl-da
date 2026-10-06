@@ -22,10 +22,10 @@ export const maxDuration = 300;
 
 /**
  * A read still marked as running long after it could be. Reading happens after the upload has
- * answered, with a minute to run; a file still "reading…" well past that is one the host cut off,
+ * answered, with five minutes to run; a file still "reading…" well past that is one the host cut off,
  * and nothing else ever says so. The stamp is the upload's — a re-read answers the page directly.
  */
-const STALL_MS = 150_000;
+const STALL_MS = 330_000;
 const stalled = (f: { extractionStatus: string; createdAt: Date }) => f.extractionStatus === "PENDING" && Date.now() - f.createdAt.getTime() > STALL_MS;
 
 export default async function BatchPage(props: PageProps<"/batches/[id]">) {
@@ -73,7 +73,7 @@ export default async function BatchPage(props: PageProps<"/batches/[id]">) {
                         <td>{f.kind.replace("_", " ").toLowerCase()}</td>
                         <td>
                           <Badge tone={f.extractionStatus === "DONE" ? "success" : f.extractionStatus === "FAILED" || stalled(f) ? "danger" : "warning"}>{f.extractionStatus === "PENDING" ? (stalled(f) ? "ran out of time" : "reading…") : f.extractionMethod ?? f.extractionStatus}</Badge>
-                          {stalled(f) && <div className="mt-1 max-w-md whitespace-normal text-xs text-amber-800">The reading was cut off before it finished — the host gives it a minute, and a photographed invoice can take longer. The file is stored: Read again gives it another go.</div>}
+                          {stalled(f) && <div className="mt-1 max-w-md whitespace-normal text-xs text-amber-800">The reading was cut off before it finished. The file is stored: Read again gives it another go.</div>}
                           {f.extractionError && <div className="mt-1 max-w-md whitespace-normal text-xs text-amber-800">{f.extractionError}</div>}
                         </td>
                         <td className="text-right">{rows}</td>

@@ -21,7 +21,7 @@ export default function AppError({ error, reset }: { error: Error & { digest?: s
       <Alert tone="danger">
         <p>
           {cutOff
-            ? "The request behind what you pressed was cut off before it answered — the host gives each one about a minute. Whatever it had done up to then is saved; Try again puts the page back, and what was running can be pressed again."
+            ? "The request behind what you pressed was cut off before it answered — the host gives each one five minutes. Whatever it had done up to then is saved; Try again puts the page back, and what was running can be pressed again."
             : "The request behind what you pressed failed. Try again puts the page back as it was."}
         </p>
         {message && <p className="mt-2 break-words font-mono text-xs opacity-80">{message}{error.digest ? ` · digest ${error.digest}` : ""}</p>}

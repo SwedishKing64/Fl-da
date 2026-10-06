@@ -14,8 +14,8 @@ import { Alert, Button, Card } from "@/app/(catalog)/ui";
  * settle is said in the instruction chat. The button runs it again — after an answer
  * in the chat, or an edit by hand.
  */
-/** How long one of the two requests is given before the card says so. The host allows a minute. */
-const PATIENCE_MS = 75_000;
+/** How long one of the two requests is given before the card says so. The host allows five minutes. */
+const PATIENCE_MS = 290_000;
 
 function withinTime<T>(work: Promise<T>, doing: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -67,7 +67,7 @@ export function BuildCheck({ batchId, needed, aiEnabled, locked }: { batchId: st
   if (!aiEnabled) return null;
   return (
     <Card title="Build check" actions={<Button size="sm" disabled={pending || locked} onClick={run}>{pending ? "Checking…" : "Check the build"}</Button>}>
-      {pending && <p className="text-sm text-[var(--ink-soft)]">{step === "files" ? "Reading the files again, forensically — every tab, every column, the totals. Up to a minute…" : "Files read. Now every product against how the shop lists this brand and what was said in the chat. Up to a minute…"}</p>}
+      {pending && <p className="text-sm text-[var(--ink-soft)]">{step === "files" ? "Reading the files again, forensically — every tab, every column, the totals. Usually under a minute…" : "Files read. Now every product against how the shop lists this brand and what was said in the chat. Usually under a minute…"}</p>}
       {!pending && result && <Alert tone={result.tone}>{result.text}</Alert>}
       {!pending && !result && <p className="text-sm text-[var(--ink-soft)]">{needed ? "This build has not been checked yet." : "Checked. The result is in the chat above; run it again after you answer or edit."}</p>}
     </Card>

@@ -2,19 +2,21 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { PrismaClient } from "@prisma/client";
-import { findDatabaseUrl, runtimeDatabaseUrl } from "./db-url";
+import { candidateDatabaseUrls, findDatabaseUrl, runtimeDatabaseUrl } from "./db-url";
 import { isMissingColumn } from "./schema-repair";
 
 export { DATABASE_ENV_KEYS, accelerateEnvName, databaseEnvNamesPresent, directDatabaseUrl, findDatabaseUrl } from "./db-url";
 
 // Single Prisma client per process (Next.js dev hot-reload safe).
-const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient; ephemeralDb?: boolean };
+const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient; ephemeralDb?: boolean; dbOverride?: { url: string; key: string; insteadOf: string } };
 
 /**
  * Resolve the database URL. When none is configured (a fresh Vercel project with no Postgres
  * store yet), fall back to a throwaway copy of the SQLite template built by `vercel-build`.
  */
 function resolveDatabaseUrl(): { url: string; ephemeral: boolean } | undefined {
+  // A store chosen because the configured one did not answer — see reachableStore.
+  if (globalForPrisma.dbOverride) return { url: runtimeDatabaseUrl(globalForPrisma.dbOverride.url), ephemeral: false };
   const configured = findDatabaseUrl();
   if (configured) return { url: runtimeDatabaseUrl(configured.url), ephemeral: false };
   const template = path.join(process.cwd(), "prisma", "template.db");
@@ -144,11 +146,57 @@ export function forgetDatabaseStatus(): void {
   healthyUntil = 0;
 }
 
+/** Whether the error is the database not answering at all, as against answering with a refusal. */
+function isUnreachable(error: unknown): boolean {
+  const code = (error as { code?: string } | null)?.code;
+  if (code === "P1001" || code === "P1002" || code === "P1017") return true;
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return /can't reach database server|connection refused|ENOTFOUND|ECONNREFUSED|timed out|ETIMEDOUT/i.test(message);
+}
+
+/**
+ * Another store that answers, when the configured one does not.
+ *
+ * Asked of each candidate in turn: does it answer, and how much of this app's data does it hold.
+ * The one holding the most import batches is the one the shop has been using; a reachable store
+ * with no tables at all is taken only when nothing better answers. Never throws, and never tried
+ * twice in one process: the choice is kept, and the gate says which store is in use and why.
+ */
+async function reachableStore(insteadOf: string): Promise<{ url: string; key: string } | null> {
+  const others = candidateDatabaseUrls().filter((c) => c.key !== insteadOf);
+  let best: { url: string; key: string; batches: number } | null = null;
+  for (const candidate of others) {
+    const probe = new PrismaClient({ datasourceUrl: runtimeDatabaseUrl(candidate.url), log: ["error"] });
+    try {
+      await probe.$queryRaw`SELECT 1`;
+      let batches = -1;
+      try {
+        batches = await probe.importBatch.count();
+      } catch {
+        // Reachable, but this app's tables are not there: a store nobody set up.
+      }
+      console.warn(`[db] ${candidate.key} answers (${batches < 0 ? "no tables" : `${batches} batches`}); ${insteadOf} did not.`);
+      if (!best || batches > best.batches) best = { ...candidate, batches };
+    } catch (error) {
+      console.warn(`[db] ${candidate.key} does not answer either: ${scrub(error)}`);
+    } finally {
+      await probe.$disconnect().catch(() => undefined);
+    }
+  }
+  return best ? { url: best.url, key: best.key } : null;
+}
+
+let fellBack = false;
+
 export async function databaseStatus(): Promise<DatabaseStatus> {
   const resolved = resolveDatabaseUrl();
   if (!resolved) return { state: "missing" };
   if (!resolved.ephemeral && Date.now() < healthyUntil) return { state: "ok", source: healthySource };
-  const source = resolved.ephemeral ? "the SQLite template bundled with the build" : findDatabaseUrl()?.key ?? "DATABASE_URL";
+  const source = resolved.ephemeral
+    ? "the SQLite template bundled with the build"
+    : globalForPrisma.dbOverride
+      ? `${globalForPrisma.dbOverride.key} (${globalForPrisma.dbOverride.insteadOf} did not answer, so the app is using the attached store that holds its data — set DATABASE_URL to it, or remove the dead value)`
+      : findDatabaseUrl()?.key ?? "DATABASE_URL";
 
   // One query, not two. Counting the users answers both questions at once: it can only succeed if
   // the connection works and the tables exist. Only a failure needs telling apart, and a failure
@@ -161,6 +209,19 @@ export async function databaseStatus(): Promise<DatabaseStatus> {
     try {
       await prisma.$queryRaw`SELECT 1`;
     } catch (reachError) {
+      // Nothing answered on the configured string. Before saying so, ask the other stores the
+      // project carries — once per process — and carry on with the one that holds the data.
+      if (!resolved.ephemeral && !fellBack && !globalForPrisma.dbOverride && isUnreachable(reachError)) {
+        fellBack = true;
+        const insteadOf = findDatabaseUrl()?.key ?? "DATABASE_URL";
+        const store = await reachableStore(insteadOf);
+        if (store) {
+          globalForPrisma.dbOverride = { ...store, insteadOf };
+          globalForPrisma.prisma = createClient();
+          console.warn(`[db] using ${store.key} instead of ${insteadOf}`);
+          return databaseStatus();
+        }
+      }
       return { state: "unreachable", source, detail: scrub(reachError) };
     }
     return { state: "no-tables", source, detail };

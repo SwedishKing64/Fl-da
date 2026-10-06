@@ -174,3 +174,31 @@ export function runtimeDatabaseUrl(url: string): string {
     return url;
   }
 }
+
+/**
+ * Every Postgres connection string in the environment, in the order worth trying.
+ *
+ * A Vercel project can carry several: the one the app was first set up with, and one per store
+ * attached since (Storage_…, Storage1_…). When the first does not answer — a Neon project that
+ * was deleted, a paused database — the right answer is nearly always one of the others, and the
+ * app can tell which by asking each. The configured one first, then the stores' pooled strings,
+ * then their direct ones, then anything else that parses; the same string never twice.
+ */
+export function candidateDatabaseUrls(env: Env = process.env): Array<{ url: string; key: string }> {
+  const out: Array<{ url: string; key: string }> = [];
+  const seen = new Set<string>();
+  const add = (key: string) => {
+    const url = env[key];
+    if (!url || !POSTGRES_URL.test(url) || seen.has(url)) return;
+    seen.add(url);
+    out.push({ url, key });
+  };
+  const found = findDatabaseUrl(env);
+  if (found && POSTGRES_URL.test(found.url)) add(found.key);
+  const keys = Object.keys(env).filter((k) => typeof env[k] === "string" && POSTGRES_URL.test(env[k]!)).sort();
+  for (const suffix of ["DATABASE_URL", "POSTGRES_PRISMA_URL", "POSTGRES_URL", "DATABASE_URL_UNPOOLED", "POSTGRES_URL_NON_POOLING"]) {
+    for (const key of keys) if (key === suffix || key.endsWith(`_${suffix}`)) add(key);
+  }
+  for (const key of keys) add(key);
+  return out;
+}

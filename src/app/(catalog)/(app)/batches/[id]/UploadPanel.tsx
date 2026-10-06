@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Alert, Button, LinkButton, cx } from "@/app/(catalog)/ui";
-import { buildProductsAction, readingCountAction } from "@/app/(catalog)/actions";
+import { buildProductsAction, readingCountAction, retryExtractionAction } from "@/app/(catalog)/actions";
 import { fitsUpload, shrinkAll, tooBig } from "@/app/(catalog)/shrink";
 
 interface UploadResult { filename: string; rows: number; method: string | null; kind: string; warnings: string[] }
@@ -19,8 +19,33 @@ const KINDS = [
 /** A read still marked as running this long after the upload is one the host cut off. Matches the page. */
 const STALL_MS = 150_000;
 
-export function UploadPanel({ batchId, aiEnabled, reading, productCount, pendingSince = [], buildNow = false }: { batchId: string; aiEnabled: boolean; hasProducts: boolean; reading: number; productCount: number; pendingSince?: number[]; buildNow?: boolean }) {
+/** How many times a read that ran out of time is tried again before it is left to the person. */
+const RETRIES = 2;
+
+export function UploadPanel({ batchId, aiEnabled, reading, productCount, pendingSince = [], buildNow = false, retryable = [] }: { batchId: string; aiEnabled: boolean; hasProducts: boolean; reading: number; productCount: number; pendingSince?: number[]; buildNow?: boolean; retryable?: Array<{ id: string; filename: string }> }) {
   const router = useRouter();
+  const [rereading, setRereading] = useState<{ filename: string; attempt: number } | null>(null);
+  const attempts = useRef(new Map<string, number>());
+
+  /**
+   * A read that ran out of time is tried again from here, without anyone pressing anything: each
+   * try is a request with a minute of its own, and the read stops itself inside that minute and
+   * says so, so a try never hangs. Twice, then the file says what happened and Read again stays.
+   */
+  useEffect(() => {
+    if (rereading || reading > 0) return;
+    const next = retryable.find((f) => (attempts.current.get(f.id) ?? 0) < RETRIES);
+    if (!next) return;
+    const attempt = (attempts.current.get(next.id) ?? 0) + 1;
+    attempts.current.set(next.id, attempt);
+    setRereading({ filename: next.filename, attempt });
+    void (async () => {
+      try { await retryExtractionAction(next.id); } catch { /* the row says what happened */ }
+      setRereading(null);
+      router.refresh();
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [retryable, reading, rereading]);
   const [building, setBuilding] = useState(false);
   const [buildError, setBuildError] = useState<string | null>(null);
   /** Whether this page has been told to build once the reading is done — by the upload, or by the server. */
@@ -215,6 +240,14 @@ export function UploadPanel({ batchId, aiEnabled, reading, productCount, pending
           <div className="flex items-center gap-3">
             <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-blue-300 border-t-blue-700" aria-hidden />
             <span>Reading {reading === 1 ? "the file" : `${reading} files`} now — columns are matched for you. A spreadsheet takes seconds; a scanned or photographed invoice is read by the model and takes up to a minute. This page updates itself as each one is read, and then builds the products.</span>
+          </div>
+        </Alert>
+      )}
+      {rereading && (
+        <Alert tone="info">
+          <div className="flex items-center gap-3">
+            <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-blue-300 border-t-blue-700" aria-hidden />
+            <span>The read of {rereading.filename} ran out of time, so it is being read again (try {rereading.attempt + 1} of {RETRIES + 1}) — a photograph is read at the model&apos;s fast speed and stops itself inside the minute rather than hanging.</span>
           </div>
         </Alert>
       )}

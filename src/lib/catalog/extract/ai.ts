@@ -91,6 +91,7 @@ Rules:
 - costPrice is the UNIT price for one item, never the line total. Strip currency symbols.
 - Never invent values. Leave a string empty or a number null when the document does not state it.
 - Ignore freight, deposit, discount, subtotal and tax summary lines - they are not products.
+- On an INVOICE or PRICE_LIST, leave description, flex, abilityLevel, dinRange, terrain, tags and imageUrls empty on every item and keep summary to one short sentence: the shop fills those in from the brand's own pages, and a photographed invoice has to be read inside a minute.
 - gstTreatment: EXCLUSIVE when prices are marked ex GST / plus GST, INCLUSIVE when marked inc GST, NONE when the supplier is overseas and no GST applies, otherwise UNKNOWN.`;
 
 let client: Anthropic | null = null;
@@ -105,18 +106,66 @@ export function aiAvailable(): boolean {
 
 type ContentBlocks = Anthropic.MessageParam["content"];
 
-async function runExtraction(content: ContentBlocks): Promise<AiExtraction> {
-  const message = await retrying(() => getClient().messages.stream({
+/**
+ * How long one read may take, all attempts together.
+ *
+ * A read runs inside a request the host allows a minute: the upload's background work, a page's
+ * Read again, the Bulk page's invoice box. A read that outlasts the minute is killed silently —
+ * nothing recorded, the file "reading…" for ever — which is worse than a read that stops itself a
+ * little earlier and says so, because a read that said so is tried again on its own.
+ */
+export const READ_BUDGET_MS = 50_000;
+
+/** Said by a read that stopped itself at the budget. The page tries such a read again by itself. */
+export const RAN_OUT_OF_TIME = "Ran out of time: the read did not finish inside the minute the host allows.";
+
+export function ranOutOfTime(message: string | null | undefined): boolean {
+  return Boolean(message && message.startsWith("Ran out of time"));
+}
+
+/**
+ * One read of a document, inside the budget.
+ *
+ * A photograph is read at the API's fast speed — the same model, answering up to two and a half
+ * times faster — because the time a read takes is almost all the answer being written, and a
+ * photographed invoice read at standard speed ran past the minute. Fast speed is a beta with its
+ * own rate limit and not every model has it, so a refusal of it falls back to standard speed with
+ * whatever time is left; a read that cannot finish in the time says so rather than being killed.
+ */
+async function runExtraction(content: ContentBlocks, options: { visual?: boolean } = {}): Promise<AiExtraction> {
+  const deadline = Date.now() + READ_BUDGET_MS;
+  const left = () => Math.max(5_000, deadline - Date.now());
+  const params = {
     model: EXTRACTION_MODEL,
-    max_tokens: 64000,
+    max_tokens: 16000,
     system: SYSTEM,
-    thinking: { type: "adaptive" },
-    output_config: { format: zodOutputFormat(ExtractionSchema), effort: "medium" },
-    messages: [{ role: "user", content }],
-  }).finalMessage());
+    thinking: { type: "adaptive" as const },
+    output_config: { format: zodOutputFormat(ExtractionSchema), effort: "medium" as const },
+    messages: [{ role: "user" as const, content }],
+  };
+  const standard = () => getClient().messages.stream(params, { timeout: left(), maxRetries: 0 }).finalMessage();
+  const fast = () => getClient().beta.messages.stream({ ...params, betas: ["fast-mode-2026-02-01"], speed: "fast" }, { timeout: left(), maxRetries: 0 }).finalMessage();
+
+  let message: Anthropic.Message | Anthropic.Beta.BetaMessage;
+  try {
+    message = await retrying(async () => {
+      if (!options.visual) return standard();
+      try {
+        return await fast();
+      } catch (err) {
+        // Fast speed turned away — the model has none, or its separate rate limit is spent — is
+        // not a reason to give up on the read: standard speed, with the time that is left.
+        if (err instanceof Anthropic.BadRequestError || err instanceof Anthropic.RateLimitError || err instanceof Anthropic.PermissionDeniedError) return standard();
+        throw err;
+      }
+    }, [2_000]);
+  } catch (err) {
+    if (err instanceof Anthropic.APIConnectionTimeoutError) throw new Error(RAN_OUT_OF_TIME);
+    throw err;
+  }
   if (message.stop_reason === "refusal") throw new Error("The AI declined to process this document");
   if (message.stop_reason === "max_tokens") throw new Error("Document too large for a single extraction; split the file");
-  const text = message.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("");
+  const text = message.content.filter((b): b is Anthropic.TextBlock | Anthropic.Beta.BetaTextBlock => b.type === "text").map((b) => b.text).join("");
   return ExtractionSchema.parse(JSON.parse(text));
 }
 
@@ -137,7 +186,7 @@ export async function extractFromPdf(buffer: Buffer, kind?: string): Promise<AiE
   return runExtraction([
     { type: "document", source: { type: "base64", media_type: "application/pdf", data: buffer.toString("base64") } },
     { type: "text", text: `${hintFor(kind)} Extract what is relevant from this document.` },
-  ]);
+  ], { visual: true });
 }
 
 const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
@@ -147,7 +196,7 @@ export async function extractFromImage(buffer: Buffer, mimeType: string, kind?: 
   return runExtraction([
     { type: "image", source: { type: "base64", media_type: mimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: buffer.toString("base64") } },
     { type: "text", text: `${hintFor(kind)} This is an uploaded image: it may be a photo or scan of an invoice, a catalogue page, or a photo of a product.` },
-  ]);
+  ], { visual: true });
 }
 
 /** Canonical headers used when AI output is turned into a table (identity mapping downstream). */

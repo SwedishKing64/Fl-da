@@ -20,6 +20,7 @@ import { enrichFromSpecs } from "./specs";
 import { DEFAULT_CATEGORY_RULES } from "./categorize";
 import { productTitle, seasonTagFrom } from "./titles";
 import { parseCsv } from "./csv";
+import { addedRows } from "./diff";
 import type { CanonicalLineItem } from "./types";
 
 const UP = "/root/.claude/uploads/94fb8bfb-35a9-5176-afe9-8fcc0dec9eb3/";
@@ -243,8 +244,8 @@ describe.skipIf(!existsSync(ORDER) || !existsSync(LIST) || !existsSync(SHOP))("w
     const result = await run(shop, false);
     const rows = parseCsv(result.csv).filter((r) => r.some((c) => c.trim()));
     const h = rows[0];
-    const before = parseCsv(shop).filter((r) => r.some((c) => c.trim())).length;
-    const added = rows.slice(before).filter((r) => r[h.indexOf("Handle")] === "process-2027");
+    const before = parseCsv(shop).filter((r) => r.some((c) => c.trim()));
+    const added = addedRows(before, rows).filter((r) => r[h.indexOf("Handle")] === "process-2027");
     expect(added.map((r) => [r[h.indexOf("Option1 Value")], r[h.indexOf("Option2 Value")], r[h.indexOf("Cost per item")]])).toEqual([
       ["Bad Dog", "152", "503.99"],
       ["Bad Dog", "155", "503.99"],

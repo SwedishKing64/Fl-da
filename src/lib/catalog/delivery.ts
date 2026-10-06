@@ -49,6 +49,8 @@ import type { PageDetails } from "./page-types";
 export interface DeliveryOptions {
   /** The season the delivery is for, which an order form never says and the matcher needs. */
   season?: string;
+  /** Whose initials go on the house tag of the products built — 123abc-zb. */
+  builtBy?: string;
   /** Which of the invoice's numbers to write onto the products that already exist. */
   fields?: InvoiceFields;
   /** The brand, for the products that have to be built. An order form seldom repeats it per line. */
@@ -170,7 +172,7 @@ export function buildDelivery(csv: string, invoiced: InvoiceLine[], options: Del
   const lines = joined.lines;
   const reconciliation = reconcile(csv, lines, { season: options.season });
   // A delivery ADDS by default. It is the whole point of this path: the goods are arriving.
-  const fields: InvoiceFields = { rrp: true, quantity: true, stock: "add", ...options.fields };
+  const fields: InvoiceFields = { rrp: true, quantity: true, stock: "add", draft: true, dropTags: ["snow sale", "snow-sale"], ...options.fields };
   const reorder = applyInvoice(csv, reconciliation.matched, fields);
   if (reorder.refused) {
     return {
@@ -208,7 +210,7 @@ export function buildDelivery(csv: string, invoiced: InvoiceLine[], options: Del
   warnings.push(...mirrored.warnings);
 
   if (options.reorderOnly || reconciliation.unmatched.length === 0) {
-    return { csv: csvSoFar, changes: reorder.changes, carryOver: reconciliation.matched, fresh: [], freshSizes: sizes.added, appended, heldBack, reconciliation, warnings };
+    return { csv: regroupByHandle(csvSoFar), changes: reorder.changes, carryOver: reconciliation.matched, fresh: [], freshSizes: sizes.added, appended, heldBack, reconciliation, warnings };
   }
 
   // The new products' lines are told by their place on the invoice, which is how a page linked to
@@ -225,7 +227,7 @@ export function buildDelivery(csv: string, invoiced: InvoiceLine[], options: Del
   }
 
   return {
-    csv: built.csv,
+    csv: regroupByHandle(built.csv),
     changes: reorder.changes,
     carryOver: reconciliation.matched,
     fresh: built.fresh,
@@ -235,6 +237,35 @@ export function buildDelivery(csv: string, invoiced: InvoiceLine[], options: Del
     reconciliation,
     warnings: [...warnings, ...built.warnings],
   };
+}
+
+/**
+ * A product's rows kept together.
+ *
+ * A variant or a picture added to a listing goes on the end of the file, which is where every
+ * pass writes and where the proof that nothing else moved can see it. Shopify reads a product's
+ * rows as one block, so once everything is written each row added for a listing is moved up to
+ * sit after that listing's last row. Rows only move; none changes.
+ */
+function regroupByHandle(csv: string): string {
+  const grid = parseCsv(csv);
+  if (grid.length < 3) return csv;
+  const header = grid[0];
+  const handleAt = header.indexOf("Handle");
+  if (handleAt < 0) return csv;
+  const body = grid.slice(1).filter((r) => r.some((c) => c.trim() !== ""));
+  const blocks: Array<{ handle: string; rows: string[][] }> = [];
+  const at = new Map<string, number>();
+  for (const row of body) {
+    const handle = (row[handleAt] ?? "").trim();
+    const seen = at.get(handle);
+    if (handle && seen !== undefined) { blocks[seen].rows.push(row); continue; }
+    if (handle) at.set(handle, blocks.length);
+    blocks.push({ handle, rows: [row] });
+  }
+  if (blocks.length === body.length) return csv;
+  const lines = [header, ...blocks.flatMap((b) => b.rows)].map((row) => row.map((c) => quote(c ?? "")).join(","));
+  return lines.join("\r\n") + "\r\n";
 }
 
 /**
@@ -564,7 +595,7 @@ function appendFresh(
   const rules = options.rules ?? DEFAULT_CATEGORY_RULES;
   const fallback = typeFromCarryOver(grid, at, carryOver, rules);
   const grouped = enrichFromSpecs(
-    groupLineItems(items, fallback ? [...rules, fallback] : rules, { listings: [...(options.listings ?? []), ...listingsFromCsv(csv)] }),
+    groupLineItems(items, fallback ? [...rules, fallback] : rules, { listings: [...(options.listings ?? []), ...listingsFromCsv(csv)], ...(options.builtBy ? { builtBy: options.builtBy } : {}) }),
     options.specs ?? [],
   );
   if (fallback) {

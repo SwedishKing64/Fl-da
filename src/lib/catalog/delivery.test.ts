@@ -11,6 +11,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { buildDelivery } from "./delivery";
 import { parseCsv } from "./csv";
+import { alignRows } from "./diff";
 import type { InvoiceLine } from "./reconcile";
 
 const line = (over: Partial<InvoiceLine> = {}): InvoiceLine =>
@@ -60,11 +61,11 @@ describe("a delivery of carry-overs and new products", () => {
     expect(after).toHaveLength(before.length + 6);
     expect(after[0]).toEqual(before[0]);                                  // the header, untouched
     expect(after[2]).toEqual(before[2]);                                  // the 177, nothing arriving
-    // The 170 moved in exactly two cells, and both are on the change list: the count going up and
-    // the recommended retail the invoice corrects.
+    // The 170 moved in exactly three cells, and all are on the change list: the count going up,
+    // the recommended retail the invoice corrects, and the product going into draft to be looked at.
     const moved = before[1].map((_, i) => i).filter((i) => before[1][i] !== after[1][i]).map((i) => before[0][i]);
-    expect(moved).toEqual(["Variant Compare At Price", "Variant Inventory Qty"]);
-    expect(out.changes.map((c) => c.column).sort()).toEqual(["Variant Compare At Price", "Variant Inventory Qty"]);
+    expect(moved).toEqual(["Variant Compare At Price", "Variant Inventory Qty", "Status"]);
+    expect(out.changes.map((c) => c.column).sort()).toEqual(["Status", "Variant Compare At Price", "Variant Inventory Qty"]);
   });
 
   it("writes the new product as a draft at the supplier's recommended retail", () => {
@@ -191,12 +192,14 @@ describe.skipIf(!existsSync(ORDER) || !existsSync(SKIS))("against the real order
     expect(after).toHaveLength(before.length + out.appended);
     expect(after[0]).toEqual(before[0]);
 
-    // Every cell of every row that was there already, except the ones the change list names.
+    // Every cell of every row that was there already, except the ones the change list names. A row
+    // is found again by its product: a new length moves up to sit with its ski (see alignRows).
     const named = new Set(out.changes.map((c) => `${c.handle}\u0000${c.column}`));
     const handleAt = before[0].indexOf("Handle");
+    const aligned = alignRows(before, after);
     for (let r = 1; r < before.length; r++) {
       for (let c = 0; c < before[0].length; c++) {
-        if ((before[r][c] ?? "") === (after[r][c] ?? "")) continue;
+        if ((before[r][c] ?? "") === (after[aligned[r]][c] ?? "")) continue;
         expect(named.has(`${(before[r][handleAt] ?? "").trim()}\u0000${before[0][c]}`)).toBe(true);
       }
     }
@@ -257,5 +260,36 @@ describe("a new colourway of a listing the shop has", () => {
     expect(white[at("Variant Image")]).toBe("https://img/white-1.jpg");
     const pictures = grid.slice(1).filter((r) => r[at("Handle")] === "cartel-x-2026" && /white-/.test(r[at("Image Src")])).map((r) => [r[at("Image Src")], r[at("Image Position")]]);
     expect(pictures).toEqual([["https://img/white-1.jpg", "3"], ["https://img/white-2.jpg", "4"]]);
+  });
+});
+
+describe("what a delivery does to the products it touches", () => {
+  const onSale = EXPORT.replace(",2027,TRUE,", ",\"2027, snow sale\",TRUE,");
+  const arriving = [line({ barcode: "821264800133", title: "BLAZE 94", size: "170", quantity: 3, rrp: 1449.99 })];
+
+  it("takes each one off the snow sale and into draft, to be looked at before it is live again", () => {
+    const out = buildDelivery(onSale, arriving, { season: "2027", vendor: "Volkl" });
+    expect(out.refused).toBeUndefined();
+    const blaze = out.changes.filter((c) => c.handle === "blaze-94-2027");
+    expect(blaze.find((c) => c.column === "Status")).toMatchObject({ before: "active", after: "draft" });
+    expect(blaze.find((c) => c.column === "Tags")).toMatchObject({ before: "2027, snow sale", after: "2027" });
+    // Once per product, on its first row, never on the 177's row.
+    expect(blaze.filter((c) => c.column === "Status")).toHaveLength(1);
+  });
+
+  it("leaves the status alone when told the products stay live", () => {
+    const out = buildDelivery(onSale, arriving, { season: "2027", vendor: "Volkl", fields: { draft: false } });
+    expect(out.changes.map((c) => c.column)).not.toContain("Status");
+    expect(out.changes.map((c) => c.column)).toContain("Tags");
+  });
+
+  it("keeps a product's rows together once a size is added to it", () => {
+    // A new length is written on the end of the file and then moved up to sit with its ski, the
+    // way Shopify reads a product: one block of rows under one handle.
+    const twoSkis = EXPORT + "other-2027,Other 2027,<p>Another ski.</p>,Volkl,Snow Skis,2027,TRUE,Length,163,,'821264800999,999.99,999.99,1,Volkl Other 2027,active\r\n";
+    const out = buildDelivery(twoSkis, [line({ barcode: "821264800157", title: "BLAZE 94", size: "184", quantity: 1, rrp: 1449.99 })], { season: "2027", vendor: "Volkl" });
+    expect(out.refused).toBeUndefined();
+    const rows = parseCsv(out.csv).filter((r) => r.some((c) => c.trim()));
+    expect(rows.slice(1).map((r) => `${r[0]} ${r[8]}`)).toEqual(["blaze-94-2027 170", "blaze-94-2027 177", "blaze-94-2027 184", "other-2027 163"]);
   });
 });

@@ -27,6 +27,12 @@ export interface CatalogTagInput {
   builtBy?: string;
   /** Title and description, for reading gender and what kind of thing it is. */
   describedAs: string;
+  /**
+   * The Type the product goes out under, where that is a heading rather than the shelf: a goggle
+   * is "Goggles" to the rule and "Ski Accessories" in the file. Its tags (ski-accessories, ski)
+   * go on alongside the shelf's own (goggles), the way the shop writes them.
+   */
+  filedAs?: string;
 }
 
 export function catalogTags(input: CatalogTagInput): string[] {
@@ -51,6 +57,14 @@ export function catalogTags(input: CatalogTagInput): string[] {
     // is better than stamping one person's initials on another person's work.
     { ...DEFAULT_TAGGING, houseTag: houseTagFor(input.builtBy ?? "") },
   );
+
+  const filed = input.filedAs ? (resolveType(input.filedAs) ?? input.filedAs.trim()) : "";
+  if (filed && filed !== type && isValidType(filed)) {
+    tags.push(...generalTags(
+      { type: filed, vendor: input.brand, genders, describedAs: input.describedAs, ...(year ? { year } : {}) },
+      { ...DEFAULT_TAGGING, houseTag: houseTagFor(input.builtBy ?? "") },
+    ));
+  }
 
   // Anything off the invoice that the shop genuinely uses is kept alongside; the rest is dropped.
   const known = new Set(tags.map((t) => t.toLowerCase()));

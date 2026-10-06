@@ -717,6 +717,10 @@ export interface InvoiceFields {
    * stocktake, which is the rarer case and says so.
    */
   stock?: "add" | "set";
+  /** Every product the delivery touches goes into draft, to be looked at before it is live again. */
+  draft?: boolean;
+  /** Tags a product loses when a delivery touches it: new season's stock is not on the snow sale. */
+  dropTags?: string[];
 }
 
 /**
@@ -758,6 +762,33 @@ export function applyInvoice(csv: string, matched: Match[], fields: InvoiceField
   let spreadQuantities = 0;
   const missingSizes: string[] = [];
   const unreadableCounts: string[] = [];
+  // The product itself, once per listing the delivery touches: into draft, and off the sale.
+  const dropTags = (fields.dropTags ?? []).map((t) => t.trim().toLowerCase()).filter(Boolean);
+  for (const first of new Set(matched.map((m) => m.productRows[0]).filter((r): r is number => r !== undefined))) {
+    const row = rows[first - 1];
+    if (!row) continue;
+    const handle = (row[index.get("Handle") ?? -1] ?? "").trim();
+    const title = (row[index.get("Title") ?? -1] ?? "").trim();
+    const put = (column: string, value: string) => {
+      const i = index.get(column);
+      if (i === undefined) return;
+      const before = (row[i] ?? "").trim();
+      if (before === value) return;
+      while (row.length <= i) row.push("");
+      row[i] = value;
+      touched.add(first);
+      changes.push({ handle, title, column, before, after: value });
+    };
+    if (fields.draft) put("Status", "draft");
+    if (dropTags.length > 0) {
+      const i = index.get("Tags");
+      if (i !== undefined) {
+        const have = (row[i] ?? "").split(",").map((t) => t.trim()).filter(Boolean);
+        const kept = have.filter((t) => !dropTags.includes(t.toLowerCase()));
+        if (kept.length !== have.length) put("Tags", kept.join(", "));
+      }
+    }
+  }
   for (const m of matched) {
     // Never a zero. An empty price cell means "leave it alone" to Shopify and a zero means free,
     // and a supplier document prints 0 for anything it does not price separately.

@@ -982,3 +982,16 @@ describe("gear for skins", () => {
     expect(isSkinAccessory(undefined)).toBe(false);
   });
 });
+
+describe("a product filed under a heading other than its shelf", () => {
+  it("carries the shelf's tags and the heading's, the way the shop writes a goggle", async () => {
+    const { catalogTags } = await import("./product-tags");
+    const tags = catalogTags({ productType: "Goggles", filedAs: "Ski Accessories", brand: "Anon", items: [], ruleTags: [], describedAs: "M4 Goggles", builtBy: "zb" });
+    expect(tags).toEqual(expect.arrayContaining(["goggles", "ski-accessories", "ski", "anon", "123abc-zb"]));
+    // Said once each, however many headings agree.
+    expect(new Set(tags).size).toBe(tags.length);
+    // A heading that is the shelf itself adds nothing.
+    expect(catalogTags({ productType: "Snow Clothing", filedAs: "Snow Clothing", brand: "Spyder", items: [], ruleTags: [], describedAs: "" }))
+      .toEqual(catalogTags({ productType: "Snow Clothing", brand: "Spyder", items: [], ruleTags: [], describedAs: "" }));
+  });
+});

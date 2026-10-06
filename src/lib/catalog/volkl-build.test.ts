@@ -19,6 +19,7 @@ import { enrichFromSpecs } from "./pipeline";
 import { keepOrderedLines, resolveAgainstReference } from "./reference-match";
 import { DEFAULT_CATEGORY_RULES } from "./categorize";
 import { parseCsv } from "./csv";
+import { addedRows } from "./diff";
 import type { CanonicalLineItem } from "./types";
 
 const UP = "/root/.claude/uploads/94fb8bfb-35a9-5176-afe9-8fcc0dec9eb3/";
@@ -174,7 +175,7 @@ describe.skipIf(!existsSync(`${UP}22065406-products_export_1-7.csv`))("the Volkl
     const { out, csv } = await deliver();
     const rows = parseCsv(out.csv).filter((r) => r.some((c) => c.trim()));
     const h = rows[0];
-    const added = rows.slice(parseCsv(csv).filter((r) => r.some((c) => c.trim())).length);
+    const added = addedRows(parseCsv(csv).filter((r) => r.some((c) => c.trim())), rows);
     const pack158 = added.filter((r) => r[h.indexOf("Handle")] === "blaze-94-2027-inc-marker-griffon-binding-package");
     expect(pack158).toHaveLength(6);   // 3 bindings the package offers × 2 fittings
     expect(new Set(pack158.map((r) => r[h.indexOf("Option1 Value")]))).toEqual(new Set(["158"]));

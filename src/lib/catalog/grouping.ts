@@ -2,6 +2,7 @@
 
 import { buildHandle } from "./handle";
 import { nameLikeSibling } from "./shop-names";
+import { csvType } from "./pipeline-pure";
 import { chooseOptions, collectionsFor, detectCategory, enrichFromTitle, metafieldsFor, OPTION_LABELS, snowboardType, tagsFor, type CategoryRuleLike } from "./categorize";
 import { resolveType } from "./taxonomy";
 import { withFit } from "./mapping";
@@ -185,7 +186,10 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
       variants.push({ item: e.item, sourceIndex: e.index, option1Value: values[0] ?? null, option2Value: values[1] ?? null, option3Value: values[2] ?? null });
     }
     const description = items.map((i) => i.description.trim()).find(Boolean) ?? "";
-    const general = catalogTags({ productType, brand, items, ruleTags: tagsFor(group.rule, items, brand), describedAs: `${shown} ${description}`, ...(opts.builtBy ? { builtBy: opts.builtBy } : {}) });
+    const collections = snowboard ? [snowboard] : collectionsFor(group.rule, items);
+    // Tagged for the shelf and for the Type it goes out under: a goggle is "Goggles" to the rule
+    // and "Ski Accessories" in the file, and the shop writes both (goggles, ski-accessories, ski).
+    const general = catalogTags({ productType, filedAs: csvType(productType, collections), brand, items, ruleTags: tagsFor(group.rule, items, brand), describedAs: `${shown} ${description}`, ...(opts.builtBy ? { builtBy: opts.builtBy } : {}) });
     // The riding-style shelves: what the shop gave this model last season, and only for a model it
     // has never listed, what the supplier calls it. See shop-memory.
     const remembered = rememberedDisciplines({ title: shown, brand }, opts.listings ?? []);
@@ -226,7 +230,7 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
       category: group.rule?.category ?? (first.category || "other"),
       productType,
       tags,
-      collections: snowboard ? [snowboard] : collectionsFor(group.rule, items),
+      collections,
       description,
       metafields: metafieldsFor(items),
       option1Name: names[0] ?? null,

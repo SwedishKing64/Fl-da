@@ -432,7 +432,10 @@ export function applyPlan(text: string, plan: Plan): AdjustResult {
         case "addTags": {
           if (!isFirst) break;
           const before = at(row, "Tags");
-          const have = splitTags(before);
+          // A product is one season: a year tag added takes the place of the year tag it has.
+          // "Add the 2027 tag" means 2027, not 2026 and 2027.
+          const years = op.tags.map((t) => t.trim()).filter((t) => /^20\d\d$/.test(t));
+          const have = splitTags(before).filter((t) => years.length === 0 || !/^20\d\d$/.test(t.trim()) || years.includes(t.trim()));
           const known = new Set(have.map((t) => t.toLowerCase()));
           const next = [...have];
           for (const tag of op.tags.map((t) => t.trim()).filter(Boolean)) {
@@ -488,7 +491,9 @@ export function applyPlan(text: string, plan: Plan): AdjustResult {
         }
         case "setTitleYear": {
           if (!isFirst) break;
-          for (const column of titleColumns(op.seo)) {
+          // The SEO title is the title with the brand in front, year and all, on every listing the
+          // shop has written one for; a year put on the title goes on it too.
+          for (const column of titleColumns(true)) {
             const before = at(row, column);
             if (!before.trim()) continue;
             const after = titleWithYear(before, op.year);

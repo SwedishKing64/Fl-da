@@ -253,7 +253,7 @@ const ReadSchema = z.object({
   pageTitle: z.string().describe("The product's name as this page gives it."),
   description: z.string().describe("The manufacturer's own description, in their words, as the page writes it — the opening copy, not the legal text or the delivery information. Up to about 140 words; a blank line between paragraphs. Empty if the page has none."),
   features: z.array(z.string()).describe("Every line of the page's own details / technical specifications / features section, each as the page writes it: \"Label: value\" where the page pairs a label with a value, a bare phrase where it does not. Up to 30. Empty if the page has none. Never compose a line the page does not carry."),
-  imageNumbers: z.array(z.number()).describe("The numbers, from the list of pictures, of the pictures of THIS product itself, the main photograph first and then its other angles and colours. Not related products, logos, banners, lifestyle thumbnails of other items, size charts or icons. At most 10. Empty if none are the product."),
+  imageNumbers: z.array(z.number()).describe("The numbers, from the list of pictures, of the pictures of THIS product itself, in the order the shop shows them: first the product on its own (the goggle alone, the boot alone, the jacket alone — front view), then its other angles, then shots that include anything bundled with it such as a face mask, a spare lens or a bag, then other colours. Not related products, logos, banners, lifestyle thumbnails of other items, size charts or icons. At most 10. Empty if none are the product."),
   note: z.string().describe("One short sentence for the person: what the page gave and what it did not."),
 });
 

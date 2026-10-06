@@ -88,12 +88,15 @@ describe.skipIf(!existsSync(ORDER) || !existsSync(SKIS))("a real delivery, read 
     const d = diffCsv(csv, out.csv);
 
     expect(d.problem).toBe("");
-    // One column out of forty-eight, which is why the preview shows the columns that moved and not
-    // the file. (Compare At no longer moves: Völkl's 1649 is the shop's 1649.99 — see asShopPrice.)
-    expect(d.columns).toEqual(["Variant Inventory Qty"]);
+    // Three columns out of forty-eight, which is why the preview shows the columns that moved and
+    // not the file: the stock, and on each product's first row the sale tag coming off and the
+    // product going into draft. (Compare At no longer moves: Völkl's 1649 is the shop's 1649.99 —
+    // see asShopPrice.)
+    expect(d.columns).toEqual(["Tags", "Variant Inventory Qty", "Status"]);
     // Seven variant rows of flat skis, and twelve of their binding packages, which carry the same
-    // stock: every binding and fitting of the length that arrived.
-    expect(d.changedRows).toBe(19);
+    // stock: every binding and fitting of the length that arrived. Plus the first row of each of
+    // the products touched, where that row carries no stock of its own.
+    expect(d.changedRows).toBe(22);
     expect(d.addedRows).toBe(9);
     const { parseCsv } = await import("./csv");
     const rowsInFile = parseCsv(csv).filter((r) => r.some((c) => c.trim())).length - 1;
@@ -106,17 +109,18 @@ describe.skipIf(!existsSync(ORDER) || !existsSync(SKIS))("a real delivery, read 
       expect(fromFile.has(`${change.handle}\u0000${change.column}\u0000${change.before}\u0000${change.after}`)).toBe(true);
     }
 
-    // And every added row is one of the two things a delivery adds: a size, or a product.
+    // And every added row is one of the two things a delivery adds: a size, or a product. Each
+    // sits with its product in the file, which is why the package's rows come before the ski's.
     const added = d.rows.filter((r) => r.kind === "added");
     expect(added.map((r) => `${r.option} of ${r.handle}`)).toEqual([
-      "158 of blaze-94-2027",
-      // The same new length on the Blaze's package, under each binding and fitting it offers.
+      // The new length on the Blaze's package, under each binding and fitting it offers.
       "158 / Marker Griffon - Black / Do Not Mount My Bindings of blaze-94-2027-inc-marker-griffon-binding-package",
       "158 / Marker Griffon - Black / Please Mount My Bindings of blaze-94-2027-inc-marker-griffon-binding-package",
       "158 / ATK HY 13 Free / Do Not Mount My Bindings of blaze-94-2027-inc-marker-griffon-binding-package",
       "158 / ATK HY 13 Free / Please Mount My Bindings of blaze-94-2027-inc-marker-griffon-binding-package",
       "158 / Salomon S/Lab Shift2 MNC 13 / Do Not Mount My Bindings of blaze-94-2027-inc-marker-griffon-binding-package",
       "158 / Salomon S/Lab Shift2 MNC 13 / Please Mount My Bindings of blaze-94-2027-inc-marker-griffon-binding-package",
+      "158 of blaze-94-2027",
       // Last season's Mantra Junior is not this season's: the 2027 one is built new.
       "138 of mantra-junior-2027",
       "148 of mantra-junior-2027",

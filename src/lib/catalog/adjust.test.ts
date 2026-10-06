@@ -26,6 +26,21 @@ describe("adjusting a real Shopify export", () => {
     expect(d.types).toContain("Snow Clothing");
   });
 
+  it("moves a product to the year tag it is given, rather than giving it two years", () => {
+    // "Add the 2027 tag" to products tagged 2026 means they are 2027 products now.
+    const out = applyPlan(text, { scope: { vendors: ["Karbon"] }, operations: [{ kind: "addTags", tags: ["2027"] }] });
+    expect(out.matched).toBe(50);
+    for (const change of out.changes.filter((c) => c.column === "Tags")) {
+      const tags = change.after.split(",").map((t) => t.trim());
+      expect(tags).toContain("2027");
+      expect(tags.filter((t) => /^20\d\d$/.test(t))).toEqual(["2027"]);
+    }
+    expect(out.changes.some((c) => /\b2026\b/.test(c.before))).toBe(true);
+    // Any other tag is simply added; the years already there are left alone.
+    const other = applyPlan(text, { scope: { vendors: ["Karbon"] }, operations: [{ kind: "addTags", tags: ["clearance"] }] });
+    expect(other.changes.every((c) => /\b20\d\d\b/.test(c.before) === /\b20\d\d\b/.test(c.after))).toBe(true);
+  });
+
   it("changes only the cells the instruction names, and keeps every row and column", () => {
     const plan: Plan = { scope: { vendors: ["Karbon"] }, operations: [{ kind: "addTags", tags: ["clearance"] }] };
     const out = applyPlan(text, plan);
@@ -671,8 +686,9 @@ describe("putting a season in the title", () => {
     expect(out.refused).toBeUndefined();
     expect(out.matched).toBe(70);
     // 70 Volkl products, 70 title cells — never one per variant row, of which they have far more.
-    expect(out.changes).toHaveLength(70);
-    expect(new Set(out.changes.map((c) => c.column))).toEqual(new Set(["Title"]));
+    // The SEO title follows the title's year on every product that has one.
+    expect(out.changes.filter((c) => c.column === "Title")).toHaveLength(70);
+    expect(new Set(out.changes.map((c) => c.column))).toEqual(new Set(["Title", "SEO Title"]));
     expect(out.changes.every((c) => c.after.includes("2028"))).toBe(true);
     expect(out.changes.some((c) => c.before.includes("2026"))).toBe(true);
     expect(out.warnings.join(" ")).toContain("matches an import on Handle");
@@ -751,9 +767,11 @@ describe("the SEO title", () => {
     expect(glove.find((c) => c.column === "SEO Title")?.after).toContain("2027");
   });
 
-  it("leaves the SEO title alone when it was not asked for", () => {
+  it("follows the title's year even when the instruction did not mention it", () => {
+    // A title moved to 2027 with an SEO title still saying 2026 is the kind of thing nobody
+    // notices until the search listing is wrong, so the two always move together.
     const out = applyPlan(SWANY, { scope: { tags: ["2026"] }, operations: [{ kind: "setTitleYear", year: "2027" }] });
-    expect(new Set(out.changes.map((c) => c.column))).toEqual(new Set(["Title"]));
+    expect(new Set(out.changes.map((c) => c.column))).toEqual(new Set(["Title", "SEO Title"]));
   });
 
   it("says so when the file has no SEO Title column to write to", () => {

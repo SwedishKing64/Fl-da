@@ -1,5 +1,7 @@
 import { PageHeader } from "@/app/(catalog)/ui";
 import { planningAvailable } from "@/lib/catalog/adjust-plan";
+import { requireUser } from "@/lib/catalog/auth";
+import { initialsFrom } from "@/lib/catalog/tagging";
 import { BulkPanel } from "./BulkPanel";
 
 /**
@@ -9,14 +11,17 @@ import { BulkPanel } from "./BulkPanel";
  */
 export const maxDuration = 60;
 
-export default function BulkPage() {
+export default async function BulkPage() {
+  // The house tag names who built a product — 123abc-zb — so the page knows whose work this is.
+  const user = await requireUser();
+  const builtBy = initialsFrom(user.name || user.email);
   return (
     <>
       <PageHeader
         title="Bulk uploads"
         subtitle="Change products already in the shop — prices through the season, moves into clearance. Export them from Shopify, say what to change, check every cell that moves, and import the file back."
       />
-      <BulkPanel aiEnabled={planningAvailable()} />
+      <BulkPanel aiEnabled={planningAvailable()} builtBy={builtBy} />
     </>
   );
 }

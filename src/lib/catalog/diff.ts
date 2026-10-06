@@ -12,9 +12,12 @@
  * list structurally cannot: a delivery appends rows for a new product and for a size a product has
  * never been stocked in, and no cell on those rows is a "change" to anything.
  *
- * Rows keep their position. Nothing on this page deletes or reorders a row — that is the promise
- * verifyOnlyIntended enforces — so row N of the old file is row N of the new one, and anything past
- * the end of the old file is new. That makes the diff exact rather than a guess at what lines up.
+ * Rows are never deleted or rewritten — that is the promise verifyOnlyIntended enforces — but a
+ * delivery does move a product's new rows up to sit with the product, because Shopify reads a
+ * product's rows as one block. So a row is found again by its product and its place among that
+ * product's rows: the k-th row of a handle in the old file is the k-th row of that handle in the
+ * new one, and any row of a handle beyond those, or of a handle the old file never had, is new.
+ * That makes the diff exact rather than a guess at what lines up.
  */
 
 import { parseCsv } from "./csv";
@@ -76,6 +79,40 @@ function titles(grid: string[][], handleAt: number, titleAt: number): Map<string
   return found;
 }
 
+/**
+ * Where each row of the old file sits in the new one, by product and place within the product.
+ *
+ * Returns, for every old row index (the header at 0 included), the index of the same row in the
+ * new file. A row of a handle the new file has fewer of than the old — which nothing here does —
+ * falls back to its own index, so the comparison still says something rather than nothing.
+ */
+export function alignRows(old: string[][], now: string[][]): number[] {
+  const handleAt = (now[0] ?? []).indexOf("Handle");
+  const handleOf = (row: string[]) => (handleAt < 0 ? "" : (row[handleAt] ?? "").trim());
+  const where = new Map<string, number[]>();
+  for (let r = 1; r < now.length; r++) {
+    const h = handleOf(now[r]);
+    const list = where.get(h) ?? [];
+    list.push(r);
+    where.set(h, list);
+  }
+  const seen = new Map<string, number>();
+  const aligned = [0];
+  for (let r = 1; r < old.length; r++) {
+    const h = handleOf(old[r]);
+    const k = seen.get(h) ?? 0;
+    seen.set(h, k + 1);
+    aligned.push(where.get(h)?.[k] ?? r);
+  }
+  return aligned;
+}
+
+/** The rows of the new file that no row of the old one became, in the new file's order. */
+export function addedRows(old: string[][], now: string[][]): string[][] {
+  const taken = new Set(alignRows(old, now));
+  return now.filter((_, r) => r > 0 && !taken.has(r));
+}
+
 export function diffCsv(before: string, after: string): CsvDiff {
   const old = clean(before);
   const now = clean(after);
@@ -102,23 +139,27 @@ export function diffCsv(before: string, after: string): CsvDiff {
   const moved = new Set<string>();
   let changedCells = 0;
 
+  const aligned = alignRows(old, now);
+  const taken = new Set(aligned);
   for (let r = 1; r < old.length; r++) {
+    const n = aligned[r];
     const cells: CellChange[] = [];
     for (let c = 0; c < header.length; c++) {
       const was = old[r][c] ?? "";
-      const is = now[r][c] ?? "";
+      const is = now[n][c] ?? "";
       if (was === is) continue;
       cells.push({ column: header[c], before: was, after: is });
       moved.add(header[c]);
     }
     if (cells.length === 0) continue;
     changedCells += cells.length;
-    const handle = handleOf(now[r]);
-    rows.push({ kind: "changed", row: r, handle, title: name.get(handle) ?? "", option: optionOf(now[r]), cells });
+    const handle = handleOf(now[n]);
+    rows.push({ kind: "changed", row: n, handle, title: name.get(handle) ?? "", option: optionOf(now[n]), cells });
   }
 
   const changedRows = rows.length;
-  for (let r = old.length; r < now.length; r++) {
+  for (let r = 1; r < now.length; r++) {
+    if (taken.has(r)) continue;
     const handle = handleOf(now[r]);
     rows.push({
       kind: "added",

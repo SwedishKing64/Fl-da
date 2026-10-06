@@ -145,7 +145,7 @@ const byName = (r: Reconciliation) => r.matched.filter((m) => m.key === "name");
 const countChanges = (results: Array<{ result: AdjustResult }>) => results.reduce((n, r) => n + r.result.changes.length, 0);
 const countMatched = (results: Array<{ result: AdjustResult }>) => results.reduce((n, r) => n + r.result.matched, 0);
 
-export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
+export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; builtBy?: string }) {
   const csvRef = useRef<HTMLInputElement>(null);
   const sheetRef = useRef<HTMLInputElement>(null);
   const [sheets, setSheets] = useState<Sheet[]>([]);
@@ -183,6 +183,8 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
    * three, and the two already on the shelf stop existing without anybody being told.
    */
   const [stock, setStock] = useState<"add" | "set">("add");
+  /** Every product the delivery touches goes into draft, to be looked over before it is live again. */
+  const [toDraft, setToDraft] = useState(true);
   /** The brand, for the products that have to be built. An order form seldom repeats it per line. */
   const [vendor, setVendor] = useState("");
   /** Whether the lines that are not in the shop yet get built onto the end of the file. */
@@ -597,8 +599,8 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
       name: s.name,
       result: buildDelivery(s.csv, order.lines, {
         season, vendor, specs, decided, sourceOf, listings, priceList: order.priceList ?? [],
-        fields: { ...fields, stock },
-        reorderOnly: s.name !== home,
+        fields: { ...fields, stock, draft: toDraft },
+        reorderOnly: s.name !== home, builtBy,
         pages,
       }),
     }));
@@ -889,7 +891,7 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
     ? sheets.map((s) => buildDelivery(s.csv, order.lines, {
         season, vendor, specs: loadedSpecs, sourceOf: specSources(references),
         listings: sheets.flatMap((x) => listingsFromCsv(x.csv)), priceList: order.priceList ?? [],
-        fields: { ...fields, stock }, reorderOnly: s.name !== homeSheet.name,
+        fields: { ...fields, stock, draft: toDraft }, reorderOnly: s.name !== homeSheet.name, builtBy,
       }))
     : [];
   const seenLines = new Set<number>();
@@ -1370,6 +1372,11 @@ export function BulkPanel({ aiEnabled }: { aiEnabled: boolean }) {
                 </label>
                 <p className="py-1 text-xs text-[var(--ink-soft)]">A size that is new to a product you already sell is always added, whether this is ticked or not: it is a variant of that product, not a product.</p>
               </fieldset>
+
+              <label className="flex items-start gap-2 rounded-xl border border-[var(--line-soft)] px-3 py-2.5 text-sm">
+                <input type="checkbox" id="invoice-draft" className="mt-1" checked={toDraft} onChange={(e) => setToDraft(e.target.checked)} />
+                <span>Put every product this delivery touches into <strong>draft</strong>.<span className="block text-xs text-[var(--ink-soft)]">The carry-overs as well as the new products, so each is looked over before it is live for the new season. Any &ldquo;snow sale&rdquo; tag comes off them either way.</span></span>
+              </label>
 
               {((buildNew && newProducts.length > 0) || newColourways.length > 0) && (
                 <BulkLinks

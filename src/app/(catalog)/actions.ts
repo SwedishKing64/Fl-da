@@ -1323,13 +1323,11 @@ export async function sendInstructionAction(batchId: string, message: string): P
           const { untouchedSinceBuilt } = await import("@/lib/catalog/pipeline");
           if (await untouchedSinceBuilt(batchId)) {
             const rebuilt = await autoApplyMappings(batchId, user.id);
-            outcome = rebuilt.products > 0 ? ` Rebuilt the ${rebuilt.products} products with this.` : "";
-            // And checked again, so an instruction that is not a directive — "drop the kids'
-            // gloves", "that one is a jacket" — is acted on or answered. See batch-agent.ts.
-            if (rebuilt.products > 0) {
-              const { reviewBatch } = await import("@/lib/catalog/batch-agent");
-              await reviewBatch(batchId, user.id).catch(() => null);
-            }
+            // The build check runs again from the page once it sees the rebuild — two requests of
+            // its own. It used to run here as well, after the instruction had been read and the
+            // products rebuilt: four model calls in one request, which the host cut off at its
+            // minute, and the page went down with it.
+            outcome = rebuilt.products > 0 ? ` Rebuilt the ${rebuilt.products} products with this; the build check runs again now.` : "";
           } else {
             await repriceBatch(batchId);
             outcome = " The products have been edited by hand, so they were only re-priced: open Column mapping and build again to apply the rest (that replaces the edits).";

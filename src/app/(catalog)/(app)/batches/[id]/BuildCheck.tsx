@@ -56,8 +56,11 @@ export function BuildCheck({ batchId, needed, aiEnabled, locked }: { batchId: st
     }
   });
 
+  // Once per build: a rebuild — from the chat, from a new file — makes the check needed again,
+  // and it runs again then. A check that failed is not repeated on its own; the button is there.
   useEffect(() => {
-    if (needed && aiEnabled && !locked && !ran.current) { ran.current = true; run(); }
+    if (!needed) { ran.current = false; return; }
+    if (aiEnabled && !locked && !ran.current) { ran.current = true; run(); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [needed, aiEnabled, locked]);
 

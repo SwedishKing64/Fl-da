@@ -20,6 +20,7 @@
  */
 
 import { parseCsv } from "./csv";
+import { fitPhraseOf } from "./shop-names";
 import { siblingsOfPlaced } from "./siblings";
 import { COLOUR_WORDS } from "./types";
 import { isPackage, quote, verifyOnlyIntended, type AdjustResult, type Change } from "./adjust";
@@ -189,7 +190,8 @@ function codesIn(title: string): Set<string> {
   const words = normName(title).split(" ").filter(Boolean);
   const out = new Set<string>();
   const take = (token: string) => {
-    if (token.length >= 3 && token.length <= 12 && /^[A-Z]{1,4}\d/.test(token)) out.add(token);
+    // Three characters and up; or a letter and a digit that IS the whole name — Anon's M5, M6.
+    if ((token.length >= 3 || (token.length === 2 && words.length === 1)) && token.length <= 12 && /^[A-Z]{1,4}\d/.test(token)) out.add(token);
   };
   for (let i = 0; i < words.length; i++) {
     take(words[i]);
@@ -267,6 +269,10 @@ function placeByName(
   },
 ): { handle: string; on: string; reason: string } {
   const miss = { handle: "", on: "", reason: "" };
+  // A key that cannot decide — a code two lines share, a word on two listings — gives way to the
+  // next, fuller key: Anon's "M4S" is on the Cylindrical and the Toric line alike, and "M4S TORIC"
+  // is only on one. The first reason is kept for when none of them can.
+  let why = "";
   for (const key of nameKeysOf(line)) {
     const seen = index.nameCounts.get(`${key}\u0000${index.variant}`) ?? 0;
     const repeated = seen > 1;
@@ -276,17 +282,21 @@ function placeByName(
       : words.length === 1
         ? index.byCode.get(key) ?? []
         : [...index.wordsOf].filter(([, title]) => hasRun(title, words) || hasRun(words, title)).map(([handle]) => handle);
-    if (handles.length === 0) continue;
+    // The name in full fits nothing on the shelf: the line is a product the shop has not got, however
+    // many listings its bare code was on. Anon's "M4S TORIC" is new though "M4S" is two listings.
+    if (handles.length === 0) { if (why && words.length >= 2 && !key.startsWith("=")) return miss; continue; }
     handles = sift(handles, line, index);
     if (repeated) {
-      return { ...miss, reason: `"${key.replace(/^=/, "")}" is on ${seen} lines of the invoice for the same size, so it cannot say which is which` };
+      why ||= `"${key.replace(/^=/, "")}" is on ${seen} lines of the invoice for the same size, so it cannot say which is which`;
+      continue;
     }
     if (handles.length > 1) {
-      return { ...miss, reason: `"${key.replace(/^=/, "")}" matches ${handles.length} products — ${handles.slice(0, 3).join(", ")}${handles.length > 3 ? ", …" : ""}` };
+      why ||= `"${key.replace(/^=/, "")}" matches ${handles.length} products — ${handles.slice(0, 3).join(", ")}${handles.length > 3 ? ", …" : ""}`;
+      continue;
     }
     return { handle: handles[0], on: key.replace(/^=/, ""), reason: "" };
   }
-  return miss;
+  return { ...miss, reason: why };
 }
 
 /**
@@ -308,6 +318,13 @@ const withoutYear = (title: string): string =>
 
 function sift(handles: string[], line: InvoiceLine, index: { seasonOf: Map<string, string>; season: string; titleOf: Map<string, string> }): string[] {
   let kept = handles;
+  // The FIT, where the line says one. Anon's "M4S" is two listings, the Low Bridge Fit and the
+  // regular; the order says which on every line, and a line of one fit is never the other's stock.
+  if (kept.length > 1 && line.fit !== undefined) {
+    const wanted = fitPhraseOf(line.fit);
+    const ofFit = kept.filter((h) => fitPhraseOf(index.titleOf.get(h) ?? "") === wanted);
+    if (ofFit.length > 0) kept = ofFit;
+  }
   if (index.season) {
     const inSeason = kept.filter((h) => (index.seasonOf.get(h) ?? "").includes(index.season.toUpperCase()));
     if (inSeason.length > 0) kept = inSeason;
@@ -576,7 +593,7 @@ export function reconcile(csv: string, lines: InvoiceLine[], options: ReconcileO
    * genuinely nothing to tell them apart then.
    */
   const variantOf = (line: InvoiceLine): string =>
-    `${(line.size ?? "").trim().toUpperCase()}\u0000${(line.colour ?? "").trim().toUpperCase()}`;
+    `${(line.size ?? "").trim().toUpperCase()}\u0000${(line.colour ?? "").trim().toUpperCase()}\u0000${fitPhraseOf(line.fit ?? "")}`;
   const nameCounts = new Map<string, number>();
   for (const line of lines) {
     for (const key of nameKeysOf(line)) {

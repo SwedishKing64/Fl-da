@@ -1,6 +1,7 @@
 // Group canonical line items into products with variants.
 
 import { buildHandle } from "./handle";
+import { nameLikeSibling } from "./shop-names";
 import { chooseOptions, collectionsFor, detectCategory, enrichFromTitle, metafieldsFor, OPTION_LABELS, snowboardType, tagsFor, type CategoryRuleLike } from "./categorize";
 import { resolveType } from "./taxonomy";
 import { withFit } from "./mapping";
@@ -148,7 +149,7 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
     // its jackets, gloves and socks. Not a ski, board or pole, which the shop names by model alone
     // and genders in the tags. Men's and women's of one model also stop sharing a title this way.
     const who = audience(first.gender);
-    const hardgoods = /^(skis?|snowboards?|poles?|ski poles?)$/i.test(productType) || /^(skis?|snowboards?|poles?)$/i.test(group.rule?.category ?? "");
+    const hardgoods = /^(skis?|snowboards?|poles?|ski poles?)$/i.test(productType) || /^(skis?|snowboards?|poles?|goggles|helmets)$/i.test(group.rule?.category ?? "") || /\b(goggles?|helmets?)\b/i.test(`${title} ${first.category} ${first.productType}`);
     // A name that is the shop's own — the line was joined to a listing — is left as the shop wrote
     // it: "Impact Wrist Guards" and "[ak] Endurance Socks" carry no audience on the shop's shelf.
     const shopNamed = (opts.listings ?? []).some((l) => normTitle(l.title.replace(/\s+20\d{2}$/, "")) === normTitle(title));
@@ -205,7 +206,10 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
       tags.includes("snow pants") ? "Pants" :
       tags.includes("midlayers") && /\binsulated\b/i.test(shown) ? "Jacket" :
       tags.includes("socks") ? "Socks" : "";
-    const named = kindSuffix ? `${asShopWritesIt(shown)} ${kindSuffix}` : shown;
+    // Better than any rule: the shop's own name for this model's other listing — the other fit, or
+    // last season's — with the fit and the year swapped. See nameLikeSibling.
+    const likeSibling = mounted ? null : nameLikeSibling(asShopWritesIt(shown), season, opts.listings ?? [], brand);
+    const named = likeSibling ? likeSibling.replace(/\s+20\d\d$/, "") : kindSuffix ? `${asShopWritesIt(shown)} ${kindSuffix}` : shown;
     products.push({
       key,
       // Built from the name the product will actually carry, season and all. Shopify derives a

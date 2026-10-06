@@ -11,10 +11,12 @@ describe("a two-tone colour written out from the sheet's own full names", () => 
     expect(writeOutColour("BLACK/WHITE", names)).toBe("Black / White");
   });
   it("writes a goggle's colour as the frame, then the lens as the sheet writes it", () => {
-    expect(writeOutColour("BLACK/PRCV SUN ONYX", names, true)).toBe("Black w/ Prcv Sun Onyx");
-    expect(writeOutColour("ARSTBL/PRCV VRBL BLUE", names, true)).toBe("Arstbl w/ Prcv Vrbl Blue");
-    expect(writeOutColour("WHITE/PRCV SUN ONYX", names, true)).toBe("White w/ Prcv Sun Onyx");
+    expect(writeOutColour("BLACK/PRCV SUN ONYX", names, true)).toBe("Black w/ Perceive Sunny Onyx");
+    expect(writeOutColour("ARSTBL/PRCV VRBL BLUE", names, true)).toBe("Airstream Blue w/ Perceive Variable Blue");
+    expect(writeOutColour("WHITE/PRCV SUN ONYX", names, true)).toBe("White w/ Perceive Sunny Onyx");
     expect(writeOutColour("BLACK", names, true)).toBe("Black");
+    // Cased already by a reader, the shorthand is still written out.
+    expect(writeOutColour("Black/Prcv Sun Red", names, true)).toBe("Black w/ Perceive Sunny Red");
   });
 
   it("leaves a plain colour to colourName", () => {

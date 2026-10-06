@@ -21,3 +21,14 @@ describe("which of an order's brands an instruction keeps", () => {
     expect(brandsAsked("only Volkl", onOrder)).toBeNull();
   });
 });
+
+describe("who a model is for by the brand's own naming", () => {
+  it("knows Anon's S models are women's", async () => {
+    const { audienceByModel } = await import("./brands");
+    expect(audienceByModel("Anon", "M4S CYLINDRICAL")).toBe("Womens");
+    expect(audienceByModel("Anon", "M5S")).toBe("Womens");
+    expect(audienceByModel("Anon", "WM3")).toBe("Womens");
+    expect(audienceByModel("Anon", "M4 TORIC")).toBe("");
+    expect(audienceByModel("Burton", "M4S")).toBe("");
+  });
+});

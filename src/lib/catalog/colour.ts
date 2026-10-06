@@ -29,21 +29,26 @@ export function colourName(value: string): string {
  * ONYX" and "PRCV VRBL BLUE" on every row, and Perceive Sunny Onyx and Perceive Variable Blue on
  * the shop's shelf. Whole words only, and "Sun" is "Sunny" only in a Perceive lens name.
  */
-const COLOUR_SHORTHAND: Record<string, string> = { TRUBLK: "TRUE BLACK", BLK: "BLACK", WHT: "WHITE", GRY: "GRAY", BLU: "BLUE", GRN: "GREEN", PRPL: "PURPLE", ORG: "ORANGE", YLW: "YELLOW" };
+const COLOUR_SHORTHAND: Record<string, string> = { TRUBLK: "TRUE BLACK", BLK: "BLACK", WHT: "WHITE", GRY: "GRAY", BLU: "BLUE", GRN: "GREEN", PRPL: "PURPLE", ORG: "ORANGE", YLW: "YELLOW", ARSTBL: "AIRSTREAM BLUE", PRCV: "PERCEIVE", VRBL: "VARIABLE" };
 function writeOutWords(part: string): string {
-  if (/[a-z]/.test(part)) return part;
-  return part.trim().split(/\s+/).map((w) => COLOUR_SHORTHAND[w] ?? w).join(" ");
+  // Whole words only, whatever the case they arrived in: a reader may have cased the colour
+  // already, and a word written out joins it in that case.
+  const cased = /[a-z]/.test(part);
+  const asCase = (w: string) => (cased ? w.toLowerCase().replace(/\b([a-z])/g, (c) => c.toUpperCase()) : w);
+  const out = part.trim().split(/\s+/).map((w) => (COLOUR_SHORTHAND[w.toUpperCase()] ? asCase(COLOUR_SHORTHAND[w.toUpperCase()]) : w));
+  // Anon's lens names: "Perceive Sunny Onyx", "Perceive Variable Blue". "Sun" is Sunny only there.
+  return out.map((w, i) => (w.toUpperCase() === "SUN" && (out[i - 1] ?? "").toUpperCase() === "PERCEIVE" ? asCase("SUNNY") : w)).join(" ");
 }
 
 /**
- * A goggle's colour is its frame, then its lens, the way the shop writes it: "Black w/ Prcv Sun
- * Onyx". The lens is written as the sheet writes it — the shop keeps Anon's own lens shorthand.
+ * A goggle's colour is its frame, then its lens, the way the shop writes it: "Black w/ Perceive
+ * Sunny Onyx" for the sheet's "BLACK/PRCV SUN ONYX".
  */
 export function goggleColour(value: string): string {
   const parts = value.split("/").map((p) => p.trim()).filter(Boolean);
   if (parts.length < 2) return colourName(value);
   const [frame, ...lens] = parts;
-  return `${colourName(writeOutWords(frame))} w/ ${colourName(lens.join(" "))}`;
+  return `${colourName(writeOutWords(frame))} w/ ${colourName(writeOutWords(lens.join(" ")))}`;
 }
 
 export function writeOutColour(value: string, fullNames: string[], lens = false): string {

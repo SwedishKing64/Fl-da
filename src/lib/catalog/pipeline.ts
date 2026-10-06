@@ -18,7 +18,7 @@ import { asShopPrice, existingHandle, listingByBarcode, listingsAsReference, rem
 import { dueInWindow, parseWindow } from "./deliveries";
 import { siblingsOfPlaced } from "./siblings";
 import { writeOutColour } from "./colour";
-import { brandIn, isBrand } from "./brands";
+import { audienceByModel, brandIn, isBrand } from "./brands";
 import { askToJoin } from "./reference-ai";
 import { aiAvailable } from "./extract/ai";
 import { repairCategoryRules, repairProductTags, repairTagRuleSpelling } from "./seed";
@@ -535,6 +535,12 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
         for (const fileId of fileIds) await noteOnFile(fileId, `Only the ${directives.deliveries} delivery: ${items.length} of ${before} lines are due then, and their quantities are that delivery's${unknown > 0 ? ` (${unknown} lines say nothing about when they are due and were kept as they are)` : ""}.`);
       }
     }
+  }
+
+  // The brand's own naming says who a model is for, over a sheet's "unisex": Anon's M4S is women's.
+  for (const entry of items) {
+    const who = audienceByModel(entry.item.brand, entry.item.title);
+    if (who) entry.item = { ...entry.item, gender: who };
   }
 
   /**

@@ -40,7 +40,7 @@ import { buildHandle } from "./handle";
 import { applyInvoice, reconcile, sameSizeText, type InvoiceFields, type InvoiceLine, type Match, type Reconciliation } from "./reconcile";
 import { resolveAgainstReference } from "./reference-match";
 import { asShopPrice, listingsFromCsv, rememberedVendor, type Listing } from "./shop-memory";
-import { brandIn, isDistributor } from "./brands";
+import { brandIn, isDistributor, audienceByModel } from "./brands";
 import { isFlatSki, isPackageBinding, packageProducts } from "./packages";
 import type { PriceRow } from "./invoice";
 import type { CanonicalLineItem } from "./types";
@@ -370,6 +370,22 @@ const VARIANT_COLUMNS = new Set([
  * belongs to the PRODUCT is cleared: an import row carrying a Title would be an edit to the
  * product, and this is only meant to add a variant to it.
  */
+/**
+ * A goggle's colour completed with the bonus lens the listing pairs with that main lens.
+ *
+ * The order names the frame and the lens in the box — "Black w/ Perceive Sunny Red" — and the shop
+ * names the bonus lens too: "Black w/ Perceive Sunny Red + Perceive Cloudy Burst". The listing's
+ * other colours say which bonus goes with which main lens; where they all agree, the new colour
+ * takes it, and where the listing says nothing it is left as the order wrote it.
+ */
+function withBonusLens(colour: string, siblings: string[]): string {
+  const m = /^(.*)\bw\/\s*(.+)$/i.exec(colour);
+  if (!m || colour.includes("+")) return colour;
+  const lens = m[2].trim().toLowerCase();
+  const bonuses = new Set(siblings.map((v) => /\bw\/\s*(.+?)\s*\+\s*(.+)$/i.exec(v)).filter((x): x is RegExpExecArray => x !== null && x[1].trim().toLowerCase() === lens).map((x) => x[2].trim()));
+  return bonuses.size === 1 ? `${colour} + ${[...bonuses][0]}` : colour;
+}
+
 function appendSizes(
   csv: string,
   matched: Match[],
@@ -421,7 +437,7 @@ function appendSizes(
     const size = (m.line.size ?? "").trim();
     const sizeAt = sizeColumn(grid[m.productRows[0]]);
     const colourAt = colourColumn(grid[m.productRows[0]]);
-    const colour = colourAt !== undefined ? colourName((m.line.colour ?? "").trim()) : "";
+    const colour = colourAt !== undefined ? withBonusLens(colourName((m.line.colour ?? "").trim()), m.productRows.map((r) => (grid[r]?.[colourAt] ?? "").trim())) : "";
     // The size spelled as this product spells its sizes — "Medium" beside "Medium", not "M".
     const sizeSpelled = m.productRows.map((r) => (grid[r]?.[sizeAt] ?? "").trim()).find((v) => v && size && sameSizeText(size, v)) ?? writeOutSize(size);
     // A row of this product that is NOT its first: it carries the variant and nothing of the
@@ -561,6 +577,11 @@ function appendFresh(
   if (!fallback && grouped.some((g) => !g.productType.trim())) {
     warnings.push("Some of the new products have no Type. An order form seldom says what a thing is, and nothing in this delivery matched a product already in the file to read it off. Set the Type in Shopify once they are imported, or load the export that has this supplier's other products in it.");
   }
+
+  // A new goggle's colour completed with the bonus lens the shop's other goggles pair with that
+  // main lens, where the whole file agrees. See withBonusLens.
+  const shelf = ["Option1 Value", "Option2 Value", "Option3 Value"].map((c) => at.get(c)).filter((i): i is number => i !== undefined).flatMap((i) => grid.slice(1).map((r) => (r[i] ?? "").trim()));
+  for (const g of grouped) for (const v of g.variants) if (/\bw\/\s/i.test(v.item.colour) && !v.item.colour.includes("+")) v.item = { ...v.item, colour: withBonusLens(v.item.colour, shelf) };
 
   const lineOf = (product: GroupedProduct): InvoiceLine[] => product.variants.map((v) => lines[v.sourceIndex]).filter(Boolean);
 
@@ -788,7 +809,8 @@ function canonical(line: InvoiceLine, vendor: string, season: string): Canonical
   const isLength = /^\d{2,3}(\.\d)?$/.test(size);
   // The order's shorthand, read as an import batch reads it: "M HIGHSHOT SO" is a men's "Highshot
   // Step On", with the audience in the gender and not the name. See expandShorthand.
-  const gender = (line.gender ?? "").trim() || audienceOfPrefix(line.title);
+  const brandOf = (line.brand ?? "").trim() || vendor;
+  const gender = audienceByModel(brandOf, line.title) || (line.gender ?? "").trim() || audienceOfPrefix(line.title);
   // A fit that is not the default is part of the name — "Photon BOA Wide" — not an option. See withFit.
   return withFit({
     title: expandShorthand(withoutAudiencePrefix(line.title.trim(), gender)),

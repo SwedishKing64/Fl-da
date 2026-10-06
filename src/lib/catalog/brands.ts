@@ -116,3 +116,15 @@ export function brandsAsked(instruction: string, onOrder: string[]): string[] | 
   const out = keep.filter((b) => !dropped.includes(b));
   return out.length === 0 || out.length === brands.length ? null : out;
 }
+
+/**
+ * Who a model is for when the sheet says "unisex" and the brand's own naming says otherwise.
+ *
+ * Anon's goggles with an S on the model — M4S, M5S, WM3 — are the women's models; the sheet calls
+ * them unisex. The shop tags them womens and, as with every goggle, names them by the model.
+ */
+export function audienceByModel(brand: string, title: string): string {
+  const name = title.trim().toUpperCase();
+  if (/^anon$/i.test(brand.trim()) && /^(W?M\d+S|WM\d+)\b/.test(name)) return "Womens";
+  return "";
+}

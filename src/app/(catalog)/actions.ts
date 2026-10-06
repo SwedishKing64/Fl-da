@@ -724,6 +724,23 @@ export async function readProductLinkAction(productId: string): Promise<ActionRe
  * everything on it each time — which on a database in another region is most of a second, every
  * few seconds, for as long as the reading takes.
  */
+/**
+ * What the server said when a request failed, by the digest the browser was given.
+ *
+ * Production hides the message from the browser; instrumentation.ts recorded it. The error page
+ * asks here, so the person sees the cause and not a hash.
+ */
+export async function explainErrorAction(digest: string): Promise<ActionResult<{ message: string; where: string; when: string }>> {
+  await requireUser();
+  const clean = digest.trim();
+  if (!clean) return { ok: false, error: "No digest." };
+  const rows = await prisma.auditLog.findMany({ where: { action: "error", details: { contains: clean } }, orderBy: { createdAt: "desc" }, take: 1 });
+  const row = rows[0];
+  if (!row) return { ok: false, error: "Nothing recorded for this digest yet." };
+  const d = parseJson<{ message?: string; path?: string; routeType?: string; routePath?: string }>(row.details, {});
+  return { ok: true, data: { message: d.message ?? "", where: `${d.routeType ?? ""} ${d.path ?? d.routePath ?? ""}`.trim(), when: row.createdAt.toISOString() } };
+}
+
 export async function readingCountAction(batchId: string): Promise<number> {
   await requireUser();
   return prisma.sourceFile.count({ where: { batchId, extractionStatus: "PENDING" } });

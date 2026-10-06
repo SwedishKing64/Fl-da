@@ -164,6 +164,7 @@ export async function storeFile(batchId: string, given: { filename: string; mime
       storagePath,
       kind: file.kind ?? "AUTO",
       extractionStatus: "PENDING",
+      readStartedAt: new Date(),
     },
   });
   return { id: record.id };
@@ -180,7 +181,7 @@ export async function ingestFile(batchId: string, given: { filename: string; mim
   const file = await (await import("./extract/heic")).asReadableImage(given);
   const requested: UploadKind = file.kind ?? "AUTO";
   const record = file.existingFileId
-    ? await prisma.sourceFile.findUniqueOrThrow({ where: { id: file.existingFileId } })
+    ? await prisma.sourceFile.update({ where: { id: file.existingFileId }, data: { extractionStatus: "PENDING", readStartedAt: new Date() } })
     : await prisma.sourceFile.create({
         data: { batchId, filename: file.filename, mimeType: file.mimeType || "application/octet-stream", sizeBytes: file.buffer.length, storagePath: await saveFile("invoices", file.filename, file.buffer), kind: requested },
       });

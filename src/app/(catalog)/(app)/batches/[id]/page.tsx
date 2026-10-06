@@ -24,10 +24,11 @@ export const maxDuration = 300;
 /**
  * A read still marked as running long after it could be. Reading happens after the upload has
  * answered, with five minutes to run; a file still "reading…" well past that is one the host cut off,
- * and nothing else ever says so. The stamp is the upload's — a re-read answers the page directly.
+ * and nothing else ever says so. The stamp is the read's own start, set when it began.
  */
 const STALL_MS = 330_000;
-const stalled = (f: { extractionStatus: string; createdAt: Date }) => f.extractionStatus === "PENDING" && Date.now() - f.createdAt.getTime() > STALL_MS;
+const startedAt = (f: { createdAt: Date; readStartedAt: Date | null }) => (f.readStartedAt ?? f.createdAt).getTime();
+const stalled = (f: { extractionStatus: string; createdAt: Date; readStartedAt: Date | null }) => f.extractionStatus === "PENDING" && Date.now() - startedAt(f) > STALL_MS;
 
 export default async function BatchPage(props: PageProps<"/batches/[id]">) {
   return guarded(() => renderBatchPage(props));
@@ -66,7 +67,7 @@ async function renderBatchPage(props: PageProps<"/batches/[id]">) {
             initial={batch.instructions.map((m) => ({ id: m.id, role: m.role, body: m.body, createdAt: m.createdAt.toISOString() }))}
           />
           <Card title="Supplier files">
-            {locked ? <Empty>This batch has been exported; files are locked for audit.</Empty> : <UploadPanel batchId={id} aiEnabled={settings ? Boolean(process.env.ANTHROPIC_API_KEY) : false} hasProducts={batch._count.products > 0} productCount={batch._count.products} reading={batch.files.filter((f) => f.extractionStatus === "PENDING" && !stalled(f)).length} pendingSince={batch.files.filter((f) => f.extractionStatus === "PENDING" && !stalled(f)).map((f) => f.createdAt.getTime())} allNew={parseDirectives(batch.directives).allNew} buildNow={batch._count.products === 0 && !batch.files.some((f) => f.extractionStatus === "PENDING" && !stalled(f)) && batch.files.some((f) => f.extractionStatus === "DONE" && !["SPEC_SHEET", "PRODUCT_PHOTO", "SHOP_EXPORT"].includes(f.detectedKind ?? f.kind))} retryable={batch.files.filter((f) => !locked && (stalled(f) || (f.extractionStatus === "FAILED" && ranOutOfTime(f.extractionError)))).map((f) => ({ id: f.id, filename: f.filename }))} />}
+            {locked ? <Empty>This batch has been exported; files are locked for audit.</Empty> : <UploadPanel batchId={id} aiEnabled={settings ? Boolean(process.env.ANTHROPIC_API_KEY) : false} hasProducts={batch._count.products > 0} productCount={batch._count.products} reading={batch.files.filter((f) => f.extractionStatus === "PENDING" && !stalled(f)).length} pendingSince={batch.files.filter((f) => f.extractionStatus === "PENDING" && !stalled(f)).map(startedAt)} allNew={parseDirectives(batch.directives).allNew} buildNow={batch._count.products === 0 && !batch.files.some((f) => f.extractionStatus === "PENDING" && !stalled(f)) && batch.files.some((f) => f.extractionStatus === "DONE" && !["SPEC_SHEET", "PRODUCT_PHOTO", "SHOP_EXPORT"].includes(f.detectedKind ?? f.kind))} retryable={batch.files.filter((f) => !locked && (stalled(f) || (f.extractionStatus === "FAILED" && ranOutOfTime(f.extractionError)))).map((f) => ({ id: f.id, filename: f.filename }))} />}
             {batch.files.length > 0 && (
               <table className="mt-4 w-full text-sm">
                 <thead className="text-left text-xs text-[var(--ink-soft)]"><tr><th className="py-1">File</th><th>Kind</th><th>Extraction</th><th className="text-right">Rows</th><th /></tr></thead>

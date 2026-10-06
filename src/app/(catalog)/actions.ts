@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect, unstable_rethrow } from "next/navigation";
+import { after } from "next/server";
 import type { ExportResult } from "@/lib/catalog/pipeline";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -810,15 +811,24 @@ export async function readingCountAction(batchId: string): Promise<number> {
  * did — so a large scan can still run out of it. The file is safe either way, so trying again is
  * the whole of the recovery, and nobody has to find the invoice and upload it twice.
  */
-export async function retryExtractionAction(fileId: string): Promise<ActionResult<{ rows: number; warnings: string[] }>> {
+export async function retryExtractionAction(fileId: string): Promise<ActionResult<{ reading: true }>> {
   const user = await requireUser();
   try {
-    await prisma.sourceFile.update({ where: { id: fileId }, data: { extractionStatus: "PENDING", extractionError: null } });
-    const result = await extractStoredFile(fileId);
-    const file = await prisma.sourceFile.findUniqueOrThrow({ where: { id: fileId }, select: { batchId: true } });
-    await logAudit("file.reread", { batchId: file.batchId, userId: user.id, details: { fileId, rows: result.rows } });
+    // The read runs after this has answered, as it does after an upload: a photograph is a long
+    // model call, and a button whose request carried it was answered by the host with an error
+    // page when the function died, which the browser could only call "an unexpected response".
+    // Answered at once, the page polls the file like any other read and builds when it is done.
+    const file = await prisma.sourceFile.update({ where: { id: fileId }, data: { extractionStatus: "PENDING", extractionError: null, readStartedAt: new Date() }, select: { batchId: true } });
+    after(async () => {
+      try {
+        const result = await extractStoredFile(fileId);
+        await logAudit("file.reread", { batchId: file.batchId, userId: user.id, details: { fileId, rows: result.rows } });
+      } catch (err) {
+        await prisma.sourceFile.update({ where: { id: fileId }, data: { extractionStatus: "FAILED", extractionError: said(err) } }).catch(() => undefined);
+      }
+    });
     revalidatePath(`/batches/${file.batchId}`);
-    return { ok: true, data: { rows: result.rows, warnings: result.warnings } };
+    return { ok: true, data: { reading: true } };
   } catch (err) {
     await prisma.sourceFile.update({ where: { id: fileId }, data: { extractionStatus: "FAILED", extractionError: said(err) } }).catch(() => undefined);
     return fail(err);

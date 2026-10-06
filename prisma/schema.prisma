@@ -129,6 +129,8 @@ model SourceFile {
   kind             String   @default("INVOICE") // INVOICE | SPEC_SHEET | PRODUCT_PHOTO | AUTO (let the AI decide)
   detectedKind     String? // what the AI decided the document is
   extractionStatus String   @default("PENDING") // PENDING | DONE | FAILED
+  /// When the read now running began — a read runs after the request that started it has answered, and one still running long after this is one the host cut off.
+  readStartedAt    DateTime?
   extractionMethod String? // CSV | XLSX | PDF_TEXT | PDF_AI | IMAGE_AI | AI_TEXT | HEURISTIC
   extractionError  String?
   headers          String? // JSON string[] of detected source headers

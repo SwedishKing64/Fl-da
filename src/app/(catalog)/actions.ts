@@ -217,11 +217,32 @@ export async function deleteSourceFileAction(fileId: string): Promise<ActionResu
  * The build, checked by the model against the shop's conventions and the instruction chat, with
  * what is plainly wrong put right and the rest asked. See batch-agent.ts.
  */
-export async function reviewBatchAction(batchId: string): Promise<ActionResult<{ summary: string; changed: number; questions: string[] }>> {
+/**
+ * The first half of the build check: the files read again, forensically, and the batch rebuilt
+ * where a column was read wrong. Its own request, because it and the product review are each a
+ * long model call and together they outlast what a deployed request is allowed — which is how
+ * the check used to die mid-way and take the page down with it.
+ */
+export async function auditBatchAction(batchId: string): Promise<ActionResult<{ summary: string; questions: string[] }>> {
+  const user = await requireUser();
+  try {
+    const { auditReading } = await import("@/lib/catalog/batch-agent");
+    const audit = await auditReading(batchId, user.id);
+    if (!audit) return { ok: false, error: "No API key is set, so the build cannot be checked. Add ANTHROPIC_API_KEY in Settings." };
+    revalidatePath(`/batches/${batchId}`);
+    const verdict = audit.verdict === "right" ? "read right" : audit.verdict === "wrong" ? "read wrong" : "not sure";
+    const remapped = audit.remapped.length ? `, ${audit.remapped.length} column${audit.remapped.length === 1 ? "" : "s"} re-read${audit.rebuilt ? " and rebuilt" : ""}` : "";
+    return { ok: true, data: { summary: `Files: ${verdict}${remapped}.`, questions: audit.questions } };
+  } catch (err) {
+    return { ok: false, error: `The files could not be re-read: ${said(err)}` };
+  }
+}
+
+export async function reviewBatchAction(batchId: string, options: { audited?: boolean } = {}): Promise<ActionResult<{ summary: string; changed: number; questions: string[] }>> {
   const user = await requireUser();
   try {
     const { reviewBatch } = await import("@/lib/catalog/batch-agent");
-    const review = await reviewBatch(batchId, user.id);
+    const review = await reviewBatch(batchId, user.id, undefined, { audit: !options.audited });
     if (!review) return { ok: false, error: "No API key is set, so the build cannot be checked. Add ANTHROPIC_API_KEY in Settings." };
     revalidatePath(`/batches/${batchId}`);
     revalidatePath(`/batches/${batchId}/review`);
@@ -954,7 +975,7 @@ export async function readInstructionSheetAction(file: { name: string; type: str
 export async function readInvoiceAction(file: { name: string; type: string; base64: string }): Promise<ActionResult<InvoiceRead & { source: string }>> {
   await requireUser();
 
-  const buffer = Buffer.from(file.base64, "base64");
+  let buffer: Buffer = Buffer.from(file.base64, "base64");
   // A serverless request body tops out around 4.5MB and this arrives base64 encoded, a third
   // bigger again — so anything past this never reaches here at all. The page shrinks pictures
   // before sending for exactly that reason; this is the backstop, and it says what to do.
@@ -962,8 +983,15 @@ export async function readInvoiceAction(file: { name: string; type: string; base
     return { ok: false, error: `That file is ${readableSize(buffer.byteLength)}, and an upload has to stay under ${readableSize(MAX_UPLOAD)}. A photo is shrunk automatically before it is sent, so this is either a very large PDF — split it — or a picture this browser could not open.` };
   }
 
+  // An iPhone HEIC the browser could not decode is decoded here instead — see extract/heic.
+  const { isHeic, heicToJpeg } = await import("@/lib/catalog/extract/heic");
+  if (isHeic(buffer, file.name, file.type)) {
+    buffer = await heicToJpeg(buffer);
+    file = { ...file, type: "image/jpeg", name: file.name.replace(/\.hei[cf]$/i, "") + ".jpg" };
+  }
+
   const isPdf = /\.pdf$/i.test(file.name) || file.type === "application/pdf";
-  const isImage = /^image\//.test(file.type) || /\.(png|jpe?g|webp|gif|heic)$/i.test(file.name);
+  const isImage = /^image\//.test(file.type) || /\.(png|jpe?g|webp|gif|heic|heif)$/i.test(file.name);
   const isWorkbook = /\.xlsx?$/i.test(file.name) || /spreadsheet|excel/i.test(file.type);
   const isCsv = /\.csv$/i.test(file.name) || file.type === "text/csv";
 
@@ -983,11 +1011,12 @@ export async function readInvoiceAction(file: { name: string; type: string; base
     if (!aiAvailable()) return { ok: false, error: `${file.name} has no columns to read, so it has to go to the API — set ANTHROPIC_API_KEY, or upload the order as a spreadsheet.` };
 
     const { extractFromPdf, extractFromImage } = await import("@/lib/catalog/extract/ai");
-    // The four the API takes. An iPhone HEIC reaches here only when the browser could not decode
-    // it to shrink it, and "unsupported media type" from three layers down says nothing useful.
+    // The four the API takes; a HEIC was turned into one of them above, so what is left here is a
+    // TIFF, a BMP or something stranger, and "unsupported media type" from three layers down says
+    // nothing useful.
     const READABLE = ["image/jpeg", "image/png", "image/gif", "image/webp"];
     if (!isPdf && !READABLE.includes(file.type)) {
-      return { ok: false, error: `${file.name} is a ${file.type || "picture in a format"} that cannot be read — this is nearly always an iPhone HEIC. Open it and save it as a PNG or JPEG, or screenshot it, and add that.` };
+      return { ok: false, error: `${file.name} is a ${file.type || "picture in a format"} that cannot be read. Open it and save it as a PNG or JPEG, or screenshot it, and add that.` };
     }
     const extracted = isPdf
       ? await extractFromPdf(buffer, "INVOICE")

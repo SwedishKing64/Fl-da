@@ -35,9 +35,14 @@ export interface Shrunk {
  * A file the browser cannot decode — an iPhone HEIC where there is no decoder, a TIFF — comes back
  * unchanged, and the caller says what to do about it. Better that than a silent failure.
  */
-export async function shrinkImage(file: File): Promise<Shrunk> {
-  const asIs = { file, note: "" };
-  if (!looksLikeImage(file) || typeof createImageBitmap !== "function") return asIs;
+export async function shrinkImage(given: File): Promise<Shrunk> {
+  const asIs = { file: given, note: "" };
+  if (!looksLikeImage(given) || typeof createImageBitmap !== "function") return asIs;
+
+  // An iPhone HEIC first, which only Safari can open natively: decoded here to a JPEG and then
+  // shrunk like any other photo. If the decoder fails the file goes as it is, and the server
+  // decodes it instead (see extract/heic) — slower, but nothing is lost.
+  const file = await decodeHeic(given);
 
   let bitmap: ImageBitmap;
   try {
@@ -47,7 +52,7 @@ export async function shrinkImage(file: File): Promise<Shrunk> {
   }
   try {
     const { width, height } = fitWithin(bitmap.width, bitmap.height);
-    if (width === bitmap.width && height === bitmap.height && fitsUpload(file.size)) return asIs;
+    if (width === bitmap.width && height === bitmap.height && fitsUpload(file.size)) return file === given ? asIs : { file, note: `${given.name}: an iPhone HEIC, sent as a JPEG.` };
 
     const canvas = document.createElement("canvas");
     canvas.width = width;
@@ -60,14 +65,28 @@ export async function shrinkImage(file: File): Promise<Shrunk> {
     ctx.drawImage(bitmap, 0, 0, width, height);
 
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.92));
-    if (!blob || blob.size >= file.size) return asIs;
-    const name = file.name.replace(/\.[^.]+$/, "") + ".jpg";
+    if (!blob || blob.size >= file.size) return file === given ? asIs : { file, note: `${given.name}: an iPhone HEIC, sent as a JPEG.` };
+    const name = given.name.replace(/\.[^.]+$/, "") + ".jpg";
     return {
-      file: new File([blob], name, { type: "image/jpeg", lastModified: file.lastModified }),
-      note: `${file.name}: ${bitmap.width}×${bitmap.height} at ${readableSize(file.size)}, sent at ${width}×${height} and ${readableSize(blob.size)} — the size it is read at.`,
+      file: new File([blob], name, { type: "image/jpeg", lastModified: given.lastModified }),
+      note: `${given.name}: ${bitmap.width}×${bitmap.height} at ${readableSize(given.size)}, sent at ${width}×${height} and ${readableSize(blob.size)} — the size it is read at.`,
     };
   } finally {
     bitmap.close();
+  }
+}
+
+const looksLikeHeic = (file: File): boolean => /^image\/hei[cf]$/i.test(file.type) || /\.hei[cf]$/i.test(file.name);
+
+/** A HEIC as a JPEG, decoded in the browser. Any other file, or a HEIC that will not decode, as is. */
+async function decodeHeic(file: File): Promise<File> {
+  if (!looksLikeHeic(file)) return file;
+  try {
+    const { heicTo } = await import("heic-to");
+    const blob = await heicTo({ blob: file, type: "image/jpeg", quality: 0.92 });
+    return new File([blob], file.name.replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg", lastModified: file.lastModified });
+  } catch {
+    return file;
   }
 }
 

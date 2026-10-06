@@ -13,9 +13,13 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
           <div style={{ width: "100%", maxWidth: 560, background: "#fff", border: "1px solid #E2E0E9", borderRadius: 12, padding: 24 }}>
             <h1 style={{ margin: 0, fontSize: 18, letterSpacing: "-0.02em" }}>Something went wrong</h1>
             <p style={{ marginTop: 8, fontSize: 14, lineHeight: 1.6, color: "#4A4757" }}>
-              The page could not be rendered. This is almost always the database: either the deployment has no connection
-              string, or it has one that points somewhere unreachable.
+              The page could not be rendered. When it happens on first load this is almost always the database: either
+              the deployment has no connection string, or it has one that points somewhere unreachable. When it happens
+              after a button was pressed, the request behind it failed, and Try again puts the page back as it was.
             </p>
+            {error.message && (
+              <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.6, color: "#6A6678", fontFamily: "ui-monospace, monospace", wordBreak: "break-word" }}>{error.message}</p>
+            )}
             <p style={{ marginTop: 8, fontSize: 14, lineHeight: 1.6, color: "#4A4757" }}>
               Reload to see the database diagnostics, which name the variable in use and what failed.
             </p>

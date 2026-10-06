@@ -151,7 +151,9 @@ const PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp
  * itself failed, losing the file along with the reading, and telling somebody their upload failed
  * when it had in fact arrived perfectly.
  */
-export async function storeFile(batchId: string, file: { filename: string; mimeType: string; buffer: Buffer; kind?: UploadKind }): Promise<{ id: string }> {
+export async function storeFile(batchId: string, given: { filename: string; mimeType: string; buffer: Buffer; kind?: UploadKind }): Promise<{ id: string }> {
+  // An iPhone HEIC is stored as the JPEG it decodes to, so everything after this can read it.
+  const file = await (await import("./extract/heic")).asReadableImage(given);
   const storagePath = await saveFile("invoices", file.filename, file.buffer);
   const record = await prisma.sourceFile.create({
     data: {
@@ -174,7 +176,8 @@ export async function extractStoredFile(fileId: string, origin?: string): Promis
   return ingestFile(record.batchId, { filename: record.filename, mimeType: record.mimeType, buffer, kind: record.kind as UploadKind, origin, existingFileId: record.id });
 }
 
-export async function ingestFile(batchId: string, file: { filename: string; mimeType: string; buffer: Buffer; kind?: UploadKind; origin?: string; existingFileId?: string }): Promise<IngestResult> {
+export async function ingestFile(batchId: string, given: { filename: string; mimeType: string; buffer: Buffer; kind?: UploadKind; origin?: string; existingFileId?: string }): Promise<IngestResult> {
+  const file = await (await import("./extract/heic")).asReadableImage(given);
   const requested: UploadKind = file.kind ?? "AUTO";
   const record = file.existingFileId
     ? await prisma.sourceFile.findUniqueOrThrow({ where: { id: file.existingFileId } })

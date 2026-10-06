@@ -12,6 +12,13 @@ import { BatchSettingsForm } from "./BatchSettingsForm";
 import { BuildProductsButton, DeleteFileButton, DeleteBatchButton, RetryExtractionButton } from "./BatchButtons";
 import { ExtractedRows } from "./ExtractedRows";
 
+/**
+ * The build check, the chat's rebuilds and the page reads are each a long model call, and a
+ * Server Action called from a page takes the page's maxDuration. Without this it takes the
+ * platform default — ten or fifteen seconds — and is cut off mid-way. See bulk/page.tsx.
+ */
+export const maxDuration = 60;
+
 export default async function BatchPage(props: PageProps<"/batches/[id]">) {
   const { id } = await props.params;
   const batch = await prisma.importBatch.findUnique({ where: { id }, include: { supplier: true, files: { orderBy: { createdAt: "asc" } }, instructions: { orderBy: { createdAt: "asc" } }, _count: { select: { products: true } } } });

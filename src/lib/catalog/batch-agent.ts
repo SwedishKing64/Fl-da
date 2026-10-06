@@ -285,12 +285,14 @@ export interface ReviewOutcome extends BatchReview {
  *
  * Returns null where there is no API, and the chat is told nothing happened.
  */
-export async function reviewBatch(batchId: string, userId: string | null, ask: Ask = askModel): Promise<ReviewOutcome | null> {
+export async function reviewBatch(batchId: string, userId: string | null, ask: Ask = askModel, options: { audit?: boolean } = {}): Promise<ReviewOutcome | null> {
   if (!aiAvailable()) return null;
   // The files first, forensically: a build checked against the sheets it came from, not only
   // against the shop's conventions. Where a column was read wrong the batch is rebuilt before the
-  // products are looked at.
-  const audit = await auditReading(batchId, userId, ask).catch(() => null);
+  // products are looked at. The page runs the two as separate requests — each is a long model
+  // call, and together they outlast what a deployed request is allowed — so it asks for the
+  // review without the audit once the audit has been run.
+  const audit = options.audit === false ? null : await auditReading(batchId, userId, ask).catch(() => null);
   const content = await describeBatch(batchId);
   const text = await ask(SYSTEM, content);
   if (!text) return null;

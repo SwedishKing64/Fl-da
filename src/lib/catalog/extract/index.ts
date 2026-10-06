@@ -18,7 +18,7 @@ export function detectKind(filename: string, mimeType: string): "csv" | "xlsx" |
   if (ext === "csv" || mimeType === "text/csv") return "csv";
   if (["xlsx", "xlsm", "xls"].includes(ext) || mimeType.includes("spreadsheet") || mimeType.includes("excel")) return "xlsx";
   if (ext === "pdf" || mimeType === "application/pdf") return "pdf";
-  if (["png", "jpg", "jpeg", "gif", "webp"].includes(ext) || mimeType.startsWith("image/")) return "image";
+  if (["png", "jpg", "jpeg", "gif", "webp", "heic", "heif"].includes(ext) || mimeType.startsWith("image/")) return "image";
   if (ext === "txt" || mimeType.startsWith("text/")) return "text";
   return "unknown";
 }

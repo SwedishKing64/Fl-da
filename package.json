@@ -21,6 +21,8 @@
     "@types/papaparse": "^5.5.2",
     "@vercel/blob": "^2.8.0",
     "exceljs": "^4.4.0",
+    "heic-convert": "^2.1.0",
+    "heic-to": "^1.6.5",
     "next": "16.2.12",
     "papaparse": "^5.7.0",
     "prisma": "^6.19.3",
@@ -31,6 +33,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/heic-convert": "^2.1.1",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

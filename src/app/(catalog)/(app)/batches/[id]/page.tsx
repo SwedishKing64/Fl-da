@@ -12,6 +12,7 @@ import { ranOutOfTime } from "@/lib/catalog/extract/ai";
 import { BatchSettingsForm } from "./BatchSettingsForm";
 import { BuildProductsButton, DeleteFileButton, DeleteBatchButton, RetryExtractionButton } from "./BatchButtons";
 import { ExtractedRows } from "./ExtractedRows";
+import { guarded } from "@/app/(catalog)/page-failed";
 
 /**
  * The build check, the chat's rebuilds and the page reads are each a long model call, and a
@@ -29,6 +30,10 @@ const STALL_MS = 330_000;
 const stalled = (f: { extractionStatus: string; createdAt: Date }) => f.extractionStatus === "PENDING" && Date.now() - f.createdAt.getTime() > STALL_MS;
 
 export default async function BatchPage(props: PageProps<"/batches/[id]">) {
+  return guarded(() => renderBatchPage(props));
+}
+
+async function renderBatchPage(props: PageProps<"/batches/[id]">) {
   const { id } = await props.params;
   const batch = await prisma.importBatch.findUnique({ where: { id }, include: { supplier: true, files: { orderBy: { createdAt: "asc" } }, instructions: { orderBy: { createdAt: "asc" } }, _count: { select: { products: true } } } });
   if (!batch) notFound();

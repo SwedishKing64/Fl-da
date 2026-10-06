@@ -8,6 +8,7 @@ import { ReviewGrid } from "./ReviewGrid";
 import { LinksPanel } from "./LinksPanel";
 import { LookupPanel } from "./LookupPanel";
 import { lookupEnabled } from "@/lib/catalog/enrich";
+import { guarded } from "@/app/(catalog)/page-failed";
 
 /**
  * Server Actions on a page take the page's maxDuration, so this is what the web lookup runs under.
@@ -16,6 +17,10 @@ import { lookupEnabled } from "@/lib/catalog/enrich";
 export const maxDuration = 300;
 
 export default async function ReviewPage(props: PageProps<"/batches/[id]/review">) {
+  return guarded(() => renderReviewPage(props));
+}
+
+async function renderReviewPage(props: PageProps<"/batches/[id]/review">) {
   const { id } = await props.params;
   const batch = await prisma.importBatch.findUnique({ where: { id } });
   if (!batch) notFound();

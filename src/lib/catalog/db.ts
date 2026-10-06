@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { PrismaClient } from "@prisma/client";
-import { findDatabaseUrl } from "./db-url";
+import { findDatabaseUrl, runtimeDatabaseUrl } from "./db-url";
 import { isMissingColumn } from "./schema-repair";
 
 export { DATABASE_ENV_KEYS, accelerateEnvName, databaseEnvNamesPresent, directDatabaseUrl, findDatabaseUrl } from "./db-url";
@@ -16,7 +16,7 @@ const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient; epheme
  */
 function resolveDatabaseUrl(): { url: string; ephemeral: boolean } | undefined {
   const configured = findDatabaseUrl();
-  if (configured) return { url: configured.url, ephemeral: false };
+  if (configured) return { url: runtimeDatabaseUrl(configured.url), ephemeral: false };
   const template = path.join(process.cwd(), "prisma", "template.db");
   if (!fs.existsSync(template)) return undefined;
   const target = path.join(os.tmpdir(), "importer-ephemeral.db");

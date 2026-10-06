@@ -150,3 +150,27 @@ export function directDatabaseUrl(env: Env = process.env): string | undefined {
     return found.url;
   }
 }
+
+/**
+ * The connection string the running app uses.
+ *
+ * A pooled Postgres endpoint — Neon's "-pooler" host, Supabase's pooler — is PgBouncer in
+ * transaction mode, which hands each query a different server connection. Prisma's prepared
+ * statements assume the same one, and without being told otherwise it fails at random under
+ * load: "prepared statement "s0" already exists", "prepared statement does not exist" — a page
+ * that rendered a moment ago failing to render now, in the middle of a build, with no change
+ * made. `pgbouncer=true` tells Prisma to do without them. A pooled URL that already carries the
+ * flag, a direct host and a SQLite file are left exactly as they are.
+ */
+export function runtimeDatabaseUrl(url: string): string {
+  if (!POSTGRES_URL.test(url)) return url;
+  try {
+    const parsed = new URL(url);
+    const pooled = /-pooler\./.test(parsed.hostname) || /pooler\.supabase\.com$/.test(parsed.hostname);
+    if (!pooled || parsed.searchParams.has("pgbouncer")) return url;
+    parsed.searchParams.set("pgbouncer", "true");
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}

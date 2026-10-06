@@ -18,7 +18,7 @@ import { ExtractedRows } from "./ExtractedRows";
  * Server Action called from a page takes the page's maxDuration. Without this it takes the
  * platform default — ten or fifteen seconds — and is cut off mid-way. See bulk/page.tsx.
  */
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 /**
  * A read still marked as running long after it could be. Reading happens after the upload has

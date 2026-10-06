@@ -9,7 +9,7 @@ import { BulkPanel } from "./BulkPanel";
  * a page take the page's maxDuration. Without this they take the platform default — ten or fifteen
  * seconds — so a four-page table was cut off mid-read and came back as "could not be read".
  */
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 export default async function BulkPage() {
   // The house tag names who built a product — 123abc-zb — so the page knows whose work this is.

@@ -13,7 +13,7 @@ import { lookupEnabled } from "@/lib/catalog/enrich";
  * Server Actions on a page take the page's maxDuration, so this is what the web lookup runs under.
  * Without it they take the platform default, and a lookup pass was killed before it could reply.
  */
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 export default async function ReviewPage(props: PageProps<"/batches/[id]/review">) {
   const { id } = await props.params;

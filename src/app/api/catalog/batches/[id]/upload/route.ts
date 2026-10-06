@@ -7,7 +7,7 @@ import type { UploadKind } from "@/lib/catalog/extract";
 import { logAudit } from "@/lib/catalog/audit";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 // Vercel serverless functions accept request bodies up to ~4.5MB; elsewhere allow 40MB.
 const MAX_BYTES = process.env.VERCEL ? 4 * 1024 * 1024 : 40 * 1024 * 1024;

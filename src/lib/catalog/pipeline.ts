@@ -381,6 +381,11 @@ export interface ApplyMappingInput {
 
 /** Apply column mappings to every extracted file, then (re)build products, variants, prices and images. */
 export async function applyMappings(batchId: string, inputs: ApplyMappingInput[], userId: string | null): Promise<{ products: number; variants: number; problems: string[] }> {
+  // Where a build's time goes, phase by phase, to the server log and the History page: the
+  // number behind "why is it so slow" is otherwise a guess.
+  const phases: Array<[string, number]> = [];
+  let mark = Date.now();
+  const phase = (name: string) => { const now = Date.now(); phases.push([name, now - mark]); mark = now; };
   const batch = await prisma.importBatch.findUniqueOrThrow({ where: { id: batchId }, include: { files: true, supplier: true } });
   const problems: string[] = [];
   for (const input of inputs) for (const p of mappingProblems(input.mapping)) problems.push(`${input.hash}: ${p}`);
@@ -575,6 +580,7 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
   }
 
   // The shop's listings as last remembered, for the shelves it gave each model before.
+  phase("read the files");
   const listings = (await prisma.shopListing.findMany({ select: { handle: true, title: true, vendor: true, productType: true, tags: true, price: true, bindingOption: true, barcodes: true } }).catch(() => []))
     .map((l) => ({ ...l, tags: l.tags.split(",").map((t) => t.trim()).filter(Boolean), barcodes: (l.barcodes ?? "").split(",").map((b) => b.trim()).filter(Boolean) }));
   // A line with no brand of its own: the vendor the shop already sells this model under, or a brand
@@ -747,6 +753,7 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
   }
 
   // Rebuild the batch's products from scratch (mapping is re-runnable until export).
+  phase("placed against the shop");
   await prisma.$transaction([
     prisma.extractedLineItem.deleteMany({ where: { batchId } }),
     prisma.product.deleteMany({ where: { batchId } }),
@@ -839,8 +846,13 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
 
   await attachUnassignedPhotos(batchId);
   await allocateBatchFreight(batchId);
+  phase("written");
   await repriceBatch(batchId);
   await prisma.importBatch.update({ where: { id: batchId }, data: { status: "REVIEW" } });
+  phase("priced");
+  const total = phases.reduce((n, [, ms]) => n + ms, 0);
+  console.log(`[build] ${batchId}: ${grouped.length} products in ${(total / 1000).toFixed(1)}s — ${phases.map(([n, ms]) => `${n} ${(ms / 1000).toFixed(1)}s`).join(", ")}`);
+  await logAudit("batch.built", { batchId, userId, details: { products: grouped.length, totalMs: total, phases: Object.fromEntries(phases) } }).catch(() => undefined);
   await logAudit("batch.mapped", { batchId, userId, details: { products: grouped.length, variants: variantCount } });
   void verifyBatchImages(batchId).catch(() => undefined);
   // The web lookup deliberately does NOT run here.

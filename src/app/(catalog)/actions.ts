@@ -1,6 +1,7 @@
 "use server";
 
-import { redirect } from "next/navigation";
+import { redirect, unstable_rethrow } from "next/navigation";
+import type { ExportResult } from "@/lib/catalog/pipeline";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma, parseJson, createTables, databaseStatus } from "@/lib/catalog/db";
@@ -54,6 +55,24 @@ function said(err: unknown): string {
   return describeApiError(err) ?? (err instanceof Error ? err.message : String(err));
 }
 
+/**
+ * An action that cannot throw.
+ *
+ * A thrown error reaches the browser in production as a digest and the words "an error occurred
+ * in the Server Components render", with the message hidden — twice now the only thing anyone
+ * had to go on. Returned as a failure instead, the message arrives whole and is shown where the
+ * button is. Next's own signals (a redirect to the login page) are rethrown untouched.
+ */
+async function safely<T>(work: () => Promise<T>): Promise<T | ActionResult<never>> {
+  try {
+    return await work();
+  } catch (err) {
+    unstable_rethrow(err);
+    console.error("[action]", err);
+    return fail(err);
+  }
+}
+
 function fail(err: unknown): ActionResult<never> {
   if (err instanceof z.ZodError) return { ok: false, error: err.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") };
   if (err instanceof ShopifyError) return { ok: false, error: err.message };
@@ -68,12 +87,14 @@ function fail(err: unknown): ActionResult<never> {
 // ---------------------------------------------------------------------------
 
 export async function loginAction(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
-  const email = String(formData.get("email") ?? "").trim().toLowerCase();
-  const password = String(formData.get("password") ?? "");
-  const user = await prisma.user.findUnique({ where: { email } });
-  if (!user || !verifyPassword(password, user.passwordHash)) return { ok: false, error: "Email or password is incorrect." };
-  await createSession(user.id);
-  redirect("/");
+  return safely(async () => {
+    const email = String(formData.get("email") ?? "").trim().toLowerCase();
+    const password = String(formData.get("password") ?? "");
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user || !verifyPassword(password, user.passwordHash)) return { ok: false, error: "Email or password is incorrect." };
+    await createSession(user.id);
+    redirect("/");
+  });
 }
 
 export async function setupAction(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
@@ -109,11 +130,13 @@ export async function createUserAction(_prev: ActionResult | null, formData: For
 }
 
 export async function deleteUserAction(userId: string): Promise<ActionResult> {
-  const me = await requireUser("ADMIN");
-  if (me.id === userId) return { ok: false, error: "You cannot delete your own account." };
-  await prisma.user.delete({ where: { id: userId } });
-  revalidatePath("/settings");
-  return { ok: true };
+  return safely(async () => {
+    const me = await requireUser("ADMIN");
+    if (me.id === userId) return { ok: false, error: "You cannot delete your own account." };
+    await prisma.user.delete({ where: { id: userId } });
+    revalidatePath("/settings");
+    return { ok: true };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -189,22 +212,26 @@ export async function updateBatchAction(batchId: string, patch: Partial<z.infer<
 }
 
 export async function deleteBatchAction(batchId: string): Promise<ActionResult> {
-  const user = await requireUser();
-  const batch = await prisma.importBatch.findUnique({ where: { id: batchId } });
-  if (!batch) return { ok: false, error: "Batch not found" };
-  if (batch.status === "PUSHED") return { ok: false, error: "Roll back the Shopify push before deleting this batch." };
-  await prisma.importBatch.delete({ where: { id: batchId } });
-  await logAudit("batch.deleted", { userId: user.id, details: { name: batch.name, batchId } });
-  redirect("/batches");
+  return safely(async () => {
+    const user = await requireUser();
+    const batch = await prisma.importBatch.findUnique({ where: { id: batchId } });
+    if (!batch) return { ok: false, error: "Batch not found" };
+    if (batch.status === "PUSHED") return { ok: false, error: "Roll back the Shopify push before deleting this batch." };
+    await prisma.importBatch.delete({ where: { id: batchId } });
+    await logAudit("batch.deleted", { userId: user.id, details: { name: batch.name, batchId } });
+    redirect("/batches");
+  });
 }
 
 export async function deleteSourceFileAction(fileId: string): Promise<ActionResult> {
-  await requireUser();
-  const file = await prisma.sourceFile.findUnique({ where: { id: fileId } });
-  if (!file) return { ok: false, error: "File not found" };
-  await prisma.sourceFile.delete({ where: { id: fileId } });
-  revalidatePath(`/batches/${file.batchId}`);
-  return { ok: true };
+  return safely(async () => {
+    await requireUser();
+    const file = await prisma.sourceFile.findUnique({ where: { id: fileId } });
+    if (!file) return { ok: false, error: "File not found" };
+    await prisma.sourceFile.delete({ where: { id: fileId } });
+    revalidatePath(`/batches/${file.batchId}`);
+    return { ok: true };
+  });
 }
 
 /**
@@ -359,21 +386,25 @@ export async function updateVariantAction(variantId: string, patch: z.infer<type
 }
 
 export async function deleteVariantAction(variantId: string): Promise<ActionResult> {
-  await requireUser();
-  const v = await prisma.variant.findUnique({ where: { id: variantId } });
-  if (!v) return { ok: false, error: "Variant not found" };
-  await prisma.variant.delete({ where: { id: variantId } });
-  const owner = await prisma.product.findUnique({ where: { id: v.productId }, select: { batchId: true } });
-  if (owner) await logAudit("variant.deleted", { batchId: owner.batchId, details: { variantId } });
-  const remaining = await prisma.variant.count({ where: { productId: v.productId } });
-  if (remaining === 0) await prisma.product.delete({ where: { id: v.productId } });
-  return { ok: true };
+  return safely(async () => {
+    await requireUser();
+    const v = await prisma.variant.findUnique({ where: { id: variantId } });
+    if (!v) return { ok: false, error: "Variant not found" };
+    await prisma.variant.delete({ where: { id: variantId } });
+    const owner = await prisma.product.findUnique({ where: { id: v.productId }, select: { batchId: true } });
+    if (owner) await logAudit("variant.deleted", { batchId: owner.batchId, details: { variantId } });
+    const remaining = await prisma.variant.count({ where: { productId: v.productId } });
+    if (remaining === 0) await prisma.product.delete({ where: { id: v.productId } });
+    return { ok: true };
+  });
 }
 
 export async function deleteProductAction(productId: string): Promise<ActionResult> {
-  await requireUser();
-  await prisma.product.delete({ where: { id: productId } });
-  return { ok: true };
+  return safely(async () => {
+    await requireUser();
+    await prisma.product.delete({ where: { id: productId } });
+    return { ok: true };
+  });
 }
 
 const bulkPatch = z.object({
@@ -439,14 +470,16 @@ export async function bulkUpdateAction(batchId: string, productIds: string[], pa
 }
 
 export async function dismissWarningAction(variantId: string, code: string, dismiss: boolean): Promise<ActionResult> {
-  await requireUser();
-  const v = await prisma.variant.findUnique({ where: { id: variantId } });
-  if (!v) return { ok: false, error: "Variant not found" };
-  const set = new Set(parseJson<string[]>(v.warningsDismissed, []));
-  if (dismiss) set.add(code);
-  else set.delete(code);
-  await prisma.variant.update({ where: { id: variantId }, data: { warningsDismissed: JSON.stringify(Array.from(set)) } });
-  return { ok: true };
+  return safely(async () => {
+    await requireUser();
+    const v = await prisma.variant.findUnique({ where: { id: variantId } });
+    if (!v) return { ok: false, error: "Variant not found" };
+    const set = new Set(parseJson<string[]>(v.warningsDismissed, []));
+    if (dismiss) set.add(code);
+    else set.delete(code);
+    await prisma.variant.update({ where: { id: variantId }, data: { warningsDismissed: JSON.stringify(Array.from(set)) } });
+    return { ok: true };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -454,22 +487,26 @@ export async function dismissWarningAction(variantId: string, code: string, dism
 // ---------------------------------------------------------------------------
 
 export async function addImageUrlAction(productId: string, url: string, variantId: string | null): Promise<ActionResult<{ validated: boolean; reason?: string }>> {
-  await requireUser();
-  const check = await checkImageUrl(url.trim());
-  if (!check.ok && check.reason === "Not a public HTTPS URL") return { ok: false, error: "Image URLs must be public https:// links." };
-  const count = await prisma.productImage.count({ where: { productId } });
-  await prisma.productImage.create({ data: { productId, variantId, url: url.trim(), position: count + 1, source: "MANUAL", validated: check.ok } });
-  return { ok: true, data: { validated: check.ok, reason: check.reason } };
+  return safely(async () => {
+    await requireUser();
+    const check = await checkImageUrl(url.trim());
+    if (!check.ok && check.reason === "Not a public HTTPS URL") return { ok: false, error: "Image URLs must be public https:// links." };
+    const count = await prisma.productImage.count({ where: { productId } });
+    await prisma.productImage.create({ data: { productId, variantId, url: url.trim(), position: count + 1, source: "MANUAL", validated: check.ok } });
+    return { ok: true, data: { validated: check.ok, reason: check.reason } };
+  });
 }
 
 export async function removeImageAction(imageId: string): Promise<ActionResult> {
-  await requireUser();
-  const img = await prisma.productImage.findUnique({ where: { id: imageId } });
-  if (!img) return { ok: false, error: "Image not found" };
-  await prisma.productImage.delete({ where: { id: imageId } });
-  const rest = await prisma.productImage.findMany({ where: { productId: img.productId }, orderBy: { position: "asc" } });
-  await prisma.$transaction(rest.map((r, i) => prisma.productImage.update({ where: { id: r.id }, data: { position: i + 1 } })));
-  return { ok: true };
+  return safely(async () => {
+    await requireUser();
+    const img = await prisma.productImage.findUnique({ where: { id: imageId } });
+    if (!img) return { ok: false, error: "Image not found" };
+    await prisma.productImage.delete({ where: { id: imageId } });
+    const rest = await prisma.productImage.findMany({ where: { productId: img.productId }, orderBy: { position: "asc" } });
+    await prisma.$transaction(rest.map((r, i) => prisma.productImage.update({ where: { id: r.id }, data: { position: i + 1 } })));
+    return { ok: true };
+  });
 }
 
 export async function setImageVariantAction(imageId: string, variantId: string | null): Promise<ActionResult> {
@@ -479,43 +516,56 @@ export async function setImageVariantAction(imageId: string, variantId: string |
 }
 
 export async function moveImageAction(imageId: string, direction: -1 | 1): Promise<ActionResult> {
-  await requireUser();
-  const img = await prisma.productImage.findUnique({ where: { id: imageId } });
-  if (!img) return { ok: false, error: "Image not found" };
-  const all = await prisma.productImage.findMany({ where: { productId: img.productId }, orderBy: { position: "asc" } });
-  const idx = all.findIndex((i) => i.id === imageId);
-  const target = idx + direction;
-  if (target < 0 || target >= all.length) return { ok: true };
-  [all[idx], all[target]] = [all[target], all[idx]];
-  await prisma.$transaction(all.map((r, i) => prisma.productImage.update({ where: { id: r.id }, data: { position: i + 1 } })));
-  return { ok: true };
+  return safely(async () => {
+    await requireUser();
+    const img = await prisma.productImage.findUnique({ where: { id: imageId } });
+    if (!img) return { ok: false, error: "Image not found" };
+    const all = await prisma.productImage.findMany({ where: { productId: img.productId }, orderBy: { position: "asc" } });
+    const idx = all.findIndex((i) => i.id === imageId);
+    const target = idx + direction;
+    if (target < 0 || target >= all.length) return { ok: true };
+    [all[idx], all[target]] = [all[target], all[idx]];
+    await prisma.$transaction(all.map((r, i) => prisma.productImage.update({ where: { id: r.id }, data: { position: i + 1 } })));
+    return { ok: true };
+  });
 }
 
 export async function saveImagesToLibraryAction(productId: string): Promise<ActionResult> {
-  await requireUser();
-  const product = await prisma.product.findUnique({ where: { id: productId }, include: { images: true, variants: { include: { lineItem: true } } } });
-  if (!product) return { ok: false, error: "Product not found" };
-  const modelCode = product.variants.map((v) => parseJson<{ modelCode?: string } | null>(v.lineItem?.normalized, null)?.modelCode).find(Boolean);
-  if (!modelCode) return { ok: false, error: "This product has no model code, so it cannot be keyed in the image library." };
-  await recordLibraryImages(product.vendor, modelCode, "", product.images.map((i) => i.url), "MANUAL");
-  return { ok: true, message: "Saved to image library" };
+  return safely(async () => {
+    await requireUser();
+    const product = await prisma.product.findUnique({ where: { id: productId }, include: { images: true, variants: { include: { lineItem: true } } } });
+    if (!product) return { ok: false, error: "Product not found" };
+    const modelCode = product.variants.map((v) => parseJson<{ modelCode?: string } | null>(v.lineItem?.normalized, null)?.modelCode).find(Boolean);
+    if (!modelCode) return { ok: false, error: "This product has no model code, so it cannot be keyed in the image library." };
+    await recordLibraryImages(product.vendor, modelCode, "", product.images.map((i) => i.url), "MANUAL");
+    return { ok: true, message: "Saved to image library" };
+  });
 }
 
 export async function verifyImagesAction(batchId: string): Promise<ActionResult<{ checked: number; failed: number }>> {
-  await requireUser();
-  await prisma.productImage.updateMany({ where: { product: { batchId } }, data: { validated: false } });
-  return { ok: true, data: await verifyBatchImages(batchId) };
+  return safely(async () => {
+    await requireUser();
+    await prisma.productImage.updateMany({ where: { product: { batchId } }, data: { validated: false } });
+    return { ok: true, data: await verifyBatchImages(batchId) };
+  });
 }
 
 // ---------------------------------------------------------------------------
 // Export / Shopify
 // ---------------------------------------------------------------------------
 
-export async function exportBatchAction(batchId: string) {
+export async function exportBatchAction(batchId: string): Promise<ExportResult> {
   const user = await requireUser();
-  const result = await exportBatch(batchId, user.id);
-  revalidatePath(`/batches/${batchId}`);
-  return result;
+  try {
+    const result = await exportBatch(batchId, user.id);
+    revalidatePath(`/batches/${batchId}`);
+    return result;
+  } catch (err) {
+    // Said in the panel, with the message whole — thrown, it reached the browser as a digest.
+    unstable_rethrow(err);
+    console.error("[action] export", err);
+    return { ok: false, errors: [said(err)], warnings: [], files: [], repairs: [] };
+  }
 }
 
 export async function reconcileAction(batchId: string): Promise<ActionResult<{ new: number; variantAdd: number; update: number }>> {
@@ -569,39 +619,43 @@ export async function enrichSeoAction(batchId: string, onlyMissing: boolean): Pr
 // ---------------------------------------------------------------------------
 
 export async function savePricingRuleAction(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
-  await requireUser("ADMIN");
-  const schema = z.object({
-    id: z.string().optional(),
-    name: z.string().min(1),
-    scope: z.enum(["DEFAULT", "CATEGORY", "BRAND", "PRODUCT"]),
-    matchValue: z.string().optional().default(""),
-    mode: z.enum(["MARGIN", "MARKUP"]),
-    percent: z.coerce.number().min(0).max(999),
-    roundTo: z.enum(["NONE", "0.99", "0.95", "1.00", "5.00", "10.00"]),
-    priority: z.coerce.number().int().default(0),
-    active: z.coerce.boolean().default(true),
+  return safely(async () => {
+    await requireUser("ADMIN");
+    const schema = z.object({
+      id: z.string().optional(),
+      name: z.string().min(1),
+      scope: z.enum(["DEFAULT", "CATEGORY", "BRAND", "PRODUCT"]),
+      matchValue: z.string().optional().default(""),
+      mode: z.enum(["MARGIN", "MARKUP"]),
+      percent: z.coerce.number().min(0).max(999),
+      roundTo: z.enum(["NONE", "0.99", "0.95", "1.00", "5.00", "10.00"]),
+      priority: z.coerce.number().int().default(0),
+      active: z.coerce.boolean().default(true),
+    });
+    try {
+      const raw = Object.fromEntries(formData.entries());
+      const d = schema.parse({ ...raw, active: raw.active === "on" || raw.active === "true" });
+      if (d.mode === "MARGIN" && d.percent >= 100) return { ok: false, error: "Margin must be below 100%." };
+      if (d.scope !== "DEFAULT" && !d.matchValue.trim()) return { ok: false, error: "Enter the category, brand or SKU this rule matches." };
+      const { id, ...data } = d;
+      if (id) await prisma.pricingRule.update({ where: { id }, data });
+      else await prisma.pricingRule.create({ data });
+      revalidatePath("/pricing");
+      return { ok: true, message: "Rule saved" };
+    } catch (err) {
+      return fail(err);
+    }
   });
-  try {
-    const raw = Object.fromEntries(formData.entries());
-    const d = schema.parse({ ...raw, active: raw.active === "on" || raw.active === "true" });
-    if (d.mode === "MARGIN" && d.percent >= 100) return { ok: false, error: "Margin must be below 100%." };
-    if (d.scope !== "DEFAULT" && !d.matchValue.trim()) return { ok: false, error: "Enter the category, brand or SKU this rule matches." };
-    const { id, ...data } = d;
-    if (id) await prisma.pricingRule.update({ where: { id }, data });
-    else await prisma.pricingRule.create({ data });
-    revalidatePath("/pricing");
-    return { ok: true, message: "Rule saved" };
-  } catch (err) {
-    return fail(err);
-  }
 }
 
 export async function deletePricingRuleAction(id: string): Promise<ActionResult> {
-  await requireUser("ADMIN");
-  await prisma.pricingRule.delete({ where: { id } });
-  await prisma.variant.updateMany({ where: { pricingRuleId: id }, data: { pricingRuleId: null } });
-  revalidatePath("/pricing");
-  return { ok: true };
+  return safely(async () => {
+    await requireUser("ADMIN");
+    await prisma.pricingRule.delete({ where: { id } });
+    await prisma.variant.updateMany({ where: { pricingRuleId: id }, data: { pricingRuleId: null } });
+    revalidatePath("/pricing");
+    return { ok: true };
+  });
 }
 
 export async function saveSettingsAction(patch: Partial<AppSettings>): Promise<ActionResult> {
@@ -731,19 +785,22 @@ export async function readProductLinkAction(productId: string): Promise<ActionRe
  * asks here, so the person sees the cause and not a hash.
  */
 export async function explainErrorAction(digest: string): Promise<ActionResult<{ message: string; where: string; when: string }>> {
-  await requireUser();
-  const clean = digest.trim();
-  if (!clean) return { ok: false, error: "No digest." };
-  const rows = await prisma.auditLog.findMany({ where: { action: "error", details: { contains: clean } }, orderBy: { createdAt: "desc" }, take: 1 });
-  const row = rows[0];
-  if (!row) return { ok: false, error: "Nothing recorded for this digest yet." };
-  const d = parseJson<{ message?: string; path?: string; routeType?: string; routePath?: string }>(row.details, {});
-  return { ok: true, data: { message: d.message ?? "", where: `${d.routeType ?? ""} ${d.path ?? d.routePath ?? ""}`.trim(), when: row.createdAt.toISOString() } };
+  return safely(async () => {
+    await requireUser();
+    const clean = digest.trim();
+    if (!clean) return { ok: false, error: "No digest." };
+    const rows = await prisma.auditLog.findMany({ where: { action: "error", details: { contains: clean } }, orderBy: { createdAt: "desc" }, take: 1 });
+    const row = rows[0];
+    if (!row) return { ok: false, error: "Nothing recorded for this digest yet." };
+    const d = parseJson<{ message?: string; path?: string; routeType?: string; routePath?: string }>(row.details, {});
+    return { ok: true, data: { message: d.message ?? "", where: `${d.routeType ?? ""} ${d.path ?? d.routePath ?? ""}`.trim(), when: row.createdAt.toISOString() } };
+  });
 }
 
 export async function readingCountAction(batchId: string): Promise<number> {
   await requireUser();
-  return prisma.sourceFile.count({ where: { batchId, extractionStatus: "PENDING" } });
+  // A poll; a failed one is not worth a thrown error, the next will do.
+  return prisma.sourceFile.count({ where: { batchId, extractionStatus: "PENDING" } }).catch(() => 0);
 }
 
 /**
@@ -841,41 +898,43 @@ export async function readSheetAgainstFilesAction(
     failed: string;
   }>;
 }>> {
-  await requireUser();
-  if (!planningAvailable()) return { ok: false, error: "Set ANTHROPIC_API_KEY to read instructions. Until then this page cannot work out what to change." };
-  try {
-    const screened = await screenInstructions(instructions, file);
-    const wanted = screened.filter((r) => r.relevant);
-    const planned = await planAdjustments(wanted.map((r) => r.instruction), file);
+  return safely(async () => {
+    await requireUser();
+    if (!planningAvailable()) return { ok: false, error: "Set ANTHROPIC_API_KEY to read instructions. Until then this page cannot work out what to change." };
+    try {
+      const screened = await screenInstructions(instructions, file);
+      const wanted = screened.filter((r) => r.relevant);
+      const planned = await planAdjustments(wanted.map((r) => r.instruction), file);
 
-    const byInstruction = new Map<string, (typeof planned)[number]>();
-    wanted.forEach((r, i) => byInstruction.set(`${r.index}`, planned[i]));
+      const byInstruction = new Map<string, (typeof planned)[number]>();
+      wanted.forEach((r, i) => byInstruction.set(`${r.index}`, planned[i]));
 
-    return {
-      ok: true,
-      data: {
-        rows: screened.map((r) => {
-          const got = byInstruction.get(`${r.index}`);
-          const p = got?.planned ?? null;
-          return {
-            instruction: r.instruction,
-            // The screen names the group; where it could not, the grounded plan usually can.
-            group: r.group || p?.category || "",
-            relevant: r.relevant,
-            why: r.why,
-            plan: p?.plan ?? null,
-            understood: p?.understood ?? "",
-            unclear: p?.unclear ?? "",
-            blocked: p?.blocked ?? [],
-            described: p ? describePlan(p.plan) : [],
-            failed: got?.failed ?? "",
-          };
-        }),
-      },
-    };
-  } catch (err) {
-    return fail(err);
-  }
+      return {
+        ok: true,
+        data: {
+          rows: screened.map((r) => {
+            const got = byInstruction.get(`${r.index}`);
+            const p = got?.planned ?? null;
+            return {
+              instruction: r.instruction,
+              // The screen names the group; where it could not, the grounded plan usually can.
+              group: r.group || p?.category || "",
+              relevant: r.relevant,
+              why: r.why,
+              plan: p?.plan ?? null,
+              understood: p?.understood ?? "",
+              unclear: p?.unclear ?? "",
+              blocked: p?.blocked ?? [],
+              described: p ? describePlan(p.plan) : [],
+              failed: got?.failed ?? "",
+            };
+          }),
+        },
+      };
+    } catch (err) {
+      return fail(err);
+    }
+  });
 }
 
 /**
@@ -890,94 +949,96 @@ export async function readSheetAgainstFilesAction(
  * exports on this page, which never leave the browser.
  */
 export async function readInstructionSheetAction(file: { name: string; type: string; base64: string }): Promise<ActionResult<SplitInstructions & { source: string }>> {
-  await requireUser();
+  return safely(async () => {
+    await requireUser();
 
-  const buffer = Buffer.from(file.base64, "base64");
-  // See MAX_UPLOAD: past this the request never arrives, whatever next.config permits.
-  if (buffer.byteLength > MAX_UPLOAD) {
-    return { ok: false, error: `That file is ${readableSize(buffer.byteLength)}, and an upload has to stay under ${readableSize(MAX_UPLOAD)}. Instruction sheets are normally a page or two — a photo is shrunk before it is sent, so this is either a very large PDF or a picture this browser could not open.` };
-  }
-
-  const isPdf = /pdf$/i.test(file.name) || file.type === "application/pdf";
-  const isImage = /^image\//.test(file.type);
-  const isWorkbook = /\.xlsx?$/i.test(file.name) || /spreadsheet|excel/i.test(file.type);
-  const isCsv = /\.csv$/i.test(file.name) || file.type === "text/csv";
-  let source = isPdf ? "read as a PDF" : isImage ? "read as a picture" : "plain text";
-
-  // A spreadsheet is read here rather than sent away to be interpreted. The template's columns are
-  // fixed, so what every cell means is settled before the file is opened — which is faster, costs
-  // nothing, and cannot read the same file two different ways on two different days. A workbook
-  // that is NOT the template still goes to the model, with its rows laid out as a table.
-  if (isWorkbook || isCsv) {
-    try {
-      const grids = isWorkbook
-        ? await (await import("@/lib/catalog/extract/tabular")).sheetGrids(buffer)
-        : [{ name: file.name, grid: (await import("@/lib/catalog/csv")).parseCsv(buffer.toString("utf8")) }];
-      const { readSaleSheet, looksLikeProductExport } = await import("@/lib/catalog/sale-sheet");
-
-      if (grids.some((g) => looksLikeProductExport((g.grid[0] ?? []).map(String)))) {
-        return { ok: false, error: `${file.name} is a Shopify product export, not a sheet of instructions. Add it under "The files from Shopify" above instead.` };
-      }
-
-      const read = readSaleSheet(grids);
-      if (read) {
-        if (read.instructions.length === 0) {
-          return { ok: false, error: `${file.name} was read from the "${read.sheet}" tab and none of its rows turned into a change.${read.ignored.length ? ` ${read.ignored.length} were left alone — the commonest reason is a row with no year tag.` : ""}` };
-        }
-        return { ok: true, data: { instructions: read.instructions, ignored: read.ignored, unclear: read.unclear, source: `the "${read.sheet}" tab, read column by column` } };
-      }
-
-      // Not the template. Lay the rows out as a table for the model rather than as loose text —
-      // the columns are the whole meaning, and a flattened sheet loses them.
-      const lines = grids.flatMap(({ name, grid }) => [
-        `--- sheet: ${name} ---`,
-        ...grid.map((row) => row.map((c) => (c ?? "").toString().trim()).join(" | ")).filter((l) => l.replace(/[|\s]/g, "")),
-      ]);
-      if (!planningAvailable()) return { ok: false, error: `${file.name} is not the shop's sale template, so it has to be read by the API — set ANTHROPIC_API_KEY, or use the template.` };
-      const split = await splitInstructions(lines.join("\n"));
-      if (!split || split.instructions.length === 0) {
-        return { ok: false, error: `${file.name} was read and nothing in it reads as a change to make. If it is the shop's template, check the headings on the first row.` };
-      }
-      return { ok: true, data: { ...split, source: `${grids.length} sheet${grids.length === 1 ? "" : "s"}, read as a table` } };
-    } catch (err) {
-      return { ok: false, error: `Could not open ${file.name}: ${said(err)}` };
+    const buffer = Buffer.from(file.base64, "base64");
+    // See MAX_UPLOAD: past this the request never arrives, whatever next.config permits.
+    if (buffer.byteLength > MAX_UPLOAD) {
+      return { ok: false, error: `That file is ${readableSize(buffer.byteLength)}, and an upload has to stay under ${readableSize(MAX_UPLOAD)}. Instruction sheets are normally a page or two — a photo is shrunk before it is sent, so this is either a very large PDF or a picture this browser could not open.` };
     }
-  }
 
-  if (!planningAvailable()) return { ok: false, error: "Set ANTHROPIC_API_KEY to read an instruction sheet." };
+    const isPdf = /pdf$/i.test(file.name) || file.type === "application/pdf";
+    const isImage = /^image\//.test(file.type);
+    const isWorkbook = /\.xlsx?$/i.test(file.name) || /spreadsheet|excel/i.test(file.type);
+    const isCsv = /\.csv$/i.test(file.name) || file.type === "text/csv";
+    let source = isPdf ? "read as a PDF" : isImage ? "read as a picture" : "plain text";
 
-  // Each stage says which one it was. "It could not be read" covers reading the file, understanding
-  // it, and finding anything in it, and as one message it sends people looking in the wrong place.
-  try {
-    if (isPdf) {
-      // Counted for the operator's benefit only; the PDF itself is what gets read, because these
-      // sheets are tables and a text layer does not survive being one.
+    // A spreadsheet is read here rather than sent away to be interpreted. The template's columns are
+    // fixed, so what every cell means is settled before the file is opened — which is faster, costs
+    // nothing, and cannot read the same file two different ways on two different days. A workbook
+    // that is NOT the template still goes to the model, with its rows laid out as a table.
+    if (isWorkbook || isCsv) {
       try {
-        const { extractPdfText } = await import("@/lib/catalog/extract/pdf");
-        const pdf = await extractPdfText(buffer);
-        source = `${pdf.pages} page${pdf.pages === 1 ? "" : "s"}`;
-      } catch {
-        // A PDF whose text layer cannot be parsed still reads perfectly well as a document.
+        const grids = isWorkbook
+          ? await (await import("@/lib/catalog/extract/tabular")).sheetGrids(buffer)
+          : [{ name: file.name, grid: (await import("@/lib/catalog/csv")).parseCsv(buffer.toString("utf8")) }];
+        const { readSaleSheet, looksLikeProductExport } = await import("@/lib/catalog/sale-sheet");
+
+        if (grids.some((g) => looksLikeProductExport((g.grid[0] ?? []).map(String)))) {
+          return { ok: false, error: `${file.name} is a Shopify product export, not a sheet of instructions. Add it under "The files from Shopify" above instead.` };
+        }
+
+        const read = readSaleSheet(grids);
+        if (read) {
+          if (read.instructions.length === 0) {
+            return { ok: false, error: `${file.name} was read from the "${read.sheet}" tab and none of its rows turned into a change.${read.ignored.length ? ` ${read.ignored.length} were left alone — the commonest reason is a row with no year tag.` : ""}` };
+          }
+          return { ok: true, data: { instructions: read.instructions, ignored: read.ignored, unclear: read.unclear, source: `the "${read.sheet}" tab, read column by column` } };
+        }
+
+        // Not the template. Lay the rows out as a table for the model rather than as loose text —
+        // the columns are the whole meaning, and a flattened sheet loses them.
+        const lines = grids.flatMap(({ name, grid }) => [
+          `--- sheet: ${name} ---`,
+          ...grid.map((row) => row.map((c) => (c ?? "").toString().trim()).join(" | ")).filter((l) => l.replace(/[|\s]/g, "")),
+        ]);
+        if (!planningAvailable()) return { ok: false, error: `${file.name} is not the shop's sale template, so it has to be read by the API — set ANTHROPIC_API_KEY, or use the template.` };
+        const split = await splitInstructions(lines.join("\n"));
+        if (!split || split.instructions.length === 0) {
+          return { ok: false, error: `${file.name} was read and nothing in it reads as a change to make. If it is the shop's template, check the headings on the first row.` };
+        }
+        return { ok: true, data: { ...split, source: `${grids.length} sheet${grids.length === 1 ? "" : "s"}, read as a table` } };
+      } catch (err) {
+        return { ok: false, error: `Could not open ${file.name}: ${said(err)}` };
       }
     }
-    const split = isPdf
-      ? await splitInstructions({ pdf: buffer })
-      : isImage
-        ? await splitInstructions({ image: buffer, mediaType: file.type })
-        : await splitInstructions(buffer.toString("utf8"));
 
-    if (!split) return { ok: false, error: `${file.name} was read, but the reply did not come back in a shape that could be used. Try it again; if it keeps happening the sheet may be longer than one pass can handle.` };
-    if (split.instructions.length === 0) {
-      return { ok: false, error: `${file.name} was read and nothing in it reads as a change to make.${split.unclear ? ` It said: ${split.unclear}` : ""}${split.ignored.length ? ` It treated these as not-a-change: ${split.ignored.slice(0, 5).join("; ")}` : ""}` };
+    if (!planningAvailable()) return { ok: false, error: "Set ANTHROPIC_API_KEY to read an instruction sheet." };
+
+    // Each stage says which one it was. "It could not be read" covers reading the file, understanding
+    // it, and finding anything in it, and as one message it sends people looking in the wrong place.
+    try {
+      if (isPdf) {
+        // Counted for the operator's benefit only; the PDF itself is what gets read, because these
+        // sheets are tables and a text layer does not survive being one.
+        try {
+          const { extractPdfText } = await import("@/lib/catalog/extract/pdf");
+          const pdf = await extractPdfText(buffer);
+          source = `${pdf.pages} page${pdf.pages === 1 ? "" : "s"}`;
+        } catch {
+          // A PDF whose text layer cannot be parsed still reads perfectly well as a document.
+        }
+      }
+      const split = isPdf
+        ? await splitInstructions({ pdf: buffer })
+        : isImage
+          ? await splitInstructions({ image: buffer, mediaType: file.type })
+          : await splitInstructions(buffer.toString("utf8"));
+
+      if (!split) return { ok: false, error: `${file.name} was read, but the reply did not come back in a shape that could be used. Try it again; if it keeps happening the sheet may be longer than one pass can handle.` };
+      if (split.instructions.length === 0) {
+        return { ok: false, error: `${file.name} was read and nothing in it reads as a change to make.${split.unclear ? ` It said: ${split.unclear}` : ""}${split.ignored.length ? ` It treated these as not-a-change: ${split.ignored.slice(0, 5).join("; ")}` : ""}` };
+      }
+      return { ok: true, data: { ...split, source } };
+    } catch (err) {
+      const message = said(err);
+      if (/timed? ?out|aborted|FUNCTION_INVOCATION_TIMEOUT/i.test(message)) {
+        return { ok: false, error: `Reading ${file.name} took longer than the page allows. A sheet of a few pages should fit — if this one is much longer, split it and add it in parts.` };
+      }
+      return { ok: false, error: `Could not read ${file.name}: ${message}` };
     }
-    return { ok: true, data: { ...split, source } };
-  } catch (err) {
-    const message = said(err);
-    if (/timed? ?out|aborted|FUNCTION_INVOCATION_TIMEOUT/i.test(message)) {
-      return { ok: false, error: `Reading ${file.name} took longer than the page allows. A sheet of a few pages should fit — if this one is much longer, split it and add it in parts.` };
-    }
-    return { ok: false, error: `Could not read ${file.name}: ${message}` };
-  }
+  });
 }
 
 /**
@@ -990,87 +1051,89 @@ export async function readInstructionSheetAction(file: { name: string; type: str
  * real way one arrives.
  */
 export async function readInvoiceAction(file: { name: string; type: string; base64: string }): Promise<ActionResult<InvoiceRead & { source: string }>> {
-  await requireUser();
+  return safely(async () => {
+    await requireUser();
 
-  let buffer: Buffer = Buffer.from(file.base64, "base64");
-  // A serverless request body tops out around 4.5MB and this arrives base64 encoded, a third
-  // bigger again — so anything past this never reaches here at all. The page shrinks pictures
-  // before sending for exactly that reason; this is the backstop, and it says what to do.
-  if (buffer.byteLength > MAX_UPLOAD) {
-    return { ok: false, error: `That file is ${readableSize(buffer.byteLength)}, and an upload has to stay under ${readableSize(MAX_UPLOAD)}. A photo is shrunk automatically before it is sent, so this is either a very large PDF — split it — or a picture this browser could not open.` };
-  }
+    let buffer: Buffer = Buffer.from(file.base64, "base64");
+    // A serverless request body tops out around 4.5MB and this arrives base64 encoded, a third
+    // bigger again — so anything past this never reaches here at all. The page shrinks pictures
+    // before sending for exactly that reason; this is the backstop, and it says what to do.
+    if (buffer.byteLength > MAX_UPLOAD) {
+      return { ok: false, error: `That file is ${readableSize(buffer.byteLength)}, and an upload has to stay under ${readableSize(MAX_UPLOAD)}. A photo is shrunk automatically before it is sent, so this is either a very large PDF — split it — or a picture this browser could not open.` };
+    }
 
-  // An iPhone HEIC the browser could not decode is decoded here instead — see extract/heic.
-  const { isHeic, heicToJpeg } = await import("@/lib/catalog/extract/heic");
-  if (isHeic(buffer, file.name, file.type)) {
-    buffer = await heicToJpeg(buffer);
-    file = { ...file, type: "image/jpeg", name: file.name.replace(/\.hei[cf]$/i, "") + ".jpg" };
-  }
+    // An iPhone HEIC the browser could not decode is decoded here instead — see extract/heic.
+    const { isHeic, heicToJpeg } = await import("@/lib/catalog/extract/heic");
+    if (isHeic(buffer, file.name, file.type)) {
+      buffer = await heicToJpeg(buffer);
+      file = { ...file, type: "image/jpeg", name: file.name.replace(/\.hei[cf]$/i, "") + ".jpg" };
+    }
 
-  const isPdf = /\.pdf$/i.test(file.name) || file.type === "application/pdf";
-  const isImage = /^image\//.test(file.type) || /\.(png|jpe?g|webp|gif|heic|heif)$/i.test(file.name);
-  const isWorkbook = /\.xlsx?$/i.test(file.name) || /spreadsheet|excel/i.test(file.type);
-  const isCsv = /\.csv$/i.test(file.name) || file.type === "text/csv";
+    const isPdf = /\.pdf$/i.test(file.name) || file.type === "application/pdf";
+    const isImage = /^image\//.test(file.type) || /\.(png|jpe?g|webp|gif|heic|heif)$/i.test(file.name);
+    const isWorkbook = /\.xlsx?$/i.test(file.name) || /spreadsheet|excel/i.test(file.type);
+    const isCsv = /\.csv$/i.test(file.name) || file.type === "text/csv";
 
-  try {
-    if (isWorkbook || isCsv) {
-      const grids = isWorkbook
-        ? await (await import("@/lib/catalog/extract/tabular")).sheetGrids(buffer)
-        : [{ name: file.name, grid: (await import("@/lib/catalog/csv")).parseCsv(buffer.toString("utf8")) }];
-      const read = readInvoiceGrids(grids);
-      if (!read) {
-        return { ok: false, error: `Nothing in ${file.name} reads as an order. An invoice needs a column identifying each line — a barcode, an EAN or an item code — and a column of prices or quantities to go with it. A list of barcodes on its own has nothing to change.` };
+    try {
+      if (isWorkbook || isCsv) {
+        const grids = isWorkbook
+          ? await (await import("@/lib/catalog/extract/tabular")).sheetGrids(buffer)
+          : [{ name: file.name, grid: (await import("@/lib/catalog/csv")).parseCsv(buffer.toString("utf8")) }];
+        const read = readInvoiceGrids(grids);
+        if (!read) {
+          return { ok: false, error: `Nothing in ${file.name} reads as an order. An invoice needs a column identifying each line — a barcode, an EAN or an item code — and a column of prices or quantities to go with it. A list of barcodes on its own has nothing to change.` };
+        }
+        return { ok: true, data: { ...read, source: `read column by column from ${read.sheet.includes(",") ? "its tabs" : `the "${read.sheet}" tab`}` } };
       }
-      return { ok: true, data: { ...read, source: `read column by column from ${read.sheet.includes(",") ? "its tabs" : `the "${read.sheet}" tab`}` } };
-    }
 
-    if (!isPdf && !isImage) return { ok: false, error: `${file.name} is not a file this can read. Invoices come as a spreadsheet, a CSV, a PDF or a photograph.` };
-    if (!aiAvailable()) return { ok: false, error: `${file.name} has no columns to read, so it has to go to the API — set ANTHROPIC_API_KEY, or upload the order as a spreadsheet.` };
+      if (!isPdf && !isImage) return { ok: false, error: `${file.name} is not a file this can read. Invoices come as a spreadsheet, a CSV, a PDF or a photograph.` };
+      if (!aiAvailable()) return { ok: false, error: `${file.name} has no columns to read, so it has to go to the API — set ANTHROPIC_API_KEY, or upload the order as a spreadsheet.` };
 
-    const { extractFromPdf, extractFromImage } = await import("@/lib/catalog/extract/ai");
-    // The four the API takes; a HEIC was turned into one of them above, so what is left here is a
-    // TIFF, a BMP or something stranger, and "unsupported media type" from three layers down says
-    // nothing useful.
-    const READABLE = ["image/jpeg", "image/png", "image/gif", "image/webp"];
-    if (!isPdf && !READABLE.includes(file.type)) {
-      return { ok: false, error: `${file.name} is a ${file.type || "picture in a format"} that cannot be read. Open it and save it as a PNG or JPEG, or screenshot it, and add that.` };
-    }
-    const extracted = isPdf
-      ? await extractFromPdf(buffer, "INVOICE")
-      : await extractFromImage(buffer, file.type, "INVOICE");
+      const { extractFromPdf, extractFromImage } = await import("@/lib/catalog/extract/ai");
+      // The four the API takes; a HEIC was turned into one of them above, so what is left here is a
+      // TIFF, a BMP or something stranger, and "unsupported media type" from three layers down says
+      // nothing useful.
+      const READABLE = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+      if (!isPdf && !READABLE.includes(file.type)) {
+        return { ok: false, error: `${file.name} is a ${file.type || "picture in a format"} that cannot be read. Open it and save it as a PNG or JPEG, or screenshot it, and add that.` };
+      }
+      const extracted = isPdf
+        ? await extractFromPdf(buffer, "INVOICE")
+        : await extractFromImage(buffer, file.type, "INVOICE");
 
-    const lines = extracted.items
-      .map((item) => ({
-        sku: item.sku ?? "",
-        barcode: item.barcode ?? "",
-        title: item.title ?? "",
-        costPrice: item.costPrice,
-        // Same rule as the column reader: a zero is not a price, it is a line with none.
-        rrp: item.rrp !== null && item.rrp > 0 ? item.rrp : null,
-        quantity: item.quantity,
-        size: (item.size || item.length || "").trim(),
-        colour: (item.colour || "").trim(),
-      }))
-      .filter((l) => (l.barcode.trim() || l.sku.trim()) && (l.rrp !== null || l.quantity !== null));
+      const lines = extracted.items
+        .map((item) => ({
+          sku: item.sku ?? "",
+          barcode: item.barcode ?? "",
+          title: item.title ?? "",
+          costPrice: item.costPrice,
+          // Same rule as the column reader: a zero is not a price, it is a line with none.
+          rrp: item.rrp !== null && item.rrp > 0 ? item.rrp : null,
+          quantity: item.quantity,
+          size: (item.size || item.length || "").trim(),
+          colour: (item.colour || "").trim(),
+        }))
+        .filter((l) => (l.barcode.trim() || l.sku.trim()) && (l.rrp !== null || l.quantity !== null));
 
-    if (lines.length === 0) {
-      return { ok: false, error: `${file.name} was read${extracted.summary ? ` — ${extracted.summary}` : ""}, but no line in it carries both something to match on (a barcode or an item code) and something to change (a price or a quantity).` };
+      if (lines.length === 0) {
+        return { ok: false, error: `${file.name} was read${extracted.summary ? ` — ${extracted.summary}` : ""}, but no line in it carries both something to match on (a barcode or an item code) and something to change (a price or a quantity).` };
+      }
+      return {
+        ok: true,
+        data: {
+          lines, sheet: file.name, warnings: [],
+          columns: { barcode: "", sku: "", rrp: "", quantity: "", title: "", size: "", colour: "" },
+          source: `read as ${isPdf ? "a PDF" : "a picture"}${extracted.supplier ? `, from ${extracted.supplier}` : ""}`,
+        },
+      };
+    } catch (err) {
+      const message = said(err);
+      if (/timed? ?out|aborted|FUNCTION_INVOCATION_TIMEOUT/i.test(message)) {
+        return { ok: false, error: `Reading ${file.name} took longer than the page allows. Upload the order as a spreadsheet if you have one — that is read instantly.` };
+      }
+      return { ok: false, error: `Could not read ${file.name}: ${message}` };
     }
-    return {
-      ok: true,
-      data: {
-        lines, sheet: file.name, warnings: [],
-        columns: { barcode: "", sku: "", rrp: "", quantity: "", title: "", size: "", colour: "" },
-        source: `read as ${isPdf ? "a PDF" : "a picture"}${extracted.supplier ? `, from ${extracted.supplier}` : ""}`,
-      },
-    };
-  } catch (err) {
-    const message = said(err);
-    if (/timed? ?out|aborted|FUNCTION_INVOCATION_TIMEOUT/i.test(message)) {
-      return { ok: false, error: `Reading ${file.name} took longer than the page allows. Upload the order as a spreadsheet if you have one — that is read instantly.` };
-    }
-    return { ok: false, error: `Could not read ${file.name}: ${message}` };
-  }
+  });
 }
 
 /**
@@ -1130,45 +1193,47 @@ export async function joinOrderAction(input: {
  * that is what the mapping suggester is for.
  */
 export async function readReferenceAction(file: { name: string; type: string; base64: string }): Promise<ActionResult<{ rows: CanonicalLineItem[]; sheet: string; columns: string[]; warnings: string[] }>> {
-  await requireUser();
+  return safely(async () => {
+    await requireUser();
 
-  const buffer = Buffer.from(file.base64, "base64");
-  if (buffer.byteLength > MAX_UPLOAD) {
-    return { ok: false, error: `That file is ${readableSize(buffer.byteLength)}, and an upload has to stay under ${readableSize(MAX_UPLOAD)}. A spec export that big is usually several seasons in one workbook — split it, or save just this season's tab.` };
-  }
-
-  const isWorkbook = /\.xlsx?$/i.test(file.name) || /spreadsheet|excel/i.test(file.type);
-  const isCsv = /\.csv$/i.test(file.name) || file.type === "text/csv";
-  if (!isWorkbook && !isCsv) {
-    return { ok: false, error: `${file.name} has no columns to read. A spec sheet or barcode list has to be a spreadsheet or a CSV — a PDF of one has nothing to look up against.` };
-  }
-
-  try {
-    const { extractXlsx, extractCsv } = await import("@/lib/catalog/extract/tabular");
-    const table = isWorkbook ? await extractXlsx(buffer) : extractCsv(buffer);
-    const { suggestMapping, applyMapping } = await import("@/lib/catalog/mapping");
-    const mapping = suggestMapping(table.headers, table.rows);
-    const rows = table.rows.map((row) => applyMapping(row, mapping)).filter((r) => r.barcode.trim() || r.sku.trim() || r.modelCode.trim() || r.description.trim());
-    if (rows.length === 0) {
-      return { ok: false, error: `Nothing in ${file.name} reads as a reference row. A spec sheet or barcode list needs a column identifying each row — an item code, a SKU or an EAN — and something to say about it.` };
+    const buffer = Buffer.from(file.base64, "base64");
+    if (buffer.byteLength > MAX_UPLOAD) {
+      return { ok: false, error: `That file is ${readableSize(buffer.byteLength)}, and an upload has to stay under ${readableSize(MAX_UPLOAD)}. A spec export that big is usually several seasons in one workbook — split it, or save just this season's tab.` };
     }
-    const named = Object.entries(mapping).filter(([, header]) => header).map(([key]) => key);
-    return {
-      ok: true,
-      data: {
-        rows,
-        sheet: table.method ?? file.name,
-        columns: named,
-        warnings: [
-          `${rows.length} row${rows.length === 1 ? "" : "s"} read from ${file.name}. Nothing here is a delivery — it is searched for the products the order built, and adds none of its own.`,
-          ...table.warnings,
-        ],
-      },
-    };
-  } catch (err) {
-    const message = said(err);
-    return { ok: false, error: `Could not read ${file.name}: ${message}` };
-  }
+
+    const isWorkbook = /\.xlsx?$/i.test(file.name) || /spreadsheet|excel/i.test(file.type);
+    const isCsv = /\.csv$/i.test(file.name) || file.type === "text/csv";
+    if (!isWorkbook && !isCsv) {
+      return { ok: false, error: `${file.name} has no columns to read. A spec sheet or barcode list has to be a spreadsheet or a CSV — a PDF of one has nothing to look up against.` };
+    }
+
+    try {
+      const { extractXlsx, extractCsv } = await import("@/lib/catalog/extract/tabular");
+      const table = isWorkbook ? await extractXlsx(buffer) : extractCsv(buffer);
+      const { suggestMapping, applyMapping } = await import("@/lib/catalog/mapping");
+      const mapping = suggestMapping(table.headers, table.rows);
+      const rows = table.rows.map((row) => applyMapping(row, mapping)).filter((r) => r.barcode.trim() || r.sku.trim() || r.modelCode.trim() || r.description.trim());
+      if (rows.length === 0) {
+        return { ok: false, error: `Nothing in ${file.name} reads as a reference row. A spec sheet or barcode list needs a column identifying each row — an item code, a SKU or an EAN — and something to say about it.` };
+      }
+      const named = Object.entries(mapping).filter(([, header]) => header).map(([key]) => key);
+      return {
+        ok: true,
+        data: {
+          rows,
+          sheet: table.method ?? file.name,
+          columns: named,
+          warnings: [
+            `${rows.length} row${rows.length === 1 ? "" : "s"} read from ${file.name}. Nothing here is a delivery — it is searched for the products the order built, and adds none of its own.`,
+            ...table.warnings,
+          ],
+        },
+      };
+    } catch (err) {
+      const message = said(err);
+      return { ok: false, error: `Could not read ${file.name}: ${message}` };
+    }
+  });
 }
 
 /**
@@ -1192,13 +1257,15 @@ export async function logAdjustmentAction(details: { instruction: string; descri
 // ---------------------------------------------------------------------------
 
 export async function attachPhotoAction(imageId: string, productId: string, variantId: string | null): Promise<ActionResult> {
-  await requireUser();
-  const photo = await prisma.unassignedImage.findUnique({ where: { id: imageId } });
-  if (!photo) return { ok: false, error: "Photo not found" };
-  const count = await prisma.productImage.count({ where: { productId } });
-  await prisma.productImage.create({ data: { productId, variantId, url: photo.url, position: count + 1, source: "MANUAL", validated: /^https:/.test(photo.url) } });
-  await prisma.unassignedImage.delete({ where: { id: imageId } });
-  return { ok: true };
+  return safely(async () => {
+    await requireUser();
+    const photo = await prisma.unassignedImage.findUnique({ where: { id: imageId } });
+    if (!photo) return { ok: false, error: "Photo not found" };
+    const count = await prisma.productImage.count({ where: { productId } });
+    await prisma.productImage.create({ data: { productId, variantId, url: photo.url, position: count + 1, source: "MANUAL", validated: /^https:/.test(photo.url) } });
+    await prisma.unassignedImage.delete({ where: { id: imageId } });
+    return { ok: true };
+  });
 }
 
 export async function deletePhotoAction(imageId: string): Promise<ActionResult> {

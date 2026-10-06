@@ -203,7 +203,13 @@ export async function ingestFile(batchId: string, given: { filename: string; mim
         return { id: record.id, rows: 0, method: "CSV", kind: requested, warnings: [note] };
       }
     }
+    const started = Date.now();
     const { table, meta } = await extractFile(file.buffer, file.filename, file.mimeType, requested);
+    // How long the read took is the number behind "this is slow", so it is kept where it can be
+    // seen: the server log, and the History page.
+    const tookMs = Date.now() - started;
+    console.log(`[read] ${file.filename}: ${table.method} in ${(tookMs / 1000).toFixed(1)}s, ${table.rows.length} rows`);
+    await logAudit("file.read", { batchId, details: { fileId: record.id, filename: file.filename, method: table.method, rows: table.rows.length, tookMs } }).catch(() => undefined);
     const detected = meta?.documentType ?? null;
     // A spreadsheet never reached the model, so nothing classified it and everything came through
     // as a delivery. Its columns say what it is: see looksLikeReference.

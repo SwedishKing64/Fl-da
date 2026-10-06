@@ -228,6 +228,15 @@ export interface AuditOutcome extends ReadingAuditResult {
  */
 export async function auditReading(batchId: string, userId: string | null, ask: Ask = askModel): Promise<AuditOutcome | null> {
   if (!aiAvailable()) return null;
+  // The audit is of a column read: a spreadsheet's headings matched to fields by rule, which is
+  // where a column goes wrong. A photograph or a scan was read by the model itself — there are no
+  // columns, and no raw tabs to hold up against — so a second long model call over the same
+  // picture had nothing to find. Said as read right, and the minute it took is given back.
+  const files = await prisma.sourceFile.findMany({ where: { batchId, extractionStatus: "DONE" }, select: { extractionMethod: true, detectedKind: true } });
+  const columnRead = files.filter((f) => !["SHOP_EXPORT", "PRODUCT_PHOTO"].includes(f.detectedKind ?? "") && !["IMAGE_AI", "PDF_AI", "AI_TEXT"].includes(f.extractionMethod ?? ""));
+  if (files.length > 0 && columnRead.length === 0) {
+    return { summary: "The files were read by the model itself — a photograph or a scan has no columns to check.", verdict: "right", findings: [], columnFixes: [], instructionsOnSheet: [], questions: [], remapped: [], rebuilt: false };
+  }
   const content = await describeReading(batchId);
   const text = await ask(AUDIT_SYSTEM.replace("FIELD_KEYS", FIELD_KEYS.join(", ")), content);
   if (!text) return null;

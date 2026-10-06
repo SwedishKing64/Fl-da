@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Alert, Button, LinkButton, cx } from "@/app/(catalog)/ui";
-import { readingCountAction } from "@/app/(catalog)/actions";
+import { buildProductsAction, readingCountAction } from "@/app/(catalog)/actions";
 import { fitsUpload, shrinkAll, tooBig } from "@/app/(catalog)/shrink";
 
 interface UploadResult { filename: string; rows: number; method: string | null; kind: string; warnings: string[] }
@@ -16,8 +16,42 @@ const KINDS = [
   { value: "PRODUCT_PHOTO", label: "Product photos", hint: "Attached to products by name or SKU in the filename, or via the review grid." },
 ];
 
-export function UploadPanel({ batchId, aiEnabled, reading, productCount }: { batchId: string; aiEnabled: boolean; hasProducts: boolean; reading: number; productCount: number }) {
+/** A read still marked as running this long after the upload is one the host cut off. Matches the page. */
+const STALL_MS = 150_000;
+
+export function UploadPanel({ batchId, aiEnabled, reading, productCount, pendingSince = [], buildNow = false }: { batchId: string; aiEnabled: boolean; hasProducts: boolean; reading: number; productCount: number; pendingSince?: number[]; buildNow?: boolean }) {
   const router = useRouter();
+  const [building, setBuilding] = useState(false);
+  const [buildError, setBuildError] = useState<string | null>(null);
+  /** Whether this page has been told to build once the reading is done — by the upload, or by the server. */
+  const buildAfter = useRef(false);
+  const built = useRef(false);
+
+  /**
+   * The products are built from here, not behind the upload: reading a photograph is one long
+   * model call and building can be another, and together they outran the minute the upload had
+   * after it answered — the file sat on "reading…" for ever. This request has a minute of its own.
+   */
+  const build = async () => {
+    if (built.current) return;
+    built.current = true;
+    setBuilding(true); setBuildError(null);
+    try {
+      const r = await buildProductsAction(batchId);
+      if (!r.ok) setBuildError(r.error);
+    } catch (err) {
+      setBuildError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBuilding(false);
+      router.refresh();
+    }
+  };
+
+  useEffect(() => {
+    if (reading > 0) return;
+    if (buildNow || buildAfter.current) { buildAfter.current = false; void build(); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reading, buildNow]);
   const inputRef = useRef<HTMLInputElement>(null);
   const [active, setActive] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -45,6 +79,9 @@ export function UploadPanel({ batchId, aiEnabled, reading, productCount }: { bat
     // is what made waiting for a scan feel like the whole app had bogged down.
     const tick = async () => {
       if (stop) return;
+      // A read the host cut off never reports back; once one is past its time the page is shown
+      // again, and says so on the file.
+      if (pendingSince.some((t) => Date.now() - t > STALL_MS)) { router.refresh(); return; }
       try {
         const left = await readingCountAction(batchId);
         if (!stop && left !== reading) router.refresh();
@@ -54,7 +91,7 @@ export function UploadPanel({ batchId, aiEnabled, reading, productCount }: { bat
     };
     const timer = setInterval(tick, 4000);
     return () => { stop = true; clearInterval(timer); };
-  }, [reading, batchId, router]);
+  }, [reading, batchId, router, pendingSince]);
 
   async function upload(chosen: FileList | File[]) {
     const picked = Array.from(chosen);
@@ -93,14 +130,14 @@ export function UploadPanel({ batchId, aiEnabled, reading, productCount }: { bat
     try {
       // XHR rather than fetch: fetch reports nothing at all about how far a request body has got,
       // and on a phone photo over a slow connection that silence is most of the wait.
-      const body = await new Promise<{ results?: UploadResult[]; auto?: AutoResult; error?: string }>((resolve, reject) => {
+      const body = await new Promise<{ results?: UploadResult[]; auto?: AutoResult; buildAfter?: boolean; error?: string }>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.open("POST", `/api/catalog/batches/${batchId}/upload`);
         xhr.upload.onprogress = (e) => { if (e.lengthComputable) setProgress(Math.round((e.loaded / e.total) * 100)); };
         // The bytes are up; what is left is the server storing them, which has no progress to report.
         xhr.upload.onload = () => setProgress(100);
         xhr.onload = () => {
-          let parsed: { results?: UploadResult[]; auto?: AutoResult; error?: string };
+          let parsed: { results?: UploadResult[]; auto?: AutoResult; buildAfter?: boolean; error?: string };
           try {
             parsed = JSON.parse(xhr.responseText);
           } catch {
@@ -119,6 +156,7 @@ export function UploadPanel({ batchId, aiEnabled, reading, productCount }: { bat
       });
       setResults(body.results ?? []);
       setAuto(body.auto ?? null);
+      if (body.buildAfter) { buildAfter.current = true; built.current = false; }
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -176,10 +214,19 @@ export function UploadPanel({ batchId, aiEnabled, reading, productCount }: { bat
         <Alert tone="info">
           <div className="flex items-center gap-3">
             <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-blue-300 border-t-blue-700" aria-hidden />
-            <span>Reading {reading === 1 ? "the file" : `${reading} files`} now, then building the products — columns are matched for you. A scanned or photographed invoice takes a minute or two. This page updates itself as each one is read, and you can leave it and come back.</span>
+            <span>Reading {reading === 1 ? "the file" : `${reading} files`} now — columns are matched for you. A spreadsheet takes seconds; a scanned or photographed invoice is read by the model and takes up to a minute. This page updates itself as each one is read, and then builds the products.</span>
           </div>
         </Alert>
       )}
+      {building && (
+        <Alert tone="info">
+          <div className="flex items-center gap-3">
+            <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-blue-300 border-t-blue-700" aria-hidden />
+            <span>Files read. Building the products — matched against what the shop already sells, named and tagged the way it lists them. Usually seconds; up to a minute when lines have to be put to the model to place.</span>
+          </div>
+        </Alert>
+      )}
+      {buildError && <Alert tone="danger">{buildError}</Alert>}
 
       {/* The way on. Without it the only route to the grid was the step bar, which reads as a
           position indicator rather than something to click. */}

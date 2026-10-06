@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { requireApiUser } from "@/lib/catalog/auth";
 import { prisma } from "@/lib/catalog/db";
 import { after } from "next/server";
-import { autoApplyMappings, extractStoredFile, noteOnFile, storeFile, untouchedSinceBuilt } from "@/lib/catalog/pipeline";
+import { extractStoredFile, noteOnFile, storeFile, untouchedSinceBuilt } from "@/lib/catalog/pipeline";
 import type { UploadKind } from "@/lib/catalog/extract";
 import { logAudit } from "@/lib/catalog/audit";
 
@@ -54,6 +54,11 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/catalog/bat
   // those products since, which a rebuild would undo. See untouchedSinceBuilt.
   const hadProducts = (await prisma.product.count({ where: { batchId: id } })) > 0;
   const shouldMap = autoMap && (!hadProducts || (await untouchedSinceBuilt(id)));
+  // Only the reading runs back here. Reading a photographed invoice is one long model call, and
+  // building the products after it can be another (lines put to the model to place), and the
+  // two together outran the minute this request has after it has answered: the work was cut off
+  // mid-way, the file sat on "reading…" for ever and nothing ever said why. So the page builds
+  // the products itself once it sees the reading is done — a request with a minute of its own.
   after(async () => {
     for (const file of stored) {
       try {
@@ -66,14 +71,7 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/catalog/bat
         }).catch(() => undefined);
       }
     }
-    if (shouldMap) {
-      await autoApplyMappings(id, user.id).catch(async (err) => {
-        // Said on the file, where it is seen — not swallowed, leaving a batch with no products and
-        // no reason. The Build products button runs it again.
-        for (const file of stored) await noteOnFile(file.id, `The products could not be built: ${err instanceof Error ? err.message : String(err)}`).catch(() => undefined);
-      });
-    }
-    else if (autoMap && hadProducts) {
+    if (autoMap && hadProducts && !shouldMap) {
       for (const file of stored) {
         await noteOnFile(file.id, "Added after the products were built and then edited by hand, so they have not been rebuilt with it — a rebuild starts again from the files and would lose those edits. To use it, open Column mapping and build again.").catch(() => undefined);
       }
@@ -81,5 +79,6 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/catalog/bat
   });
 
   // `reading` tells the page there is more to come, so it can wait rather than look finished.
-  return NextResponse.json({ ok: true, results, reading: stored.length, auto: { applied: false, products: 0, variants: 0 } });
+  // `buildAfter` tells the page to build the products once the reading is done.
+  return NextResponse.json({ ok: true, results, reading: stored.length, buildAfter: shouldMap, auto: { applied: false, products: 0, variants: 0 } });
 }

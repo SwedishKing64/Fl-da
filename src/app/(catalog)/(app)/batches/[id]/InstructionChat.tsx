@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { clearInstructionsAction, sendInstructionAction, type InstructionMessage } from "@/app/(catalog)/actions";
+import { clearInstructionsAction, sendInstructionAction, setAllNewAction, type InstructionMessage } from "@/app/(catalog)/actions";
 import { Alert, Card } from "@/app/(catalog)/ui";
 import { Chat } from "@/app/(catalog)/Chat";
 
@@ -18,16 +18,32 @@ export function InstructionChat({
   directives,
   aiEnabled,
   locked,
+  allNew: allNewInitial = false,
 }: {
   batchId: string;
   initial: InstructionMessage[];
   directives: string[];
   aiEnabled: boolean;
   locked: boolean;
+  allNew?: boolean;
 }) {
   const [turns, setTurns] = useState(initial);
   const [inForce, setInForce] = useState(directives);
   const [pending, start] = useTransition();
+  const [allNew, setAllNew] = useState(allNewInitial);
+  const [allNewNote, setAllNewNote] = useState<string | null>(null);
+
+  const toggleAllNew = (next: boolean) => start(async () => {
+    setAllNew(next); setAllNewNote(null);
+    try {
+      const r = await setAllNewAction(batchId, next);
+      if (!r.ok) { setAllNew(!next); setAllNewNote(r.error); return; }
+      setInForce(r.data!.directives);
+      if (r.data!.rebuilt > 0) setAllNewNote(`Rebuilt the ${r.data!.rebuilt} products ${next ? "without matching against the shop" : "matched against the shop"}.`);
+    } catch (err) {
+      setAllNew(!next); setAllNewNote(err instanceof Error ? err.message : String(err));
+    }
+  });
 
   return (
     <Card title="About this invoice">
@@ -35,6 +51,15 @@ export function InstructionChat({
         Anything true of the whole invoice that it cannot read off the page — the brand, a tag every product needs, a
         closeout discount. Said here, it is applied to every product in the batch.
       </p>
+
+      <label className="mb-3 flex cursor-pointer items-start gap-2 text-sm">
+        <input type="checkbox" className="mt-1" checked={allNew} disabled={pending || locked} onChange={(e) => toggleAllNew(e.target.checked)} />
+        <span>
+          <span className="font-medium">All new products</span>
+          <span className="block text-xs text-[var(--ink-soft)]">Nothing on this invoice is in the shop yet, so build without matching the lines against what it already sells. Quicker: that match is where lines go to the model to be placed. Leave it off for a reorder, where a line the shop has becomes a stock update on its listing.</span>
+          {allNewNote && <span className="block text-xs text-[var(--ink)]">{allNewNote}</span>}
+        </span>
+      </label>
 
       {inForce.length > 0 && (
         <div className="mb-3 rounded-lg border border-[var(--gold)] bg-[#fffdf2] p-3">

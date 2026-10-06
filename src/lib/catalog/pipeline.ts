@@ -603,7 +603,9 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
    * file, and only models of the line's own brand are offered.
    */
   const shopRefs: CanonicalLineItem[] = [];
-  if (specItems.length === 0 && items.length > 0) {
+  // Told every product is new to the shop, there is nothing to match against — and the match is
+  // the slow part of a build, where lines the rules cannot place are put to the model.
+  if (specItems.length === 0 && items.length > 0 && !directives.allNew) {
     const brands = [...new Set(items.map((i) => i.item.brand.trim()).filter(Boolean))];
     shopRefs.push(...brands.flatMap((b) => listingsAsReference(listings, b)));
     if (shopRefs.length > 0) {

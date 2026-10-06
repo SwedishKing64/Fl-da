@@ -22,7 +22,7 @@ const STALL_MS = 330_000;
 /** How many times a read that ran out of time is tried again before it is left to the person. */
 const RETRIES = 2;
 
-export function UploadPanel({ batchId, aiEnabled, reading, productCount, pendingSince = [], buildNow = false, retryable = [] }: { batchId: string; aiEnabled: boolean; hasProducts: boolean; reading: number; productCount: number; pendingSince?: number[]; buildNow?: boolean; retryable?: Array<{ id: string; filename: string }> }) {
+export function UploadPanel({ batchId, aiEnabled, reading, productCount, pendingSince = [], buildNow = false, retryable = [], allNew = false }: { batchId: string; aiEnabled: boolean; hasProducts: boolean; reading: number; productCount: number; pendingSince?: number[]; buildNow?: boolean; retryable?: Array<{ id: string; filename: string }>; allNew?: boolean }) {
   const router = useRouter();
   const [rereading, setRereading] = useState<{ filename: string; attempt: number } | null>(null);
   const attempts = useRef(new Map<string, number>());
@@ -255,7 +255,7 @@ export function UploadPanel({ batchId, aiEnabled, reading, productCount, pending
         <Alert tone="info">
           <div className="flex items-center gap-3">
             <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-blue-300 border-t-blue-700" aria-hidden />
-            <span>Files read. Building the products — matched against what the shop already sells, named and tagged the way it lists them. Usually seconds; longer when lines have to be put to the model to place.</span>
+            <span>{allNew ? "Files read. Building the products as new — named, tagged and priced the way the shop lists this brand. Usually seconds." : "Files read. Building the products — matched against what the shop already sells, named and tagged the way it lists them. Usually seconds; longer when lines have to be put to the model to place. If everything here is new, tick All new products above and that match is skipped."}</span>
           </div>
         </Alert>
       )}

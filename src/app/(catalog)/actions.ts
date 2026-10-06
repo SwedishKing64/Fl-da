@@ -1431,6 +1431,29 @@ export async function sendInstructionAction(batchId: string, message: string): P
 }
 
 /** Forget everything said about this invoice and build it on the rules alone. */
+/**
+ * "All new products": the one directive worth a tick rather than a sentence, because it is the
+ * difference between a build that matches every line against the shop and one that does not.
+ */
+export async function setAllNewAction(batchId: string, allNew: boolean): Promise<ActionResult<{ directives: string[]; rebuilt: number }>> {
+  return safely(async () => {
+    const user = await requireUser();
+    const batch = await prisma.importBatch.findUniqueOrThrow({ where: { id: batchId }, select: { directives: true, status: true } });
+    if (["EXPORTED", "PUSHED"].includes(batch.status)) return { ok: false, error: "This batch has been exported, so it is no longer being built." };
+    const directives = { ...parseDirectives(batch.directives), allNew };
+    await prisma.importBatch.update({ where: { id: batchId }, data: { directives: JSON.stringify(directives) } });
+    await logAudit("batch.instruction", { batchId, userId: user.id, details: directives });
+    let rebuilt = 0;
+    const built = await prisma.product.count({ where: { batchId } });
+    if (built > 0) {
+      const { untouchedSinceBuilt } = await import("@/lib/catalog/pipeline");
+      if (await untouchedSinceBuilt(batchId)) rebuilt = (await autoApplyMappings(batchId, user.id)).products;
+    }
+    revalidatePath(`/batches/${batchId}`);
+    return { ok: true, data: { directives: describeDirectives(directives), rebuilt } };
+  });
+}
+
 export async function clearInstructionsAction(batchId: string): Promise<ActionResult> {
   const user = await requireUser();
   try {

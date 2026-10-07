@@ -6,6 +6,7 @@ import { Alert, Badge, LinkButton, PageHeader, statusTone } from "@/app/(catalog
 import { Steps } from "../Steps";
 import { ReviewGrid } from "./ReviewGrid";
 import { LinksPanel } from "./LinksPanel";
+import { parseDirectives } from "@/lib/catalog/instructions";
 import { LookupPanel } from "./LookupPanel";
 import { lookupEnabled } from "@/lib/catalog/enrich";
 import { guarded } from "@/app/(catalog)/page-failed";
@@ -39,7 +40,11 @@ async function renderReviewPage(props: PageProps<"/batches/[id]/review">) {
   }, {});
   // A product written under a handle the shop already lists is a quantity update of a listing that
   // has its page already; only the new products are asked for one.
-  const inShop = new Set((await prisma.shopListing.findMany({ where: { handle: { in: review.products.map((p) => p.handle) } }, select: { handle: true } })).map((l) => l.handle));
+  // Unless every product here is new, which the person has said: then a handle that happens to
+  // match is not a listing, and each product is asked for its page.
+  const inShop = parseDirectives(batch.directives).allNew
+    ? new Set<string>()
+    : new Set((await prisma.shopListing.findMany({ where: { handle: { in: review.products.map((p) => p.handle) } }, select: { handle: true } })).map((l) => l.handle));
   return (
     <>
       <PageHeader

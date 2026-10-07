@@ -48,6 +48,7 @@ export function UploadPanel({ batchId, aiEnabled, reading, productCount, pending
   }, [retryable, reading, rereading]);
   const [building, setBuilding] = useState(false);
   const [buildError, setBuildError] = useState<string | null>(null);
+  const [builtIn, setBuiltIn] = useState<string | null>(null);
   /** Whether this page has been told to build once the reading is done — by the upload, or by the server. */
   const buildAfter = useRef(false);
   const built = useRef(false);
@@ -64,6 +65,7 @@ export function UploadPanel({ batchId, aiEnabled, reading, productCount, pending
     try {
       const r = await buildProductsAction(batchId);
       if (!r.ok) setBuildError(r.error);
+      else if (r.data?.tookMs !== undefined) setBuiltIn(`Built in ${(r.data.tookMs / 1000).toFixed(1)}s${r.data.phases?.length ? ` (${r.data.phases.join(", ")})` : ""}.`);
     } catch (err) {
       setBuildError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -114,7 +116,10 @@ export function UploadPanel({ batchId, aiEnabled, reading, productCount, pending
         // A failed poll is not worth reporting; the next one will do.
       }
     };
-    const timer = setInterval(tick, 4000);
+    // Quickly at first — a spreadsheet is read in well under a second, and four seconds of
+    // "reading…" after that was the slowest part of a small build — then every four seconds.
+    const started = Date.now();
+    const timer = setInterval(() => { if (Date.now() - started < 20_000 || (Date.now() - started) % 4000 < 1500) void tick(); }, 1500);
     return () => { stop = true; clearInterval(timer); };
   }, [reading, batchId, router, pendingSince]);
 
@@ -267,7 +272,7 @@ export function UploadPanel({ batchId, aiEnabled, reading, productCount, pending
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--line)] bg-[var(--rubin-tint)] px-4 py-3">
           <div className="text-sm">
             <div className="font-semibold">{productCount} product{productCount === 1 ? "" : "s"} built from these files.</div>
-            <div className="text-xs text-[var(--ink-soft)]">Prices, tags and descriptions are all editable in the grid.</div>
+            <div className="text-xs text-[var(--ink-soft)]">Prices, tags and descriptions are all editable in the grid.{builtIn ? ` ${builtIn}` : ""}</div>
           </div>
           <LinkButton href={`/batches/${batchId}/review`} variant="primary">Next: Review &amp; price →</LinkButton>
         </div>

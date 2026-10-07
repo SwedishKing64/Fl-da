@@ -995,3 +995,17 @@ describe("a product filed under a heading other than its shelf", () => {
       .toEqual(catalogTags({ productType: "Snow Clothing", brand: "Spyder", items: [], ruleTags: [], describedAs: "" }));
   });
 });
+
+describe("a rule's bare noun for a shelf the shop tags in full", () => {
+  it("drops 'boots' from a ski boot, whose shelf tag is ski-boots, and keeps 'socks' on socks", async () => {
+    const { catalogTags } = await import("./product-tags");
+    const boot = catalogTags({ productType: "Ski Boots", brand: "Tecnica", items: [], ruleTags: ["boots"], describedAs: "Mach1 120 TD GW Ski Boots" });
+    expect(boot).toContain("ski-boots");
+    expect(boot).not.toContain("boots");
+    const binding = catalogTags({ productType: "Snowboard Bindings", brand: "Burton", items: [], ruleTags: ["bindings"], describedAs: "Cartel X" });
+    expect(binding).toContain("snowboard-bindings");
+    expect(binding).not.toContain("bindings");
+    const socks = catalogTags({ productType: "Snow Socks", brand: "Burton", items: [], ruleTags: ["socks"], describedAs: "Weekend Midweight Socks" });
+    expect(socks).toContain("socks");
+  });
+});

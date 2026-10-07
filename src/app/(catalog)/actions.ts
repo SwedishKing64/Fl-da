@@ -281,7 +281,7 @@ export async function reviewBatchAction(batchId: string, options: { audited?: bo
   }
 }
 
-export async function buildProductsAction(batchId: string): Promise<ActionResult<{ products: number }>> {
+export async function buildProductsAction(batchId: string): Promise<ActionResult<{ products: number; tookMs?: number; phases?: string[] }>> {
   const user = await requireUser();
   try {
     const files = await prisma.sourceFile.findMany({ where: { batchId }, select: { extractionStatus: true, detectedKind: true, kind: true, filename: true } });
@@ -296,7 +296,9 @@ export async function buildProductsAction(batchId: string): Promise<ActionResult
       return { ok: false, error: result.unmapped.length > 0 ? `The columns of ${result.unmapped.join(", ")} could not be read on their own. Open Column mapping and say which column is the product's name.` : "Nothing on the order has a quantity or a price against it, so there was nothing to build." };
     }
     revalidatePath(`/batches/${batchId}`);
-    return { ok: true, data: { products: result.products } };
+    const { lastBuild } = await import("@/lib/catalog/pipeline");
+    const timing = lastBuild();
+    return { ok: true, data: { products: result.products, ...(timing ? { tookMs: timing.tookMs, phases: timing.phases } : {}) } };
   } catch (err) {
     return { ok: false, error: `The products could not be built: ${said(err)}` };
   }

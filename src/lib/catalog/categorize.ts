@@ -36,8 +36,8 @@ export const ACCESSORIES_PATTERN = String.raw`\bbeanie|\bwax\b|\btune|\bbag\b|\b
 
 /** Seeded defaults; editable in Settings. Order matters (boots before skis so "ski boot" wins). */
 export const DEFAULT_CATEGORY_RULES: CategoryRuleLike[] = [
-  { category: "boots", pattern: String.raw`\bboots?\b|\bhawx\b|\bmondo`, productType: "Ski Boots", collections: "Ski Boots", tags: "boots", option1: "size", option2: "width", option3: "colour", priority: 100, active: true },
-  { category: "bindings", pattern: BINDINGS_PATTERN, productType: "Ski Bindings", collections: "Bindings", tags: "bindings", option1: "size", option2: "colour", option3: null, priority: 95, active: true },
+  { category: "boots", pattern: String.raw`\bboots?\b|\bhawx\b|\bmondo`, productType: "Ski Boots", collections: "Ski Boots", tags: "", option1: "size", option2: "width", option3: "colour", priority: 100, active: true },
+  { category: "bindings", pattern: BINDINGS_PATTERN, productType: "Ski Bindings", collections: "Bindings", tags: "", option1: "size", option2: "colour", option3: null, priority: 95, active: true },
   { category: "poles", pattern: String.raw`\bpoles?\b`, productType: "Ski Poles", collections: "Poles", tags: "poles", option1: "length", option2: "colour", option3: null, priority: 90, active: true },
   { category: "helmets", pattern: String.raw`\bhelmets?\b`, productType: "Helmets", collections: "Helmets", tags: "helmets, protection", option1: "size", option2: "colour", option3: null, priority: 85, active: true },
   { category: "goggles", pattern: String.raw`\bgoggles?\b|\blens\b`, productType: "Goggles", collections: "Goggles", tags: "goggles", option1: "colour", option2: "size", option3: null, priority: 84, active: true },

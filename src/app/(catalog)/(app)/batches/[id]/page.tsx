@@ -12,6 +12,7 @@ import { ranOutOfTime } from "@/lib/catalog/extract/ai";
 import { BatchSettingsForm } from "./BatchSettingsForm";
 import { BuildProductsButton, DeleteFileButton, DeleteBatchButton, RetryExtractionButton } from "./BatchButtons";
 import { ExtractedRows } from "./ExtractedRows";
+import { LinksPanel } from "./review/LinksPanel";
 import { guarded } from "@/app/(catalog)/page-failed";
 
 /**
@@ -41,6 +42,17 @@ async function renderBatchPage(props: PageProps<"/batches/[id]">) {
   const [suppliers, settings, reviewed] = await Promise.all([prisma.supplier.findMany({ orderBy: { name: "asc" } }), getSettings(), reviewedSinceBuilt(id)]);
   const locked = ["EXPORTED", "PUSHED"].includes(batch.status);
   const extracted = batch.files.filter((f) => f.extractionStatus === "DONE");
+  const allNew = parseDirectives(batch.directives).allNew;
+  // The products, for their page links: asked for here, right after the build, where the person
+  // is — the review page asks too, but a step on another page was a step nobody saw.
+  const products = batch._count.products > 0
+    ? await prisma.product.findMany({ where: { batchId: id }, select: { id: true, title: true, handle: true, lookupStatus: true, lookupSource: true }, orderBy: { sortOrder: "asc" } })
+    : [];
+  // A product the shop already lists keeps the page it has — unless every product here is new,
+  // which the person has said, and a handle that happens to match is not a listing.
+  const inShop = allNew || products.length === 0
+    ? new Set<string>()
+    : new Set((await prisma.shopListing.findMany({ where: { handle: { in: products.map((p) => p.handle) } }, select: { handle: true } })).map((l) => l.handle));
 
   return (
     <>
@@ -63,11 +75,11 @@ async function renderBatchPage(props: PageProps<"/batches/[id]">) {
             locked={locked}
             aiEnabled={Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN)}
             directives={describeDirectives(parseDirectives(batch.directives))}
-            allNew={parseDirectives(batch.directives).allNew}
+            allNew={allNew}
             initial={batch.instructions.map((m) => ({ id: m.id, role: m.role, body: m.body, createdAt: m.createdAt.toISOString() }))}
           />
           <Card title="Supplier files">
-            {locked ? <Empty>This batch has been exported; files are locked for audit.</Empty> : <UploadPanel batchId={id} aiEnabled={settings ? Boolean(process.env.ANTHROPIC_API_KEY) : false} hasProducts={batch._count.products > 0} productCount={batch._count.products} reading={batch.files.filter((f) => f.extractionStatus === "PENDING" && !stalled(f)).length} pendingSince={batch.files.filter((f) => f.extractionStatus === "PENDING" && !stalled(f)).map(startedAt)} allNew={parseDirectives(batch.directives).allNew} buildNow={batch._count.products === 0 && !batch.files.some((f) => f.extractionStatus === "PENDING" && !stalled(f)) && batch.files.some((f) => f.extractionStatus === "DONE" && !["SPEC_SHEET", "PRODUCT_PHOTO", "SHOP_EXPORT"].includes(f.detectedKind ?? f.kind))} retryable={batch.files.filter((f) => !locked && (stalled(f) || (f.extractionStatus === "FAILED" && ranOutOfTime(f.extractionError)))).map((f) => ({ id: f.id, filename: f.filename }))} />}
+            {locked ? <Empty>This batch has been exported; files are locked for audit.</Empty> : <UploadPanel batchId={id} aiEnabled={settings ? Boolean(process.env.ANTHROPIC_API_KEY) : false} hasProducts={batch._count.products > 0} productCount={batch._count.products} reading={batch.files.filter((f) => f.extractionStatus === "PENDING" && !stalled(f)).length} pendingSince={batch.files.filter((f) => f.extractionStatus === "PENDING" && !stalled(f)).map(startedAt)} allNew={allNew} buildNow={batch._count.products === 0 && !batch.files.some((f) => f.extractionStatus === "PENDING" && !stalled(f)) && batch.files.some((f) => f.extractionStatus === "DONE" && !["SPEC_SHEET", "PRODUCT_PHOTO", "SHOP_EXPORT"].includes(f.detectedKind ?? f.kind))} retryable={batch.files.filter((f) => !locked && (stalled(f) || (f.extractionStatus === "FAILED" && ranOutOfTime(f.extractionError)))).map((f) => ({ id: f.id, filename: f.filename }))} />}
             {batch.files.length > 0 && (
               <table className="mt-4 w-full text-sm">
                 <thead className="text-left text-xs text-[var(--ink-soft)]"><tr><th className="py-1">File</th><th>Kind</th><th>Extraction</th><th className="text-right">Rows</th><th /></tr></thead>
@@ -100,6 +112,13 @@ async function renderBatchPage(props: PageProps<"/batches/[id]">) {
               />
             ))}
           </Card>
+          {products.length > 0 && (
+            <LinksPanel
+              batchId={id}
+              locked={locked}
+              products={products.map((p) => ({ id: p.id, title: p.title, handle: p.handle, url: ["LINKED", "RELINKED", "LINK_FAILED", "PAGE", "PAGE_UNSURE"].includes(p.lookupStatus) ? p.lookupSource : "", status: p.lookupStatus, inShop: inShop.has(p.handle) }))}
+            />
+          )}
         </div>
         <div className="space-y-6">
           <Details summary="Currency, GST and freight" hint="Set once per batch. Only open it if this invoice is not in plain AUD.">

@@ -12,7 +12,7 @@
  * have is worse than no tag — nobody browsing ever lands on it, and it looks like a typo forever.
  */
 
-import { DEFAULT_TAGGING, generalTags, gendersFromText, houseTagFor, isShopifyGenerated, slugTag, type Gender } from "./tagging";
+import { DEFAULT_TAGGING, generalTags, gendersFromText, houseTagFor, isShopifyGenerated, slugTag, tagsFor, type Gender } from "./tagging";
 import { isValidType, resolveType } from "./taxonomy";
 import type { CanonicalLineItem } from "./types";
 
@@ -73,6 +73,7 @@ export function catalogTags(input: CatalogTagInput): string[] {
     if (!tag || known.has(tag.toLowerCase())) continue;
     if (isShopifyGenerated(tag)) continue; // Shopify maintains its own size/colour/price bands
     if (isInvented(raw, genders)) continue;
+    if (isBareNounOf(tag, type)) continue; // "boots" on a Ski Boot: the shelf tag is ski-boots
     tags.push(tag);
     known.add(tag.toLowerCase());
   }
@@ -110,6 +111,18 @@ function seasonOf(items: CanonicalLineItem[]): number | undefined {
     if (match) return Number(match[1]);
   }
   return undefined;
+}
+
+/**
+ * A rule's tag that is only the last word of the Type, where the shop's own tag is the whole of
+ * it: "boots" on Ski Boots, whose shelf tag is ski-boots; "bindings" on Snowboard Bindings, which
+ * the shop tags snowboard-bindings. The bare word names no shelf the shop has. Only for these two
+ * nouns: "socks" on Snow Socks is a tag the shop does write.
+ */
+const BARE_NOUNS = new Set(["boots", "bindings"]);
+function isBareNounOf(tag: string, type: string): boolean {
+  const primary = tagsFor(type)[0] ?? "";
+  return BARE_NOUNS.has(tag.toLowerCase()) && primary !== tag && primary.endsWith(`-${tag.toLowerCase()}`);
 }
 
 function dedupe(tags: string[]): string[] {

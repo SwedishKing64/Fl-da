@@ -381,6 +381,12 @@ export interface ApplyMappingInput {
 }
 
 /** Apply column mappings to every extracted file, then (re)build products, variants, prices and images. */
+/** How long the last build in this process took, phase by phase, for the page to say. */
+let lastBuildTiming: { tookMs: number; phases: string[] } | null = null;
+export function lastBuild(): { tookMs: number; phases: string[] } | null {
+  return lastBuildTiming;
+}
+
 export async function applyMappings(batchId: string, inputs: ApplyMappingInput[], userId: string | null): Promise<{ products: number; variants: number; problems: string[] }> {
   // Where a build's time goes, phase by phase, to the server log and the History page: the
   // number behind "why is it so slow" is otherwise a guess.
@@ -582,7 +588,16 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
 
   // The shop's listings as last remembered, for the shelves it gave each model before.
   phase("read the files");
-  const listings = (await prisma.shopListing.findMany({ select: { handle: true, title: true, vendor: true, productType: true, tags: true, price: true, bindingOption: true, barcodes: true } }).catch(() => []))
+  // Only the listings of the brands on the order, when every line names its brand: the shop has
+  // thousands, each with its barcodes and tags, and fetching them all across a region was most
+  // of a build. A line with no brand of its own needs the lot, to find its brand among them.
+  const orderBrands = [...new Set(items.map((i) => i.item.brand.trim().toLowerCase()).filter(Boolean))];
+  const everyLineBranded = items.length > 0 && items.every((i) => i.item.brand.trim());
+  const vendorSpellings = knownVendors.filter((v) => orderBrands.includes(v.trim().toLowerCase()));
+  const listings = (await prisma.shopListing.findMany({
+    ...(everyLineBranded ? { where: { vendor: { in: vendorSpellings } } } : {}),
+    select: { handle: true, title: true, vendor: true, productType: true, tags: true, price: true, bindingOption: true, barcodes: true },
+  }).catch(() => []))
     .map((l) => ({ ...l, tags: l.tags.split(",").map((t) => t.trim()).filter(Boolean), barcodes: (l.barcodes ?? "").split(",").map((b) => b.trim()).filter(Boolean) }));
   // A line with no brand of its own: the vendor the shop already sells this model under, or a brand
   // its own name or its file names — "PIM_Export_VolklSkis" — spell out.
@@ -769,7 +784,34 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
     // The SEO title is that title with the brand in front of it, which is the one place it appears.
     const season = seasonTagFrom(g.tags);
     const title = productTitle(g.title, season);
-    const product = await prisma.product.create({
+    // Everything the product owns goes in with it: its variants, each with the order line it came
+    // from, and its pictures. One round trip per product instead of one per row — a build on a
+    // database in another region was waiting on the network a dozen times per product.
+    const modelCode = g.variants.map((v) => v.item.modelCode).find(Boolean) ?? "";
+    const images: Array<{ url: string; source: string; altText: string; validated?: boolean }> = [];
+    const urls = new Set<string>();
+    for (const url of g.imageUrls) {
+      if (urls.has(url)) continue;
+      urls.add(url);
+      images.push({ url, source: "SUPPLIER", altText: g.title });
+    }
+    if (urls.size === 0 && modelCode) {
+      const colours = Array.from(new Set(g.variants.map((v) => v.item.colour).filter(Boolean)));
+      for (const url of await findLibraryImages(g.brand, modelCode, colours[0] ?? "")) {
+        if (urls.has(url)) continue;
+        urls.add(url);
+        images.push({ url, source: "LIBRARY", altText: g.title, validated: true });
+      }
+      for (const colour of colours.slice(1)) {
+        for (const url of await findLibraryImages(g.brand, modelCode, colour)) {
+          if (urls.has(url)) continue;
+          urls.add(url);
+          images.push({ url, source: "LIBRARY", altText: `${g.title} ${colour}`, validated: true });
+        }
+      }
+    }
+    let vsort = 0;
+    await prisma.product.create({
       data: {
         batchId,
         handle: g.handle,
@@ -790,61 +832,37 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
         option3Name: g.option3Name,
         metafields: JSON.stringify(g.metafields),
         sortOrder: sort++,
+        variants: {
+          create: g.variants.map((v) => {
+            const src = items[v.sourceIndex];
+            variantCount++;
+            return {
+              sku: v.item.sku,
+              barcode: v.item.barcode,
+              option1Value: v.option1Value,
+              option2Value: v.option2Value,
+              option3Value: v.option3Value,
+              grams: v.item.grams ?? 0,
+              quantity: v.item.quantity ?? 0,
+              sortOrder: vsort++,
+              costPrice: v.item.costPrice ?? 0,
+              costCurrency: batch.currency,
+              gstTreatment: batch.gstTreatment,
+              fxRateToAud: batch.fxRateToAud,
+              // The recommended retail is what the product sells for, so it sets the price rather
+              // than sitting beside it as a strikethrough. Without one the markup rules price it.
+              retailOverride: v.item.rrp ?? null,
+              compareAtPrice: null,
+              lineItem: {
+                create: { batchId, sourceFileId: src.fileId, rowIndex: src.rowIndex, raw: JSON.stringify(src.raw), normalized: JSON.stringify(v.item) },
+              },
+            };
+          }),
+        },
+        // Supplier URLs first, then the library.
+        images: { create: images.map((img, i) => ({ ...img, position: i + 1 })) },
       },
     });
-    let vsort = 0;
-    for (const v of g.variants) {
-      const src = items[v.sourceIndex];
-      const variant = await prisma.variant.create({
-        data: {
-          productId: product.id,
-          sku: v.item.sku,
-          barcode: v.item.barcode,
-          option1Value: v.option1Value,
-          option2Value: v.option2Value,
-          option3Value: v.option3Value,
-          grams: v.item.grams ?? 0,
-          quantity: v.item.quantity ?? 0,
-          sortOrder: vsort++,
-          costPrice: v.item.costPrice ?? 0,
-          costCurrency: batch.currency,
-          gstTreatment: batch.gstTreatment,
-          fxRateToAud: batch.fxRateToAud,
-          // The recommended retail is what the product sells for, so it sets the price rather than
-          // sitting beside it as a strikethrough. Without one the markup rules price it.
-          retailOverride: v.item.rrp ?? null,
-          compareAtPrice: null,
-        },
-      });
-      await prisma.extractedLineItem.create({
-        data: { batchId, sourceFileId: src.fileId, rowIndex: src.rowIndex, raw: JSON.stringify(src.raw), normalized: JSON.stringify(v.item), variantId: variant.id },
-      });
-      variantCount++;
-    }
-    // Images: supplier URLs first, then the library.
-    let position = 1;
-    const urls = new Set<string>();
-    for (const url of g.imageUrls) {
-      if (urls.has(url)) continue;
-      urls.add(url);
-      await prisma.productImage.create({ data: { productId: product.id, url, position: position++, source: "SUPPLIER", altText: g.title } });
-    }
-    const modelCode = g.variants.map((v) => v.item.modelCode).find(Boolean) ?? "";
-    if (urls.size === 0 && modelCode) {
-      const colours = Array.from(new Set(g.variants.map((v) => v.item.colour).filter(Boolean)));
-      for (const url of await findLibraryImages(g.brand, modelCode, colours[0] ?? "")) {
-        if (urls.has(url)) continue;
-        urls.add(url);
-        await prisma.productImage.create({ data: { productId: product.id, url, position: position++, source: "LIBRARY", altText: g.title, validated: true } });
-      }
-      for (const colour of colours.slice(1)) {
-        for (const url of await findLibraryImages(g.brand, modelCode, colour)) {
-          if (urls.has(url)) continue;
-          urls.add(url);
-          await prisma.productImage.create({ data: { productId: product.id, url, position: position++, source: "LIBRARY", altText: `${g.title} ${colour}`, validated: true } });
-        }
-      }
-    }
   }
 
   await attachUnassignedPhotos(batchId);
@@ -858,6 +876,7 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
   await logAudit("batch.built", { batchId, userId, details: { products: grouped.length, totalMs: total, phases: Object.fromEntries(phases) } }).catch(() => undefined);
   await logAudit("batch.mapped", { batchId, userId, details: { products: grouped.length, variants: variantCount } });
   void verifyBatchImages(batchId).catch(() => undefined);
+  lastBuildTiming = { tookMs: total, phases: phases.map(([name, ms]) => `${name} ${(ms / 1000).toFixed(1)}s`) };
   // The web lookup deliberately does NOT run here.
   //
   // It used to, through `after`, and it was worse than not running at all. This is the tail of the

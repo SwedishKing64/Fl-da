@@ -16,7 +16,7 @@
  * is required is a far smaller problem than an application that will not start.
  */
 
-import { SCHEMA_SQL } from "./schema-sql";
+import { SCHEMA_SQL, schemaStatements } from "./schema-sql";
 
 const CREATE_TABLE = /CREATE TABLE "(\w+)" \(([\s\S]*?)\n\);/g;
 
@@ -43,4 +43,30 @@ export function isMissingColumn(error: unknown): boolean {
   if (code === "P2022") return true;
   const message = error instanceof Error ? error.message : String(error ?? "");
   return /does not exist in the current database/i.test(message) || /column .* does not exist/i.test(message);
+}
+
+/**
+ * Every table, index and foreign key in the schema, each written so that a database already
+ * holding it is left alone: CREATE TABLE IF NOT EXISTS, CREATE INDEX IF NOT EXISTS. A whole table
+ * added in a release — ShopListing, the shop's own listings — was missing from a database the
+ * build step never reached, and every query against it failed with P2021 while the columns
+ * repair, which only ever adds columns, had nothing to add. A foreign key has no IF NOT EXISTS,
+ * so those are applied and a failure on one already there is ignored by the caller.
+ */
+export function tableStatements(): string[] {
+  return schemaStatements()
+    .map((statement) =>
+      statement
+        .replace(/^CREATE TABLE "/, 'CREATE TABLE IF NOT EXISTS "')
+        .replace(/^CREATE UNIQUE INDEX "/, 'CREATE UNIQUE INDEX IF NOT EXISTS "')
+        .replace(/^CREATE INDEX "/, 'CREATE INDEX IF NOT EXISTS "'),
+    );
+}
+
+/** True for the Prisma error that means a whole table the code expects is not there. */
+export function isMissingTable(error: unknown): boolean {
+  const code = (error as { code?: string } | null)?.code;
+  if (code === "P2021") return true;
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return /table .* does not exist/i.test(message) || /relation "[^"]+" does not exist/i.test(message);
 }

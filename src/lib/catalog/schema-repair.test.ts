@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { columnStatements, isMissingColumn } from "./schema-repair";
+import { columnStatements, isMissingColumn, isMissingTable, tableStatements } from "./schema-repair";
 import { SCHEMA_SQL } from "./schema-sql";
 
 /**
@@ -66,5 +66,24 @@ describe("the client heals itself", () => {
     expect(db).toContain("addMissingColumns");
     // Only that one error is handled; everything else is passed straight through.
     expect(db).toMatch(/if \(!isMissingColumn\(error\)\) throw error;/);
+    expect(db).toMatch(/if \(isMissingTable\(error\)\) \{/);
+  });
+});
+
+describe("a whole table the database is missing", () => {
+  it("is created with IF NOT EXISTS, indexes too, so a database in step is untouched", () => {
+    const statements = tableStatements();
+    const tables = statements.filter((s) => /^CREATE TABLE/.test(s));
+    expect(tables.length).toBeGreaterThan(20);
+    expect(tables.every((s) => s.startsWith("CREATE TABLE IF NOT EXISTS \""))).toBe(true);
+    expect(statements.some((s) => s.startsWith('CREATE TABLE IF NOT EXISTS "ShopListing"'))).toBe(true);
+    expect(statements.filter((s) => /^CREATE (UNIQUE )?INDEX/.test(s)).every((s) => / IF NOT EXISTS "/.test(s))).toBe(true);
+  });
+
+  it("is told from a column, by Prisma's code or its message", () => {
+    expect(isMissingTable({ code: "P2021" })).toBe(true);
+    expect(isMissingTable(new Error("The table `public.ShopListing` does not exist in the current database."))).toBe(true);
+    expect(isMissingTable({ code: "P2022" })).toBe(false);
+    expect(isMissingTable(new Error("Connection refused"))).toBe(false);
   });
 });

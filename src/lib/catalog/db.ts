@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { PrismaClient } from "@prisma/client";
 import { candidateDatabaseUrls, findDatabaseUrl, runtimeDatabaseUrl } from "./db-url";
-import { isMissingColumn } from "./schema-repair";
+import { isMissingColumn, isMissingTable } from "./schema-repair";
 
 export { DATABASE_ENV_KEYS, accelerateEnvName, databaseEnvNamesPresent, directDatabaseUrl, findDatabaseUrl } from "./db-url";
 
@@ -55,6 +55,13 @@ function createClient(): PrismaClient {
         try {
           return await query(args);
         } catch (error) {
+          if (isMissingTable(error)) {
+            // A whole table the code expects — one added in a later release — is not there.
+            console.error(`[schema] the database is missing a table the code expects; creating what is missing and retrying`);
+            await addMissingTables();
+            await addMissingColumns();
+            return query(args);
+          }
           if (!isMissingColumn(error)) throw error;
           console.error(`[schema] the database is missing a column the code expects; adding it and retrying`);
           await addMissingColumns();
@@ -261,6 +268,34 @@ export async function createTables(): Promise<{ statements: number }> {
  * ADD COLUMN IF NOT EXISTS, so a database already in step is left exactly as it is. Run once per
  * process, the first time a query says a column is missing.
  */
+/**
+ * Create whatever tables and indexes this database is missing.
+ *
+ * Every statement is IF NOT EXISTS, so a database already in step is untouched; a foreign key
+ * already there fails on its own and is skipped. Once per process, the first time a query says a
+ * table is missing.
+ */
+let tableRepair: Promise<number> | null = null;
+
+export function addMissingTables(): Promise<number> {
+  tableRepair ??= (async () => {
+    const { tableStatements } = await import("./schema-repair");
+    let applied = 0;
+    for (const statement of tableStatements()) {
+      try {
+        await prisma.$executeRawUnsafe(statement);
+        applied++;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (!/already exists/i.test(message)) console.error(`[schema] ${statement.slice(0, 80)}…: ${message}`);
+      }
+    }
+    forgetDatabaseStatus();
+    return applied;
+  })();
+  return tableRepair;
+}
+
 let columnRepair: Promise<number> | null = null;
 
 export function addMissingColumns(): Promise<number> {

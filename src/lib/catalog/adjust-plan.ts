@@ -28,10 +28,11 @@ const ScopeSchema = z.object({
 });
 
 const OperationSchema = z.object({
-  kind: z.enum(["discount", "endSale", "setPrice", "addTags", "removeTags", "setStatus", "setType", "setVendor", "setQuantity", "setTitleYear", "renameTitle"]),
+  kind: z.enum(["discount", "endSale", "setPrice", "addTags", "removeTags", "setStatus", "setType", "setVendor", "setQuantity", "setTitleYear", "renameTitle", "setMountPrice"]),
   percent: z.number().nullable().describe("For discount: the percentage off, 1-95. Null otherwise."),
   from: z.enum(["rrp", "current"]).nullable().describe("For discount: 'rrp' (the default, off the recommended retail in Compare At) or 'current' only when the instruction plainly means off today's price."),
-  value: z.number().nullable().describe("For setPrice: the new price. For setQuantity: the stock on hand. Null otherwise."),
+  value: z.number().nullable().describe("For setPrice: the new price. For setQuantity: the stock on hand. For setMountPrice: the mounting charge in dollars, e.g. 59. Null otherwise."),
+  bindings: z.enum(["drill", "system", ""]).describe("For setMountPrice only: \"drill\" when the instruction means the packages whose binding is drilled onto the ski (touring bindings, Griffon, Squire, Strive, Jester, Pivot, Attack — 'bindings that need a drill mount'); \"system\" when it means skis that come with a binding on a track (Xpress, NX Konect, PR, Joy SLR, M 12, Z12, RS, TPX — 'skis that come with a binding', 'system bindings', 'track bindings'); empty when it means every package. Empty otherwise."),
   tags: z.array(z.string()).describe("For addTags/removeTags: the tags, spelled as this shop spells them. Empty otherwise."),
   status: z.enum(["active", "draft", "archived"]).nullable().describe("For setStatus. Null otherwise."),
   text: z.string().describe("For setType/setVendor: the new value. For setTitleYear: the four-digit season, e.g. \"2027\". For renameTitle: the wording to put IN. Empty otherwise."),
@@ -66,6 +67,8 @@ The shop's rules, which you follow without being told:
 - "Put the price back to the RRP", "bring it to RRP", "price them at the recommended retail", "take them off sale", "remove the discount", "back to full price" all mean endSale: the price returns to the recommended retail in Compare At and Compare At clears. Use it whenever the instruction says to price at the RRP WITHOUT giving a number. setPrice is only for an instruction that states an actual figure.
 - "Set the stock to 0", "mark them out of stock", "we have 12 left" is setQuantity. Stock is per variant, so it applies to every length or size the scope matched.
 - A ski or snowboard is sold two ways and the shop prices them separately: FLAT means the ski on its own, PACKAGE means the ski with a binding on it. When an instruction says flat, "flat only", "no bindings", "ski only", "board only", set fitting: "flat". When it says package, "pakage" (they misspell it), "package only", "with bindings", "inc bindings", "binding package", set fitting: "package". When it says "flat and package", or says neither, leave fitting empty — that means both. This matters more than it looks: their sale sheet has "2027 snow skis flat 15%" on one line and "2027 snow skis package 20%" on the next, and without it each line takes in the other's products and whichever runs second sets the price of both.
+
+- The MOUNTING charge (also "mount price", "fitting price", "binding fitting", "fitting charge") is what a package's "Please Mount My Bindings" variant costs over its "Please Do Not Mount My Bindings" variant. "Increase the mount price to $59", "mounting is now $59", "please mount should be $59 more than do not mount" is setMountPrice with value 59 and fitting: "package". Which packages: "skis with touring bindings / Griffon / Squire / Strive / bindings that need a drill mount" is bindings: "drill"; "skis that come with a binding / system bindings / track bindings / Xpress" is bindings: "system"; neither said means every package. Two different charges for the two kinds are two setMountPrice operations. It is not a discount and not setPrice.
 
 How to read a list of values. "Items tagged 2999 or 2026 or 2025" is ANY ONE of them, so it goes in anyTags. The tags field means ALL AT ONCE, and no product carries five different years, so putting a list there matches nothing. Getting this backwards is the single worst thing you can do here.
 
@@ -113,6 +116,9 @@ function toOperation(raw: z.infer<typeof OperationSchema>): Operation | null {
     // cannot check at a glance across 500 products, so a half-read instruction is dropped.
     case "setTitleYear": return /^\d{4}$/.test(raw.text.trim()) ? { kind: "setTitleYear", year: raw.text.trim(), ...(raw.seo ? { seo: true } : {}) } : null;
     case "renameTitle": return raw.find.trim() ? { kind: "renameTitle", find: raw.find.trim(), replace: raw.text, ...(raw.seo ? { seo: true } : {}) } : null;
+    case "setMountPrice": return typeof raw.value === "number" && raw.value > 0 && raw.value < 1000
+      ? { kind: "setMountPrice", amount: raw.value, ...(raw.bindings === "drill" || raw.bindings === "system" ? { bindings: raw.bindings } : {}) }
+      : null;
   }
 }
 
@@ -411,6 +417,7 @@ export function describePlan(plan: Plan): string[] {
       case "setType": lines.push(`Set the type to ${op.value}.`); break;
       case "setVendor": lines.push(`Set the vendor to ${op.value}.`); break;
       case "setQuantity": lines.push(`Set the stock on hand to ${Math.round(op.value)}.`); break;
+      case "setMountPrice": lines.push(`Set the mounting charge to $${op.amount.toFixed(2)}${op.bindings === "drill" ? " on packages whose binding is drilled on (Griffon, Squire, Strive, Pivot, Attack, every touring binding)" : op.bindings === "system" ? " on skis that come with a track binding (Xpress, NX Konect, PR, Joy SLR, M 12, Z12, RS, TPX)" : " on every package"}: each "Please Mount My Bindings" variant is priced that much over its "Do Not Mount" twin — the recommended retail by the full amount, the price by the same share, so a sale stays the sale it was.`); break;
       case "setTitleYear": lines.push(`Put ${op.year} in the product title${op.seo ? " and the SEO title" : ""} — replacing the season already there, or in front of the length and binding wording where there is none. The URL does not change.`); break;
       case "renameTitle": {
         const where = `the product title${op.seo ? " and the SEO title" : ""}`;

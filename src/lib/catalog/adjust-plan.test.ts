@@ -256,3 +256,11 @@ describe("a tag to add keeps the spelling it was asked for", () => {
     expect(respellAddedTags(add(["snow sales"]), ask, ["snow sales"])).toEqual(add(["snow sale"]));
   });
 });
+
+describe("the mounting charge, described", () => {
+  it("says which packages and how the sale is kept", () => {
+    const lines = describePlan({ scope: { fitting: "package" }, operations: [{ kind: "setMountPrice", amount: 59, bindings: "drill" }] });
+    expect(lines.join(" ")).toMatch(/mounting charge to \$59\.00 on packages whose binding is drilled on/);
+    expect(lines.join(" ")).toMatch(/a sale stays the sale it was/);
+  });
+});

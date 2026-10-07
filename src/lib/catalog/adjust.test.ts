@@ -924,3 +924,51 @@ describe("a product on a narrower shelf is not on the broad one", () => {
     expect(matched({ tags: ["ski poles"], anyTags: ["2999"] })).toBe(55);
   });
 });
+
+describe("the mounting charge on a ski package", () => {
+  const H = "Handle,Title,Vendor,Type,Tags,Option1 Name,Option1 Value,Option2 Name,Option2 Value,Option3 Name,Option3 Value,Variant Price,Variant Compare At Price,Status";
+  const drill = "mantra-88-2027-inc-marker-griffon-binding-package";
+  const system = "experience-80-2026-inc-xpress-11-binding-package";
+  const csv = [
+    H,
+    `${drill},Mantra 88 2027 inc Marker Griffon Binding Package,Volkl,Skis,"2027, ski packages",Length,170,Binding Option,Marker Griffon - Black,Binding Fitting,Please Do Not Mount My Bindings,1500.00,2000.00,active`,
+    `${drill},,,,,Length,170,Binding Option,Marker Griffon - Black,Binding Fitting,Please Mount My Bindings,1530.00,2040.00,`,
+    `${drill},,,,,Length,177,Binding Option,Marker Griffon - Black,Binding Fitting,Please Do Not Mount My Bindings,1500.00,2000.00,`,
+    `${drill},,,,,Length,177,Binding Option,Marker Griffon - Black,Binding Fitting,Please Mount My Bindings,1530.00,2040.00,`,
+    `${drill},,,,,Length,177,Binding Option,ATK Raider 13 Evo,Binding Fitting,Please Do Not Mount My Bindings,1800.00,,`,
+    `${drill},,,,,Length,177,Binding Option,ATK Raider 13 Evo,Binding Fitting,Please Mount My Bindings,1840.00,,`,
+    `${system},Experience 80 2026 inc Xpress 11 Binding Package,Rossignol,Skis,"2026, ski packages",Length,158,Binding Fitting,Please Do Not Mount My Bindings,,,999.99,,active`,
+    `${system},,,,,Length,158,Binding Fitting,Please Mount My Bindings,,,1029.99,,`,
+  ].join("\r\n") + "\r\n";
+  const cell = (out: string, handle: string, fitting: RegExp, column: string, length = "") => {
+    const grid = parseCsv(out);
+    const ix = new Map(grid[0].map((h, i) => [h, i]));
+    const row = grid.slice(1).find((r) => r[ix.get("Handle")!] === handle && (!length || r[ix.get("Option1 Value")!] === length) && [r[ix.get("Option2 Value")!], r[ix.get("Option3 Value")!]].some((v) => fitting.test(v ?? "")));
+    return row?.[ix.get(column)!] ?? "";
+  };
+
+  it("prices the mounted variant the charge over its unmounted twin, keeping the sale it is on", () => {
+    const out = applyPlan(csv, { scope: { fitting: "package" }, operations: [{ kind: "setMountPrice", amount: 59, bindings: "drill" }] });
+    expect(out.refused).toBeUndefined();
+    // 25% off stays 25% off: Compare At up by the full 59, the price by three quarters of it.
+    expect(cell(out.csv, drill, /^Please Mount/, "Variant Compare At Price", "170")).toBe("2059.00");
+    expect(cell(out.csv, drill, /^Please Mount/, "Variant Price", "170")).toBe("1544.25");
+    expect(cell(out.csv, drill, /Do Not Mount/, "Variant Price", "170")).toBe("1500.00");
+    // A touring binding on the same ski, not on sale: the full amount on the price, no Compare At invented.
+    const grid = parseCsv(out.csv); const ix = new Map(grid[0].map((h, i) => [h, i]));
+    const atk = grid.slice(1).find((r) => r[ix.get("Option2 Value")!] === "ATK Raider 13 Evo" && /^Please Mount/.test(r[ix.get("Option3 Value")!]))!;
+    expect(atk[ix.get("Variant Price")!]).toBe("1859.00");
+    expect(atk[ix.get("Variant Compare At Price")!]).toBe("");
+    // The system binding was not asked for.
+    expect(cell(out.csv, system, /^Please Mount/, "Variant Price")).toBe("1029.99");
+    expect(out.changes.every((c) => c.handle === drill)).toBe(true);
+  });
+
+  it("does the skis that come with a binding when told, and leaves the drilled ones", () => {
+    const out = applyPlan(csv, { scope: { fitting: "package" }, operations: [{ kind: "setMountPrice", amount: 49, bindings: "system" }] });
+    expect(out.refused).toBeUndefined();
+    expect(cell(out.csv, system, /^Please Mount/, "Variant Price")).toBe("1048.99");
+    expect(cell(out.csv, drill, /^Please Mount/, "Variant Price", "170")).toBe("1530.00");
+    expect(out.changes.map((c) => c.handle)).toEqual([system]);
+  });
+});

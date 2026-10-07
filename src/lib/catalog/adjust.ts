@@ -20,6 +20,7 @@
 
 import { parseCsv } from "./csv";
 import { withoutGenerated } from "./generated-tags";
+import { isSystemBinding } from "./mount";
 
 export interface Scope {
   /** Vendor names, matched case-insensitively. Any one of them matches. */
@@ -116,7 +117,15 @@ export type Operation =
    */
   | { kind: "setTitleYear"; year: string; seo?: boolean }
   /** Swap one piece of wording in the title for another, wherever it appears. */
-  | { kind: "renameTitle"; find: string; replace: string; seo?: boolean };
+  | { kind: "renameTitle"; find: string; replace: string; seo?: boolean }
+  /**
+   * The fitting charge on a ski package: what "Please Mount My Bindings" costs over "Please Do
+   * Not Mount My Bindings" for the same length and binding. Set on the recommended retail, with
+   * the sale kept: Compare At moves by the amount and the price by the same share of it, so a
+   * package at 25% off stays at 25% off. `bindings` limits it to the drill-mount packages or the
+   * ones whose binding comes with the ski — see bindings.ts — and left out means every package.
+   */
+  | { kind: "setMountPrice"; amount: number; bindings?: "drill" | "system" };
 
 export interface Plan {
   scope: Scope;
@@ -363,9 +372,12 @@ export function applyPlan(text: string, plan: Plan): AdjustResult {
 
   // A handle's product columns live on its first row; every later row belongs to the same product.
   const firstRowOf = new Map<string, string[]>();
+  const rowsOf = new Map<string, string[][]>();
   for (const row of rows) {
     const handle = at(row, "Handle").trim();
-    if (handle && !firstRowOf.has(handle)) firstRowOf.set(handle, row);
+    if (!handle) continue;
+    if (!firstRowOf.has(handle)) firstRowOf.set(handle, row);
+    rowsOf.set(handle, [...(rowsOf.get(handle) ?? []), row]);
   }
 
   const asObject = (row: string[]): Record<string, string> => Object.fromEntries(header.map((h, i) => [h, row[i] ?? ""]));
@@ -426,6 +438,51 @@ export function applyPlan(text: string, plan: Plan): AdjustResult {
           if (price(at(row, "Variant Price")) === null) continue;
           const before = at(row, "Variant Price");
           if (set(row, "Variant Price", fmt(money(op.value)))) record("Variant Price", before, fmt(money(op.value)));
+          break;
+        }
+        case "setMountPrice": {
+          // Once per product, across all its rows: each length-and-binding's mounted variant is
+          // priced off its unmounted twin.
+          if (!isFirst) break;
+          const first = firstRowOf.get(handle) ?? row;
+          const names = ["Option1 Name", "Option2 Name", "Option3 Name"].map((c) => at(first, c));
+          const fit = names.findIndex((n) => /fitting|mount/i.test(n));
+          if (fit < 0) break;
+          const fitColumn = `Option${fit + 1} Value`;
+          const bindingAt = names.findIndex((n, i) => i !== fit && /binding/i.test(n));
+          const others = ["Option1 Value", "Option2 Value", "Option3 Value"].filter((_, i) => i !== fit);
+          const pairs = new Map<string, { unmounted?: string[]; mounted?: string[] }>();
+          for (const r of rowsOf.get(handle) ?? []) {
+            const v = at(r, fitColumn);
+            const which = /do\s*not\s*mount|don'?t\s*mount|unmounted|not\s*mounted|without/i.test(v) ? "unmounted" : /mount/i.test(v) ? "mounted" : null;
+            if (!which) continue;
+            const key = others.map((c) => at(r, c).trim()).join("\u0000");
+            const pair = pairs.get(key) ?? {};
+            pair[which] = r;
+            pairs.set(key, pair);
+          }
+          for (const pair of pairs.values()) {
+            if (!pair.unmounted || !pair.mounted) continue;
+            if (op.bindings) {
+              const binding = bindingAt >= 0 ? at(pair.unmounted, `Option${bindingAt + 1} Value`) : "";
+              const system = isSystemBinding(`${binding} ${title}`);
+              if ((op.bindings === "system") !== system) continue;
+            }
+            const unmountedPrice = price(at(pair.unmounted, "Variant Price"));
+            if (unmountedPrice === null) continue;
+            const unmountedCompare = price(at(pair.unmounted, "Variant Compare At Price"));
+            // The sale stays what it was: the amount lands on the recommended retail in full, and
+            // on the price by the same share the price is of the recommended retail.
+            const share = unmountedCompare && unmountedCompare > 0 ? unmountedPrice / unmountedCompare : 1;
+            const nextPrice = fmt(money(unmountedPrice + op.amount * share));
+            const beforePrice = at(pair.mounted, "Variant Price");
+            if (set(pair.mounted, "Variant Price", nextPrice)) record("Variant Price", beforePrice, nextPrice);
+            if (unmountedCompare !== null && index.has("Variant Compare At Price")) {
+              const nextCompare = fmt(money(unmountedCompare + op.amount));
+              const beforeCompare = at(pair.mounted, "Variant Compare At Price");
+              if (set(pair.mounted, "Variant Compare At Price", nextCompare)) record("Variant Compare At Price", beforeCompare, nextCompare);
+            }
+          }
           break;
         }
         // The rest are the product's own, and belong only on the row that carries them.

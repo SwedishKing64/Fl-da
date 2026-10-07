@@ -12,7 +12,7 @@
  * Told by the binding's name, as the shop writes it in the package's Binding Option or its title.
  * Anything it cannot place is taken as a drill mount, which is what nearly everything is.
  */
-const SYSTEM_BINDING = /\b(xpress|nx\s?\d|konect|freeflex|slr|joy\s?\d|pr\s?1\d|prd\s?\d|prw\s?\d|protector|z\s?1[02]\b|m\s?1[02]\s?gw|rs\s?1[01]|tpx|tpc|tcx|el\s?1[0-9]|elw|vmotion|track|system)\b/i;
+const SYSTEM_BINDING = /\b(xpress|xp\s?1\d|nx\s?\d|konect|freeflex|slr|joy\s?\d|pr\s?1\d|prd\s?\d|prw\s?\d|protector|z\s?1[02]\b|m\s?1[02]\s?gw|rs\s?1[01]|tpx|tpc|tcx|el\s?1[0-9]|elw|vmotion|track|system)\b/i;
 
 export function isSystemBinding(name: string): boolean {
   return SYSTEM_BINDING.test(name);

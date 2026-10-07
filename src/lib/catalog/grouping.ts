@@ -150,13 +150,19 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
     // its jackets, gloves and socks. Not a ski, board or pole, which the shop names by model alone
     // and genders in the tags. Men's and women's of one model also stop sharing a title this way.
     const who = audience(first.gender);
-    const hardgoods = /^(skis?|snowboards?|poles?|ski poles?)$/i.test(productType) || /^(skis?|snowboards?|poles?|goggles|helmets)$/i.test(group.rule?.category ?? "") || /\b(goggles?|helmets?)\b/i.test(`${title} ${first.category} ${first.productType}`);
+    // A ski boot is named by its model alone, like a ski: "Zero G Tour Pro 2027", not "Men's Zero
+    // G Tour Pro Ski Boots 2027". The gender goes in the tags. (A snowboard boot keeps the shop's
+    // "Men's … Snowboard Boots".)
+    const skiBoot = /^(ski boots|touring boots|alpine boots|race boots)$/i.test(productType);
+    const hardgoods = skiBoot || /^(skis?|snowboards?|poles?|ski poles?)$/i.test(productType) || /^(skis?|snowboards?|poles?|goggles|helmets)$/i.test(group.rule?.category ?? "") || /\b(goggles?|helmets?)\b/i.test(`${title} ${first.category} ${first.productType}`);
     // A name that is the shop's own — the line was joined to a listing — is left as the shop wrote
     // it: "Impact Wrist Guards" and "[ak] Endurance Socks" carry no audience on the shop's shelf.
     const shopNamed = (opts.listings ?? []).some((l) => normTitle(l.title.replace(/\s+20\d{2}$/, "")) === normTitle(title));
-    const titled = who && !hardgoods && !shopNamed && !/^(men'?s|women'?s|kids'?|youth|junior)\b/i.test(title)
-      ? `${{ mens: "Men's", womens: "Women's", kids: "Kids'" }[who]} ${asShopWritesIt(title)}`
-      : title;
+    // The kind word comes off a ski boot's name as well, wherever the supplier put it.
+    const bare = skiBoot ? title.replace(/\s*\b(ski|touring|alpine|race)?\s*boots?\b/gi, " ").replace(/\s{2,}/g, " ").trim() || title : title;
+    const titled = who && !hardgoods && !shopNamed && !/^(men'?s|women'?s|kids'?|youth|junior)\b/i.test(bare)
+      ? `${{ mens: "Men's", womens: "Women's", kids: "Kids'" }[who]} ${asShopWritesIt(bare)}`
+      : bare;
     // A ski the supplier sends already mounted — "HERO FIS GS FAC SPX15" — is a package, and is
     // named as one: "Hero FIS GS Fac 2026 inc SPX 15 Binding Package". See integratedBinding.
     const season = items.map((i) => i.season).find((s) => /^20\d{2}$/.test(s)) ?? "";

@@ -964,15 +964,17 @@ describe("the mounting charge on a ski package", () => {
     expect(atk[ix.get("Variant Compare At Price")!]).toBe("");
     // The system binding was not asked for.
     expect(cell(out.csv, system, /^Please Mount/, "Variant Price")).toBe("1029.99");
-    // A race package already charging $60 on the recommended retail is not brought down.
-    expect(cell(out.csv, dearer, /^Please Mount/, "Variant Compare At Price")).toBe("3959.99");
-    expect(out.changes.every((c) => c.handle === drill)).toBe(true);
+    // A race package charging $60 on the recommended retail comes down to the $59 as well, and
+    // its one-third discount is re-applied to the new recommended retail.
+    expect(cell(out.csv, dearer, /^Please Mount/, "Variant Compare At Price")).toBe("3958.99");
+    expect(cell(out.csv, dearer, /^Please Mount/, "Variant Price")).toBe("2639.32");
+    expect(new Set(out.changes.map((c) => c.handle))).toEqual(new Set([drill, dearer]));
   });
 
-  it("brings a dearer charge down only when told the amount is exact", () => {
-    const out = applyPlan(csv, { scope: { fitting: "package" }, operations: [{ kind: "setMountPrice", amount: 59, bindings: "drill", exact: true }] });
-    expect(cell(out.csv, dearer, /^Please Mount/, "Variant Compare At Price")).toBe("3958.99");
-    expect(new Set(out.changes.map((c) => c.handle))).toEqual(new Set([drill, dearer]));
+  it("leaves a dearer charge alone when told to only increase", () => {
+    const out = applyPlan(csv, { scope: { fitting: "package" }, operations: [{ kind: "setMountPrice", amount: 59, bindings: "drill", raiseOnly: true }] });
+    expect(cell(out.csv, dearer, /^Please Mount/, "Variant Compare At Price")).toBe("3959.99");
+    expect(out.changes.every((c) => c.handle === drill)).toBe(true);
   });
 
   it("does the skis that come with a binding when told, and leaves the drilled ones", () => {

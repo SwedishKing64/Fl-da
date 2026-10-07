@@ -123,11 +123,11 @@ export type Operation =
    * Not Mount My Bindings" for the same length and binding. Set on the recommended retail, with
    * the sale kept: Compare At moves by the amount and the price by the same share of it, so a
    * package at 25% off stays at 25% off. `bindings` limits it to the drill-mount packages or the
-   * ones whose binding comes with the ski — see mount.ts — and left out means every package. A
-   * package already charging more is left alone unless `exact` says to bring it down too: "the
-   * mount price is going up to $59" raises what is under; "make it exactly $59" sets it.
+   * ones whose binding comes with the ski — see mount.ts — and left out means every package. The
+   * difference is set to the amount, up or down; `raiseOnly` leaves a package already charging
+   * more as it is, for an instruction that says "at least" or "only increase".
    */
-  | { kind: "setMountPrice"; amount: number; bindings?: "drill" | "system"; exact?: boolean };
+  | { kind: "setMountPrice"; amount: number; bindings?: "drill" | "system"; raiseOnly?: boolean };
 
 export interface Plan {
   scope: Scope;
@@ -477,7 +477,7 @@ export function applyPlan(text: string, plan: Plan): AdjustResult {
             const mountedCompare = price(at(pair.mounted, "Variant Compare At Price"));
             const mountedPrice = price(at(pair.mounted, "Variant Price"));
             const charging = unmountedCompare !== null && mountedCompare !== null ? mountedCompare - unmountedCompare : mountedPrice !== null ? mountedPrice - unmountedPrice : null;
-            if (!op.exact && charging !== null && charging >= op.amount - 0.005) continue;
+            if (op.raiseOnly && charging !== null && charging >= op.amount - 0.005) continue;
             // The sale stays what it was: the amount lands on the recommended retail in full, and
             // on the price by the same share the price is of the recommended retail.
             const share = unmountedCompare && unmountedCompare > 0 ? unmountedPrice / unmountedCompare : 1;

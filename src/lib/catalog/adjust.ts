@@ -20,7 +20,7 @@
 
 import { parseCsv } from "./csv";
 import { withoutGenerated } from "./generated-tags";
-import { isSystemBinding } from "./mount";
+import { isSystemMount } from "./mount";
 
 export interface Scope {
   /** Vendor names, matched case-insensitively. Any one of them matches. */
@@ -467,7 +467,7 @@ export function applyPlan(text: string, plan: Plan): AdjustResult {
             if (!pair.unmounted || !pair.mounted) continue;
             if (op.bindings) {
               const binding = bindingAt >= 0 ? at(pair.unmounted, `Option${bindingAt + 1} Value`) : "";
-              const system = isSystemBinding(`${binding} ${title}`);
+              const system = isSystemMount(binding, title);
               if ((op.bindings === "system") !== system) continue;
             }
             const unmountedPrice = price(at(pair.unmounted, "Variant Price"));

@@ -127,7 +127,15 @@ export type Operation =
    * difference is set to the amount, up or down; `raiseOnly` leaves a package already charging
    * more as it is, for an instruction that says "at least" or "only increase".
    */
-  | { kind: "setMountPrice"; amount: number; bindings?: "drill" | "system"; raiseOnly?: boolean };
+  | { kind: "setMountPrice"; amount: number; bindings?: "drill" | "system"; raiseOnly?: boolean }
+  /**
+   * What the shop paid for it, per variant row: Shopify's "Cost per item". An exact figure goes on
+   * every variant row the scope matched, a row with a cost already or not — a cost is often never
+   * entered, and setting it is how it gets entered. A percentage moves the costs that are there,
+   * which is what a supplier's price rise is.
+   */
+  | { kind: "setCost"; value: number }
+  | { kind: "changeCost"; percent: number };
 
 export interface Plan {
   scope: Scope;
@@ -398,6 +406,7 @@ export function applyPlan(text: string, plan: Plan): AdjustResult {
     if (op.kind === "setVendor") return index.has("Vendor") ? [] : ["Vendor"];
     if (op.kind === "setTitleYear" || op.kind === "renameTitle") return titleColumns(op.seo).filter((c) => !index.has(c));
     if (op.kind === "setQuantity") return index.has("Variant Inventory Qty") ? [] : ["Variant Inventory Qty"];
+    if (op.kind === "setCost" || op.kind === "changeCost") return index.has("Cost per item") ? [] : ["Cost per item"];
     return index.has("Variant Price") ? [] : ["Variant Price"];
   }))];
   for (const column of missing) warnings.push(`The file has no "${column}" column, so that part of the instruction could not be applied.`);
@@ -566,6 +575,22 @@ export function applyPlan(text: string, plan: Plan): AdjustResult {
           const after = String(Math.round(op.value));
           const before = at(row, "Variant Inventory Qty");
           if (set(row, "Variant Inventory Qty", after)) record("Variant Inventory Qty", before, after);
+          break;
+        }
+        case "setCost": {
+          // A variant row carries a price; an image row carries neither, and gets no cost.
+          if (price(at(row, "Variant Price")) === null) break;
+          const after = fmt(money(op.value));
+          const before = at(row, "Cost per item");
+          if (set(row, "Cost per item", after)) record("Cost per item", before, after);
+          break;
+        }
+        case "changeCost": {
+          const current = price(at(row, "Cost per item"));
+          if (current === null) break;
+          const after = fmt(money(current * (1 + op.percent / 100)));
+          const before = at(row, "Cost per item");
+          if (set(row, "Cost per item", after)) record("Cost per item", before, after);
           break;
         }
         case "setTitleYear": {

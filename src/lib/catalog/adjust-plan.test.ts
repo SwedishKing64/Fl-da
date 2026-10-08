@@ -164,8 +164,12 @@ describe("describePlan", () => {
         { kind: "renameTitle", find: "Griffon Demo", replace: "Griffon 13" },
         { kind: "renameTitle", find: " EX DEMO", replace: "" },
         { kind: "setQuantity", value: 0 },
+        { kind: "setCost", value: 450 },
+        { kind: "changeCost", percent: -7.5 },
       ],
     });
+    expect(lines.find((l) => l.includes("cost per item to $450.00"))).toBeTruthy();
+    expect(lines.find((l) => l.includes("Bring the cost per item down by 7.5%"))).toBeTruthy();
     expect(lines[0]).toContain("vendor is Burton");
     expect(lines[1]).toContain("2027");
     // The URL is the thing a person will assume moved with the title. Every title line says it.

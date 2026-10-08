@@ -744,6 +744,38 @@ describe("renaming and restocking", () => {
   });
 });
 
+describe("the cost per item", () => {
+  const H = "Handle,Title,Vendor,Option1 Name,Option1 Value,Variant Price,Variant Compare At Price,Cost per item,Image Src";
+  const file = [
+    H,
+    "mach1-120,Mach1 120 2027,Tecnica,Size,265,1199.00,,615.00,",
+    "mach1-120,,,Size,275,1199.00,,,",
+    "mach1-120,,,,,,,,https://cdn.example.com/mach1.jpg",
+    "cochise-120,Cochise 120 2027,Tecnica,Size,275,1349.00,,722.00,",
+  ].join("\r\n") + "\r\n";
+  const costs = (out: string) => parseCsv(out).slice(1).map((r) => r[7]);
+
+  it("sets an exact cost on every variant row, the ones with no cost yet included, and on no image row", () => {
+    const out = applyPlan(file, { scope: { handles: ["mach1-120"] }, operations: [{ kind: "setCost", value: 630 }] });
+    expect(out.refused).toBeUndefined();
+    expect(costs(out.csv)).toEqual(["630.00", "630.00", "", "722.00"]);
+    expect(parseCsv(out.csv).slice(1).map((r) => r[5])).toEqual(["1199.00", "1199.00", "", "1349.00"]);
+    expect(out.changes.map((c) => [c.column, c.before, c.after])).toEqual([["Cost per item", "615.00", "630.00"], ["Cost per item", "", "630.00"]]);
+  });
+
+  it("moves the costs that are there by a percentage and leaves the price alone", () => {
+    const out = applyPlan(file, { scope: { vendors: ["Tecnica"] }, operations: [{ kind: "changeCost", percent: 5 }] });
+    expect(costs(out.csv)).toEqual(["645.75", "", "", "758.10"]);
+    expect(parseCsv(out.csv).slice(1).map((r) => r[5])).toEqual(["1199.00", "1199.00", "", "1349.00"]);
+    expect(costs(applyPlan(file, { scope: {}, operations: [{ kind: "changeCost", percent: -10 }] }).csv)).toEqual(["553.50", "", "", "649.80"]);
+  });
+
+  it("says so when the file has no cost column", () => {
+    const thin = "Handle,Title,Variant Price\r\nx,A ski,100.00\r\n";
+    expect(applyPlan(thin, { scope: {}, operations: [{ kind: "setCost", value: 50 }] }).warnings.join(" ")).toContain("Cost per item");
+  });
+});
+
 /**
  * The two things the Swany run could not do.
  *

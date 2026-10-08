@@ -137,6 +137,8 @@ export interface Plan {
 export interface Change {
   handle: string;
   title: string;
+  /** Which variant, where the change is to one of many: its option values, as "165cm · SPX 12". */
+  variant?: string;
   column: string;
   before: string;
   after: string;
@@ -402,8 +404,8 @@ export function applyPlan(text: string, plan: Plan): AdjustResult {
     if (!handle || !inScope.has(handle)) continue;
     const isFirst = firstRowOf.get(handle) === row;
     const title = at(firstRowOf.get(handle) ?? row, "Title");
-    const record = (column: string, before: string, after: string) => {
-      if (before !== after) changes.push({ handle, title, column, before, after });
+    const record = (column: string, before: string, after: string, variant?: string) => {
+      if (before !== after) changes.push({ handle, title, ...(variant ? { variant } : {}), column, before, after });
     };
 
     for (const op of plan.operations) {
@@ -447,6 +449,7 @@ export function applyPlan(text: string, plan: Plan): AdjustResult {
           // priced off its unmounted twin.
           if (!isFirst) break;
           const first = firstRowOf.get(handle) ?? row;
+          const vendor = at(first, "Vendor");
           const names = ["Option1 Name", "Option2 Name", "Option3 Name"].map((c) => at(first, c));
           const fit = names.findIndex((n) => /fitting|mount/i.test(n));
           if (fit < 0) break;
@@ -467,7 +470,7 @@ export function applyPlan(text: string, plan: Plan): AdjustResult {
             if (!pair.unmounted || !pair.mounted) continue;
             if (op.bindings) {
               const binding = bindingAt >= 0 ? at(pair.unmounted, `Option${bindingAt + 1} Value`) : "";
-              const system = isSystemMount(binding, title);
+              const system = isSystemMount(binding, title, vendor);
               if ((op.bindings === "system") !== system) continue;
             }
             const unmountedPrice = price(at(pair.unmounted, "Variant Price"));
@@ -482,12 +485,14 @@ export function applyPlan(text: string, plan: Plan): AdjustResult {
             // on the price by the same share the price is of the recommended retail.
             const share = unmountedCompare && unmountedCompare > 0 ? unmountedPrice / unmountedCompare : 1;
             const nextPrice = fmt(money(unmountedPrice + op.amount * share));
+            const mounted = pair.mounted;
+            const variant = ["Option1 Value", "Option2 Value", "Option3 Value"].map((c) => at(mounted, c).trim()).filter(Boolean).join(" · ");
             const beforePrice = at(pair.mounted, "Variant Price");
-            if (set(pair.mounted, "Variant Price", nextPrice)) record("Variant Price", beforePrice, nextPrice);
+            if (set(pair.mounted, "Variant Price", nextPrice)) record("Variant Price", beforePrice, nextPrice, variant);
             if (unmountedCompare !== null && index.has("Variant Compare At Price")) {
               const nextCompare = fmt(money(unmountedCompare + op.amount));
               const beforeCompare = at(pair.mounted, "Variant Compare At Price");
-              if (set(pair.mounted, "Variant Compare At Price", nextCompare)) record("Variant Compare At Price", beforeCompare, nextCompare);
+              if (set(pair.mounted, "Variant Compare At Price", nextCompare)) record("Variant Compare At Price", beforeCompare, nextCompare, variant);
             }
           }
           break;

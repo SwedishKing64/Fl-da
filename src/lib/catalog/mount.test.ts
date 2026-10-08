@@ -106,3 +106,22 @@ describe("a package is placed by its binding before its title", () => {
     expect(isSystemMount(binding, title)).toBe(system);
   });
 });
+
+describe("Look's SPX is a system binding on a Rossignol or Dynastar, which carry it on a rail or plate", () => {
+  it.each([
+    ["SPX 14", "Forza 70' Ti 2027 inc Spx 14 Binding Package", "Rossignol", true],
+    ["", "Forza 70° V-TI K 2026 inc SPX14 Binding Package", "Rossignol", true],
+    ["Look Spx 14 - Black", "Hero Elite ST Ti K inc Spx 14 Binding Package", "Rossignol", true],
+    ["SPX 12", "Hero Athlete GS 170-182 inc SPX 12 Rockerace Binding Package", "Rossignol", true],
+    ["", "Hero Athlete FIS SL Factory 157 inc Spx 15 Rockerace Binding Package", "Rossignol", true],
+    ["Spx 11", "Hero GS Pro 126-171 inc Spx 11 Binding Package", "Rossignol", true],
+    ["", "Speed Omeglass Master inc SPX 15 Rockerace Binding Package", "Dynastar", true],
+    ["SPX 11", "MR-D 166cm inc Binding Package", "ID One", false],
+    ["Look SPX10 - Black / Hot Red", "Mr S White inc Look SPX10 Binding Package", "ID One", false],
+    ["Pivot 14", "MR-D 166cm inc Binding Package", "ID One", false],
+    ["SPX 12 GW", "Mantra 88 inc SPX 12 Binding Package", "Volkl", false],
+    ["SPX 12 GW", "Enforcer 94 inc Binding Package", "", false],
+  ])("%s on %s by %s", (binding, title, vendor, system) => {
+    expect(isSystemMount(binding, title, vendor)).toBe(system);
+  });
+});

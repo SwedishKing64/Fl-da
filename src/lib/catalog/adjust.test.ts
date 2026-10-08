@@ -929,7 +929,7 @@ describe("the mounting charge on a ski package", () => {
   const H = "Handle,Title,Vendor,Type,Tags,Option1 Name,Option1 Value,Option2 Name,Option2 Value,Option3 Name,Option3 Value,Variant Price,Variant Compare At Price,Status";
   const drill = "mantra-88-2027-inc-marker-griffon-binding-package";
   const system = "experience-80-2026-inc-xpress-11-binding-package";
-  const dearer = "hero-fis-gs-2027-inc-spx-15-binding-package";
+  const dearer = "omen-team-2027-inc-look-pivot-15-binding-package";
   const csv = [
     H,
     `${drill},Mantra 88 2027 inc Marker Griffon Binding Package,Volkl,Skis,"2027, ski packages",Length,170,Binding Option,Marker Griffon - Black,Binding Fitting,Please Do Not Mount My Bindings,1500.00,2000.00,active`,
@@ -940,7 +940,7 @@ describe("the mounting charge on a ski package", () => {
     `${drill},,,,,Length,177,Binding Option,ATK Raider 13 Evo,Binding Fitting,Please Mount My Bindings,1840.00,,`,
     `${system},Experience 80 2026 inc Xpress 11 Binding Package,Rossignol,Skis,"2026, ski packages",Length,158,Binding Fitting,Please Do Not Mount My Bindings,,,999.99,,active`,
     `${system},,,,,Length,158,Binding Fitting,Please Mount My Bindings,,,1029.99,,`,
-    `${dearer},Hero FIS GS 2027 inc SPX 15 Binding Package,Rossignol,Skis,"2027, ski packages",Length,188,Binding Fitting,Please Do Not Mount My Bindings,,,2599.99,3899.99,active`,
+    `${dearer},Omen Team 2027 inc Look Pivot 15 Binding Package,Armada,Skis,"2027, ski packages",Length,188,Binding Fitting,Please Do Not Mount My Bindings,,,2599.99,3899.99,active`,
     `${dearer},,,,,Length,188,Binding Fitting,Please Mount My Bindings,,,2639.99,3959.99,`,
   ].join("\r\n") + "\r\n";
   const cell = (out: string, handle: string, fitting: RegExp, column: string, length = "") => {

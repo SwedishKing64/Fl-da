@@ -46,12 +46,22 @@ const SYSTEM_BINDING = new RegExp(
   "i",
 );
 
+/**
+ * Look's SPX is both. Sold flat it is drilled, and on an ID One or a Majesty it is. But Rossignol
+ * and Dynastar never sell it flat: their piste skis carry it on a Konect rail (the "K" in "Forza
+ * 70° V-Ti K", "Hero Elite ST Ti K"), their race skis on an R20/R21/R22 plate the factory fitted,
+ * which the Rockerace slides onto. No drilling on either, so on those skis it is a system binding.
+ */
+const SPX = /\b(spx\s?\d*|rockerace)\b/i;
+const ON_A_PLATE = /\b(rossignol|dynastar)\b/i;
+
 /** A name that is a drill mount whatever else it says. Konect is the one rail SPX. */
 const DRILL_BINDING = /\b(atk|fritschi|vipec|tecton|raider|crest|dynafit|rottefella|nnn\w*|xplore|alpinist|kingpin|duke|pivot|griffon|squire|strive|jester|warden|attack|spx\s?\d*|rockerace|mnc|s\/lab|shift\s?2|kid\s?\d+|comp\s?j)\b/i;
 
-function place(name: string): boolean | null {
+function place(name: string, vendor = ""): boolean | null {
   if (!name.trim()) return null;
   if (/konect/i.test(name)) return true;
+  if (SPX.test(name) && ON_A_PLATE.test(vendor)) return true;
   if (DRILL_BINDING.test(name)) return false;
   if (SYSTEM_BINDING.test(name)) return true;
   return null;
@@ -64,8 +74,8 @@ export function isSystemBinding(name: string): boolean {
 
 /**
  * Whether a package is on a system binding, told first by its Binding Option and only then, when
- * that says nothing either way, by its title.
+ * that says nothing either way, by its title. The vendor settles the SPX question.
  */
-export function isSystemMount(binding: string, title: string): boolean {
-  return place(binding) ?? place(title) ?? false;
+export function isSystemMount(binding: string, title: string, vendor = ""): boolean {
+  return place(binding, vendor) ?? place(title, vendor) ?? false;
 }

@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { joinOrderAction, readPageAction, rememberListingsAction, logAdjustmentAction, planAdjustmentAction, readInstructionSheetAction, readInvoiceAction, readReferenceAction, readSheetAgainstFilesAction } from "@/app/(catalog)/actions";
 import { applyPlan, describeFile, foldPlans, isWholeFile, whyNoMatch, type AdjustResult, type FoldStep, type Plan } from "@/lib/catalog/adjust";
-import { csvFilename } from "@/lib/catalog/csv";
+import { csvFilename, escapeCsvField } from "@/lib/catalog/csv";
 import { reconcile, type InvoiceFields, type Reconciliation } from "@/lib/catalog/reconcile";
 import { buildDelivery, joinToReference, type FreshProduct } from "@/lib/catalog/delivery";
 import { deliveryAsked, narrowToWindow, parseWindow } from "@/lib/catalog/deliveries";
@@ -14,7 +14,7 @@ import { listingsFromCsv } from "@/lib/catalog/shop-memory";
 import type { CanonicalLineItem } from "@/lib/catalog/types";
 import type { InvoiceRead } from "@/lib/catalog/invoice";
 import { fitsUpload, looksLikeImage, shrinkImage, tooBig } from "@/app/(catalog)/shrink";
-import { Alert, Button, Card, INPUT, cx } from "@/app/(catalog)/ui";
+import { Alert, Button, Card, INPUT, INPUT_INLINE, cx } from "@/app/(catalog)/ui";
 import { ChangedCells } from "./ChangedCells";
 
 /**
@@ -228,6 +228,11 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
 
   const [instruction, setInstruction] = useState("");
   const [preview, setPreview] = useState<Preview | null>(null);
+  // Narrows the preview's list of changes to the products whose name, handle, variant or value
+  // contains this. A run over three hundred packages is checked by looking for the ones that
+  // should not be in it, and that needs every change on the page and a way to find one.
+  const [previewFilter, setPreviewFilter] = useState("");
+  const clearPreview = () => { setPreview(null); setPreviewFilter(""); };
   const [busy, setBusy] = useState<"files" | "sheet" | "invoice" | "reference" | "planning" | "applying" | null>(null);
   const [progress, setProgress] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -249,7 +254,7 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
   const [opened, setOpened] = useState<string | null>(null);
 
   async function takeCsvs(files: FileList | File[]) {
-    setBusy("files"); setError(null); setPreview(null); setSaved(null);
+    setBusy("files"); setError(null); clearPreview(); setSaved(null);
     const added: Sheet[] = [];
     const rejected: string[] = [];
     try {
@@ -317,7 +322,7 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
    */
   async function takeDocuments(files: File[]) {
     if (files.length === 1) return takeInvoice(files[0]);
-    setBusy("invoice"); setError(null); setPreview(null); setSaved(null);
+    setBusy("invoice"); setError(null); clearPreview(); setSaved(null);
     const readings: Array<{ file: File; data: Invoice | null; ordered: number }> = [];
     try {
       for (const file of files) {
@@ -419,7 +424,7 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
    * each one is.
    */
   async function takeSheet(file: File) {
-    setBusy("sheet"); setError(null); setPreview(null); setRows([]); setSheetNote(null); setOpen(null); setConfirmedWhole([]);
+    setBusy("sheet"); setError(null); clearPreview(); setRows([]); setSheetNote(null); setOpen(null); setConfirmedWhole([]);
     try {
       const sent = await shrinkImage(file);
       if (!fitsUpload(sent.file.size)) { setError(tooBig(file, sent.file.size)); return; }
@@ -450,7 +455,7 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
    * needs to leave the machine. Only the invoice itself goes to the server, and only to be read.
    */
   async function takeInvoice(file: File) {
-    setBusy("invoice"); setError(null); setPreview(null); setSaved(null);
+    setBusy("invoice"); setError(null); clearPreview(); setSaved(null);
     try {
       const sent = await shrinkImage(file);
       if (!fitsUpload(sent.file.size)) { setError(tooBig(file, sent.file.size)); return; }
@@ -658,7 +663,7 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
     const brandsKept = invoice ? brandsAsked(text, brandsOnOrder) : null;
     if (brandsKept) {
       const off = brandsOnOrder.filter((b) => !brandsKept.includes(b));
-      setBrandsOff(off); setInstruction(""); setPreview(null); setError(null);
+      setBrandsOff(off); setInstruction(""); clearPreview(); setError(null);
       // One brand kept is also whose delivery this is, for whatever has to be built.
       if (brandsKept.length === 1 && !vendor.trim()) setVendor(brandsKept[0]);
       setSaved(`Only ${brandsKept.join(" and ")}: ${off.join(" and ")} ${off.length === 1 ? "is" : "are"} set aside, and the delivery above is now the ${brandsKept.join(" and ")} lines`);
@@ -668,13 +673,13 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
     if (asked) {
       const w = parseWindow(asked);
       if (w) {
-        setDelivery(asked); setInstruction(""); setPreview(null); setError(null);
+        setDelivery(asked); setInstruction(""); clearPreview(); setError(null);
         const share = narrowToWindow(invoice!.lines, w);
         setSaved(`Only the ${asked} delivery: ${share.lines.length} of ${invoice!.lines.length} lines on ${invoice!.filename} are due then, and the delivery above is now those${share.undated > 0 ? ` (${share.undated} of them give no date, so they are kept)` : ""}`);
         return;
       }
     }
-    setBusy("planning"); setError(null); setPreview(null); setSaved(null); setConfirmWholeFile(false);
+    setBusy("planning"); setError(null); clearPreview(); setSaved(null); setConfirmWholeFile(false);
     try {
       // One reading, grounded in everything across all the loaded files.
       const merge = (pick: (s: Sheet) => string[]) => [...new Set(sheets.flatMap(pick))].sort();
@@ -738,7 +743,7 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
       setError(`${out.refused.length} change${out.refused.length === 1 ? " was" : "s were"} left out — ${out.refused.length === 1 ? "it" : "they"} failed the check that nothing moves except what was asked for. Everything else in the group was applied.`);
     }
     setBusy(null);
-    setPreview(null);
+    clearPreview();
   }
 
   function apply() {
@@ -768,7 +773,7 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
     }]);
     setRows((current) => current.map((r) => ({ ...r, results: measure(r, nextSheets) })));
     setInstruction("");
-    setPreview(null);
+    clearPreview();
     setConfirmWholeFile(false);
     setSaved(null);
   }
@@ -787,7 +792,7 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
     // The files are what was undone. Rows already marked applied stay marked — reading the sheet
     // again is the clean way to start it over.
     setRows((current) => current.map((r) => ({ ...r, results: measure(r, nextSheets) })));
-    setPreview(null);
+    clearPreview();
     setSaved(null);
   }
 
@@ -841,6 +846,24 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
   const wholeFile = preview ? isWholeFile(preview.plan.scope) : false;
   const refused = preview?.results.some((r) => r.result.refused) === true;
   const totalChanges = countChanges(preview?.results ?? []);
+  const allChanges = (preview?.results ?? []).flatMap((r) => r.result.changes.map((c) => ({ file: r.name, c })));
+  const previewProducts = new Set(allChanges.map((r) => r.c.handle)).size;
+  const needle = previewFilter.trim().toLowerCase();
+  const shownChanges = needle
+    ? allChanges.filter((r) => [r.c.title, r.c.handle, r.c.variant ?? "", r.c.column, r.c.before, r.c.after, r.file].some((v) => v.toLowerCase().includes(needle)))
+    : allChanges;
+
+  /** The whole list of changes as a sheet, to be gone through at leisure or kept with the run. */
+  function downloadChanges() {
+    const head = ["File", "Product", "Handle", "Variant", "Column", "Now", "After"];
+    const lines = [head, ...allChanges.map((r) => [r.file, r.c.title, r.c.handle, r.c.variant ?? "", r.c.column, r.c.before, r.c.after])]
+      .map((cells) => cells.map(escapeCsvField).join(","));
+    const url = URL.createObjectURL(new Blob([lines.join("\n") + "\n"], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url; link.download = "changes-to-check.csv";
+    document.body.appendChild(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
   const totalMatched = countMatched(preview?.results ?? []);
   const blocked = preview !== null && preview.blocked.length > 0;
   const nothingToDo = preview !== null && !refused && !blocked && totalChanges === 0;
@@ -972,7 +995,7 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
                       </Button>
                     )}
                     <Button size="sm" variant={touched(s) ? "primary" : undefined} onClick={() => setSaved(download(s))}>Download</Button>
-                    <Button size="sm" variant="danger" onClick={() => { setSheets((x) => x.filter((y) => y.name !== s.name)); setPreview(null); setRows([]); setSheetNote(null); setOpened(null); }}>Remove</Button>
+                    <Button size="sm" variant="danger" onClick={() => { setSheets((x) => x.filter((y) => y.name !== s.name)); clearPreview(); setRows([]); setSheetNote(null); setOpened(null); }}>Remove</Button>
                   </div>
                 </div>
                 {opened === s.name && touched(s) && (
@@ -1427,7 +1450,7 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
 
           <label className="block text-sm">
             <span className="mb-1 block font-medium text-[var(--ink-2)]">{feed.length > 0 ? "And then…" : "Say it the way you would say it to someone"}</span>
-            <textarea rows={2} value={instruction} onChange={(e) => { setInstruction(e.target.value); setPreview(null); }} className={INPUT} placeholder={recent ? "The products you just edited: add the 2027 tag and put it in the title" : "Put all the Karbon jackets 30% off and into clearance"} />
+            <textarea rows={2} value={instruction} onChange={(e) => { setInstruction(e.target.value); clearPreview(); }} className={INPUT} placeholder={recent ? "The products you just edited: add the 2027 tag and put it in the title" : "Put all the Karbon jackets 30% off and into clearance"} />
             <span className="mt-1 block text-xs text-[var(--ink-soft)]">Each one applies on top of the last, across every file, and any of them can be undone. Prices and tags, and also titles ({"\u201c"}make the Volkl skis 2027{"\u201d"}) and stock on hand. A title change never moves the product{"\u2019"}s URL.</span>
           </label>
           <div className="mt-3 flex flex-wrap gap-2">
@@ -1510,11 +1533,27 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
                       <p className="mt-1 text-sm">Every one of them already carries what you asked for, so there is nothing to change.</p>
                     </>
                   )}
-                  <div className="mt-3"><Button onClick={() => setPreview(null)}>Discard</Button></div>
+                  <div className="mt-3"><Button onClick={() => clearPreview()}>Discard</Button></div>
                 </Alert>
               ) : (
                 <>
-                  <div className="mt-3 max-h-80 overflow-auto rounded-lg border border-[var(--line-soft)]">
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <input
+                      id="preview-filter"
+                      type="search"
+                      value={previewFilter}
+                      onChange={(e) => setPreviewFilter(e.target.value)}
+                      placeholder="Find a product, variant or value in the list"
+                      className={cx(INPUT_INLINE, "w-72 max-w-full py-1.5")}
+                    />
+                    <span className="text-xs text-[var(--ink-soft)]">
+                      {shownChanges.length === allChanges.length
+                        ? <>{previewProducts} product{previewProducts === 1 ? "" : "s"}, every change shown.</>
+                        : <>{shownChanges.length} of {allChanges.length} change{allChanges.length === 1 ? "" : "s"} shown.</>}
+                    </span>
+                    <Button size="sm" onClick={downloadChanges}>Download the list</Button>
+                  </div>
+                  <div className="mt-2 max-h-[32rem] overflow-auto rounded-lg border border-[var(--line-soft)]">
                     <table className="w-full text-xs">
                       <thead className="sticky top-0 bg-[var(--rubin-tint)] text-left">
                         <tr>
@@ -1526,10 +1565,10 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
                         </tr>
                       </thead>
                       <tbody>
-                        {preview.results.flatMap((r) => r.result.changes.map((c) => ({ file: r.name, c }))).slice(0, 200).map((row, i) => (
+                        {shownChanges.map((row, i) => (
                           <tr key={i} className="border-t border-[var(--line-soft)] align-top">
                             {sheets.length > 1 && <td className="whitespace-nowrap px-2.5 py-1.5 text-[var(--ink-soft)]">{row.file}</td>}
-                            <td className="px-2.5 py-1.5"><div className="font-medium">{row.c.title || row.c.handle}</div><div className="font-mono text-[10px] text-[var(--ink-soft)]">{row.c.handle}</div></td>
+                            <td className="px-2.5 py-1.5"><div className="font-medium">{row.c.title || row.c.handle}</div>{row.c.variant && <div className="text-[var(--ink-soft)]">{row.c.variant}</div>}<div className="font-mono text-[10px] text-[var(--ink-soft)]">{row.c.handle}</div></td>
                             <td className="whitespace-nowrap px-2.5 py-1.5 text-[var(--ink-soft)]">{row.c.column}</td>
                             <td className="px-2.5 py-1.5"><span className="line-clamp-2 text-[var(--ink-soft)]">{row.c.before || "—"}</span></td>
                             <td className={cx("px-2.5 py-1.5 font-medium", row.c.column === "Variant Price" && "text-[var(--violet)]")}><span className="line-clamp-2">{row.c.after || "—"}</span></td>
@@ -1538,10 +1577,10 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
                       </tbody>
                     </table>
                   </div>
-                  {totalChanges > 200 && <p className="mt-2 text-xs text-[var(--ink-soft)]">Showing the first 200 of {totalChanges}.</p>}
+                  {shownChanges.length === 0 && <p className="mt-2 text-xs text-[var(--ink-soft)]">Nothing in the list has &ldquo;{previewFilter}&rdquo; in it.</p>}
                   <div className="mt-4 flex flex-wrap items-center gap-3">
                     <Button variant="primary" disabled={wholeFile && !confirmWholeFile} onClick={apply}>Apply this</Button>
-                    <Button onClick={() => setPreview(null)}>Discard</Button>
+                    <Button onClick={() => clearPreview()}>Discard</Button>
                   </div>
                 </>
               )}

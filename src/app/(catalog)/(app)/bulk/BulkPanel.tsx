@@ -539,7 +539,7 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
       setProgress("");
     }
     /**
-     * The pages somebody linked, read before anything is built. One request per page, two at a
+     * The pages somebody linked, read before anything is built. One request per page, three at a
      * time, each with its own time limit; a page that cannot be read is said so and its product is
      * built without it, like every product that was given no link at all.
      */
@@ -585,7 +585,9 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
           setProgress(`Reading the product pages — ${done} of ${asked.length}…`);
         }
       };
-      await Promise.all([worker(), worker()]);
+      // Three at a time: each is its own request with its own time limit, and a delivery can have
+      // two dozen pages linked.
+      await Promise.all([worker(), worker(), worker()]);
       setLinkNotes(notes);
       setProgress("");
     }
@@ -1419,8 +1421,9 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
 
               <div className="flex flex-wrap items-center gap-2">
                 <Button variant="primary" disabled={busy !== null || (placed === 0 && !(buildNew && toBuild > 0))} onClick={applyDeliveryNow}>
-                  {busy === "applying" ? "Working…" : `${applied === (order?.filename ?? "") && order ? "Apply the delivery again" : "Apply the delivery"} — ${placed} carry-over${placed === 1 ? "" : "s"}${buildNew && toBuild > 0 ? `, ${toBuild} to build` : ""}`}
+                  {busy === "applying" ? progress || "Working…" : `${applied === (order?.filename ?? "") && order ? "Apply the delivery again" : "Apply the delivery"} — ${placed} carry-over${placed === 1 ? "" : "s"}${buildNew && toBuild > 0 ? `, ${toBuild} to build` : ""}`}
                 </Button>
+                {busy === "applying" && progress && <span className="text-xs text-[var(--ink-soft)]">Each page is given a minute or so; one that takes longer is built without it, and can be read again afterwards.</span>}
                 {placed === 0 && !buildNew && <span className="text-xs text-[var(--ink-soft)]">{whyNothing(invoice, against)}</span>}
                 {placed === 0 && buildNew && toBuild > 0 && <span className="text-xs text-[var(--ink-soft)]">Nothing on this invoice is in the loaded exports, so all of it is built. {whyNothing(invoice, against)}</span>}
               </div>

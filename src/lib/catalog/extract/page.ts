@@ -18,6 +18,15 @@ import { retrying } from "../api-errors";
 import { cleanProductUrl, type PageDetails } from "../page-types";
 
 const MAX_BYTES = 3 * 1024 * 1024;
+/**
+ * How long one page may take, all in. The fetch has its own fifteen seconds; the rest is the
+ * model. Without a limit a read that the service is slow to answer sits for the SDK's ten minutes
+ * and is then retried, and a delivery of two dozen linked pages shows "Working…" for an hour. A
+ * page that runs out of time is built without, like one that could not be reached.
+ */
+export const PAGE_BUDGET_MS = 75_000;
+/** The retries the SDK makes on its own, each inside what is left of the budget. */
+const MODEL_RETRIES = 2;
 const MAX_TEXT = 28_000;
 const MAX_IMAGES = 40;
 const BROWSER = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
@@ -268,15 +277,23 @@ If the page is not for this product, say so with confident false and report noth
 let client: Anthropic | null = null;
 const getClient = (): Anthropic => (client ??= new Anthropic({ maxRetries: 6 }));
 
-export type AskPage = (system: string, content: string) => Promise<string | undefined>;
-const askModel: AskPage = async (system, content) => {
+/** A read's time limit: when it must be done by, and what that leaves now. */
+export interface Deadline { at: number }
+export const deadline = (ms = PAGE_BUDGET_MS): Deadline => ({ at: Date.now() + ms });
+const left = (d: Deadline): number => Math.max(1_000, d.at - Date.now());
+const outOfTime = (d: Deadline): boolean => d.at - Date.now() < 5_000;
+/** The SDK's request options for one call: the time that is left, and few retries inside it. */
+const within = (d: Deadline) => ({ timeout: left(d), maxRetries: MODEL_RETRIES, signal: AbortSignal.timeout(left(d)) });
+
+export type AskPage = (system: string, content: string, deadline?: Deadline) => Promise<string | undefined>;
+const askModel: AskPage = async (system, content, d = deadline()) => {
   const response = await retrying(() => getClient().messages.stream({
     model: EXTRACTION_MODEL,
     max_tokens: 5000,
     system,
     output_config: { format: zodOutputFormat(ReadSchema), effort: "low" },
     messages: [{ role: "user", content }],
-  }).finalMessage());
+  }, within(d)).finalMessage(), outOfTime(d) ? [] : [2_000, 5_000]);
   return response.content.find((b): b is Anthropic.TextBlock => b.type === "text")?.text;
 };
 
@@ -304,7 +321,7 @@ export function basicDetails(d: Distilled, note = ""): PageDetails {
   };
 }
 
-export async function extractFromPage(d: Distilled, hint: PageHint, ask: AskPage = askModel): Promise<PageDetails> {
+export async function extractFromPage(d: Distilled, hint: PageHint, ask: AskPage = askModel, by: Deadline = deadline()): Promise<PageDetails> {
   const content = [
     describeHint(hint),
     "",
@@ -321,7 +338,7 @@ export async function extractFromPage(d: Distilled, hint: PageHint, ask: AskPage
     ...d.images.map((c, i) => `${i + 1}. ${c.url}${c.alt ? `  — ${c.alt}` : ""}`),
   ].filter((l) => l !== "").join("\n");
 
-  const text = await ask(SYSTEM, content);
+  const text = await ask(SYSTEM, content, by);
   if (!text) return basicDetails(d, "The page could not be read by the model, so only what it declares about itself was taken.");
   const parsed = ReadSchema.safeParse(JSON.parse(text));
   if (!parsed.success) return basicDetails(d, "The model's reading of the page could not be used, so only what it declares about itself was taken.");
@@ -358,8 +375,8 @@ Quote the manufacturer's wording; do not paraphrase it and do not write marketin
 
 const FetchedSchema = ReadSchema.omit({ imageNumbers: true });
 
-export async function readViaModelFetch(link: string, hint: PageHint): Promise<PageDetails | null> {
-  if (!aiAvailable()) return null;
+export async function readViaModelFetch(link: string, hint: PageHint, by: Deadline = deadline()): Promise<PageDetails | null> {
+  if (!aiAvailable() || outOfTime(by)) return null;
   const research = await retrying(() => getClient().messages.stream({
     model: EXTRACTION_MODEL,
     max_tokens: 8000,
@@ -368,16 +385,16 @@ export async function readViaModelFetch(link: string, hint: PageHint): Promise<P
     output_config: { effort: "low" },
     tools: [{ type: "web_fetch_20260209", name: "web_fetch", max_uses: 2 }],
     messages: [{ role: "user", content: `${describeHint(hint)}\n\nThe product's page: ${link}` }],
-  }).finalMessage());
+  }, within(by)).finalMessage(), []);
   const notes = research.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("\n").trim();
-  if (!notes) return null;
+  if (!notes || outOfTime(by)) return null;
   const shaped = await retrying(() => getClient().messages.stream({
     model: EXTRACTION_MODEL,
     max_tokens: 4000,
     system: "Turn the notes into fields. Copy what the notes establish and leave everything else empty — never fill a gap with something plausible. Keep the manufacturer's wording.",
     output_config: { format: zodOutputFormat(FetchedSchema), effort: "low" },
     messages: [{ role: "user", content: `${describeHint(hint)}\n\nNotes on the page ${link}:\n${notes}` }],
-  }).finalMessage());
+  }, within(by)).finalMessage(), []);
   const text = shaped.content.find((b): b is Anthropic.TextBlock => b.type === "text")?.text;
   if (!text) return null;
   const parsed = FetchedSchema.safeParse(JSON.parse(text));
@@ -401,13 +418,14 @@ export async function readViaModelFetch(link: string, hint: PageHint): Promise<P
 }
 
 /** Fetch a product's page and read it. Throws PageError, with something fit to show, when it cannot. */
-export async function readProductPage(link: string, hint: PageHint, deps: { fetcher?: typeof fetch; ask?: AskPage; viaModel?: typeof readViaModelFetch } = {}): Promise<PageDetails> {
+export async function readProductPage(link: string, hint: PageHint, deps: { fetcher?: typeof fetch; ask?: AskPage; viaModel?: typeof readViaModelFetch; budgetMs?: number } = {}): Promise<PageDetails> {
   const viaModel = deps.viaModel ?? readViaModelFetch;
+  const by = deadline(deps.budgetMs);
   // A page this server cannot get is tried once more through the API's own fetch, if there is one.
   const fallback = async (why: PageError): Promise<PageDetails> => {
     if (/not a public website|does not exist|not a web page|not a web address/i.test(why.message)) throw why;
     if (!aiAvailable() && !deps.viaModel) throw why;
-    const found = await viaModel(link, hint).catch(() => null);
+    const found = await viaModel(link, hint, by).catch(() => null);
     if (found) return found;
     throw why;
   };
@@ -425,8 +443,11 @@ export async function readProductPage(link: string, hint: PageHint, deps: { fetc
   }
   if (!aiAvailable() && !deps.ask) return basicDetails(d);
   try {
-    return await extractFromPage(d, hint, deps.ask);
-  } catch {
-    return basicDetails(d, "The model could not read the page just now, so only what the page declares about itself was taken.");
+    return await extractFromPage(d, hint, deps.ask, by);
+  } catch (err) {
+    const slow = outOfTime(by) || (err instanceof Error && /timeout|abort/i.test(err.name + err.message));
+    return basicDetails(d, slow
+      ? "The model took too long over the page, so only what the page declares about itself was taken. Read the pages again to try it once more."
+      : "The model could not read the page just now, so only what the page declares about itself was taken.");
   }
 }

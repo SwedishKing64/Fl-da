@@ -746,7 +746,10 @@ export async function readPageAction(input: { url: string; title: string; brand?
     if ("error" in cleaned) return { ok: false, error: cleaned.error || "No link." };
     const { readProductPage, PageError } = await import("@/lib/catalog/extract/page");
     try {
-      return { ok: true, data: await readProductPage(cleaned.url, { title: input.title, brand: input.brand, colours: (input.colours ?? []).slice(0, 6) }) };
+      const data = await readProductPage(cleaned.url, { title: input.title, brand: input.brand, colours: (input.colours ?? []).slice(0, 6) });
+      // Each picture set on its square and kept here, so it is the same size as every other on the shop.
+      const { hostPictures } = await import("@/lib/catalog/pictures");
+      return { ok: true, data: { ...data, images: await hostPictures(data.images, input.title) } };
     } catch (err) {
       if (err instanceof PageError) return { ok: false, error: err.message };
       throw err;

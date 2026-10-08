@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireApiUser } from "@/lib/catalog/auth";
 import { prisma } from "@/lib/catalog/db";
+import { framePicture } from "@/lib/catalog/pictures";
 import { saveFile, publicFileUrl, filePath } from "@/lib/catalog/storage";
 import { getSettings } from "@/lib/catalog/settings";
 
@@ -25,7 +26,10 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/catalog/pro
   for (const file of files) {
     if (!IMAGE_TYPES.has(file.type)) return NextResponse.json({ error: `${file.name}: only JPEG, PNG, GIF or WebP images are accepted` }, { status: 400 });
     if (file.size > 20 * 1024 * 1024) return NextResponse.json({ error: `${file.name}: images must be under 20MB` }, { status: 400 });
-    const rel = await saveFile("images", file.name, Buffer.from(await file.arrayBuffer()));
+    // Set on its square like every other picture, where it can be read; kept as sent where not.
+    const raw = Buffer.from(await file.arrayBuffer());
+    const framed = await framePicture(raw).catch(() => null);
+    const rel = await saveFile("images", framed ? file.name.replace(/\.[^.]+$/, "") + ".jpg" : file.name, framed ? framed.data : raw);
     const publicUrl = publicFileUrl(rel, settings.publicBaseUrl);
     if (!publicUrl) warning = "No public base URL is configured in Settings, so this image will not be reachable by Shopify until one is set.";
     const url = publicUrl ?? `${req.nextUrl.origin}${filePath(rel)}`;

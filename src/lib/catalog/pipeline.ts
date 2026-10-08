@@ -27,6 +27,7 @@ import { applyTemplates, type ProductTemplateLike } from "./templates";
 import { allocateFreight, exGstCostAud, priceVariant } from "./pricing";
 import { getSettings } from "./settings";
 import { checkImageUrl, findLibraryImages, recordLibraryImages } from "./images";
+import { framePicture, hostPictures } from "./pictures";
 import { generateCsvParts, validateCsvFile, validateProducts } from "./csv";
 import { toCsvProducts } from "./pipeline-pure";
 import { repairForExport, type Repair } from "./repair";
@@ -243,7 +244,9 @@ export async function ingestFile(batchId: string, given: { filename: string; mim
     if (effective === "PRODUCT_PHOTO" && PHOTO_TYPES.has(file.mimeType)) {
       // A photo of a product: keep it as an image, not as line items.
       const settings = await getSettings();
-      const ref = await saveFile("images", file.filename, file.buffer);
+      // Set on its square like every other picture, where it can be read; kept as sent where not.
+      const framed = await framePicture(file.buffer).catch(() => null);
+      const ref = await saveFile("images", framed ? file.filename.replace(/\.[^.]+$/, "") + ".jpg" : file.filename, framed ? framed.data : file.buffer);
       const url = publicFileUrl(ref, settings.publicBaseUrl) ?? `${file.origin ?? ""}${filePath(ref)}`;
       const seen = table.rows[0];
       const hint = seen ? [seen.brand, seen.title, seen.modelCode, seen.colour].filter(Boolean).join(" ") : "";
@@ -779,6 +782,9 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
 
   let variantCount = 0;
   let sort = 0;
+  // Every product's pictures share one allowance: past it they are left as the addresses they
+  // were, so a slow brand site cannot make a build of fifty products wait on each.
+  const picturesUntil = Date.now() + 90_000;
   for (const g of grouped) {
     // A seasonal product carries its year after the name — the same products that carry a year tag.
     // The SEO title is that title with the brand in front of it, which is the one place it appears.
@@ -790,7 +796,7 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
     const modelCode = g.variants.map((v) => v.item.modelCode).find(Boolean) ?? "";
     const images: Array<{ url: string; source: string; altText: string; validated?: boolean }> = [];
     const urls = new Set<string>();
-    for (const url of g.imageUrls) {
+    for (const url of await hostPictures([...new Set(g.imageUrls)], title, { until: picturesUntil })) {
       if (urls.has(url)) continue;
       urls.add(url);
       images.push({ url, source: "SUPPLIER", altText: g.title });

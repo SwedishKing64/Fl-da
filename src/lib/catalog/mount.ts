@@ -3,7 +3,7 @@
  *
  * The shop charges to fit a binding, and charges differently for the two kinds. A SYSTEM binding
  * comes with the ski and clicks onto a rail the factory put there — Rossignol's Xpress and NX
- * Konect, Look's Lowride, Head's PR, JRS, Joy and SLR, Tyrolia's PR and PRD, Atomic's M 10/M 12,
+ * Konect, Look's Lowride and Kid 4, Head's PR, JRS, Joy and SLR, Tyrolia's PR and PRD, Atomic's M 10/M 12,
  * C 5, L 6 and Colt, Salomon's Z10/Z12, M11 and L10, Fischer's RS, Blizzard and Nordica's TPX/TPC
  * and TP2, Elan's EL, ELX and EMX, Marker's FDT track, K2's M3 Quikclik, Head's Evo for juniors —
  * no holes, a few minutes' work. Everything else — Marker's Griffon, Squire, Strive and Jester,
@@ -26,7 +26,7 @@ const SYSTEM_BINDING = new RegExp(
   "\\b(" +
     [
       // Rossignol, Look, Dynastar
-      "xpress", "xp\\s?(w\\s?)?1[01]", "xp\\s?jr\\s?\\d+", "nx\\s?\\d+", "konect", "lowride",
+      "xpress", "xp\\s?(w\\s?)?1[01]", "xp\\s?jr\\s?\\d+", "nx\\s?\\d+", "konect", "lowride", "kid(-?x)?\\s?\\d+",
       // Head, Tyrolia
       "freeflex", "slr", "joy\\s?\\d+", "evo\\s?\\d+", "jrs", "pr[dw]?\\s?\\d+", "protector", "tpx", "tpc", "tcx",
       // Atomic, Salomon
@@ -56,7 +56,7 @@ const SPX = /\b(spx\s?\d*|rockerace)\b/i;
 const ON_A_PLATE = /\b(rossignol|dynastar)\b/i;
 
 /** A name that is a drill mount whatever else it says. Konect is the one rail SPX. */
-const DRILL_BINDING = /\b(atk|fritschi|vipec|tecton|raider|crest|dynafit|rottefella|nnn\w*|xplore|alpinist|kingpin|duke|pivot|griffon|squire|strive|jester|warden|attack|spx\s?\d*|rockerace|mnc|s\/lab|shift\s?2|kid\s?\d+|comp\s?j)\b/i;
+const DRILL_BINDING = /\b(atk|fritschi|vipec|tecton|raider|crest|dynafit|rottefella|nnn\w*|xplore|alpinist|kingpin|duke|pivot|griffon|squire|strive|jester|warden|attack|spx\s?\d*|rockerace|mnc|s\/lab|shift\s?2|comp\s?j)\b/i;
 
 function place(name: string, vendor = ""): boolean | null {
   if (!name.trim()) return null;

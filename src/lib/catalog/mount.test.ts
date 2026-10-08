@@ -45,6 +45,9 @@ describe("telling a system binding from a drill mount by its name", () => {
     "vMotion 12 GW Volkl Deacon",
     "Colt 5 GW Atomic Redster J2",
     "Look Xp Jr7 Hero Jr 130-150",
+    "Look Kid 4 Team Speed 2026 inc Look Kid 4 Binding Package",
+    "Hero Jr 100-140 2024 inc Kid4 Binding Package",
+    "Kid-X 4 Rossignol Experience Pro",
     "SPX 12 Konect Rossignol Hero Elite",
     "ShiftX EL 10 Wingman 83 C",
   ])("%s is a system binding", (name) => {
@@ -75,7 +78,6 @@ describe("telling a system binding from a drill mount by its name", () => {
     "Rottefella Xplore Åsnes",
     "Rottefella NNNBC Magnum",
     "Rottefella 75mm",
-    "Look Kid 4 Rossignol Experience Pro",
     "XP 120 Positrack inc Binding Package",
     "Fritschi Vipec Evo 12",
     "Marker Alpinist 10 inc Brake",

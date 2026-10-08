@@ -971,6 +971,37 @@ describe("the mounting charge on a ski package", () => {
     expect(new Set(out.changes.map((c) => c.handle))).toEqual(new Set([drill, dearer]));
   });
 
+  it("mirrors a twin that is not on sale: the mounted variant's own sale goes, its stale recommended retail with it, and the move is said", () => {
+    // The Madshus from the shop: Do Not Mount at 1179 with no recommended retail, Please Mount on its
+    // own 10% sale. Setting the charge made its price 1238 and left a retail of 1233.95 under it.
+    const madshus = "madshus-annum-boot-and-nnnbc-binding-package";
+    const file = [
+      H,
+      `${madshus},Annum Boot and NNNBC Binding Package,Madshus,Skis,"ski packages",Length,185,Binding Fitting,Please Do Not Mount My Bindings,Size,42,1179.00,,active`,
+      `${madshus},,,,,Length,185,Binding Fitting,Please Mount My Bindings,Size,42,1110.56,1233.95,`,
+    ].join("\r\n") + "\r\n";
+    const out = applyPlan(file, { scope: { fitting: "package" }, operations: [{ kind: "setMountPrice", amount: 59, bindings: "drill" }] });
+    expect(cell(out.csv, madshus, /^Please Mount/, "Variant Price")).toBe("1238.00");
+    expect(cell(out.csv, madshus, /^Please Mount/, "Variant Compare At Price")).toBe("");
+    expect(out.changes.map((c) => [c.column, c.before, c.after])).toEqual([["Variant Price", "1110.56", "1238.00"], ["Variant Compare At Price", "1233.95", ""]]);
+    expect(out.warnings.join(" ")).toMatch(/1 mounted variant moved by more than the mounting charge itself.*Annum Boot and NNNBC Binding Package \(185 · Please Mount My Bindings · 42: 1110.56 to 1238.00\)/);
+  });
+
+  it("takes a product with a mounting option as a package whatever its title says", () => {
+    // Two Elan packages in the shop are titled by the ski alone, and the package scope passed them by.
+    const elan = "wingman-82cti";
+    const file = [
+      H,
+      `${elan},Wingman 82CTI,Elan,Skis,"ski packages",Length,166,Binding Option,FX EMX 12.0,Binding Fitting,Please Do Not Mount My Bindings,937.49,1249.99,active`,
+      `${elan},,,,,Length,166,Binding Option,FX EMX 12.0,Binding Fitting,Please Mount My Bindings,1226.24,1634.99,`,
+    ].join("\r\n") + "\r\n";
+    const out = applyPlan(file, { scope: { fitting: "package" }, operations: [{ kind: "setMountPrice", amount: 49, bindings: "system" }] });
+    expect(out.matched).toBe(1);
+    expect(cell(out.csv, elan, /^Please Mount/, "Variant Compare At Price")).toBe("1298.99");
+    expect(cell(out.csv, elan, /^Please Mount/, "Variant Price")).toBe("974.24");
+    expect(applyPlan(file, { scope: { fitting: "flat" }, operations: [{ kind: "setMountPrice", amount: 49 }] }).matched).toBe(0);
+  });
+
   it("leaves a dearer charge alone when told to only increase", () => {
     const out = applyPlan(csv, { scope: { fitting: "package" }, operations: [{ kind: "setMountPrice", amount: 59, bindings: "drill", raiseOnly: true }] });
     expect(cell(out.csv, dearer, /^Please Mount/, "Variant Compare At Price")).toBe("3959.99");

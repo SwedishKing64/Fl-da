@@ -291,7 +291,10 @@ function matches(scope: Scope, row: Record<string, string>): boolean {
   if (scope.types?.length && !scope.types.some((t) => eq(t, row["Type"] ?? ""))) return false;
   if (scope.handles?.length && !scope.handles.some((h) => eq(h, row["Handle"] ?? ""))) return false;
   if (scope.titleContains && !(row["Title"] ?? "").toLowerCase().includes(scope.titleContains.trim().toLowerCase())) return false;
-  if (scope.fitting && isPackage(row["Title"] ?? "") !== (scope.fitting === "package")) return false;
+  // A package is one by its title, or by having a mounting option: "Wingman 82CTI" with a
+  // "Binding Fitting" option is as much a package as one that says so.
+  const packaged = isPackage(row["Title"] ?? "") || ["Option1 Name", "Option2 Name", "Option3 Name"].some((c) => /fitting|mount/i.test(row[c] ?? ""));
+  if (scope.fitting && packaged !== (scope.fitting === "package")) return false;
   const have = new Set(splitTags(row["Tags"] ?? "").map((t) => t.toLowerCase()));
   if (scope.tags?.length && !scope.tags.every((t) => have.has(t.trim().toLowerCase()))) return false;
   if (scope.anyTags?.length && !scope.anyTags.some((t) => have.has(t.trim().toLowerCase()))) return false;
@@ -399,6 +402,8 @@ export function applyPlan(text: string, plan: Plan): AdjustResult {
   }))];
   for (const column of missing) warnings.push(`The file has no "${column}" column, so that part of the instruction could not be applied.`);
 
+  // Mounted variants the mounting charge moved by more than the charge itself.
+  const bigMoves = new Set<string>();
   for (const row of rows) {
     const handle = at(row, "Handle").trim();
     if (!handle || !inScope.has(handle)) continue;
@@ -489,11 +494,16 @@ export function applyPlan(text: string, plan: Plan): AdjustResult {
             const variant = ["Option1 Value", "Option2 Value", "Option3 Value"].map((c) => at(mounted, c).trim()).filter(Boolean).join(" · ");
             const beforePrice = at(pair.mounted, "Variant Price");
             if (set(pair.mounted, "Variant Price", nextPrice)) record("Variant Price", beforePrice, nextPrice, variant);
-            if (unmountedCompare !== null && index.has("Variant Compare At Price")) {
-              const nextCompare = fmt(money(unmountedCompare + op.amount));
+            if (index.has("Variant Compare At Price")) {
+              // The twin's sale, or the twin's no sale: a mounted variant left with a recommended
+              // retail its twin does not have would show a retail below its own price.
+              const nextCompare = unmountedCompare !== null ? fmt(money(unmountedCompare + op.amount)) : "";
               const beforeCompare = at(pair.mounted, "Variant Compare At Price");
               if (set(pair.mounted, "Variant Compare At Price", nextCompare)) record("Variant Compare At Price", beforeCompare, nextCompare, variant);
             }
+            // A mounted variant that was on a different sale from its twin moves by more than the
+            // charge: right by the rule, and worth a look.
+            if (mountedPrice !== null && Math.abs(Number(nextPrice) - mountedPrice) > op.amount + 0.005) bigMoves.add(`${title} (${variant}: ${beforePrice} to ${nextPrice})`);
           }
           break;
         }
@@ -608,6 +618,10 @@ export function applyPlan(text: string, plan: Plan): AdjustResult {
         ...unintended.slice(0, 5),
       ],
     };
+  }
+  if (bigMoves.size > 0) {
+    const shown = [...bigMoves];
+    warnings.push(`${bigMoves.size} mounted variant${bigMoves.size === 1 ? "" : "s"} moved by more than the mounting charge itself, because the "Please Mount" variant was on a different sale from its "Do Not Mount" twin — it now carries the twin's sale and the charge on top, which is the rule, but check these are what you want: ${shown.slice(0, 8).join("; ")}${shown.length > 8 ? `; and ${shown.length - 8} more` : ""}.`);
   }
   return { csv, changes, matched: inScope.size, products: firstRowOf.size, variantRows: rows.length, warnings, ...(preamble.length ? { preambleRemoved: preamble.length } : {}) };
 }

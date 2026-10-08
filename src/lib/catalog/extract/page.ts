@@ -16,6 +16,7 @@ import { z } from "zod";
 import { EXTRACTION_MODEL, aiAvailable } from "./ai";
 import { retrying } from "../api-errors";
 import { cleanProductUrl, type PageDetails } from "../page-types";
+import { fetchShopifyProduct, storeAsHtml, storePictures } from "./shopify-store";
 
 const MAX_BYTES = 3 * 1024 * 1024;
 /**
@@ -442,6 +443,26 @@ export async function readProductPage(link: string, hint: PageHint, deps: { fetc
     if (found) return found;
     throw why;
   };
+  // A product in a Shopify store is read as the store's data: the same words, and the pictures
+  // tied to the colour ordered rather than guessed at. Any other link, or a store that will not
+  // give its data, is read as a page.
+  const store = await fetchShopifyProduct(link, deps.fetcher).catch(() => null);
+  if (store) {
+    const d = distillPage(storeAsHtml(store.product), link);
+    const { pictures, matched } = storePictures(store.product, hint.colours ?? []);
+    d.images = pictures.slice(0, MAX_IMAGES);
+    d.structured = { name: store.product.title, description: d.structured.description, brand: store.product.vendor, images: pictures.slice(0, 3).map((c) => c.url) };
+    const withColour = (out: PageDetails): PageDetails => (matched ? { ...out, pictureColour: matched } : out);
+    if (!aiAvailable() && !deps.ask) return withColour(basicDetails(d));
+    try {
+      return withColour(await extractFromPage(d, hint, deps.ask, by));
+    } catch (err) {
+      const slow = outOfTime(by) || (err instanceof Error && /timeout|abort/i.test(err.name + err.message));
+      return withColour(basicDetails(d, slow
+        ? "The model took too long over the page, so only what the store declares about the product was taken. Read the pages again to try it once more."
+        : "The model could not read the page just now, so only what the store declares about the product was taken."));
+    }
+  }
   let fetched: { html: string; url: string };
   try {
     fetched = await fetchHtml(link, deps.fetcher);

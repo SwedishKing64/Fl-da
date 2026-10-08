@@ -62,17 +62,26 @@ export interface PageRead {
   also: string[];
 }
 
+/** The colours the product is listed in: the values of whichever option is the colour one. */
+function coloursOf(product: { option1Name: string | null; option2Name: string | null; option3Name: string | null; variants: Array<{ option1Value: string | null; option2Value: string | null; option3Value: string | null }> }): string[] {
+  const names = [product.option1Name, product.option2Name, product.option3Name];
+  const at = names.findIndex((n) => /colou?r/i.test(n ?? ""));
+  if (at < 0) return [];
+  const values = product.variants.map((v) => [v.option1Value, v.option2Value, v.option3Value][at]?.trim() ?? "").filter(Boolean);
+  return [...new Set(values)].slice(0, 6);
+}
+
 /** Fetch a product's page and write what it says onto the product, and onto its package. */
 export async function readProductLink(productId: string, deps: { read?: typeof readProductPage } = {}): Promise<PageRead> {
   const read = deps.read ?? readProductPage;
-  const product = await prisma.product.findUniqueOrThrow({ where: { id: productId }, include: { variants: { select: { sku: true }, take: 3 } } });
+  const product = await prisma.product.findUniqueOrThrow({ where: { id: productId }, include: { variants: { select: { sku: true, option1Value: true, option2Value: true, option3Value: true } } } });
   const url = product.lookupSource.trim();
   const empty = { productId, description: false, details: 0, images: 0, also: [] as string[] };
   if (!url) return { ...empty, ok: false, said: "There is no link beside this product." };
 
   let details: PageDetails;
   try {
-    details = await read(url, { title: flatTitleOf(product.title), brand: product.vendor || undefined, modelCode: product.variants.map((v) => v.sku).find(Boolean) });
+    details = await read(url, { title: flatTitleOf(product.title), brand: product.vendor || undefined, modelCode: product.variants.map((v) => v.sku).find(Boolean), colours: coloursOf(product) });
   } catch (err) {
     const said = err instanceof PageError ? err.message : "The page could not be read.";
     await prisma.product.update({ where: { id: productId }, data: { lookupStatus: "LINK_FAILED", lookupAt: new Date() } });
@@ -91,8 +100,13 @@ export async function readProductLink(productId: string, deps: { read?: typeof r
     if (id === productId) { out.description = r.description; out.details = r.details; out.images = r.images; notes.push(...r.notes); }
   }
   const got = [out.description ? "the description" : "", out.details > 0 ? `${out.details} detail${out.details === 1 ? "" : "s"}` : "", out.images > 0 ? `${out.images} picture${out.images === 1 ? "" : "s"}` : ""].filter(Boolean);
+  // Pictures of a colour the product is not listed in are the wrong pictures, however good.
+  const wanted = coloursOf(product);
+  const shown = (details.pictureColour ?? "").trim();
+  const offColour = out.images > 0 && wanted.length > 0 && shown !== "" && !wanted.some((c) => c.toLowerCase().includes(shown.toLowerCase()) || shown.toLowerCase().includes(c.toLowerCase()));
   const said = [
     got.length ? `Took ${got.join(", ")} from the page.` : "The page had nothing to take.",
+    out.images > 0 && shown ? `The pictures are of the ${shown} colour${offColour ? `, not the ${wanted.join(" / ")} this product comes in — open the page with that colour selected and paste that link instead` : ""}.` : "",
     details.confident ? "" : `The page is titled "${details.pageTitle || "?"}", which does not clearly match this product — check it is the right page.`,
     ...notes,
     details.via === "basic" ? details.note : "",

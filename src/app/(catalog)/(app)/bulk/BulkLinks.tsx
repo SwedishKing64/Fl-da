@@ -39,7 +39,7 @@ export function BulkLinks({ products, links, onChange, notes, disabled }: {
     <fieldset className="rounded-xl border border-[var(--line-soft)] px-3 py-2.5">
       <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-[var(--ink-soft)]">Product pages · {given} of {products.length} have a link</legend>
       <p className="mb-3 text-xs text-[var(--ink-soft)]">
-        Paste a product&rsquo;s own page under its name and its description, details and pictures are taken from it when you apply the delivery. A new colour of a listing you already have takes its pictures the same way. A product with no link is built as it is.
+        Paste a product&rsquo;s own page under its name and its description, details and pictures are taken from it when you apply the delivery. A new colour of a listing you already have takes its pictures the same way. A product with no link is built as it is. <strong>Open the page with the colour you ordered selected before copying the link</strong>: the pictures are taken of that colour, and the read is told the colour on the order so it leaves the other colours&rsquo; pictures alone.
       </p>
       <ul className="max-h-[26rem] space-y-3 overflow-auto pr-1">
         {products.map((p) => {
@@ -53,7 +53,7 @@ export function BulkLinks({ products, links, onChange, notes, disabled }: {
                 inputMode="url"
                 value={drafts[p.key] ?? links[p.key] ?? ""}
                 disabled={disabled}
-                placeholder="Link to this product's page (optional)"
+                placeholder="Link to this product's page, with the ordered colour selected (optional)"
                 onChange={(e) => setDrafts((d) => ({ ...d, [p.key]: e.target.value }))}
                 onBlur={() => commit(p.key)}
                 onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}

@@ -87,6 +87,19 @@ describe("reading the page", () => {
   const d = distillPage(PAGE, "https://www.rossignol.com/au/hero-gs");
   const hint = { title: "HERO GS R22 SPX12", brand: "Rossignol" };
 
+  it("tells the model the colour ordered and passes back the colour the pictures show", async () => {
+    const seen: string[] = [];
+    const out = await extractFromPage(d, { ...hint, colours: ["Black"] }, async (_system, content) => {
+      seen.push(content);
+      return JSON.stringify({ confident: true, pageTitle: "Hero GS R22", description: "x", features: [], imageNumbers: [1], pictureColour: "Black", note: "ok" });
+    });
+    expect(seen[0]).toContain("Colour ordered: Black");
+    expect(out.pictureColour).toBe("Black");
+    const two = await extractFromPage(d, { ...hint, colours: ["Black", "White"] }, async (_system, content) => { seen.push(content); return JSON.stringify({ confident: true, pageTitle: "x", description: "", features: [], imageNumbers: [], note: "" }); });
+    expect(seen[1]).toContain("Colours ordered: Black, White");
+    expect(two.pictureColour).toBe("");
+  });
+
   it("takes the description, the details and the pictures the model picked, by number", async () => {
     const seen: string[] = [];
     const out = await extractFromPage(d, hint, async (_system, content) => {

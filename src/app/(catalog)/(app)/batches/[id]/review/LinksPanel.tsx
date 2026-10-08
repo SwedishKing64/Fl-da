@@ -101,7 +101,7 @@ export function LinksPanel({ batchId, products, locked }: { batchId: string; pro
       <p className="mb-3 text-xs text-[var(--ink-soft)]">
         {own.length === 0
           ? <>Every product here is one the shop already lists, so each keeps the page it has. Nothing to link.</>
-          : <>Paste each new product&rsquo;s own page under its name and its description, details and pictures are taken from it. A product with no link is left exactly as it is.</>}
+          : <>Paste each new product&rsquo;s own page under its name and its description, details and pictures are taken from it. A product with no link is left exactly as it is. Open the page with the colour you have selected before copying the link: the pictures are taken of that colour, and the read is told the product&rsquo;s colours so it leaves the others&rsquo; pictures alone.</>}
         {read > 0 && <> {read} read so far.</>}
       </p>
       {open && (
@@ -117,7 +117,7 @@ export function LinksPanel({ batchId, products, locked }: { batchId: string; pro
                   inputMode="url"
                   value={urls[p.id] ?? ""}
                   disabled={locked || reading === p.id}
-                  placeholder="Link to this product's page (optional)"
+                  placeholder="Link to this product's page, with your colour selected (optional)"
                   onChange={(e) => setUrls((u) => ({ ...u, [p.id]: e.target.value }))}
                   onBlur={() => void save(p.id)}
                   onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}

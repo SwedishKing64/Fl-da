@@ -562,20 +562,32 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
         if (colourway) return `${colourway.title} in ${colourway.colour}`;
         return newProducts.find((p) => p.lines.includes(key))?.title ?? order.lines[key]?.title ?? "a product";
       };
+      // The colours the order has for the product, so the page's pictures are of those and not of
+      // whichever colour the page happens to open on.
+      const coloursOf = (key: number): string[] => {
+        const colourway = newColourways.find((c) => c.key === key);
+        if (colourway) return [colourway.colour];
+        const lines = newProducts.find((p) => p.lines.includes(key))?.lines ?? [key];
+        return [...new Set(lines.map((i) => (order.lines[i]?.colour ?? "").trim()).filter(Boolean))];
+      };
       let done = 0, next = 0;
       const notes: typeof linkNotes = {};
       const worker = async () => {
         for (let i = next++; i < asked.length; i = next++) {
           const { key, url } = asked[i];
           setProgress(`Reading the product pages — ${done} of ${asked.length}…`);
-          const r = await readPageAction({ url, title: nameOf(key), brand: vendor || undefined }).catch((err) => ({ ok: false as const, error: err instanceof Error ? err.message : String(err) }));
+          const r = await readPageAction({ url, title: nameOf(key), brand: vendor || undefined, colours: coloursOf(key) }).catch((err) => ({ ok: false as const, error: err instanceof Error ? err.message : String(err) }));
           done++;
           if (r.ok && r.data) {
             pages[key] = r.data;
             const got = [r.data.description.trim() ? "the description" : "", r.data.features.length > 0 ? `${r.data.features.length} detail${r.data.features.length === 1 ? "" : "s"}` : "", r.data.images.length > 0 ? `${r.data.images.length} picture${r.data.images.length === 1 ? "" : "s"}` : ""].filter(Boolean);
             const unsure = r.data.confident ? "" : ` The page is titled "${r.data.pageTitle || "?"}", which does not clearly match — check it is the right one.`;
-            const text = `${got.length ? `Took ${got.join(", ")} from the page.` : "The page had nothing to take."}${unsure}${r.data.via === "basic" ? ` ${r.data.note}` : ""}`;
-            notes[key] = { tone: r.data.confident ? "ok" : "warn", text };
+            const wanted = coloursOf(key);
+            const shown = (r.data.pictureColour ?? "").trim();
+            const offColour = r.data.images.length > 0 && wanted.length > 0 && shown !== "" && !wanted.some((c) => c.toLowerCase().includes(shown.toLowerCase()) || shown.toLowerCase().includes(c.toLowerCase()));
+            const colourNote = r.data.images.length > 0 && shown ? ` The pictures are of the ${shown} colour${offColour ? `, not the ${wanted.join(" / ")} ordered — open the page with that colour selected and paste that link instead` : ""}.` : "";
+            const text = `${got.length ? `Took ${got.join(", ")} from the page.` : "The page had nothing to take."}${colourNote}${unsure}${r.data.via === "basic" ? ` ${r.data.note}` : ""}`;
+            notes[key] = { tone: r.data.confident && !offColour ? "ok" : "warn", text };
             linkFeed.push(`${nameOf(key)}: ${text}`);
           } else {
             const text = `${r.ok ? "The page could not be read." : r.error} Built without it.`;

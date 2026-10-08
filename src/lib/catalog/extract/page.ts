@@ -262,15 +262,16 @@ const ReadSchema = z.object({
   pageTitle: z.string().describe("The product's name as this page gives it."),
   description: z.string().describe("The manufacturer's own description, in their words, as the page writes it — the opening copy, not the legal text or the delivery information. Up to about 140 words; a blank line between paragraphs. Empty if the page has none."),
   features: z.array(z.string()).describe("Every line of the page's own details / technical specifications / features section, each as the page writes it: \"Label: value\" where the page pairs a label with a value, a bare phrase where it does not. Up to 30. Empty if the page has none. Never compose a line the page does not carry."),
-  imageNumbers: z.array(z.number()).describe("The numbers, from the list of pictures, of the pictures of THIS product itself, in the order the shop shows them: first the product on its own (the goggle alone, the boot alone, the jacket alone — front view), then its other angles, then shots that include anything bundled with it such as a face mask, a spare lens or a bag, then other colours. Not related products, logos, banners, lifestyle thumbnails of other items, size charts or icons. At most 10. Empty if none are the product."),
-  note: z.string().describe("One short sentence for the person: what the page gave and what it did not."),
+  imageNumbers: z.array(z.number()).describe("The numbers, from the list of pictures, of the pictures of THIS product in the colour ordered, in the order the shop shows them: first the product on its own (the goggle alone, the boot alone, the jacket alone — front view), then its other angles, then shots that include anything bundled with it such as a face mask, a spare lens or a bag. Where a colour was ordered, only pictures of that colour: tell the colour from each picture's caption, from its address (a colour's name or code in the file name), and from which colour the page shows as selected. Where no colour was ordered, the product's pictures and then its other colours. Never a picture of a different colour than the one ordered; if the page's pictures cannot be told apart by colour, give none and say so in the note. Not related products, logos, banners, lifestyle thumbnails of other items, size charts or icons. At most 10. Empty if none are the product."),
+  pictureColour: z.string().describe("The colour the chosen pictures show, as the page names it. Empty when the page does not say or no pictures were chosen."),
+  note: z.string().describe("One short sentence for the person: what the page gave and what it did not, and, where a colour was ordered, whether the pictures are of that colour."),
 });
 
 const SYSTEM = `You read one product's web page for a ski and snowboard retailer in Australia who is building a Shopify listing, and report what the page says about the product.
 
 You are given the product the retailer ordered, then the page: its title, what it declares about itself, its visible text with headings and lists kept as lines, and a numbered list of the pictures on it.
 
-Report only what the page carries. Quote the manufacturer's wording; do not paraphrase it and do not write marketing copy of your own. If the fetched page shows addresses of the product's own pictures (links ending .jpg, .jpeg, .png or .webp that are photographs of this product, not icons, logos or other products), list them at the end under the heading "Pictures:", one per line, exactly as written. The details section is often headed "Details", "Specs", "Technical specifications", "Features" or "Product information" — take its lines exactly as written, keeping each label with its value. Choose pictures by number from the list given and from nothing else.
+Report only what the page carries. Quote the manufacturer's wording; do not paraphrase it and do not write marketing copy of your own. The retailer sells the product in the colour they ordered and the listing's pictures must be of that colour: a page usually carries pictures of every colour it comes in, named in the captions or in the picture addresses, and the pictures of a colour that was not ordered are wrong for the listing however good they are. If the fetched page shows addresses of the product's own pictures (links ending .jpg, .jpeg, .png or .webp that are photographs of this product, not icons, logos or other products), list them at the end under the heading "Pictures:", one per line, exactly as written. The details section is often headed "Details", "Specs", "Technical specifications", "Features" or "Product information" — take its lines exactly as written, keeping each label with its value. Choose pictures by number from the list given and from nothing else.
 
 If the page is not for this product, say so with confident false and report nothing from it that you would not stand behind.`;
 
@@ -297,13 +298,23 @@ const askModel: AskPage = async (system, content, d = deadline()) => {
   return response.content.find((b): b is Anthropic.TextBlock => b.type === "text")?.text;
 };
 
-export interface PageHint { title: string; brand?: string; modelCode?: string }
+export interface PageHint {
+  title: string;
+  brand?: string;
+  modelCode?: string;
+  /** The colour or colours ordered, as the order form writes them: the pictures must be of these. */
+  colours?: string[];
+}
 
-const describeHint = (hint: PageHint): string => [
-  `Product ordered: ${hint.title}`,
-  hint.brand ? `Brand: ${hint.brand}` : "",
-  hint.modelCode ? `Model code: ${hint.modelCode}` : "",
-].filter(Boolean).join("\n");
+const describeHint = (hint: PageHint): string => {
+  const colours = (hint.colours ?? []).map((c) => c.trim()).filter(Boolean);
+  return [
+    `Product ordered: ${hint.title}`,
+    hint.brand ? `Brand: ${hint.brand}` : "",
+    hint.modelCode ? `Model code: ${hint.modelCode}` : "",
+    colours.length === 1 ? `Colour ordered: ${colours[0]} — the pictures must be of this colour` : colours.length > 1 ? `Colours ordered: ${colours.join(", ")} — the pictures must be of these colours, the first of them first` : "",
+  ].filter(Boolean).join("\n");
+};
 
 /** What the page declares about itself, with no model reading it: for when there is no API key, or it failed. */
 export function basicDetails(d: Distilled, note = ""): PageDetails {
@@ -340,7 +351,8 @@ export async function extractFromPage(d: Distilled, hint: PageHint, ask: AskPage
 
   const text = await ask(SYSTEM, content, by);
   if (!text) return basicDetails(d, "The page could not be read by the model, so only what it declares about itself was taken.");
-  const parsed = ReadSchema.safeParse(JSON.parse(text));
+  // What the model is asked for has every field; what it sends back is taken even when a field is missing.
+  const parsed = ReadSchema.extend({ pictureColour: z.string().optional() }).safeParse(JSON.parse(text));
   if (!parsed.success) return basicDetails(d, "The model's reading of the page could not be used, so only what it declares about itself was taken.");
   const r = parsed.data;
   // Only pictures the page had, once each, in the order chosen.
@@ -357,6 +369,7 @@ export async function extractFromPage(d: Distilled, hint: PageHint, ask: AskPage
     confident: r.confident,
     sourceUrl: d.url,
     via: "ai",
+    pictureColour: (r.pictureColour ?? "").trim(),
     note: r.note.trim(),
   };
 }

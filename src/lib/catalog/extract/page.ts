@@ -262,8 +262,8 @@ const ReadSchema = z.object({
   pageTitle: z.string().describe("The product's name as this page gives it."),
   description: z.string().describe("The manufacturer's own description, in their words, as the page writes it — the opening copy, not the legal text or the delivery information. Up to about 140 words; a blank line between paragraphs. Empty if the page has none."),
   features: z.array(z.string()).describe("Every line of the page's own details / technical specifications / features section, each as the page writes it: \"Label: value\" where the page pairs a label with a value, a bare phrase where it does not. Up to 30. Empty if the page has none. Never compose a line the page does not carry."),
-  imageNumbers: z.array(z.number()).describe("The numbers, from the list of pictures, of the pictures of THIS product in the colour ordered, in the order the shop shows them: first the product on its own (the goggle alone, the boot alone, the jacket alone — front view), then its other angles, then shots that include anything bundled with it such as a face mask, a spare lens or a bag. Where a colour was ordered, only pictures of that colour: tell the colour from each picture's caption, from its address (a colour's name or code in the file name), and from which colour the page shows as selected. Where no colour was ordered, the product's pictures and then its other colours. Never a picture of a different colour than the one ordered; if the page's pictures cannot be told apart by colour, give none and say so in the note. Not related products, logos, banners, lifestyle thumbnails of other items, size charts or icons. At most 10. Empty if none are the product."),
-  pictureColour: z.string().describe("The colour the chosen pictures show, as the page names it. Empty when the page does not say or no pictures were chosen."),
+  imageNumbers: z.array(z.number()).describe("The numbers, from the list of pictures, of the pictures of THIS product itself, in the order the shop shows them: first the product on its own (the goggle alone, the boot alone, the jacket alone — front view), then its other angles, then shots that include anything bundled with it such as a face mask, a spare lens or a bag, then the same product in its other colours. Where a colour was ordered, put the pictures of that colour first when the captions or addresses say which that is — but include the product's pictures whatever their colour; they are sorted by looking at them afterwards. Not related products, logos, banners, lifestyle thumbnails of other items, size charts or icons. At most 16. Empty if none are the product."),
+  pictureColour: z.string().describe("The colour the page shows as selected or names for its pictures, where it says. Empty when it does not."),
   note: z.string().describe("One short sentence for the person: what the page gave and what it did not, and, where a colour was ordered, whether the pictures are of that colour."),
 });
 
@@ -271,7 +271,7 @@ const SYSTEM = `You read one product's web page for a ski and snowboard retailer
 
 You are given the product the retailer ordered, then the page: its title, what it declares about itself, its visible text with headings and lists kept as lines, and a numbered list of the pictures on it.
 
-Report only what the page carries. Quote the manufacturer's wording; do not paraphrase it and do not write marketing copy of your own. The retailer sells the product in the colour they ordered and the listing's pictures must be of that colour: a page usually carries pictures of every colour it comes in, named in the captions or in the picture addresses, and the pictures of a colour that was not ordered are wrong for the listing however good they are. If the fetched page shows addresses of the product's own pictures (links ending .jpg, .jpeg, .png or .webp that are photographs of this product, not icons, logos or other products), list them at the end under the heading "Pictures:", one per line, exactly as written. The details section is often headed "Details", "Specs", "Technical specifications", "Features" or "Product information" — take its lines exactly as written, keeping each label with its value. Choose pictures by number from the list given and from nothing else.
+Report only what the page carries. Quote the manufacturer's wording; do not paraphrase it and do not write marketing copy of your own. A page usually carries pictures of every colour the product comes in; list the product's pictures in every colour, with the colour ordered first where the page says which is which, and they are sorted by colour afterwards by looking at them. If the fetched page shows addresses of the product's own pictures (links ending .jpg, .jpeg, .png or .webp that are photographs of this product, not icons, logos or other products), list them at the end under the heading "Pictures:", one per line, exactly as written. The details section is often headed "Details", "Specs", "Technical specifications", "Features" or "Product information" — take its lines exactly as written, keeping each label with its value. Choose pictures by number from the list given and from nothing else.
 
 If the page is not for this product, say so with confident false and report nothing from it that you would not stand behind.`;
 
@@ -312,7 +312,7 @@ const describeHint = (hint: PageHint): string => {
     `Product ordered: ${hint.title}`,
     hint.brand ? `Brand: ${hint.brand}` : "",
     hint.modelCode ? `Model code: ${hint.modelCode}` : "",
-    colours.length === 1 ? `Colour ordered: ${colours[0]} — the pictures must be of this colour` : colours.length > 1 ? `Colours ordered: ${colours.join(", ")} — the pictures must be of these colours, the first of them first` : "",
+    colours.length === 1 ? `Colour ordered: ${colours[0]}` : colours.length > 1 ? `Colours ordered: ${colours.join(", ")}` : "",
   ].filter(Boolean).join("\n");
 };
 
@@ -364,7 +364,7 @@ export async function extractFromPage(d: Distilled, hint: PageHint, ask: AskPage
   return {
     description: r.description.trim(),
     features: r.features.map((f) => f.replace(/\s+/g, " ").trim()).filter(Boolean).slice(0, 30),
-    images: images.slice(0, 10),
+    images: images.slice(0, 16),
     pageTitle: r.pageTitle.trim() || d.structured.name || d.title,
     confident: r.confident,
     sourceUrl: d.url,

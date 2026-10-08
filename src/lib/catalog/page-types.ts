@@ -17,8 +17,10 @@ export interface PageDetails {
   sourceUrl: string;
   /** How it was read: "ai" is the model reading the page; "basic" is only what the page declares about itself. */
   via: "ai" | "basic";
-  /** The colour the pictures show, as the page names it, where the model could tell. */
+  /** The colour the pictures show, where the model could tell by looking at them. */
   pictureColour?: string;
+  /** For the person: what was done about the pictures' colour, when something was. */
+  pictureNote?: string;
   /** One line for the person: what was and was not found. */
   note: string;
 }

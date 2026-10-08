@@ -19,6 +19,7 @@
 import sharp from "sharp";
 import { getSettings } from "./settings";
 import { publicFileUrl, saveFile, usingBlob } from "./storage";
+import { pickColour, type ColourLook, type Looker } from "./colour-match";
 
 /** The square's side: big enough for Shopify's zoom, small enough to be quick. */
 export const CANVAS_MAX = 2048;
@@ -160,4 +161,58 @@ export async function hostPictures(urls: string[], name: string, deps: { fetcher
   };
   await Promise.all([worker(), worker(), worker(), worker()]);
   return out;
+}
+
+export interface HostedOfColour {
+  /** The pictures kept, in the order given: hosted where they could be, as they were where not. */
+  images: string[];
+  /** How many were left out for being another colour. */
+  leftOut: number;
+  /** The colours the left-out pictures showed. */
+  otherColours: string[];
+  /** The colour the kept pictures show, where the model named one. */
+  shown: string;
+  /** False when the pictures were not looked at: no colour ordered, no model, or the look failed. */
+  looked: boolean;
+}
+
+/**
+ * A page's pictures, with the ones in another colour left out: fetched, looked at against the
+ * colour ordered, and the rest framed and kept here. A picture that could not be fetched is kept
+ * as the address it was, unlooked at — the review page is where to catch it.
+ */
+export async function hostPicturesOfColour(urls: string[], name: string, colours: string[], deps: { fetcher?: typeof fetch; publicBaseUrl?: string; until?: number; ask?: Looker } = {}): Promise<HostedOfColour> {
+  const none: HostedOfColour = { images: urls, leftOut: 0, otherColours: [], shown: "", looked: false };
+  if (urls.length === 0) return none;
+  const base = deps.publicBaseUrl ?? (await getSettings()).publicBaseUrl;
+  const canHost = usingBlob() || publicFileUrl("images/x.jpg", base) !== null;
+  const until = Math.min(deps.until ?? Infinity, Date.now() + SET_MS);
+
+  // Fetched, a few at a time.
+  const bytes: Array<Buffer | null> = urls.map(() => null);
+  let next = 0;
+  const fetchWorker = async () => {
+    for (let i = next++; i < urls.length; i = next++) {
+      if (Date.now() > until) return;
+      bytes[i] = await fetchPicture(urls[i], deps.fetcher);
+    }
+  };
+  await Promise.all([fetchWorker(), fetchWorker(), fetchWorker(), fetchWorker()]);
+
+  // Looked at, the ones that were fetched.
+  const got = bytes.map((b, i) => ({ b, i })).filter((x): x is { b: Buffer; i: number } => x.b !== null);
+  let look: ColourLook = { keep: got.map((_, k) => k), otherColours: [], shown: "", looked: false };
+  if (got.length > 0 && colours.some((c) => c.trim())) look = await pickColour(got.map((x) => x.b), colours, name, { ask: deps.ask });
+  const keepIndex = new Set(look.keep.map((k) => got[k].i));
+
+  // Kept: framed and stored where they can be, as they were where not; the unfetched as they were.
+  const images: string[] = [];
+  for (let i = 0; i < urls.length; i++) {
+    const b = bytes[i];
+    if (b === null) { images.push(urls[i]); continue; }
+    if (!keepIndex.has(i)) continue;
+    const hosted = canHost && Date.now() <= until ? await storePicture(b, `${name}-${i + 1}`, base).catch(() => null) : null;
+    images.push(hosted ?? urls[i]);
+  }
+  return { images, leftOut: got.length - look.keep.length, otherColours: look.otherColours, shown: look.shown, looked: look.looked };
 }

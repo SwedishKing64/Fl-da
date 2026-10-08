@@ -19,7 +19,7 @@ import { prisma } from "./db";
 import { houseBody, isPlaceholderBody } from "./body";
 import { cleanProductUrl, fitlessOf, flatHandleOf, type PageDetails } from "./page-types";
 import { readProductPage, PageError } from "./extract/page";
-import { hostPictures } from "./pictures";
+import { picturesForColour } from "./picture-colour";
 
 /** A package is read from its ski's page: "… inc Marker Griffon Binding Package" is the ski's name with a binding added. */
 export const flatTitleOf = (title: string): string => title.replace(/\s+inc\s+.*binding package$/i, "").replace(/\s+inc\s+.*$/i, "").trim();
@@ -73,9 +73,9 @@ function coloursOf(product: { option1Name: string | null; option2Name: string | 
 }
 
 /** Fetch a product's page and write what it says onto the product, and onto its package. */
-export async function readProductLink(productId: string, deps: { read?: typeof readProductPage; host?: typeof hostPictures } = {}): Promise<PageRead> {
+export async function readProductLink(productId: string, deps: { read?: typeof readProductPage; pictures?: typeof picturesForColour } = {}): Promise<PageRead> {
   const read = deps.read ?? readProductPage;
-  const host = deps.host ?? hostPictures;
+  const pictures = deps.pictures ?? picturesForColour;
   const product = await prisma.product.findUniqueOrThrow({ where: { id: productId }, include: { variants: { select: { sku: true, option1Value: true, option2Value: true, option3Value: true } } } });
   const url = product.lookupSource.trim();
   const empty = { productId, description: false, details: 0, images: 0, also: [] as string[] };
@@ -84,8 +84,8 @@ export async function readProductLink(productId: string, deps: { read?: typeof r
   let details: PageDetails;
   try {
     details = await read(url, { title: flatTitleOf(product.title), brand: product.vendor || undefined, modelCode: product.variants.map((v) => v.sku).find(Boolean), colours: coloursOf(product) });
-    // Each picture set on its square and kept here, the same size as every other on the shop.
-    details = { ...details, images: await host(details.images, product.title) };
+    // The pictures looked at for the product's colour, then each set on its square and kept here.
+    details = await pictures(details, product.title, coloursOf(product));
   } catch (err) {
     const said = err instanceof PageError ? err.message : "The page could not be read.";
     await prisma.product.update({ where: { id: productId }, data: { lookupStatus: "LINK_FAILED", lookupAt: new Date() } });
@@ -104,13 +104,9 @@ export async function readProductLink(productId: string, deps: { read?: typeof r
     if (id === productId) { out.description = r.description; out.details = r.details; out.images = r.images; notes.push(...r.notes); }
   }
   const got = [out.description ? "the description" : "", out.details > 0 ? `${out.details} detail${out.details === 1 ? "" : "s"}` : "", out.images > 0 ? `${out.images} picture${out.images === 1 ? "" : "s"}` : ""].filter(Boolean);
-  // Pictures of a colour the product is not listed in are the wrong pictures, however good.
-  const wanted = coloursOf(product);
-  const shown = (details.pictureColour ?? "").trim();
-  const offColour = out.images > 0 && wanted.length > 0 && shown !== "" && !wanted.some((c) => c.toLowerCase().includes(shown.toLowerCase()) || shown.toLowerCase().includes(c.toLowerCase()));
   const said = [
     got.length ? `Took ${got.join(", ")} from the page.` : "The page had nothing to take.",
-    out.images > 0 && shown ? `The pictures are of the ${shown} colour${offColour ? `, not the ${wanted.join(" / ")} this product comes in — open the page with that colour selected and paste that link instead` : ""}.` : "",
+    details.pictureNote ?? "",
     details.confident ? "" : `The page is titled "${details.pageTitle || "?"}", which does not clearly match this product — check it is the right page.`,
     ...notes,
     details.via === "basic" ? details.note : "",

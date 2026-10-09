@@ -773,6 +773,20 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
     }
   }
 
+  // What was written by hand on the invoice against its lines, for the person to act on: the
+  // reader carries it, the build does not act on it, and it would be lost otherwise.
+  const penned = items.filter((i) => (i.item.extras?.notes ?? "").trim());
+  if (penned.length > 0) {
+    const byFile = new Map<string, string[]>();
+    for (const i of penned) {
+      const line = `${[i.item.title, i.item.length || i.item.size].filter(Boolean).join(" ")}: ${i.item.extras!.notes.trim()}`;
+      const list = byFile.get(i.fileId) ?? [];
+      if (!list.includes(line)) list.push(line);
+      byFile.set(i.fileId, list);
+    }
+    for (const [fileId, lines] of byFile) await noteOnFile(fileId, `Written on it by hand, to act on: ${lines.join("; ")}.`);
+  }
+
   // What the person said not to build, by name or by unticking it on the batch page.
   if (directives.skip.length > 0) {
     const left = grouped.filter((g) => isSkipped({ title: productTitle(g.title, seasonTagFrom(g.tags)), handle: g.handle }, directives.skip));

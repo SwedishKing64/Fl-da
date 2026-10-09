@@ -19,16 +19,16 @@ const LineItemSchema = z.object({
   modelCode: z.string().describe("Model/style code shared across sizes of the same product, else empty"),
   sku: z.string().describe("Supplier SKU / item code for this exact variant, else empty"),
   barcode: z.string().describe("EAN/UPC if present, digits only, else empty"),
-  costPrice: z.number().nullable().describe("Unit cost price as a number, before any line total; null if the document has no cost (spec sheets, photos)"),
+  costPrice: z.number().nullable().describe("Unit cost price as a number, before any line total, AFTER any discount written by hand against the line; null if the document has no cost (spec sheets, photos)"),
   currency: z.string().describe("ISO currency code if stated on the document, else empty"),
   quantity: z.number().nullable().describe("Units ordered/invoiced for this line; null when not an order"),
-  rrp: z.number().nullable().describe("Recommended retail price if stated"),
+  rrp: z.number().nullable().describe("Recommended retail price if stated — printed in an RRP column, or written by hand against the line (see the handwriting rules)"),
   length: z.string().describe("Ski/snowboard length in cm, digits only, else empty"),
   size: z.string().describe("Boot size (mondopoint) or apparel size (S, M, L, XL, 8, 10, 12…), else empty. On a size-grid invoice this is the column header the quantity sat under."),
   width: z.string().describe("Boot last width in mm or ski waist width, else empty"),
   colour: z.string().describe("Colourway, else empty"),
   gender: z.string().describe("Mens/Womens/Unisex/Kids if stated, else empty"),
-  season: z.string().describe("Season/model year like '2026' or 'FW25', else empty"),
+  season: z.string().describe("Season/model year like '2026' or 'FW25', else empty. A two-digit year written by hand against the line — 23, 24, 27 — is that year: '2023', '2024', '2027'. A handwritten 2998 or 2999 is copied as written."),
   category: z.string().describe("One of: skis, snowboards, boots, bindings, poles, helmets, goggles, apparel, accessories, other"),
   description: z.string().describe("Marketing description and key features in plain prose, else empty"),
   flex: z.string().describe("Flex rating if stated"),
@@ -37,6 +37,7 @@ const LineItemSchema = z.object({
   terrain: z.string().describe("Terrain/use if stated, e.g. All-Mountain, Freeride, Park"),
   tags: z.string().describe("Comma-separated tags a shop would use, only where the document genuinely suggests one (e.g. 'Freeride, Twin Tip'). Never the supplier's own section headings or marketing phrases. Empty is a good answer."),
   imageUrls: z.array(z.string()).describe("Any image URLs printed for this line"),
+  notes: z.string().describe("What was written by hand against this line that is not a season, a retail price, a discount or a quantity, in plain words — 'QTY if it exists', 'should be 148cm', '+ SLR 10 binding', 'could also read 1699'. Empty when nothing was."),
 });
 
 const ExtractionSchema = z.object({
@@ -84,6 +85,14 @@ Prices — the most important thing on the document:
 - rrp is the single field this shop cannot do without: it is what the product sells for. If an RRP column exists, EVERY item you return from a row under it carries that row's rrp — including every size of the same colourway on a size grid. Do not put the price on the first size and leave the rest null.
 - If the page is rotated or sideways, read it rotated. The column headings are on the same edge as the numbers and they say which column is which; never guess a column's meaning from the size of the numbers in it.
 - If, having read the headings, no RRP is stated anywhere on the document, leave rrp null. Do not put the wholesale price there — it will be looked up on the brand's website instead, and a wholesale price written into rrp would be sold at.
+
+Handwriting — a printed document the shop's staff have written on in pen, which is common and which the pen is the point of:
+- Pen on a printed order or invoice is the shop's own instruction for that line, and it overrides the print. Read it with as much care as the print.
+- A handwritten column heading names what the handwritten numbers beneath it are: "YT" (year tag) means the numbers under it are each line's season; "RRP" means recommended retail; "DISC" means a discount. Without a heading: a bare two-digit number beside a line (23, 24, 25, 27) is its season as a year (2023, 2024, 2025, 2027); a three-or-four-digit amount is its recommended retail (rrp); a percentage is a discount off the printed unit price, so costPrice is the printed unit price less that percentage. "2998" and "2999" are the shop's own season tags for closeouts and go in season as written.
+- A quantity written in pen replaces the printed one. A line struck through in pen was not ordered: leave it out.
+- Lines written entirely by hand — "more boots coming below", a model name with sizes and quantities such as "FORMULA RS 130 / 25.5 x1 / 26.5 x1", a retail and a discount — are items like any printed line: one item per size, the quantity after the "x", the rrp and the discount as written.
+- "Title" written beside a column or a line is a reminder to the shop about naming and is not a value. Words like "QTY if it exists", "should be 148cm" or "+ SLR 10" are instructions a person will act on: carry them in the line's notes field, in plain words, and nowhere else.
+- Where a handwritten figure could be read two ways, take the likelier and say in notes what else it could read.
 
 Rules:
 - title is the product name only; put length/size/colour in their own fields. Keep the brand out of the title when it is identifiable separately.
@@ -203,7 +212,7 @@ export async function extractFromImage(buffer: Buffer, mimeType: string, kind?: 
 /** Canonical headers used when AI output is turned into a table (identity mapping downstream). */
 export const AI_HEADERS = [
   "title", "brand", "modelCode", "sku", "barcode", "costPrice", "quantity", "rrp", "length", "size", "width",
-  "colour", "gender", "season", "category", "description", "flex", "abilityLevel", "dinRange", "terrain", "tags", "imageUrls",
+  "colour", "gender", "season", "category", "description", "flex", "abilityLevel", "dinRange", "terrain", "tags", "imageUrls", "notes",
 ] as const;
 
 export function aiExtractionToTable(result: AiExtraction, method: ExtractedTable["method"], text?: string): ExtractedTable {

@@ -127,6 +127,8 @@ function expand(words: string[]): string[] {
 interface Reference {
   spec: CanonicalLineItem;
   code: string;
+  /** The row's EAN, digits only; empty on a sheet that has none. */
+  barcode: string;
   required: string[];
   optional: string[];
   gender: "MENS" | "WOMENS" | "KIDS" | "";
@@ -140,11 +142,16 @@ function genderOf(name: string): Reference["gender"] {
   return "";
 }
 
+/** A barcode as digits only: an EAN written with a leading apostrophe or spaces is the same EAN. */
+const digits = (v: string): string => v.replace(/\D+/g, "");
+
 function referenceOf(spec: CanonicalLineItem): Reference {
   const core = tokens(spec.title).filter((w) => !GENDER.has(w) && !KIND.has(w));
   return {
     spec,
-    code: spec.modelCode.replace(/\s+/g, "").toUpperCase(),
+    // A barcode list keys its rows by SKU and has no model code column; the SKU is the code then.
+    code: (spec.modelCode || spec.sku).replace(/\s+/g, "").toUpperCase(),
+    barcode: digits(spec.barcode),
     required: core.filter((w) => !OPTIONAL.has(w)),
     optional: core.filter((w) => OPTIONAL.has(w)),
     gender: genderOf(spec.title),
@@ -173,7 +180,7 @@ export function shopName(catalogueName: string): string {
 
 export interface LineMatch {
   spec: CanonicalLineItem;
-  how: "code" | "name" | "model";
+  how: "barcode" | "code" | "name" | "model";
   /** What was left of the order's wording once the model's own words were taken out: the graphic. */
   graphic: string;
 }
@@ -198,14 +205,26 @@ export interface LineMatch {
  * and a tie is refused rather than guessed.
  */
 export function matchLine(line: CanonicalLineItem, refs: Reference[], vocabulary: Set<string>, sharedCodes = true, strict = false): LineMatch | { reason: string } {
+  // The barcode is the one key an invoice and an order form share on every row, and it is exact:
+  // the EAN on the line is the EAN of one row. Burton's invoice carries it, and so does their order
+  // form, which has no model code and names a binding "FREESTYLE" — which no name match found.
+  const ean = digits(line.barcode);
+  if (ean.length >= 8) {
+    const hit = refs.filter((r) => r.barcode === ean);
+    if (hit.length > 0) {
+      const named = hit.find((r) => r.spec.description.trim()) ?? hit[0];
+      return { spec: named.spec, how: "barcode", graphic: graphicOf(line.title, named, vocabulary) };
+    }
+  }
   const code = (line.modelCode || line.sku).replace(/\s+/g, "").toUpperCase();
   const coded = refs.filter((r) => r.code);
   if (code && coded.length > 0) {
     // The sheet's code may be shorter than the order's (a PIM keys the model, "V2610134"; the order
     // says "V2610134.000") or LONGER (a barcode list keys the length, "V2610134.000.179"), and both
-    // are the same model. Longer only where it extends the order's code at a separator, so that
+    // are the same model. Longer only where it extends the order's code at a separator, or where
+    // digits give way to letters (Burton's style "105441" and its SKU "105441CA02RG00M"), so that
     // "V26101" does not claim "V2610134".
-    const extends_ = (r: Reference) => r.code.length > code.length && r.code.startsWith(code) && /^[.\-/]/.test(r.code.slice(code.length));
+    const extends_ = (r: Reference) => r.code.length > code.length && r.code.startsWith(code) && (/^[.\-/]/.test(r.code.slice(code.length)) || (/\d$/.test(code) && /^[A-Z]/.test(r.code.slice(code.length))));
     const hits = coded.filter((r) => code === r.code || (r.code.length >= 4 && code.startsWith(r.code)) || extends_(r));
     const longest = Math.max(0, ...hits.filter((r) => !extends_(r)).map((r) => r.code.length));
     const exact = hits.filter((r) => !extends_(r) && r.code.length === longest);
@@ -323,22 +342,40 @@ export function resolveAgainstReference(
       joined.push({ line: line.title || line.sku, reason: found.reason });
       return widen(line, rules);
     }
-    const spec = found.spec;
+    let spec = found.spec;
     sources[index] = sourceOf(spec);
     joined.push({ line: line.title || line.sku, to: spec.title, how: found.how });
+    // A row off a barcode list says what the thing is and nothing about it. Where another sheet
+    // loaded alongside describes it — Burton's description list beside Burton's order form — the
+    // row is found there by name, and its words come along. See fromDescribed.
+    const bare = !spec.description.trim();
+    if (bare) {
+      const described = fromDescribed(spec, line, refs, vocabulary);
+      if (described) { spec = { ...described, barcode: spec.barcode || described.barcode, sku: spec.sku || described.sku, colour: spec.colour || described.colour, size: spec.size || described.size, length: spec.length || described.length }; sources[index] = sourceOf(described); }
+    }
     const name = shopName(spec.title);
     const way = named.get(name) ?? peelColour(name, spec.colour);
+    // The sheet names the model where it is a catalogue; a barcode list's "FREESTYLE" is not a
+    // better name than the invoice's own "Men's Freestyle Snowboard Bindings", so that one stays.
+    const sheetName = way?.model ?? name;
+    const keepOwn = bare && line.title.trim() !== "" && tokens(line.title).length >= tokens(sheetName).length;
     const next: CanonicalLineItem = {
       ...line,
-      title: way?.model ?? name,
+      title: keepOwn ? line.title : sheetName,
       modelCode: spec.modelCode || line.modelCode,
       // The supplier's own per-colour code is still the line's identity; keep it where it was.
-      sku: line.sku || line.modelCode,
+      // A line without one takes the row's: a barcode list keys every size by SKU.
+      sku: line.sku || line.modelCode || spec.sku,
+      barcode: line.barcode || spec.barcode,
       // Only a season that reads as a year. Volkl writes "26/27"; left as it is it became a tag.
       season: line.season || (/^20\d{2}$/.test(seasonFrom(spec.season)) ? seasonFrom(spec.season) : ""),
       gender: tidyGender(line.gender) || tidyGender(spec.gender) || tidyGender(genderOf(spec.title)),
-      colour: line.colour || found.graphic || way?.colour || "",
+      // The row's own colour column where it has one; the order's leftover wording where a catalogue
+      // row has none ("CUSTOM NEW GRAPHIC" is the Custom in the New Graphic); nothing from the
+      // wording of a line placed by its barcode, where the leftover is just "Snowboard Bindings".
+      colour: line.colour || spec.colour || (found.how === "barcode" ? "" : found.graphic) || way?.colour || "",
       terrain: line.terrain || spec.terrain,
+      description: line.description || spec.description,
     };
     // What kind of product this is, from the catalogue's full name rather than the short one.
     const rule = detectCategory({ ...next, title: spec.title, description: "" }, rules);
@@ -349,6 +386,26 @@ export function resolveAgainstReference(
     return widen(next, rules);
   });
   return { items: oneProductPerName(fillFromSiblings(out, joined, sources, rules)).map((i) => widen(i, rules)), joined };
+}
+
+/**
+ * The row on a described sheet for a line a bare barcode list placed: found by the list's name
+ * for it, or the line's own, among the rows that carry a description. Null when none fits.
+ */
+function fromDescribed(bare: CanonicalLineItem, line: CanonicalLineItem, refs: Reference[], vocabulary: Set<string>): CanonicalLineItem | null {
+  const described = refs.filter((r) => r.spec.description.trim());
+  if (described.length === 0) return null;
+  // By code first: Burton's description list keys a model by five digits, and the order form's SKU
+  // begins with them ("22245" is the Hometown Hero; "2224513E1QRG156" is one of it in 156).
+  const probes: CanonicalLineItem[] = [
+    { ...line, title: bare.title || line.title, modelCode: bare.modelCode || line.modelCode, sku: bare.sku || line.sku, barcode: "", gender: line.gender || bare.gender },
+    ...[bare.title, line.title].filter((t) => t.trim()).map((title) => ({ ...line, title, modelCode: "", sku: "", barcode: "", gender: line.gender || bare.gender })),
+  ];
+  for (const probe of probes) {
+    const found = matchLine(probe, described, vocabulary, false, false);
+    if (!("reason" in found)) return found.spec;
+  }
+  return null;
 }
 
 /**

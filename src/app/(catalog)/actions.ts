@@ -1066,6 +1066,39 @@ export async function readInstructionSheetAction(file: { name: string; type: str
  * of why this accepts a picture at all: an invoice photographed on a phone in the stockroom is a
  * real way one arrives.
  */
+/**
+ * A photo or scan of a supplier's paperwork, scribbled on, read into a table. See extract/transcribe.
+ *
+ * Several files are the pages of one document, read together. The pen's meaning, where the person
+ * says it, goes to the reader as a hint.
+ */
+export async function transcribeDocumentAction(input: { files: Array<{ name: string; type: string; base64: string }>; hint: string }): Promise<ActionResult<import("@/lib/catalog/extract/transcribe").Transcript>> {
+  return safely(async () => {
+    await requireUser();
+    const { isHeic, heicToJpeg } = await import("@/lib/catalog/extract/heic");
+    const { transcribeDocument } = await import("@/lib/catalog/extract/transcribe");
+    const pages: import("@/lib/catalog/extract/transcribe").Page[] = [];
+    for (const file of input.files) {
+      let buffer: Buffer = Buffer.from(file.base64, "base64");
+      if (buffer.byteLength > MAX_UPLOAD) {
+        return { ok: false, error: `${file.name} is ${readableSize(buffer.byteLength)}, and an upload has to stay under ${readableSize(MAX_UPLOAD)}. A photo is shrunk before it is sent, so this is a PDF too big to send — split it.` };
+      }
+      let type = file.type;
+      if (isHeic(buffer, file.name, file.type)) { buffer = await heicToJpeg(buffer); type = "image/jpeg"; }
+      const isPdf = /\.pdf$/i.test(file.name) || type === "application/pdf";
+      if (isPdf) pages.push({ kind: "pdf", data: buffer });
+      else if (/^image\/(jpeg|png|gif|webp)$/.test(type)) pages.push({ kind: "image", mediaType: type as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: buffer });
+      else if (/\.(jpe?g)$/i.test(file.name)) pages.push({ kind: "image", mediaType: "image/jpeg", data: buffer });
+      else if (/\.png$/i.test(file.name)) pages.push({ kind: "image", mediaType: "image/png", data: buffer });
+      else return { ok: false, error: `${file.name} is not a photo or a PDF. This reads a picture or a scan of the paperwork; a spreadsheet goes straight to the bulk page.` };
+    }
+    if (pages.length === 0) return { ok: false, error: "No file was received." };
+    const data = await transcribeDocument(pages, input.hint);
+    await logAudit("document.transcribed", { userId: (await requireUser()).id, details: { pages: pages.length, supplier: data.supplier, reference: data.reference, rows: data.rows.length } }).catch(() => undefined);
+    return { ok: true, data };
+  });
+}
+
 export async function readInvoiceAction(file: { name: string; type: string; base64: string }): Promise<ActionResult<InvoiceRead & { source: string }>> {
   return safely(async () => {
     await requireUser();

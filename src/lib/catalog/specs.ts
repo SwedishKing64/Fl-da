@@ -120,6 +120,8 @@ export function enrichFromSpecs<T extends { title: string; brand: string; descri
    * ordered in 170 and 177 described itself as a 191.
    */
   const written = new Set<T>();
+  /** Of those, the ones whose body carries the sheet's prose: a list of numbers gives way to words. */
+  const prosed = new Set<T>();
 
   for (const spec of specs) {
     const code = normKey(spec.modelCode);
@@ -175,9 +177,15 @@ export function enrichFromSpecs<T extends { title: string; brand: string; descri
     // almost never does and the numbers are most of what a customer wants. A body that is only a
     // Tech Specs list still reads as unwritten to the web lookup, so the prose can arrive later
     // without either one having to wait for the other. See isPlaceholderBody.
-    if ((spec.description.trim() || lines.length > 0) && isPlaceholderBody(target.description) && !written.has(target)) {
+    // A row with prose takes over a body that only a bare row's numbers wrote: Burton's order
+    // form, loaded first, says "SIZE: M" of a binding that its description list then describes.
+    const prose = spec.description.trim() !== "";
+    const unwritten = isPlaceholderBody(target.description) && !written.has(target);
+    const numbersOnly = written.has(target) && !prosed.has(target);
+    if ((prose || lines.length > 0) && (unwritten || (prose && numbersOnly))) {
       target.description = houseBody(spec.description, lines);
       written.add(target);
+      if (prose) prosed.add(target);
     }
     for (const t of spec.tags.split(",").map((x) => x.trim()).filter(Boolean)) if (!target.tags.includes(t)) target.tags.push(t);
     for (const u of spec.imageUrls) if (!target.imageUrls.includes(u)) target.imageUrls.push(u);

@@ -208,14 +208,20 @@ export function matchLine(line: CanonicalLineItem, refs: Reference[], vocabulary
   // The barcode is the one key an invoice and an order form share on every row, and it is exact:
   // the EAN on the line is the EAN of one row. Burton's invoice carries it, and so does their order
   // form, which has no model code and names a binding "FREESTYLE" — which no name match found.
+  // A catalogue row found by code or name still comes first, since it knows the model's name and
+  // its words; the barcode places the line where the codes and the names could not, or lands it
+  // on the exact size when all a code found was a bare list.
   const ean = digits(line.barcode);
-  if (ean.length >= 8) {
-    const hit = refs.filter((r) => r.barcode === ean);
-    if (hit.length > 0) {
-      const named = hit.find((r) => r.spec.description.trim()) ?? hit[0];
-      return { spec: named.spec, how: "barcode", graphic: graphicOf(line.title, named, vocabulary) };
-    }
-  }
+  const hit = ean.length >= 8 ? refs.filter((r) => r.barcode === ean) : [];
+  const byBarcode: LineMatch | null = hit.length > 0
+    ? (() => { const named = hit.find((r) => r.spec.description.trim()) ?? hit[0]; return { spec: named.spec, how: "barcode" as const, graphic: graphicOf(line.title, named, vocabulary) }; })()
+    : null;
+  const rest = matchByCodeOrName(line, refs, vocabulary, sharedCodes, strict);
+  if (!("reason" in rest) && (rest.spec.description.trim() || !byBarcode)) return rest;
+  return byBarcode ?? rest;
+}
+
+function matchByCodeOrName(line: CanonicalLineItem, refs: Reference[], vocabulary: Set<string>, sharedCodes: boolean, strict: boolean): LineMatch | { reason: string } {
   const code = (line.modelCode || line.sku).replace(/\s+/g, "").toUpperCase();
   const coded = refs.filter((r) => r.code);
   if (code && coded.length > 0) {
@@ -286,6 +292,7 @@ function graphicOf(title: string, ref: Reference, vocabulary: Set<string>): stri
   const left = words.filter((x) =>
     !own.some((w) => sameWord(x, w))
     && !OPTIONAL.has(x)
+    && !GENDER.has(x) && !KIND.has(x)
     && ![...vocabulary].some((v) => sameWord(x, v))
     && !isPlaceholder(x));
   return left.map((w) => w.charAt(0) + w.slice(1).toLowerCase()).join(" ");
@@ -356,26 +363,28 @@ export function resolveAgainstReference(
     const name = shopName(spec.title);
     const way = named.get(name) ?? peelColour(name, spec.colour);
     // The sheet names the model where it is a catalogue; a barcode list's "FREESTYLE" is not a
-    // better name than the invoice's own "Men's Freestyle Snowboard Bindings", so that one stays.
+    // better name than the invoice's own "Men's Freestyle Snowboard Bindings", so that one stays —
+    // where it IS a name: written in its own case, as an invoice read by the model writes it. An
+    // order form's shorthand is all capitals ("BLAZE 94 BLACK FLAT") and the sheet names that.
     const sheetName = way?.model ?? name;
-    const keepOwn = bare && line.title.trim() !== "" && tokens(line.title).length >= tokens(sheetName).length;
+    const written = /[a-z]/.test(line.title) && tokens(line.title).length >= tokens(sheetName).length;
+    const keepOwn = bare && written;
     const next: CanonicalLineItem = {
       ...line,
       title: keepOwn ? line.title : sheetName,
       modelCode: spec.modelCode || line.modelCode,
       // The supplier's own per-colour code is still the line's identity; keep it where it was.
-      // A line without one takes the row's: a barcode list keys every size by SKU.
-      sku: line.sku || line.modelCode || spec.sku,
-      barcode: line.barcode || spec.barcode,
+      // A line placed by its barcode takes the row's SKU: that row is exactly this size of this
+      // colour, which a row found by a model code is not.
+      sku: line.sku || line.modelCode || (found.how === "barcode" ? spec.sku : ""),
       // Only a season that reads as a year. Volkl writes "26/27"; left as it is it became a tag.
       season: line.season || (/^20\d{2}$/.test(seasonFrom(spec.season)) ? seasonFrom(spec.season) : ""),
       gender: tidyGender(line.gender) || tidyGender(spec.gender) || tidyGender(genderOf(spec.title)),
-      // The row's own colour column where it has one; the order's leftover wording where a catalogue
-      // row has none ("CUSTOM NEW GRAPHIC" is the Custom in the New Graphic); nothing from the
-      // wording of a line placed by its barcode, where the leftover is just "Snowboard Bindings".
-      colour: line.colour || spec.colour || (found.how === "barcode" ? "" : found.graphic) || way?.colour || "",
+      // The order's leftover wording names the colourway as the shop does ("BLAZE 94 ROSE" is the
+      // Rose, whatever the sheet's colour column calls it); only a row found by its barcode, which
+      // is exactly this colour of this size, says its colour first.
+      colour: line.colour || (found.how === "barcode" ? spec.colour : "") || found.graphic || way?.colour || "",
       terrain: line.terrain || spec.terrain,
-      description: line.description || spec.description,
     };
     // What kind of product this is, from the catalogue's full name rather than the short one.
     const rule = detectCategory({ ...next, title: spec.title, description: "" }, rules);

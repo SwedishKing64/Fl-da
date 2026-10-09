@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { resolveAgainstReference } from "./reference-match";
+import { enrichFromSpecs } from "./specs";
 import { DEFAULT_CATEGORY_RULES } from "./categorize";
 import type { CanonicalLineItem } from "./types";
 
@@ -46,9 +47,12 @@ describe("joining an invoice to Burton's order form", () => {
     ];
     const r = resolveAgainstReference(lines, [...orderForm, ...descriptions], DEFAULT_CATEGORY_RULES);
     expect(r.joined.map((j) => ("how" in j ? j.how : j.reason))).toEqual(["barcode", "barcode"]);
-    expect(r.items[0].description).toContain("Freestyle binding");
+    // The model is known by the list's code now, which is how the words are found when the product is built.
+    expect(r.items.map((i) => i.modelCode)).toEqual(["10544", "10002"]);
     expect(r.items[0].sku).toBe("105441CA02RG00M");
-    expect(r.items[1].description).toContain("Storm-ready");
+    const built = enrichFromSpecs(r.items.map((i) => ({ title: i.title, brand: "Burton", description: "", tags: [] as string[], imageUrls: [] as string[], metafields: {} as Record<string, string>, variants: [{ item: i }] })), [...orderForm, ...descriptions]);
+    expect(built[0].description).toContain("Freestyle binding");
+    expect(built[1].description).toContain("Storm-ready");
     // The invoice's own name stays: the list was only asked for the words.
     expect(r.items[1].title).toBe("Men's [ak] Cyclic GORE-TEX Jacket");
   });

@@ -31,6 +31,7 @@ const DirectivesSchema = z.object({
   deliveries: z.string().describe("Only the lines due in one delivery window, when they say so: a month as YYYY-MM ('only the December 2026 delivery' is 2026-12), a span as YYYY-MM..YYYY-MM, a whole year as YYYY ('only what has an estimated delivery of 26' is 2026), or an ordinal ('first delivery only' is 'first'). Empty when they have not said, and every line is built."),
   onlyNew: z.boolean().describe("True when they say to only add products the shop does not already have, and leave out the ones it already lists."),
   allNew: z.boolean().describe("True when they say every product on this invoice is new to the shop — nothing on it is already listed — so the lines are not to be matched against the shop's listings at all. 'These are all new products', 'nothing here is in the shop yet', 'don't match against the shop'."),
+  skip: z.array(z.string()).describe("Products on the invoice NOT to build, as they named them: 'don't build the Kore 94', 'leave out the socks and the beanies', 'skip the Cyclic bib' is ['Kore 94', 'socks', 'beanies'] / ['Cyclic bib']. One entry per product or kind of product named. Empty when they have not said."),
   brands: z.array(z.string()).describe("Only the lines of these brands, when a sheet carries more than one brand and they say which to do: 'only Burton', 'start with Burton and do Anon separately', 'leave out Anon' (then the brands to keep are the others they named). Empty when they have not said."),
   notes: z.string().describe("Anything else worth knowing that is not one of the fields above — kept with the batch and used when copy is written. Empty when there is nothing."),
 });
@@ -49,6 +50,7 @@ export const NO_DIRECTIVES: BatchDirectives = {
   deliveries: "",
   onlyNew: false,
   allNew: false,
+  skip: [],
   brands: [],
   notes: "",
 };
@@ -59,7 +61,7 @@ Turn what they say into directives that apply to every product in the batch. Tak
 
 Skis are built twice as a matter of course: flat, and as a package with a binding (men's with the Marker Griffon, women's with the Marker Squire), priced from the binding on the supplier's own price list. When they talk about packaging, partnering or selling skis with a binding, that is the packages and packageBindings fields.
 
-An order form can span several deliveries — a column of quantities per month, or a delivery date per line. "Only the December 2026 delivery", "just the April order" or "only the lines with an estimated delivery of 26" is the deliveries field. "Only add the new products" / "leave out what we already have" is onlyNew. "These are all new products" / "nothing here is in the shop" / "don't match against the shop" is allNew: the lines are built as new products without being matched against the shop's listings, which is quicker. A sheet can carry two brands (Burton and Anon on one Burton order): "only Burton" / "start with Burton, Anon later" is the brands field.
+An order form can span several deliveries — a column of quantities per month, or a delivery date per line. "Only the December 2026 delivery", "just the April order" or "only the lines with an estimated delivery of 26" is the deliveries field. "Only add the new products" / "leave out what we already have" is onlyNew. "These are all new products" / "nothing here is in the shop" / "don't match against the shop" is allNew: the lines are built as new products without being matched against the shop's listings, which is quicker. A sheet can carry two brands (Burton and Anon on one Burton order): "only Burton" / "start with Burton, Anon later" is the brands field. Products they say not to build — "don't build the Kore 94", "leave out the socks", "skip the beanies and the neck warmers" — go in skip, one entry per product or kind named, as they named it.
 
 Only fill a field they actually asked for. Everything else stays empty, null or false — a directive changes every product in the batch, so inventing one is expensive. Anything they say that is not one of the fields goes in notes, where it reaches the writing without changing a field.
 
@@ -125,6 +127,7 @@ export function describeDirectives(d: BatchDirectives): string[] {
   else if (d.packages === "build") out.push("Every ski also as a binding package");
   if (d.deliveries.trim()) out.push(`Only the ${/^\d{4}-\d{2}/.test(d.deliveries.trim()) ? d.deliveries.trim().replace("..", " to ") : `${d.deliveries.trim()}`} delivery`);
   if (d.onlyNew) out.push("Only products the shop does not already list");
+  if (d.skip.length) out.push(`Not built: ${d.skip.join(", ")}`);
   if (d.brands.length) out.push(`Only ${d.brands.join(" and ")}`);
   if (d.notes.trim()) out.push(d.notes.trim());
   return out;
@@ -147,4 +150,23 @@ export function discounted(price: number, pct: number | null | undefined): numbe
   if (pct === null || pct === undefined || !Number.isFinite(pct) || pct <= 0) return price;
   const off = Math.min(pct, 100) / 100;
   return Math.round(price * (1 - off) * 100) / 100;
+}
+
+/**
+ * Whether a built product is one the person said not to build.
+ *
+ * Matched on the words: "Kore 94" leaves out "Kore 94 Ti 2026" and its binding package; "socks"
+ * leaves out every product with socks in its name. A handle is matched whole, which is how the
+ * checklist on the batch page names what it unticked.
+ */
+export function isSkipped(product: { title: string; handle: string }, skip: string[]): boolean {
+  const title = product.title.toLowerCase();
+  const handle = product.handle.toLowerCase();
+  return skip.some((s) => {
+    const want = s.trim().toLowerCase();
+    if (!want) return false;
+    if (want === handle) return true;
+    const words = want.replace(/[^a-z0-9 ]+/g, " ").split(/\s+/).filter(Boolean);
+    return words.length > 0 && words.every((w) => new RegExp(`(^|[^a-z0-9])${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z0-9]|$)`).test(title));
+  });
 }

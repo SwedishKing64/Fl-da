@@ -2,7 +2,7 @@
 
 import type { Prisma } from "@prisma/client";
 import { productTitle, seasonTagFrom, seoTitle } from "./titles";
-import { parseDirectives } from "./instructions";
+import { isSkipped, parseDirectives } from "./instructions";
 import { prisma, parseJson } from "./db";
 import { extractFile, type UploadKind } from "./extract";
 import { applyMapping, headerHash, looksLikeReference, mappingProblems, repairTemplate, seasonFrom, suggestMapping, suggestOptions, type Mapping, type MappingOptions, type SavedOptions } from "./mapping";
@@ -770,6 +770,17 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
         packages.length > 0 ? `Built ${packages.length} binding package${packages.length === 1 ? "" : "s"} beside the flat skis: ${packages.map((p) => p.title).join(", ")}.` : "",
         ...skipped.map((k) => `No package for ${k.title}: ${k.reason}.`),
       ].filter(Boolean).join(" "));
+    }
+  }
+
+  // What the person said not to build, by name or by unticking it on the batch page.
+  if (directives.skip.length > 0) {
+    const left = grouped.filter((g) => isSkipped({ title: productTitle(g.title, seasonTagFrom(g.tags)), handle: g.handle }, directives.skip));
+    for (const g of left) grouped.splice(grouped.indexOf(g), 1);
+    if (left.length > 0) {
+      for (const fileId of [...new Set(items.map((i) => i.fileId))]) {
+        await noteOnFile(fileId, `Not built, as asked: ${left.map((g) => productTitle(g.title, seasonTagFrom(g.tags))).join(", ")}.`);
+      }
     }
   }
 

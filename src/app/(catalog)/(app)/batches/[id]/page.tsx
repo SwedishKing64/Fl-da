@@ -13,6 +13,7 @@ import { BatchSettingsForm } from "./BatchSettingsForm";
 import { BuildProductsButton, DeleteFileButton, DeleteBatchButton, RetryExtractionButton } from "./BatchButtons";
 import { ExtractedRows } from "./ExtractedRows";
 import { LinksPanel } from "./review/LinksPanel";
+import { BuildList } from "./BuildList";
 import { guarded } from "@/app/(catalog)/page-failed";
 
 /**
@@ -42,7 +43,8 @@ async function renderBatchPage(props: PageProps<"/batches/[id]">) {
   const [suppliers, settings, reviewed] = await Promise.all([prisma.supplier.findMany({ orderBy: { name: "asc" } }), getSettings(), reviewedSinceBuilt(id)]);
   const locked = ["EXPORTED", "PUSHED"].includes(batch.status);
   const extracted = batch.files.filter((f) => f.extractionStatus === "DONE");
-  const allNew = parseDirectives(batch.directives).allNew;
+  const directives = parseDirectives(batch.directives);
+  const allNew = directives.allNew;
   // The products, for their page links: asked for here, right after the build, where the person
   // is — the review page asks too, but a step on another page was a step nobody saw.
   const products = batch._count.products > 0
@@ -112,6 +114,9 @@ async function renderBatchPage(props: PageProps<"/batches/[id]">) {
               />
             ))}
           </Card>
+          {(products.length > 0 || directives.skip.length > 0) && (
+            <BuildList batchId={id} locked={locked} built={products.map((p) => ({ title: p.title, handle: p.handle }))} skipped={directives.skip} />
+          )}
           {products.length > 0 && (
             <LinksPanel
               batchId={id}

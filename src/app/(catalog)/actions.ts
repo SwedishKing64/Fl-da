@@ -1484,6 +1484,48 @@ export async function sendInstructionAction(batchId: string, message: string): P
  * "All new products": the one directive worth a tick rather than a sentence, because it is the
  * difference between a build that matches every line against the shop and one that does not.
  */
+/**
+ * Which of the invoice's products to build: the ones unticked on the batch page are left out.
+ *
+ * A product unticked goes from the batch at once and is remembered as skipped, so a later build
+ * leaves it out too. One ticked back is built again — a rebuild, since the build is what makes it,
+ * and only while nothing on the review page has been edited since the last one.
+ */
+export async function setSkippedProductsAction(batchId: string, skip: string[]): Promise<ActionResult<{ removed: number; rebuilt: boolean; said: string }>> {
+  return safely(async () => {
+    const user = await requireUser();
+    const batch = await prisma.importBatch.findUniqueOrThrow({ where: { id: batchId }, select: { directives: true, status: true } });
+    if (["EXPORTED", "PUSHED"].includes(batch.status)) return { ok: false, error: "This batch has been exported, so what it builds is no longer being changed." };
+    const before = parseDirectives(batch.directives);
+    const next = [...new Set(skip.map((x) => x.trim()).filter(Boolean))];
+    const directives = { ...before, skip: next };
+    await prisma.importBatch.update({ where: { id: batchId }, data: { directives: JSON.stringify(directives) } });
+    await logAudit("batch.instruction", { batchId, userId: user.id, details: { skip: next } });
+    const { isSkipped, parseDirectives: _p } = await import("@/lib/catalog/instructions");
+    void _p;
+    const built = await prisma.product.findMany({ where: { batchId }, select: { id: true, title: true, handle: true } });
+    const gone = built.filter((p) => isSkipped(p, next));
+    if (gone.length > 0) await prisma.product.deleteMany({ where: { id: { in: gone.map((p) => p.id) } } });
+    // Something ticked back on: only a rebuild brings it back.
+    const restored = before.skip.filter((x) => !next.includes(x));
+    let rebuilt = false;
+    let said = gone.length > 0 ? `${gone.length} product${gone.length === 1 ? "" : "s"} left out.` : "";
+    if (restored.length > 0) {
+      const { untouchedSinceBuilt } = await import("@/lib/catalog/pipeline");
+      if (await untouchedSinceBuilt(batchId)) {
+        await autoApplyMappings(batchId, user.id);
+        rebuilt = true;
+        said = `${said} Built again with ${restored.join(", ")} back in.`.trim();
+      } else {
+        said = `${said} ${restored.join(", ")} will be back the next time the products are built — the review page has edits, so they were not rebuilt now.`.trim();
+      }
+    }
+    revalidatePath(`/batches/${batchId}`);
+    revalidatePath(`/batches/${batchId}/review`);
+    return { ok: true, data: { removed: gone.length, rebuilt, said } };
+  });
+}
+
 export async function setAllNewAction(batchId: string, allNew: boolean): Promise<ActionResult<{ directives: string[]; rebuilt: number }>> {
   return safely(async () => {
     const user = await requireUser();

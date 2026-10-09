@@ -52,3 +52,17 @@ describe("what a batch is being built under", () => {
     expect(describeDirectives(NO_DIRECTIVES)).toEqual([]);
   });
 });
+
+describe("what the person said not to build", () => {
+  it("matches a product by the words they used, or by its handle from the checklist", async () => {
+    const { isSkipped, describeDirectives, NO_DIRECTIVES } = await import("./instructions");
+    expect(isSkipped({ title: "Kore 94 Ti 2026", handle: "kore-94-ti-2026" }, ["Kore 94"])).toBe(true);
+    expect(isSkipped({ title: "Kore 94 Ti 2026 inc Tyrolia Attack 14 Binding Package", handle: "kore-94-ti-2026-inc-tyrolia-attack-14-binding-package" }, ["kore 94"])).toBe(true);
+    expect(isSkipped({ title: "Kore 99 2026", handle: "kore-99-2026" }, ["Kore 94"])).toBe(false);
+    expect(isSkipped({ title: "Men's Weekend Midweight Socks (2 Pack) 2026", handle: "mens-weekend-midweight-socks-2-pack-2026" }, ["socks"])).toBe(true);
+    expect(isSkipped({ title: "Kids' Warmest Mittens 2027", handle: "kids-warmest-mittens-2027" }, ["kids-warmest-mittens-2027"])).toBe(true);
+    expect(isSkipped({ title: "Kids' Warmest Mittens 2027", handle: "kids-warmest-mittens-2027" }, ["mitten"])).toBe(false);
+    expect(isSkipped({ title: "Anything", handle: "anything" }, ["", "  "])).toBe(false);
+    expect(describeDirectives({ ...NO_DIRECTIVES, skip: ["Kore 94", "socks"] })).toContain("Not built: Kore 94, socks");
+  });
+});

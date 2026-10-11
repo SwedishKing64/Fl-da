@@ -8,24 +8,24 @@
  * what you type into and what the app works out for you. */
 .grid-wrap { overflow: auto; max-height: calc(100vh - 300px); border: 1px solid var(--line); border-radius: 12px; background: #fff; }
 .review-grid { border-collapse: separate; border-spacing: 0; font-size: 13.5px; min-width: 1720px; }
-.review-grid th { position: sticky; top: 27px; z-index: 2; background: #faf9f6; border-bottom: 1px solid var(--line); padding: 9px 12px; text-align: left; font-weight: 600; white-space: nowrap; color: var(--ink-2); }
+.review-grid th { position: sticky; top: 27px; z-index: 2; background: #f7f8fa; border-bottom: 1px solid var(--line); padding: 9px 12px; text-align: left; font-weight: 600; white-space: nowrap; color: var(--ink-2); }
 /* The band headings sit above the column names, and both stay put when the grid scrolls. */
-.review-grid tr.band-row th { top: 0; z-index: 3; height: 27px; padding: 4px 12px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--ink-soft); background: #f3f1ec; border-bottom: 1px solid var(--line-soft); }
+.review-grid tr.band-row th { top: 0; z-index: 3; height: 27px; padding: 4px 12px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--ink-soft); background: #eef1f5; border-bottom: 1px solid var(--line-soft); }
 .review-grid th.band-start, .review-grid td.band-start { border-left: 1px solid var(--line); }
 /* Worked out from the other columns, so not somewhere to type. */
 .review-grid th.calculated { color: var(--ink-soft); font-weight: 500; }
 .review-grid td.calculated .cell { color: var(--ink-2); background: rgba(0, 0, 0, 0.022); }
 .review-grid td { border-bottom: 1px solid var(--line-soft); padding: 0; vertical-align: middle; white-space: nowrap; height: 42px; }
-.review-grid tr.product-row td { background: #f4f2ed; font-weight: 500; border-top: 2px solid var(--line); border-bottom: 1px solid var(--line); }
+.review-grid tr.product-row td { background: #f3f5f8; font-weight: 500; border-top: 2px solid var(--line); border-bottom: 1px solid var(--line); }
 .review-grid tr.variant-row td { background: #fff; }
 .review-grid tr.row-error td { box-shadow: inset 3px 0 0 var(--detractor); }
 .review-grid tr.row-warning td { box-shadow: inset 3px 0 0 var(--passive); }
-.review-grid tr.selected td { background: #efeaff; }
-.review-grid tr.variant-row:hover td { background: #fbfaff; }
+.review-grid tr.selected td { background: var(--meta-tint); }
+.review-grid tr.variant-row:hover td { background: #f5f9ff; }
 .review-grid .cell { display: block; padding: 9px 12px; min-width: 60px; overflow: hidden; text-overflow: ellipsis; max-width: 300px; }
 /* An editable cell says so before it is clicked: a dotted rule under the value, solid on hover. */
-.review-grid .cell.editable { cursor: cell; box-shadow: inset 0 -1px 0 rgba(91, 75, 214, 0.22); }
-.review-grid .cell.editable:hover { background: rgba(91, 75, 214, 0.07); box-shadow: inset 0 -2px 0 var(--violet); }
+.review-grid .cell.editable { cursor: cell; box-shadow: inset 0 -1px 0 rgba(8, 102, 255, 0.28); }
+.review-grid .cell.editable:hover { background: rgba(8, 102, 255, 0.07); box-shadow: inset 0 -2px 0 var(--meta); }
 .review-grid .cell.focused { outline: 2px solid var(--violet); outline-offset: -2px; }
 .review-grid .cell.num { text-align: right; font-variant-numeric: tabular-nums; }
 .review-grid .cell input:not([type="checkbox"]), .review-grid .cell select { width: 100%; height: 100%; border: 0; outline: 2px solid var(--violet); outline-offset: -2px; padding: 8px 11px; font: inherit; background: #fff; }
@@ -40,4 +40,4 @@
 .summary-bar .v { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .dropzone { border: 2px dashed var(--line); border-radius: 12px; padding: 28px; text-align: center; color: var(--ink-soft); transition: background 0.15s, border-color 0.15s; }
 .dropzone.active { border-color: var(--violet); background: var(--violet-soft); color: var(--violet); }
-.review-grid tr.section-row td { background: #e8e2ff; color: var(--ink); font-size: 12.5px; height: 38px; border-top: 2px solid var(--violet); }
+.review-grid tr.section-row td { background: var(--meta-tint-2); color: var(--meta-ink); font-size: 12.5px; height: 38px; border-top: 2px solid var(--meta); }

@@ -18,8 +18,8 @@ export default async function BulkPage() {
   return (
     <>
       <PageHeader
-        title="Bulk uploads"
-        subtitle="Change products already in the shop — prices through the season, moves into clearance. Export them from Shopify, say what to change, check every cell that moves, and import the file back."
+        title="Prices and stock"
+        subtitle="Change products already in the shop: prices through the season, moves into clearance, a delivery added to stock. Export them from Shopify, say what to change in plain words, check every cell that moves, and import the file back."
       />
       <BulkPanel aiEnabled={planningAvailable()} builtBy={builtBy} />
     </>

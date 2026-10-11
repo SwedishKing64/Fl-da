@@ -16,11 +16,11 @@ const ICONS: Record<string, React.ReactNode> = {
 };
 
 const LINKS = [
-  { href: "/", label: "Dashboard", icon: "dashboard", exact: true },
-  { href: "/batches", label: "Import batches", icon: "batches" },
-  { href: "/bulk", label: "Bulk uploads", icon: "bulk" },
+  { href: "/", label: "Home", icon: "dashboard", exact: true },
+  { href: "/batches", label: "New products", icon: "batches" },
+  { href: "/bulk", label: "Prices and stock", icon: "bulk" },
   { href: "/tidy", label: "Tidy a document", icon: "tidy" },
-  { href: "/pricing", label: "Pricing", icon: "pricing" },
+  { href: "/pricing", label: "Price calculator", icon: "pricing" },
   { href: "/history", label: "History", icon: "history" },
   { href: "/settings", label: "Settings", icon: "settings", admin: true },
 ];

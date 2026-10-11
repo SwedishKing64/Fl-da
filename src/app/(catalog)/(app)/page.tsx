@@ -1,14 +1,56 @@
 import Link from "next/link";
 import { prisma, parseJson } from "@/lib/catalog/db";
-import { Badge, Card, Details, Empty, LinkButton, PageHeader, Stat, fmtDate, statusTone } from "@/app/(catalog)/ui";
+import { Badge, Card, Details, Empty, PageHeader, Stat, fmtDate, statusTone } from "@/app/(catalog)/ui";
 import type { ReviewSummary } from "@/lib/catalog/review-types";
+
+/**
+ * Home. Three jobs the shop comes here to do, each a card you press, and the batches on the way
+ * with the one thing to do next on each. The figures that used to lead the page are below the
+ * fold: nobody opens this to be told how many variants they have exported.
+ */
+
+/** The one thing to do next on a batch, from where it has got to. */
+function nextStep(status: string, files: number, products: number): { text: string; href: string; done?: boolean } {
+  switch (status) {
+    case "EXPORTED":
+    case "PUSHED": return { text: "Done — import the file into Shopify", href: "export", done: true };
+    case "ROLLED_BACK": return { text: "Rolled back — start again if needed", href: "" };
+    case "FAILED": return { text: "Something went wrong — open it", href: "" };
+    case "REVIEW": return { text: products > 0 ? "Check the products, then export" : "Build the products", href: products > 0 ? "review" : "" };
+    default: return files === 0 ? { text: "Upload the invoice", href: "" } : products === 0 ? { text: "Build the products", href: "" } : { text: "Check the products", href: "review" };
+  }
+}
+
+const JOBS = [
+  {
+    href: "/batches/new",
+    title: "Add new products",
+    text: "An invoice or order confirmation goes in — a spreadsheet, a PDF or a photo — and ready-to-import Shopify products come out, priced and tagged the way the shop does it.",
+    go: "Start with an invoice",
+    icon: <><path d="M4 7.5 12 3l8 4.5-8 4.5-8-4.5Z" /><path d="m4 12 8 4.5 8-4.5" /><path d="m4 16.5 8 4.5 8-4.5" /></>,
+  },
+  {
+    href: "/bulk",
+    title: "Change prices or stock",
+    text: "Load your shop export, say what should change in plain words — a sale, a clearance, a delivery to add to stock — check the list, download the file.",
+    go: "Open prices and stock",
+    icon: <><path d="M12 15V3" /><path d="m7 8 5-5 5 5" /><path d="M4 15v4.5A1.5 1.5 0 0 0 5.5 21h13a1.5 1.5 0 0 0 1.5-1.5V15" /></>,
+  },
+  {
+    href: "/tidy",
+    title: "Tidy a photo of paperwork",
+    text: "A scribbled-on order confirmation, read into a table you can check, pen marks and all, and saved as a CSV the other two pages take.",
+    go: "Read a photo",
+    icon: <><rect x="4" y="3" width="16" height="18" rx="1.5" /><path d="M8 8h8M8 12h8M8 16h5" /></>,
+  },
+];
 
 export default async function DashboardPage() {
   const [batches, recent, exported, audit] = await Promise.all([
     prisma.importBatch.count(),
     prisma.importBatch.findMany({ orderBy: { updatedAt: "desc" }, take: 8, include: { supplier: true, _count: { select: { products: true, files: true } } } }),
     // Capped: this reads a JSON blob per batch, and a shop two seasons in has hundreds. The
-    // figures below it are a dashboard headline, not an accounting record.
+    // figures below it are a headline, not an accounting record.
     prisma.importBatch.findMany({ where: { status: { in: ["EXPORTED", "PUSHED"] } }, select: { summary: true }, orderBy: { exportedAt: "desc" }, take: 200 }),
     prisma.auditLog.findMany({ orderBy: { createdAt: "desc" }, take: 8, include: { user: true, batch: true } }),
   ]);
@@ -21,51 +63,66 @@ export default async function DashboardPage() {
     variants += s.variants;
     units += s.units;
   }
+  const onTheGo = recent.filter((b) => !["EXPORTED", "PUSHED", "ROLLED_BACK"].includes(b.status));
 
   return (
     <>
-      <PageHeader title="Dashboard" subtitle="Turn supplier invoices and spec sheets into ready-to-import Shopify products." actions={<LinkButton href="/batches/new" variant="primary">New import</LinkButton>} />
-      <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Stat label="Import batches" value={batches.toLocaleString("en-AU")} sub={recent.length > 0 ? `last touched ${fmtDate(recent[0].updatedAt)}` : "none yet"} />
-        <Stat label="Products exported" value={products.toLocaleString("en-AU")} sub={`across ${exported.length} exported batch${exported.length === 1 ? "" : "es"}`} />
-        <Stat label="Variants exported" value={variants.toLocaleString("en-AU")} sub={products > 0 ? `${(variants / products).toFixed(1)} per product` : "—"} />
-        <Stat label="Units" value={units.toLocaleString("en-AU")} sub="ordered across those batches" tone="gold" />
+      <PageHeader title="What would you like to do?" subtitle="Pick a job. Each one walks you through it a step at a time." />
+      <div className="mb-8 grid gap-4 md:grid-cols-3">
+        {JOBS.map((j, i) => (
+          <Link key={j.href} href={j.href} className={`job lift rise rise-${i + 1}`}>
+            <span className="job-ico" aria-hidden>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{j.icon}</svg>
+            </span>
+            <h2>{j.title}</h2>
+            <p>{j.text}</p>
+            <span className="job-go">{j.go} <span aria-hidden>→</span></span>
+          </Link>
+        ))}
       </div>
+
       <div className="grid gap-6 lg:grid-cols-3">
-        <Card title="Recent batches" className={recent.length === 0 ? "lg:col-span-2" : "lg:col-span-3"} actions={<Link href="/batches" className="text-xs text-[var(--violet)]">All batches</Link>}>
+        <Card title={onTheGo.length > 0 ? "Carry on where you left off" : "Recent imports"} className="lg:col-span-3" actions={<Link href="/batches" className="text-[13px] font-medium text-[var(--meta)]">All imports</Link>}>
           {recent.length === 0 ? (
-            <Empty>No imports yet. Start by creating a batch and uploading an invoice or spec sheet.</Empty>
+            <Empty>Nothing yet. Press <strong>Add new products</strong> above and upload an invoice to begin.</Empty>
           ) : (
-            <table className="w-full text-sm">
-              <thead className="text-left text-xs text-[var(--ink-soft)]"><tr><th className="py-1">Batch</th><th>Supplier</th><th>Status</th><th className="text-right">Files</th><th className="text-right">Products</th><th className="text-right">Updated</th></tr></thead>
-              <tbody>
-                {recent.map((b) => (
-                  <tr key={b.id} className="border-t border-[var(--line-soft)]">
-                    <td className="py-2"><Link href={`/batches/${b.id}`} className="font-medium text-[var(--violet)]">{b.name}</Link></td>
-                    <td>{b.supplier?.name ?? "–"}</td>
-                    <td><Badge tone={statusTone(b.status)}>{b.status.replace("_", " ")}</Badge></td>
-                    <td className="text-right">{b._count.files}</td>
-                    <td className="text-right">{b._count.products}</td>
-                    <td className="text-right text-xs text-[var(--ink-soft)]">{fmtDate(b.updatedAt)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <ul className="divide-y divide-[var(--line-soft)]">
+              {recent.map((b) => {
+                const step = nextStep(b.status, b._count.files, b._count.products);
+                const href = `/batches/${b.id}${step.href ? `/${step.href}` : ""}`;
+                return (
+                  <li key={b.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                    <div className="min-w-0">
+                      <Link href={`/batches/${b.id}`} className="text-[15px] font-semibold text-[var(--ink)] hover:text-[var(--meta)]">{b.name}</Link>
+                      <div className="mt-0.5 text-[13px] text-[var(--ink-soft)]">
+                        {[b.supplier?.name, `${b._count.files} file${b._count.files === 1 ? "" : "s"}`, `${b._count.products} product${b._count.products === 1 ? "" : "s"}`, fmtDate(b.updatedAt)].filter(Boolean).join(" · ")}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge tone={statusTone(b.status)}>{b.status.replace("_", " ")}</Badge>
+                      <Link href={href} className={`next-step ${step.done ? "done" : ""}`}>{step.text}{!step.done && <span aria-hidden>→</span>}</Link>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
           )}
         </Card>
-        {recent.length === 0 && <Card title="How it works">
-          <ol className="list-decimal space-y-2 pl-5 text-sm text-[var(--ink-2)]">
-            <li><strong>Upload</strong> invoices, spec sheets or product photos. Spreadsheets are read directly; PDFs and photos are read by AI.</li>
-            <li><strong>Review</strong> the products in the grid: fix anything, add images, check tags.</li>
-            <li><strong>Export</strong> one Shopify CSV per brand (or product type), or push straight to the store.</li>
-          </ol>
-          <p className="mt-3 text-xs text-[var(--ink-soft)]">Tags, collections and types follow the shop&apos;s own conventions, measured from its catalogue. Prices are the supplier&apos;s recommended retail, less any discount you state for the invoice.</p>
-        </Card>}
+
+        <Details summary="The numbers so far" hint="imports, products and units exported" className="lg:col-span-3">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <Stat label="Imports" value={batches.toLocaleString("en-AU")} sub={recent.length > 0 ? `last touched ${fmtDate(recent[0].updatedAt)}` : "none yet"} />
+            <Stat label="Products exported" value={products.toLocaleString("en-AU")} sub={`across ${exported.length} exported import${exported.length === 1 ? "" : "s"}`} />
+            <Stat label="Variants exported" value={variants.toLocaleString("en-AU")} sub={products > 0 ? `${(variants / products).toFixed(1)} per product` : "—"} />
+            <Stat label="Units" value={units.toLocaleString("en-AU")} sub="ordered across those imports" tone="gold" />
+          </div>
+        </Details>
+
         <Details summary="Latest activity" className="lg:col-span-3">
           <ul className="divide-y divide-[var(--line-soft)] text-sm">
             {audit.map((a) => (
               <li key={a.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
-                <span><span className="font-mono text-xs text-[var(--ink-soft)]">{a.action}</span> {a.batch && <Link href={`/batches/${a.batch.id}`} className="text-[var(--violet)]">{a.batch.name}</Link>}</span>
+                <span><span className="font-mono text-xs text-[var(--ink-soft)]">{a.action}</span> {a.batch && <Link href={`/batches/${a.batch.id}`} className="text-[var(--meta)]">{a.batch.name}</Link>}</span>
                 <span className="text-xs text-[var(--ink-soft)]">{a.user?.name ?? "system"} · {fmtDate(a.createdAt)}</span>
               </li>
             ))}
@@ -76,4 +133,3 @@ export default async function DashboardPage() {
     </>
   );
 }
-

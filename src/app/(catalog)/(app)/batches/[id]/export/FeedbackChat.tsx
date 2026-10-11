@@ -57,7 +57,7 @@ export function FeedbackChat({ batchId, initial, aiEnabled }: { batchId: string;
 function Proposal({ message, onApply, pending }: { message: FeedbackMessage; onApply: () => void; pending: boolean }) {
   const applied = Boolean(message.appliedRule.trim());
   return (
-    <div className="mt-2 rounded-lg border border-[var(--gold)] bg-[#fffdf2] p-3">
+    <div className="mt-2 rounded-lg border border-[var(--meta-bright)] bg-[var(--meta-tint)] p-3">
       <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--gold-deep)]">
         {applied ? "Added to the standing rules" : "Add this so it does not happen again"}
       </div>

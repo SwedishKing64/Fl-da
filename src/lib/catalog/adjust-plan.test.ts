@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { describePlan, groundScope, mapWithConcurrency, respellAddedTags } from "./adjust-plan";
+import { describePlan, groundScope, mapWithConcurrency, respellAddedTags, withPackages } from "./adjust-plan";
 
 const FILE = {
   vendors: ["Burton", "Nitro", "Arc'teryx", "Anon", "POC", "Ride"],
@@ -266,5 +266,21 @@ describe("the mounting charge, described", () => {
     const lines = describePlan({ scope: { fitting: "package" }, operations: [{ kind: "setMountPrice", amount: 59, bindings: "drill" }] });
     expect(lines.join(" ")).toMatch(/mounting charge to \$59\.00 on packages whose binding is drilled on/);
     expect(lines.join(" ")).toMatch(/a sale stays the sale it was/);
+  });
+
+  it("names the bindings the instruction called out", () => {
+    const named = ["Marker FDT 7", "M7.0", "SPX 15", "NX7"];
+    expect(describePlan({ scope: { fitting: "package" }, operations: [{ kind: "setMountPrice", amount: 59, bindings: "drill", named }] }).join(" "))
+      .toMatch(/drilled on .*, and on any package whose binding is Marker FDT 7, M7\.0, SPX 15, NX7:/);
+    expect(describePlan({ scope: { fitting: "package" }, operations: [{ kind: "setMountPrice", amount: 59, named }] }).join(" "))
+      .toMatch(/\$59\.00 on packages whose binding is Marker FDT 7, M7\.0, SPX 15, NX7:/);
+  });
+
+  it("is always scoped to packages, however the instruction's 'flat' was read", () => {
+    // "All flat drill mount bindings ... please mount should be $59 more" came back as fitting: flat
+    // and matched no package. The flat there is the binding.
+    expect(withPackages({ fitting: "flat" }, [{ kind: "setMountPrice", amount: 59, bindings: "drill" }])).toEqual({ fitting: "package" });
+    expect(withPackages({}, [{ kind: "setMountPrice", amount: 59 }])).toEqual({ fitting: "package" });
+    expect(withPackages({ fitting: "flat" }, [{ kind: "discount", percent: 10 }])).toEqual({ fitting: "flat" });
   });
 });

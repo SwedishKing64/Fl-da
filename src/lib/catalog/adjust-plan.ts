@@ -33,7 +33,8 @@ const OperationSchema = z.object({
   from: z.enum(["rrp", "current"]).nullable().describe("For discount: 'rrp' (the default, off the recommended retail in Compare At) or 'current' only when the instruction plainly means off today's price."),
   value: z.number().nullable().describe("For setPrice: the new price. For setQuantity: the stock on hand. For setMountPrice: the mounting charge in dollars, e.g. 59. For setCost: the cost per item in dollars. Null otherwise."),
   raiseOnly: z.boolean().describe("For setMountPrice only: true only when the instruction says to ONLY increase, never lower — 'at least $59', 'raise any that are under $59', 'don't lower any'. False when it says the difference should be $59, is going up to $59, or is now $59: then every package is set to that difference, up or down. False otherwise."),
-  bindings: z.enum(["drill", "system", ""]).describe("For setMountPrice only: \"drill\" when the instruction means the packages whose binding is drilled onto the ski (touring bindings, Griffon, Squire, Strive, Jester, Pivot, Attack — 'bindings that need a drill mount'); \"system\" when it means skis that come with a binding on a track (Xpress, NX Konect, PR, Joy SLR, M 12, Z12, RS, TPX — 'skis that come with a binding', 'system bindings', 'track bindings'); empty when it means every package. Empty otherwise."),
+  bindings: z.enum(["drill", "system", ""]).describe("For setMountPrice only: \"drill\" when the instruction means the packages whose binding is drilled onto the ski (touring bindings, Griffon, Squire, Strive, Jester, Pivot, Attack, SPX — 'bindings that need a drill mount', 'flat bindings', 'flat drill mount bindings'); \"system\" when it means skis that come with a binding on a track (Xpress, NX Konect, PR, Joy SLR, M 12, Z12, RS, TPX — 'skis that come with a binding', 'system bindings', 'track bindings', 'integrated bindings'); empty when it means every package. Empty otherwise."),
+  bindingNames: z.array(z.string()).describe("For setMountPrice only: the binding models the instruction names, one per entry, spelled as it spells them — 'including Marker FDT 7, M7.0, SPX 15, NX7' is [\"Marker FDT 7\", \"M7.0\", \"SPX 15\", \"NX7\"]. Packages on these bindings are always included, whichever kind they would otherwise count as. Names of bindings never go in the scope. Empty otherwise."),
   tags: z.array(z.string()).describe("For addTags/removeTags: the tags, spelled as this shop spells them. Empty otherwise."),
   status: z.enum(["active", "draft", "archived"]).nullable().describe("For setStatus. Null otherwise."),
   text: z.string().describe("For setType/setVendor: the new value. For setTitleYear: the four-digit season, e.g. \"2027\". For renameTitle: the wording to put IN. Empty otherwise."),
@@ -70,7 +71,7 @@ The shop's rules, which you follow without being told:
 - The COST (also "cost per item", "cost price", "wholesale", "what we pay", "buy price") is what the shop pays, never the selling price. "Set the cost to $450", "cost per item is 450" is setCost with value 450. "Costs are up 5%", "wholesale went up 3.5%", "cost price down 10%" is changeCost with percent 5, 3.5 or -10. Neither touches the price or the Compare At; a cost change is not a discount and not setPrice.
 - A ski or snowboard is sold two ways and the shop prices them separately: FLAT means the ski on its own, PACKAGE means the ski with a binding on it. When an instruction says flat, "flat only", "no bindings", "ski only", "board only", set fitting: "flat". When it says package, "pakage" (they misspell it), "package only", "with bindings", "inc bindings", "binding package", set fitting: "package". When it says "flat and package", or says neither, leave fitting empty — that means both. This matters more than it looks: their sale sheet has "2027 snow skis flat 15%" on one line and "2027 snow skis package 20%" on the next, and without it each line takes in the other's products and whichever runs second sets the price of both.
 
-- The MOUNTING charge (also "mount price", "fitting price", "binding fitting", "fitting charge") is what a package's "Please Mount My Bindings" variant costs over its "Please Do Not Mount My Bindings" variant. "Increase the mount price to $59", "mounting is now $59", "please mount should be $59 more than do not mount" is setMountPrice with value 59 and fitting: "package". Which packages: "skis with touring bindings / Griffon / Squire / Strive / bindings that need a drill mount" is bindings: "drill"; "skis that come with a binding / system bindings / track bindings / Xpress" is bindings: "system"; neither said means every package. Two different charges for the two kinds are two setMountPrice operations. The difference is set to the amount, up or down — a package charging $60 comes to $59 — unless the instruction says to only increase or never lower (raiseOnly: true). It is not a discount and not setPrice.
+- The MOUNTING charge (also "mount price", "fitting price", "binding fitting", "fitting charge") is what a package's "Please Mount My Bindings" variant costs over its "Please Do Not Mount My Bindings" variant. "Increase the mount price to $59", "mounting is now $59", "please mount should be $59 more than do not mount" is setMountPrice with value 59 and fitting: "package" — ALWAYS "package", because only a package has the two options; the word "flat" in a mounting instruction describes the BINDING (sold flat, so it is drilled on), never the ski, so "flat bindings", "flat drill mount bindings", "all flat bindings" is bindings: "drill" with fitting: "package", not fitting: "flat". Which packages: "skis with touring bindings / Griffon / Squire / Strive / SPX / flat bindings / bindings that need a drill mount" is bindings: "drill"; "skis that come with a binding / system bindings / integrated bindings / track bindings / Xpress" is bindings: "system"; neither said means every package. When the instruction names binding models — "including Marker FDT 7, M7.0, SPX 15, NX7, Freeflex 11" — put each one in bindingNames exactly as written; those packages are included on top of the kind, and the names never go in the scope (not titleContains, not tags). An instruction like this is complete and clear: return the operation and leave "unclear" empty. Two different charges for the two kinds are two setMountPrice operations. The difference is set to the amount, up or down — a package charging $60 comes to $59 — unless the instruction says to only increase or never lower (raiseOnly: true). It is not a discount and not setPrice.
 
 How to read a list of values. "Items tagged 2999 or 2026 or 2025" is ANY ONE of them, so it goes in anyTags. The tags field means ALL AT ONCE, and no product carries five different years, so putting a list there matches nothing. Getting this backwards is the single worst thing you can do here.
 
@@ -121,9 +122,14 @@ function toOperation(raw: z.infer<typeof OperationSchema>): Operation | null {
     case "setTitleYear": return /^\d{4}$/.test(raw.text.trim()) ? { kind: "setTitleYear", year: raw.text.trim(), ...(raw.seo ? { seo: true } : {}) } : null;
     case "renameTitle": return raw.find.trim() ? { kind: "renameTitle", find: raw.find.trim(), replace: raw.text, ...(raw.seo ? { seo: true } : {}) } : null;
     case "setMountPrice": return typeof raw.value === "number" && raw.value > 0 && raw.value < 1000
-      ? { kind: "setMountPrice", amount: raw.value, ...(raw.bindings === "drill" || raw.bindings === "system" ? { bindings: raw.bindings } : {}), ...(raw.raiseOnly ? { raiseOnly: true } : {}) }
+      ? { kind: "setMountPrice", amount: raw.value, ...(raw.bindings === "drill" || raw.bindings === "system" ? { bindings: raw.bindings } : {}), ...(named(raw.bindingNames).length ? { named: named(raw.bindingNames) } : {}), ...(raw.raiseOnly ? { raiseOnly: true } : {}) }
       : null;
   }
+}
+
+/** The binding models an instruction names, trimmed and de-duplicated. */
+function named(names: string[]): string[] {
+  return [...new Set(names.map((n) => n.trim()).filter(Boolean))];
 }
 
 /**
@@ -386,7 +392,16 @@ export async function planAdjustment(
   const { scope, dropped, blocked, category } = groundScope(parsed.data.scope, file);
   const operations = blocked.length ? [] : respellAddedTags(parsed.data.operations.map(toOperation).filter((op): op is Operation => op !== null), instruction, file.tags);
   const unclear = [parsed.data.unclear.trim(), ...dropped].filter(Boolean).join(" ");
-  return { plan: { scope, operations }, understood: parsed.data.understood.trim(), unclear, blocked, category };
+  return { plan: { scope: withPackages(scope, operations), operations }, understood: parsed.data.understood.trim(), unclear, blocked, category };
+}
+
+/**
+ * A mounting charge lives on packages, so a plan that sets one is scoped to them whatever the
+ * reader made of the scope. "All flat drill mount bindings" read as fitting: "flat" matched no
+ * package and did nothing; the "flat" there is the binding, not the ski.
+ */
+export function withPackages(scope: Plan["scope"], operations: Operation[]): Plan["scope"] {
+  return operations.some((op) => op.kind === "setMountPrice") ? { ...scope, fitting: "package" } : scope;
 }
 
 /** A plan in words, for the screen — built from the plan itself so it cannot describe something else. */
@@ -423,7 +438,12 @@ export function describePlan(plan: Plan): string[] {
       case "setQuantity": lines.push(`Set the stock on hand to ${Math.round(op.value)}.`); break;
       case "setCost": lines.push(`Set the cost per item to $${op.value.toFixed(2)} on every variant.`); break;
       case "changeCost": lines.push(`${op.percent > 0 ? "Put the cost per item up" : "Bring the cost per item down"} by ${Math.abs(op.percent)}% on every variant that has one. The price is not touched.`); break;
-      case "setMountPrice": lines.push(`Set the mounting charge to $${op.amount.toFixed(2)}${op.bindings === "drill" ? " on packages whose binding is drilled on (Griffon, Squire, Strive, Pivot, Attack, every touring binding)" : op.bindings === "system" ? " on skis that come with a track binding (Xpress, NX Konect, PR, Joy SLR, M 12, Z12, RS, TPX)" : " on every package"}: each "Please Mount My Bindings" variant is priced that much over its "Do Not Mount" twin — the recommended retail by the full amount, the price by the same share, so a sale stays the sale it was.${op.raiseOnly ? " A package already charging that or more keeps its charge." : " A package charging more comes down to it."}`); break;
+      case "setMountPrice": {
+        const kind = op.bindings === "drill" ? " on packages whose binding is drilled on (Griffon, Squire, Strive, Pivot, Attack, SPX, every touring binding)" : op.bindings === "system" ? " on skis that come with a track binding (Xpress, NX Konect, PR, Joy SLR, M 12, Z12, RS, TPX)" : op.named?.length ? "" : " on every package";
+        const names = op.named?.length ? `${kind ? ", and on any package" : " on packages"} whose binding is ${op.named.join(", ")}` : "";
+        lines.push(`Set the mounting charge to $${op.amount.toFixed(2)}${kind}${names}: each "Please Mount My Bindings" variant is priced that much over its "Do Not Mount" twin — the recommended retail by the full amount, the price by the same share, so a sale stays the sale it was.${op.raiseOnly ? " A package already charging that or more keeps its charge." : " A package charging more comes down to it."}`);
+        break;
+      }
       case "setTitleYear": lines.push(`Put ${op.year} in the product title${op.seo ? " and the SEO title" : ""} — replacing the season already there, or in front of the length and binding wording where there is none. The URL does not change.`); break;
       case "renameTitle": {
         const where = `the product title${op.seo ? " and the SEO title" : ""}`;

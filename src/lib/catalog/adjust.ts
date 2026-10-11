@@ -123,11 +123,14 @@ export type Operation =
    * Not Mount My Bindings" for the same length and binding. Set on the recommended retail, with
    * the sale kept: Compare At moves by the amount and the price by the same share of it, so a
    * package at 25% off stays at 25% off. `bindings` limits it to the drill-mount packages or the
-   * ones whose binding comes with the ski — see mount.ts — and left out means every package. The
+   * ones whose binding comes with the ski — see mount.ts — and left out means every package.
+   * `named` lists binding models the instruction called out ("SPX 15", "NX7", "M7.0"): a package
+   * on one of those is in whatever kind it would be placed as, and with no `bindings` it is the
+   * named ones alone. The
    * difference is set to the amount, up or down; `raiseOnly` leaves a package already charging
    * more as it is, for an instruction that says "at least" or "only increase".
    */
-  | { kind: "setMountPrice"; amount: number; bindings?: "drill" | "system"; raiseOnly?: boolean }
+  | { kind: "setMountPrice"; amount: number; bindings?: "drill" | "system"; named?: string[]; raiseOnly?: boolean }
   /**
    * What the shop paid for it, per variant row: Shopify's "Cost per item". An exact figure goes on
    * every variant row the scope matched, a row with a cost already or not — a cost is often never
@@ -291,6 +294,20 @@ function broadShelfOf(scope: Scope): "ski" | "snowboard" | null {
   if (asked.some((a) => /^(snow )?skis?$/.test(a))) return "ski";
   if (asked.some((a) => /^snowboards?$/.test(a))) return "snowboard";
   return null;
+}
+
+/**
+ * A binding model as the instruction wrote it, matched the way the shop writes it: "NX7" finds
+ * "Look NX 7 GW", "M7.0" finds "Marker M7.0 FDT", "SPX 12" does not find "SPX 120" or "SPX 1".
+ * Letters and numbers may be run together or spaced in either, and a brand in front is ignored.
+ */
+export function bindingPattern(name: string): RegExp {
+  const parts = name.toLowerCase().match(/[a-z]+|\d+(?:\.\d+)?/g) ?? [];
+  const escaped = parts.map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  // "Marker FDT 7": a word in front of the family name is the brand, and the file may leave it out.
+  const brand = escaped.length > 2 && /^[a-z]+$/.test(parts[0] ?? "") && /^[a-z]+$/.test(parts[1] ?? "");
+  const body = brand ? `(${escaped[0]}[\\s-]?)?${escaped.slice(1).join("[\\s-]?")}` : escaped.join("[\\s-]?");
+  return new RegExp(`(^|[^a-z0-9])${body || "(?!)"}(?![a-z0-9])`, "i");
 }
 
 function matches(scope: Scope, row: Record<string, string>): boolean {
@@ -471,6 +488,7 @@ export function applyPlan(text: string, plan: Plan): AdjustResult {
           const bindingAt = names.findIndex((n, i) => i !== fit && /bind/i.test(n)); // "Bindin Option" is in the file
           const others = ["Option1 Value", "Option2 Value", "Option3 Value"].filter((_, i) => i !== fit);
           const pairs = new Map<string, { unmounted?: string[]; mounted?: string[] }>();
+          const named = (op.named ?? []).map(bindingPattern);
           for (const r of rowsOf.get(handle) ?? []) {
             const v = at(r, fitColumn);
             const which = /do\s*not\s*mount|don'?t\s*mount|unmounted|not\s*mounted|without/i.test(v) ? "unmounted" : /mount/i.test(v) ? "mounted" : null;
@@ -482,10 +500,10 @@ export function applyPlan(text: string, plan: Plan): AdjustResult {
           }
           for (const pair of pairs.values()) {
             if (!pair.unmounted || !pair.mounted) continue;
-            if (op.bindings) {
+            if (op.bindings || named.length) {
               const binding = bindingAt >= 0 ? at(pair.unmounted, `Option${bindingAt + 1} Value`) : "";
-              const system = isSystemMount(binding, title, vendor);
-              if ((op.bindings === "system") !== system) continue;
+              const isNamed = named.some((re) => re.test(binding) || re.test(title));
+              if (!isNamed && (!op.bindings || (op.bindings === "system") !== isSystemMount(binding, title, vendor))) continue;
             }
             const unmountedPrice = price(at(pair.unmounted, "Variant Price"));
             if (unmountedPrice === null) continue;

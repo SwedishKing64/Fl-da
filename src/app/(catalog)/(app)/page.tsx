@@ -27,21 +27,24 @@ const JOBS = [
     title: "Add new products",
     text: "An invoice or order confirmation goes in — a spreadsheet, a PDF or a photo — and ready-to-import Shopify products come out, priced and tagged the way the shop does it.",
     go: "Start with an invoice",
-    icon: <><path d="M4 7.5 12 3l8 4.5-8 4.5-8-4.5Z" /><path d="m4 12 8 4.5 8-4.5" /><path d="m4 16.5 8 4.5 8-4.5" /></>,
+    goIcon: "🧾",
+    icon: "📦",
   },
   {
     href: "/bulk",
     title: "Change prices or stock",
     text: "Load your shop export, say what should change in plain words — a sale, a clearance, a delivery to add to stock — check the list, download the file.",
     go: "Open prices and stock",
-    icon: <><path d="M12 15V3" /><path d="m7 8 5-5 5 5" /><path d="M4 15v4.5A1.5 1.5 0 0 0 5.5 21h13a1.5 1.5 0 0 0 1.5-1.5V15" /></>,
+    goIcon: "✨",
+    icon: "🏷️",
   },
   {
     href: "/tidy",
     title: "Tidy a photo of paperwork",
     text: "A scribbled-on order confirmation, read into a table you can check, pen marks and all, and saved as a CSV the other two pages take.",
     go: "Read a photo",
-    icon: <><rect x="4" y="3" width="16" height="18" rx="1.5" /><path d="M8 8h8M8 12h8M8 16h5" /></>,
+    goIcon: "📷",
+    icon: "📸",
   },
 ];
 
@@ -71,12 +74,10 @@ export default async function DashboardPage() {
       <div className="mb-8 grid gap-4 md:grid-cols-3">
         {JOBS.map((j, i) => (
           <Link key={j.href} href={j.href} className={`job lift rise rise-${i + 1}`}>
-            <span className="job-ico" aria-hidden>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{j.icon}</svg>
-            </span>
+            <span className="job-ico" aria-hidden>{j.icon}</span>
             <h2>{j.title}</h2>
             <p>{j.text}</p>
-            <span className="job-go">{j.go} <span aria-hidden>→</span></span>
+            <span className="job-go"><span className="emo-btn" aria-hidden>{j.goIcon}</span>{j.go} <span aria-hidden>→</span></span>
           </Link>
         ))}
       </div>

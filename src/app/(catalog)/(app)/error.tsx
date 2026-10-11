@@ -46,7 +46,7 @@ export default function AppError({ error, reset }: { error: Error & { digest?: s
         {message && <p className="mt-2 break-words font-mono text-xs opacity-80">{message}{error.digest ? ` · digest ${error.digest}` : ""}</p>}
       </Alert>
       <div className="flex gap-2">
-        <Button variant="primary" onClick={() => reset()}>Try again</Button>
+        <Button variant="primary" icon="🔄" onClick={() => reset()}>Try again</Button>
         <Button onClick={() => window.location.reload()}>Reload the page</Button>
       </div>
     </div>

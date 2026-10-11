@@ -969,7 +969,7 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
       <Card
         title="The files from Shopify"
         actions={edited.length > 0
-          ? <Button size="sm" variant="primary" onClick={downloadAll}>Download the {edited.length === 1 ? "updated file" : `${edited.length} updated files`}</Button>
+          ? <Button size="sm" variant="primary" icon="⬇️" onClick={downloadAll}>Download the {edited.length === 1 ? "updated file" : `${edited.length} updated files`}</Button>
           : undefined}
       >
         <p className="mb-3 text-sm text-[var(--ink-soft)]">
@@ -979,7 +979,7 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
           <div className="text-sm font-medium text-[var(--ink)]">{busy === "files" ? "Reading…" : "Drop exports here, or choose files"}</div>
           <div className="mt-1 text-xs text-[var(--ink-soft)]">Shopify export CSVs. An invoice dropped here — a spreadsheet, a PDF or a photo — is sent to the invoice reader below rather than refused.</div>
           <div className="mt-3">
-            <Button size="sm" onClick={() => csvRef.current?.click()} disabled={busy !== null}>Choose files</Button>
+            <Button icon="📂" size="sm" onClick={() => csvRef.current?.click()} disabled={busy !== null}>Choose files</Button>
             <input ref={csvRef} type="file" multiple className="hidden" onChange={(e) => { if (e.target.files?.length) void takeCsvs(e.target.files); e.target.value = ""; }} />
           </div>
         </div>
@@ -1036,7 +1036,7 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
         <Card
           title="The buyer's sheet"
           actions={allReady.length > 0
-            ? <Button size="sm" variant="primary" disabled={busy !== null} onClick={() => applyRows(allReady.map((r) => r.id), `Everything that matched — ${allReady.length} change${allReady.length === 1 ? "" : "s"}`)}>Apply all {allReady.length}</Button>
+            ? <Button size="sm" variant="primary" icon="✅" disabled={busy !== null} onClick={() => applyRows(allReady.map((r) => r.id), `Everything that matched — ${allReady.length} change${allReady.length === 1 ? "" : "s"}`)}>Apply all {allReady.length}</Button>
             : undefined}
         >
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1044,7 +1044,7 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
               <span className="font-medium">Have the changes written down?</span>
               <span className="ml-2 text-xs text-[var(--ink-soft)]">The shop&rsquo;s sale template as a spreadsheet, or a PDF or photo of a written page. A template is read column by column and exactly — no interpreting. Either way it is matched against the files above, grouped by shelf, and you approve a shelf at a time.</span>
             </div>
-            <Button size="sm" disabled={busy !== null} onClick={() => sheetRef.current?.click()}>{busy === "sheet" ? "Reading…" : rows.length > 0 ? "Use a different sheet" : "Add the sale sheet"}</Button>
+            <Button icon="📋" size="sm" disabled={busy !== null} onClick={() => sheetRef.current?.click()}>{busy === "sheet" ? "Reading…" : rows.length > 0 ? "Use a different sheet" : "Add the sale sheet"}</Button>
             <input ref={sheetRef} type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void takeSheet(f); e.target.value = ""; }} />
           </div>
 
@@ -1092,7 +1092,7 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
                       {groupChanges > 0 && <> · <strong className="tabular-nums">{groupChanges}</strong> cell{groupChanges === 1 ? "" : "s"} would change</>}
                     </span>
                   </div>
-                  <Button size="sm" variant="primary" disabled={busy !== null || ready.length === 0} onClick={() => applyRows(ready.map((r) => r.id), g.name)}>
+                  <Button size="sm" variant="primary" icon="✅" disabled={busy !== null || ready.length === 0} onClick={() => applyRows(ready.map((r) => r.id), g.name)}>
                     {ready.length === 0 ? "Nothing to apply" : `Apply ${ready.length === g.rows.length ? "this group" : `${ready.length} of ${g.rows.length}`}`}
                   </Button>
                 </div>
@@ -1158,7 +1158,7 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
                   <div className="font-semibold">Ready to import — {sizeOfIt} across {edited.length} file{edited.length === 1 ? "" : "s"}.</div>
                   <div className="mt-0.5 text-xs text-[var(--ink-soft)]">Only the files something was written into are listed. The rest are still the ones you loaded, so there is nothing to re-import for them.</div>
                 </div>
-                <Button variant="primary" onClick={downloadAll}>Download {edited.length === 1 ? "it" : `all ${edited.length}`}</Button>
+                <Button variant="primary" icon="⬇️" onClick={downloadAll}>Download {edited.length === 1 ? "it" : `all ${edited.length}`}</Button>
               </div>
               <ul className="mt-2 divide-y divide-[var(--line-soft)] text-sm">
                 {edited.map((s) => (
@@ -1217,7 +1217,7 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
               <span className="font-medium">A delivery arriving, or prices that have changed?</span>
               <span className="ml-2 text-xs text-[var(--ink-soft)]">Add the order form and each line is matched by barcode, then by item code, then by the product&rsquo;s name — so a line that says SX-2M finds the SX-2M. A line that fits two products is never guessed at. What it matches has its stock put up; a size the product does not list arrives as a variant of it, and a product the shop does not have is built onto the end of the same file. A spreadsheet or CSV is read by its columns; a PDF or a photo of one goes to the API to be read.</span>
             </div>
-            <Button size="sm" disabled={busy !== null} onClick={() => invoiceRef.current?.click()}>{busy === "invoice" ? "Reading…" : invoice ? "Use a different invoice" : "Add the invoice"}</Button>
+            <Button icon="🧾" size="sm" disabled={busy !== null} onClick={() => invoiceRef.current?.click()}>{busy === "invoice" ? "Reading…" : invoice ? "Use a different invoice" : "Add the invoice"}</Button>
             <input ref={invoiceRef} type="file" multiple className="hidden" onChange={(e) => { const f = Array.from(e.target.files ?? []); if (f.length) void takeDocuments(f); e.target.value = ""; }} />
           </div>
 
@@ -1353,7 +1353,7 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
                     <span className="font-medium">Spec sheets and barcode lists</span>
                     <span className="ml-2 text-xs text-[var(--ink-soft)]">Burton&rsquo;s description list or Volkl&rsquo;s spec export: each order line is found on it first, so the order&rsquo;s shorthand (&ldquo;CUSTOM NEW GRAPHIC 58W&rdquo;) is matched to the shop under the catalogue&rsquo;s name (Custom, 158W), and anything that has to be built takes its description from it. A barcode list is where the EAN for each size is. Add the order first, then these.</span>
                   </div>
-                  <Button size="sm" disabled={busy !== null} onClick={() => referenceRef.current?.click()}>{busy === "reference" ? "Reading…" : references.length > 0 ? "Add another" : "Add a spec sheet"}</Button>
+                  <Button icon="📑" size="sm" disabled={busy !== null} onClick={() => referenceRef.current?.click()}>{busy === "reference" ? "Reading…" : references.length > 0 ? "Add another" : "Add a spec sheet"}</Button>
                   <input ref={referenceRef} type="file" multiple className="hidden" onChange={(e) => { const f = Array.from(e.target.files ?? []); e.target.value = ""; void (async () => { for (const file of f) await takeReference(file); })(); }} />
                 </div>
                 {references.length > 0 && (
@@ -1430,7 +1430,7 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
               )}
 
               <div className="flex flex-wrap items-center gap-2">
-                <Button variant="primary" disabled={busy !== null || (placed === 0 && !(buildNew && toBuild > 0))} onClick={applyDeliveryNow}>
+                <Button variant="primary" icon="📦" disabled={busy !== null || (placed === 0 && !(buildNew && toBuild > 0))} onClick={applyDeliveryNow}>
                   {busy === "applying" ? progress || "Working…" : `${applied === (order?.filename ?? "") && order ? "Apply the delivery again" : "Apply the delivery"} — ${placed} carry-over${placed === 1 ? "" : "s"}${buildNew && toBuild > 0 ? `, ${toBuild} to build` : ""}`}
                 </Button>
                 {busy === "applying" && progress && <span className="text-xs text-[var(--ink-soft)]">Each page is given a minute or so; one that takes longer is built without it, and can be read again afterwards.</span>}
@@ -1467,7 +1467,7 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
             <span className="mt-1 block text-xs text-[var(--ink-soft)]">Each one applies on top of the last, across every file, and any of them can be undone. Prices and tags, and also titles ({"\u201c"}make the Volkl skis 2027{"\u201d"}) and stock on hand. A title change never moves the product{"\u2019"}s URL.</span>
           </label>
           <div className="mt-3 flex flex-wrap gap-2">
-            <Button variant="primary" disabled={(!aiEnabled && !(invoice && (deliveryAsked(instruction) || brandsAsked(instruction, brandsOnOrder)))) || busy !== null || !instruction.trim()} onClick={() => void workOut()}>
+            <Button variant="primary" icon="✨" disabled={(!aiEnabled && !(invoice && (deliveryAsked(instruction) || brandsAsked(instruction, brandsOnOrder)))) || busy !== null || !instruction.trim()} onClick={() => void workOut()}>
               {busy === "planning" ? "Working it out…" : "Work out what would change"}
             </Button>
           </div>
@@ -1546,7 +1546,7 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
                       <p className="mt-1 text-sm">Every one of them already carries what you asked for, so there is nothing to change.</p>
                     </>
                   )}
-                  <div className="mt-3"><Button onClick={() => clearPreview()}>Discard</Button></div>
+                  <div className="mt-3"><Button icon="🗑️" onClick={() => clearPreview()}>Discard</Button></div>
                 </Alert>
               ) : (
                 <>
@@ -1592,8 +1592,8 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
                   </div>
                   {shownChanges.length === 0 && <p className="mt-2 text-xs text-[var(--ink-soft)]">Nothing in the list has &ldquo;{previewFilter}&rdquo; in it.</p>}
                   <div className="mt-4 flex flex-wrap items-center gap-3">
-                    <Button variant="primary" disabled={wholeFile && !confirmWholeFile} onClick={apply}>Apply this</Button>
-                    <Button onClick={() => clearPreview()}>Discard</Button>
+                    <Button variant="primary" icon="✅" disabled={wholeFile && !confirmWholeFile} onClick={apply}>Apply this</Button>
+                    <Button icon="🗑️" onClick={() => clearPreview()}>Discard</Button>
                   </div>
                 </>
               )}

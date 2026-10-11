@@ -664,3 +664,39 @@ a.step:hover { background: var(--meta-tint); color: var(--meta-ink); }
   padding: 4px 11px;
 }
 .next-step.done { background: var(--promoter-tint); color: var(--promoter); }
+
+/* ---------------------------------------------------------------------------
+   Emoji chips. A button and a menu item lead with a picture of what they do,
+   sat in a little round chip the way a reaction sits on a post.
+   --------------------------------------------------------------------------- */
+.emo-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin-left: -4px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.22);
+  font-size: 14px;
+  line-height: 1;
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+}
+.emo-btn.emo-sm { width: 20px; height: 20px; font-size: 12px; margin-left: -3px; }
+/* On a white button the chip is the blue tint. */
+button:not(.bg-\[var\(--meta\)\]) > .emo-btn, a:not(.bg-\[var\(--meta\)\]) > .emo-btn { background: var(--meta-tint); }
+.nav-link .emo {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+  font-size: 16px;
+  line-height: 1;
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+  transition: background 0.18s var(--ease), transform 0.18s var(--ease);
+}
+.nav-link:hover .emo { background: rgba(255, 255, 255, 0.24); transform: scale(1.06); }
+.nav-link.on .emo { background: #fff; }
+.job .job-ico { font-size: 26px; line-height: 1; font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }

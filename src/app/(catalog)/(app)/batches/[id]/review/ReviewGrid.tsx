@@ -366,7 +366,7 @@ export function ReviewGrid({ initial, batchId }: { initial: ReviewData; batchId:
           {bulk.field === "status" && <select value={bulk.value} onChange={(e) => setBulk({ ...bulk, value: e.target.value })} className={`${INPUT_INLINE} w-40`}><option value="">Choose…</option><option value="draft">Draft</option><option value="active">Active</option></select>}
           {bulk.field === "gstTreatment" && <select value={bulk.value} onChange={(e) => setBulk({ ...bulk, value: e.target.value })} className={`${INPUT_INLINE} w-40`}><option value="">Choose…</option><option value="EXCLUSIVE">Ex GST</option><option value="INCLUSIVE">Inc GST</option><option value="NONE">No GST</option></select>}
           {bulk.field === "dismissWarnings" && <select value={bulk.value} onChange={(e) => setBulk({ ...bulk, value: e.target.value })} className={`${INPUT_INLINE} w-56`}><option value="">All warnings</option>{["NO_IMAGE", "LOW_MARGIN", "MISSING_SKU", "MISSING_VENDOR", "MISSING_TYPE", "NEGATIVE_PROFIT", "UPDATE_EXISTING", "DUPLICATE_SKU_SHOPIFY"].map((c) => <option key={c} value={c}>{FLAG_LABELS[c]}</option>)}</select>}
-          <Button size="sm" variant="primary" onClick={runBulk} disabled={pending}>Apply</Button>
+          <Button size="sm" variant="primary" icon="✅" onClick={runBulk} disabled={pending}>Apply</Button>
           <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>Clear</Button>
         </div>
       )}
@@ -667,7 +667,7 @@ function ProductDrawer({ batchId, product, unassigned, locked, publicBaseUrl, on
                 ))}
               </div>
             </div>
-            {!locked && <Button variant="primary" disabled={pending} onClick={() => start(async () => { const r = await updateProductAction(product.id, { seoTitle: details.seoTitle, seoDescription: details.seoDescription, bodyHtml: details.bodyHtml, option1Name: details.option1Name || null, option2Name: details.option2Name || null, option3Name: details.option3Name || null, metafields: details.metafields }); setMessage(r.ok ? { tone: "success", text: "Product details saved." } : { tone: "danger", text: r.error }); await refresh(); })}>Save details</Button>}
+            {!locked && <Button variant="primary" icon="💾" disabled={pending} onClick={() => start(async () => { const r = await updateProductAction(product.id, { seoTitle: details.seoTitle, seoDescription: details.seoDescription, bodyHtml: details.bodyHtml, option1Name: details.option1Name || null, option2Name: details.option2Name || null, option3Name: details.option3Name || null, metafields: details.metafields }); setMessage(r.ok ? { tone: "success", text: "Product details saved." } : { tone: "danger", text: r.error }); await refresh(); })}>Save details</Button>}
           </div>
         )}
       </div>

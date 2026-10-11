@@ -92,7 +92,7 @@ export function LinksPanel({ batchId, products, locked }: { batchId: string; pro
       className="mb-4"
       title={<>Product pages <span className="font-normal text-[var(--ink-soft)]">· {linked.length} of {own.length} new product{own.length === 1 ? "" : "s"} have a link{updates > 0 ? ` · ${updates} quantity update${updates === 1 ? "" : "s"} keep the page they have` : ""}</span></>}
       actions={<>
-        <Button size="sm" variant="primary" disabled={locked || progress !== null || linked.length === 0} onClick={() => void readAll()}>
+        <Button size="sm" variant="primary" icon="🔗" disabled={locked || progress !== null || linked.length === 0} onClick={() => void readAll()}>
           {progress ? `Reading ${progress.done} of ${progress.of}…` : unread.length > 0 ? `Read ${unread.length} page${unread.length === 1 ? "" : "s"}` : "Read the pages again"}
         </Button>
         <Button size="sm" onClick={() => setOpen(!open)}>{open ? "Hide" : "Show"}</Button>

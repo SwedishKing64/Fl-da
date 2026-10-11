@@ -98,7 +98,7 @@ export function Chat({
           placeholder={placeholder}
           className="min-h-[46px] flex-1 resize-y rounded-lg border border-[var(--line)] bg-white px-3 py-2 text-sm outline-none transition focus:border-[var(--rubin-bright)] focus:ring-2 focus:ring-[var(--rubin-bright)]/25 disabled:bg-neutral-50"
         />
-        <Button variant="primary" onClick={send} disabled={pending || disabled || !draft.trim()}>{pending ? "…" : "Send"}</Button>
+        <Button variant="primary" icon="💬" onClick={send} disabled={pending || disabled || !draft.trim()}>{pending ? "…" : "Send"}</Button>
       </div>
     </div>
   );

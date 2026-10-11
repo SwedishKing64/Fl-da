@@ -48,7 +48,7 @@ export function UserForm() {
       <Field label="Password"><input name="password" type="password" minLength={8} required className={INPUT} /></Field>
       <Field label="Role"><select name="role" defaultValue="STAFF" className={INPUT}><option value="STAFF">Staff</option><option value="ADMIN">Admin</option></select></Field>
       {state && <div className="sm:col-span-2">{state.ok ? <Alert tone="success">{state.message}</Alert> : <Alert tone="danger">{state.error}</Alert>}</div>}
-      <div><Button type="submit" variant="primary" disabled={pending}>Add account</Button></div>
+      <div><Button type="submit" variant="primary" icon="👤" disabled={pending}>Add account</Button></div>
     </ActionForm>
   );
 }

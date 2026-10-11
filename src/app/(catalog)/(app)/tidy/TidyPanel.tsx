@@ -111,14 +111,14 @@ export function TidyPanel({ aiEnabled }: { aiEnabled: boolean }) {
           A photo or a scan: JPEG, PNG, an iPhone HEIC, or a PDF. Several photos are the pages of one document and are read together. The pen counts: a price in the margin is read as the recommended retail, a percentage as the discount, a year as the season, and everything else written against a line is kept as a note on it. A ski with its binding bracketed beneath it comes out as one package.
         </p>
         <div className="flex flex-wrap items-center gap-2">
-          <Button size="sm" disabled={busy} onClick={() => fileRef.current?.click()}>{files.length > 0 ? "Choose different pages" : "Choose the photo or PDF"}</Button>
+          <Button icon="📷" size="sm" disabled={busy} onClick={() => fileRef.current?.click()}>{files.length > 0 ? "Choose different pages" : "Choose the photo or PDF"}</Button>
           <input ref={fileRef} type="file" multiple accept="image/*,.heic,.heif,.pdf,application/pdf" className="hidden" onChange={(e) => { setFiles(Array.from(e.target.files ?? [])); e.target.value = ""; }} />
           {files.length > 0 && <span className="text-sm text-[var(--ink-soft)]">{files.map((f) => f.name).join(", ")}</span>}
         </div>
         <label className="mt-3 block text-xs font-medium text-[var(--ink-soft)]" htmlFor="tidy-hint">What the handwriting means, if it needs saying</label>
         <input id="tidy-hint" className={cx(INPUT, "mt-1")} value={hint} disabled={busy} onChange={(e) => setHint(e.target.value)} placeholder="e.g. the red numbers are the package RRPs; 2998 means closeout; the right-hand column is our cost after freight" />
         <div className="mt-3 flex flex-wrap items-center gap-3">
-          <Button variant="primary" disabled={busy || files.length === 0 || !aiEnabled} onClick={() => void readDocument()}>{busy ? progress || "Reading…" : "Read it into a table"}</Button>
+          <Button variant="primary" icon="✨" disabled={busy || files.length === 0 || !aiEnabled} onClick={() => void readDocument()}>{busy ? progress || "Reading…" : "Read it into a table"}</Button>
           {busy && <span className="text-xs text-[var(--ink-soft)]">A page takes a minute or two.</span>}
         </div>
         {error && <Alert tone="danger" className="mt-3">{error}</Alert>}
@@ -128,8 +128,8 @@ export function TidyPanel({ aiEnabled }: { aiEnabled: boolean }) {
         <Card
           title={<>{transcript.supplier || "Document"}{transcript.reference ? <span className="font-normal text-[var(--ink-soft)]"> · {transcript.reference}</span> : ""}{transcript.date ? <span className="font-normal text-[var(--ink-soft)]"> · {transcript.date}</span> : ""}</>}
           actions={<>
-            <Button size="sm" onClick={() => setTranscript((t) => (t ? { ...t, rows: [...t.rows, blank()] } : t))}>Add a row</Button>
-            <Button size="sm" variant="primary" onClick={download}>Download the CSV</Button>
+            <Button icon="➕" size="sm" onClick={() => setTranscript((t) => (t ? { ...t, rows: [...t.rows, blank()] } : t))}>Add a row</Button>
+            <Button size="sm" variant="primary" icon="⬇️" onClick={download}>Download the CSV</Button>
           </>}
         >
           {transcript.remarks && <p className="mb-2 text-sm"><span className="font-medium">Written on the page:</span> {transcript.remarks}</p>}

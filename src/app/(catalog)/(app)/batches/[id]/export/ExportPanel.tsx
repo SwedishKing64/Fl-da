@@ -101,7 +101,7 @@ export function ExportPanel(props: { batchId: string; status: string; errors: st
         )}
         {result && <Alert tone={result.tone} className="mt-3"><div>{result.text}</div>{result.list && <ul className="mt-1 list-disc pl-5 text-xs">{result.list.slice(0, 30).map((l, i) => <li key={i}>{l}</li>)}</ul>}</Alert>}
         <div className="mt-4 flex flex-wrap items-center gap-2">
-          <Button variant="primary" disabled={pending || blocked} onClick={doExport}>{pending ? "Working…" : "Generate Shopify CSV"}</Button>
+          <Button variant="primary" icon="📤" disabled={pending || blocked} onClick={doExport}>{pending ? "Working…" : "Generate Shopify CSV"}</Button>
           {props.status === "EXPORTED" && <span className="text-xs text-[var(--ink-soft)]">Already exported — generating again replaces the files below.</span>}
         </div>
       </Card>
@@ -113,7 +113,7 @@ export function ExportPanel(props: { batchId: string; status: string; errors: st
               <li key={f.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
                 <div><span className="font-medium">{f.filename}</span><div className="text-xs text-[var(--ink-soft)]">{f.partCount > 1 ? `Part ${f.partIndex} of ${f.partCount} · ` : ""}{f.rowCount} rows · {(f.sizeBytes / 1024).toFixed(0)} KB · {fmtDate(f.createdAt)}</div></div>
                 <div className="flex items-center gap-2">
-                  <Button size="sm" variant="primary" disabled={downloading === f.id} onClick={() => doDownload(f.id, f.filename)}>{downloading === f.id ? "Saving…" : "Download"}</Button>
+                  <Button size="sm" variant="primary" icon="⬇️" disabled={downloading === f.id} onClick={() => doDownload(f.id, f.filename)}>{downloading === f.id ? "Saving…" : "Download"}</Button>
                   {/* The direct link stays as a second way down, for a browser that would rather
                       open the file itself than be handed one. Styled as a button, because it is
                       one — a bare bordered link next to a filled button read as decoration. */}

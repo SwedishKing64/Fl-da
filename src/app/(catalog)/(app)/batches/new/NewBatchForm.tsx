@@ -70,7 +70,7 @@ export function NewBatchForm({ suppliers, fxRates }: { suppliers: SupplierOpt[];
         </div>
       </Card>
       {state && !state.ok && <Alert tone="danger">{state.error}</Alert>}
-      <Button type="submit" variant="primary" disabled={pending}>{pending ? "Creating…" : "Create batch & upload files"}</Button>
+      <Button type="submit" variant="primary" icon="🧾" disabled={pending}>{pending ? "Creating…" : "Create batch & upload files"}</Button>
     </ActionForm>
   );
 }

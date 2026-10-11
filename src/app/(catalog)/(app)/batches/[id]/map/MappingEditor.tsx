@@ -91,7 +91,7 @@ export function MappingEditor({ batchId, groups, fields, supplierName, hasProduc
       })}
       {error && <Alert tone="danger">{error}</Alert>}
       {hasProducts && !disabled && <Alert tone="warning">Applying the mapping again rebuilds this batch&apos;s products and discards edits made in the review grid.</Alert>}
-      {!disabled && <Button variant="primary" onClick={apply} disabled={pending}>{pending ? "Building products…" : "Apply mapping & build products →"}</Button>}
+      {!disabled && <Button variant="primary" icon="🔨" onClick={apply} disabled={pending}>{pending ? "Building products…" : "Apply mapping & build products →"}</Button>}
     </div>
   );
 }

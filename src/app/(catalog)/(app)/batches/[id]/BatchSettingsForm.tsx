@@ -63,7 +63,7 @@ export function BatchSettingsForm({ batch, suppliers, disabled }: { batch: Batch
       </Field>
       <Field label="Notes"><textarea rows={2} value={form.notes} onChange={(e) => set("notes", e.target.value)} disabled={disabled} className={INPUT} /></Field>
       {msg && <Alert tone={msg.ok ? "success" : "danger"}>{msg.text}</Alert>}
-      {!disabled && <Button variant="primary" onClick={save} disabled={pending}>{pending ? "Saving…" : "Save & reprice"}</Button>}
+      {!disabled && <Button variant="primary" icon="💾" onClick={save} disabled={pending}>{pending ? "Saving…" : "Save & reprice"}</Button>}
     </div>
   );
 }

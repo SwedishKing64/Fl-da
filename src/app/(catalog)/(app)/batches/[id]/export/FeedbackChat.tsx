@@ -65,7 +65,7 @@ function Proposal({ message, onApply, pending }: { message: FeedbackMessage; onA
       {applied ? (
         <p className="mt-2 text-xs text-[var(--ink-soft)]">Every import from here is built against it. Edit or remove it under Templates → House rules.</p>
       ) : (
-        <Button size="sm" variant="primary" className="mt-2" disabled={pending} onClick={onApply}>Add to the rules</Button>
+        <Button size="sm" variant="primary" icon="📌" className="mt-2" disabled={pending} onClick={onApply}>Add to the rules</Button>
       )}
     </div>
   );

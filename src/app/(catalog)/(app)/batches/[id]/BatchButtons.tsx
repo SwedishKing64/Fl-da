@@ -62,7 +62,7 @@ export function BuildProductsButton({ batchId }: { batchId: string }) {
   return (
     <span className="inline-flex flex-col items-end gap-1">
       <Button
-        variant="primary"
+        variant="primary" icon="🔨"
         disabled={pending}
         onClick={() => start(async () => {
           setError(null);

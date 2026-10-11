@@ -7,7 +7,7 @@ export default async function BatchesPage() {
   const batches = await prisma.importBatch.findMany({ orderBy: { createdAt: "desc" }, include: { supplier: true, createdBy: true, _count: { select: { products: true, files: true } } } });
   return (
     <>
-      <PageHeader title="New products" subtitle="Each import is one supplier invoice or order that becomes one Shopify file of new products." actions={<LinkButton href="/batches/new" variant="primary">Start with an invoice</LinkButton>} />
+      <PageHeader title="New products" subtitle="Each import is one supplier invoice or order that becomes one Shopify file of new products." actions={<LinkButton href="/batches/new" variant="primary" icon="🧾">Start with an invoice</LinkButton>} />
       <Card>
         {batches.length === 0 ? <Empty>No batches yet.</Empty> : (
           <table className="w-full text-sm">

@@ -26,7 +26,13 @@ const BUTTON = {
   ghost: "hover:bg-neutral-100 disabled:text-neutral-400",
 };
 
-export function Button({ variant = "secondary", size = "md", className, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: keyof typeof BUTTON; size?: "sm" | "md" }) {
+/** The emoji that leads a button, in a little round chip the way a reaction sits on a post. */
+function Emo({ icon, size }: { icon?: string; size: "sm" | "md" }) {
+  if (!icon) return null;
+  return <span className={cx("emo-btn", size === "sm" && "emo-sm")} aria-hidden>{icon}</span>;
+}
+
+export function Button({ variant = "secondary", size = "md", className, icon, children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: keyof typeof BUTTON; size?: "sm" | "md"; icon?: string }) {
   return (
     <button
       {...props}
@@ -36,13 +42,17 @@ export function Button({ variant = "secondary", size = "md", className, ...props
         BUTTON[variant],
         className,
       )}
-    />
+    >
+      <Emo icon={icon} size={size} />
+      {children}
+    </button>
   );
 }
 
-export function LinkButton({ href, children, variant = "secondary", size = "md", className }: { href: string; children: ReactNode; variant?: keyof typeof BUTTON; size?: "sm" | "md"; className?: string }) {
+export function LinkButton({ href, children, variant = "secondary", size = "md", className, icon }: { href: string; children: ReactNode; variant?: keyof typeof BUTTON; size?: "sm" | "md"; className?: string; icon?: string }) {
   return (
     <Link href={href} style={variant === "primary" ? { color: "#fff" } : undefined} className={cx("inline-flex items-center justify-center gap-1.5 rounded-[10px] font-semibold transition-all duration-200", size === "sm" ? "px-3 py-1.5 text-[13px]" : "px-4 py-2.5 text-[15px]", BUTTON[variant], className)}>
+      <Emo icon={icon} size={size} />
       {children}
     </Link>
   );

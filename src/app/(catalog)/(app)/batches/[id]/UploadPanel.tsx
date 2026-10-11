@@ -274,7 +274,7 @@ export function UploadPanel({ batchId, aiEnabled, reading, productCount, pending
             <div className="font-semibold">{productCount} product{productCount === 1 ? "" : "s"} built from these files.</div>
             <div className="text-xs text-[var(--ink-soft)]">Prices, tags and descriptions are all editable in the grid.{builtIn ? ` ${builtIn}` : ""}</div>
           </div>
-          <LinkButton href={`/batches/${batchId}/review`} variant="primary">Next: Review &amp; price →</LinkButton>
+          <LinkButton href={`/batches/${batchId}/review`} variant="primary" icon="🔍">Next: Review &amp; price →</LinkButton>
         </div>
       )}
 

@@ -7,7 +7,7 @@ import { prisma, parseJson } from "./db";
 import { extractFile, type UploadKind } from "./extract";
 import { applyMapping, headerHash, looksLikeReference, mappingProblems, repairTemplate, seasonFrom, suggestMapping, suggestOptions, type Mapping, type MappingOptions, type SavedOptions } from "./mapping";
 import { groupLineItems } from "./grouping";
-import { houseTags } from "./product-tags";
+import { houseTags, retagForType } from "./product-tags";
 import { DEFAULT_CATEGORY_RULES, type CategoryRuleLike } from "./categorize";
 import { enrichFromSpecs, normKey } from "./specs";
 import { houseBody } from "./body";
@@ -693,7 +693,9 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
       { vendor: g.brand, productType: g.productType, category: g.category, tags: g.tags, collections: g.collections, metafields: g.metafields, optionNames: [g.option1Name, g.option2Name, g.option3Name].filter((n): n is string => Boolean(n)) },
       templates,
     );
-    const out = applyTagRules({ title: g.title, vendor: g.brand, category: g.category, productType: viaTemplate.productType, skus: g.variants.map((v) => v.item.sku), tags: viaTemplate.tags, collections: viaTemplate.collections, metafields: viaTemplate.metafields }, tagRules);
+    // A convention that changes the Type changes the shelf tags with it. See retagForType.
+    const tagsForType = viaTemplate.productType && viaTemplate.productType !== g.productType ? retagForType(viaTemplate.tags, g.productType, viaTemplate.productType) : viaTemplate.tags;
+    const out = applyTagRules({ title: g.title, vendor: g.brand, category: g.category, productType: viaTemplate.productType, skus: g.variants.map((v) => v.item.sku), tags: tagsForType, collections: viaTemplate.collections, metafields: viaTemplate.metafields }, tagRules);
     return {
       ...g,
       productType: directives.productType.trim() || out.productType,

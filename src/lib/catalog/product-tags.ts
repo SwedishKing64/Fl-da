@@ -12,7 +12,8 @@
  * have is worse than no tag — nobody browsing ever lands on it, and it looks like a typo forever.
  */
 
-import { DEFAULT_TAGGING, generalTags, gendersFromText, houseTagFor, isShopifyGenerated, slugTag, tagsFor, type Gender } from "./tagging";
+import { DEFAULT_TAGGING, generalTags, gendersFromText, headingTags, houseTagFor, isShopifyGenerated, sectionsFor, slugTag, tagsFor, type Gender } from "./tagging";
+import { headingsFor } from "./taxonomy";
 import { isValidType, resolveType } from "./taxonomy";
 import type { CanonicalLineItem } from "./types";
 
@@ -150,4 +151,33 @@ function dedupe(tags: string[]): string[] {
  */
 export function houseTags(tags: string[]): string[] {
   return dedupe(tags.map((t) => t.trim().toLowerCase()).filter(Boolean));
+}
+
+/** The tags that say where a Type sits: its own shelf, the heading above it, and the menu. */
+export function shelfTags(type: string): string[] {
+  const resolved = resolveType(type) ?? type.trim();
+  if (!resolved || !isValidType(resolved)) return [];
+  return dedupe([...tagsFor(resolved), ...headingTags(resolved), ...sectionsFor(resolved).map(slugTag)]);
+}
+
+/**
+ * A product's tags once its Type has been changed after they were made.
+ *
+ * The categoriser's tags come from the Type it chose, and a learned convention can then put the
+ * shop's own Type on the product instead — Osprey's packs were read as ski bags, tagged
+ * ski-accessories and ski, and typed Packs and Bags afterwards with the ski tags still on them.
+ * The old Type's shelf tags come off, the new Type's go on, and everything else stays. A change
+ * from a shelf to the heading above it — Hiking Packs to Packs and Bags — changes nothing, since
+ * the shelf's tags already carry its heading.
+ */
+export function retagForType(tags: string[], from: string, to: string): string[] {
+  const was = resolveType(from) ?? from.trim();
+  const now = resolveType(to) ?? to.trim();
+  if (!now || was === now || headingsFor(was).includes(now)) return tags;
+  const stale = new Set(shelfTags(was).map((t) => t.toLowerCase()));
+  const fresh = shelfTags(now);
+  // The accessories rules' own word, which names no shelf once the product is not an accessory.
+  if (/accessories$/i.test(was) && !/accessories$/i.test(now)) stale.add("accessories");
+  const keep = tags.filter((t) => !stale.has(t.toLowerCase()) || fresh.some((f) => f.toLowerCase() === t.toLowerCase()));
+  return dedupe([...fresh, ...keep]);
 }

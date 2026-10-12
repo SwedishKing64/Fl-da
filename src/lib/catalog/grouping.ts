@@ -7,6 +7,7 @@ import { chooseOptions, collectionsFor, detectCategory, enrichFromTitle, metafie
 import { resolveType } from "./taxonomy";
 import { withFit } from "./mapping";
 import { classifyAccessory } from "./accessories";
+import { packShelf } from "./packs";
 import { integratedBinding } from "./packages";
 import { isSnowboardBrand } from "./brands";
 import { normaliseOptionName, optionNamesFor } from "./options";
@@ -140,11 +141,14 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
     // heading of the sport it serves — a Burton board bag or stomp pad under Snowboard Accessories,
     // a glove or a goggle under Ski Accessories whoever made it, which is where the shop keeps all
     // 27 of its goggles and 127 of its 129 gloves. See classifyAccessory.
+    // A pack is filed on the Outdoor menu by what it is, before the accessories rules can read
+    // "bag" into it: an Osprey Exos is a hiking pack, not a ski bag. See packs.ts.
+    const pack = packShelf(brand, title, first.category, first.productType, first.description);
     const accessory = group.rule?.category === "accessories"
       ? classifyAccessory(items.some((i) => isSnowboardBrand(i.brand) || /\bsnowboard/i.test(`${i.category} ${i.productType} ${i.title}`)) ? "Snowboard" : "Ski", title, first.description, first.category, first.productType).type
       : null;
     // A supplier's own kind word is a Type only when it is one the shop uses: "FREERIDE" is not.
-    const productType = snowboard ?? accessory ?? group.rule?.productType ?? resolveType(first.productType) ?? "";
+    const productType = snowboard ?? pack ?? accessory ?? group.rule?.productType ?? resolveType(first.productType) ?? "";
     // The audience goes on the front of a gendered product's name, as the shop writes it: every one
     // of its 20 snowboard bindings and 14 of its 15 boots is "Men's …" or "Women's …", and so are
     // its jackets, gloves and socks. Not a ski, board or pole, which the shop names by model alone
@@ -192,7 +196,7 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
       variants.push({ item: e.item, sourceIndex: e.index, option1Value: values[0] ?? null, option2Value: values[1] ?? null, option3Value: values[2] ?? null });
     }
     const description = items.map((i) => i.description.trim()).find(Boolean) ?? "";
-    const collections = snowboard ? [snowboard] : collectionsFor(group.rule, items);
+    const collections = snowboard ? [snowboard] : pack ? ["Packs & Bags"] : collectionsFor(group.rule, items);
     // Tagged for the shelf and for the Type it goes out under: a goggle is "Goggles" to the rule
     // and "Ski Accessories" in the file, and the shop writes both (goggles, ski-accessories, ski).
     const general = catalogTags({ productType, filedAs: csvType(productType, collections), brand, items, ruleTags: tagsFor(group.rule, items, brand), describedAs: `${shown} ${description}`, ...(opts.builtBy ? { builtBy: opts.builtBy } : {}) });

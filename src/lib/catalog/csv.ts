@@ -11,6 +11,7 @@ import { NO_VARIANT_OPTION, normaliseOptionName, normaliseOptionValue, writeOutS
 import { defaultGrams } from "./variant-rules";
 import { formatPrice } from "./money";
 import { isValidHandle } from "./handle";
+import { spellType } from "./pipeline-pure";
 
 export interface CsvImage {
   url: string;
@@ -178,7 +179,7 @@ export function buildRows(products: CsvProduct[], options: GenerateOptions = {})
         row["Vendor"] = product.vendor ?? "";
         // The shop leaves Shopify's own taxonomy alone and files everything by its own Type.
         row["Product Category"] = product.productCategory ?? "Uncategorized";
-        row["Type"] = product.productType ?? "";
+        row["Type"] = spellType(product.productType ?? "");
         row["Tags"] = (product.tags ?? []).map((t) => t.trim()).filter(Boolean).join(", ");
         // Every product the importer builds arrives in the store as a draft, so someone looks at it
         // before a customer can. There is no setting for this: a product that went live straight

@@ -16,6 +16,14 @@ import type { ReviewProduct } from "./review-types";
  * Where a shelf hangs under two headings — Gloves under both Clothing Accessories and Snowboard
  * Accessories — the product's own collection decides, and failing that the first one does.
  */
+/**
+ * The Type as the shop's own column spells it: the menu draws an ampersand, the catalogue writes
+ * it out — "Packs and Bags" on all forty-six of its packs, "Climbing and Abseiling" on all forty.
+ */
+export function spellType(productType: string): string {
+  return productType.trim().replace(/\s*&\s*/g, " and ");
+}
+
 export function csvType(productType: string, collections: string[]): string {
   const headings = headingsFor(productType);
   if (headings.length === 0) return productType.trim();

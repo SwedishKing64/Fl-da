@@ -360,7 +360,7 @@ export function isWholeFile(scope: Scope): boolean {
  * Only the first few rows are searched. A preamble is a line or two; a Shopify export with its
  * header fifty rows down is not an export with a preamble, it is a different file.
  */
-function openExport(text: string): { grid: string[][]; preamble: string[][] } {
+export function openExport(text: string): { grid: string[][]; preamble: string[][] } {
   const all = parseCsv(text).filter((r) => r.some((c) => c.trim() !== ""));
   const at = all.slice(0, 10).findIndex((row) => row.includes("Handle") && row.includes("Title"));
   return at > 0 ? { grid: all.slice(at), preamble: all.slice(0, at) } : { grid: all, preamble: [] };

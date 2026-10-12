@@ -7,7 +7,8 @@ import { csvFilename, escapeCsvField } from "@/lib/catalog/csv";
 import { reconcile, type InvoiceFields, type InvoiceLine, type Reconciliation } from "@/lib/catalog/reconcile";
 import { buildDelivery, joinToReference, type FreshProduct } from "@/lib/catalog/delivery";
 import { deliveryAsked, narrowToWindow, parseWindow } from "@/lib/catalog/deliveries";
-import { kindOfLine, kindsAsked, typesByBarcode } from "@/lib/catalog/kinds";
+import { kindOfLine, kindsAsked, typeKey, typesByBarcode } from "@/lib/catalog/kinds";
+import { kindsSuffix, onlyKinds } from "@/lib/catalog/narrow-export";
 import { brandsAsked } from "@/lib/catalog/brands";
 import { fitlessOf, type PageDetails } from "@/lib/catalog/page-types";
 import { BulkLinks } from "./BulkLinks";
@@ -875,6 +876,33 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
   const rowsAddedTo = (name: string) => feed.reduce((n, f) => n + (f.perFile.find((p) => p.name === name)?.rowsAdded ?? 0), 0);
   const edited = sheets.filter(touched);
 
+  /**
+   * Hand over a file cut down to some kinds of product.
+   *
+   * The delivery was worked as the boards alone, and the file to import is the boards alone: a
+   * whole export would put every binding and glove in it through Shopify's import too, for no
+   * change. Named for what is in it, so "-updated-snowboards" is never mistaken for the whole.
+   */
+  const [downloadKinds, setDownloadKinds] = useState<string[]>([]);
+  const kindsInFiles = [...new Set(sheets.flatMap((s) => s.types))].sort();
+  // The kinds the delivery above was narrowed to, where the files have them: one click to download the same.
+  const kindsOfDelivery = kindsOff.length > 0 ? kindsInFiles.filter((t) => kindsOnOrder.some((k) => !kindsOff.includes(k) && typeKey(k) === typeKey(t))) : [];
+  const downloadTargets = (edited.length > 0 ? edited : sheets);
+  const narrowedFiles = downloadKinds.length > 0 ? downloadTargets.map((s) => ({ sheet: s, out: onlyKinds(s.csv, downloadKinds) })).filter((n) => n.out.products > 0) : [];
+  function downloadOnly(sheet: Sheet, csv: string): string {
+    const out = csvFilename(sheet.name, `${appliedTo(sheet.name) > 0 ? "-updated" : ""}${kindsSuffix(downloadKinds)}`);
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url; link.download = out;
+    document.body.appendChild(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+    return out;
+  }
+  function downloadOnlyAll() {
+    if (narrowedFiles.length === 0) { setError(`None of the loaded files has a product of ${downloadKinds.join(" or ")}.`); return; }
+    setSaved(narrowedFiles.map((n) => downloadOnly(n.sheet, n.out.csv)).join(", "));
+  }
+
   const wholeFile = preview ? isWholeFile(preview.plan.scope) : false;
   const refused = preview?.results.some((r) => r.result.refused) === true;
   const totalChanges = countChanges(preview?.results ?? []);
@@ -1038,6 +1066,34 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
               </li>
             ))}
           </ul>
+        )}
+        {sheets.length > 0 && kindsInFiles.length > 1 && (
+          <fieldset className="mt-4 rounded-xl border border-[var(--line-soft)] px-3 py-2.5">
+            <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-[var(--ink-soft)]">Download only some kinds of product</legend>
+            <p className="mb-2 text-xs text-[var(--ink-soft)]">Tick the kinds and the {edited.length > 0 ? "updated file comes down" : "file comes down"} with those products alone, every row of each, under the same headings &mdash; so importing it touches nothing else.</p>
+            <div className="flex flex-wrap gap-2">
+              {kindsInFiles.map((t) => {
+                const on = downloadKinds.some((k) => typeKey(k) === typeKey(t));
+                return (
+                  <label key={t} className={`flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-sm ${on ? "border-[var(--meta)] bg-[var(--meta-tint)] text-[var(--meta-ink)]" : "border-[var(--line)] text-[var(--ink-soft)]"}`}>
+                    <input type="checkbox" id={`download-kind-${t.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`} checked={on} onChange={(e) => setDownloadKinds((k) => (e.target.checked ? [...k, t] : k.filter((x) => typeKey(x) !== typeKey(t))))} />
+                    <span>{t}</span>
+                  </label>
+                );
+              })}
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Button size="sm" variant="primary" icon="⬇️" disabled={downloadKinds.length === 0 || narrowedFiles.length === 0} onClick={downloadOnlyAll}>
+                {downloadKinds.length === 0
+                  ? "Download only the kinds ticked"
+                  : `Download only ${downloadKinds.join(" and ")} — ${narrowedFiles.reduce((n, f) => n + f.out.products, 0)} product${narrowedFiles.reduce((n, f) => n + f.out.products, 0) === 1 ? "" : "s"} in ${narrowedFiles.length} file${narrowedFiles.length === 1 ? "" : "s"}`}
+              </Button>
+              {kindsOfDelivery.length > 0 && !kindsOfDelivery.every((t) => downloadKinds.some((k) => typeKey(k) === typeKey(t))) && (
+                <Button size="sm" onClick={() => setDownloadKinds(kindsOfDelivery)}>Same as the delivery: {kindsOfDelivery.join(" and ")}</Button>
+              )}
+              {downloadKinds.length > 0 && <Button size="sm" onClick={() => setDownloadKinds([])}>Clear</Button>}
+            </div>
+          </fieldset>
         )}
       </Card>
 

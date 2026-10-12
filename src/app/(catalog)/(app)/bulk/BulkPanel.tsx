@@ -645,6 +645,9 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
       return { ...s, history: [...s.history, s.csv], csv: touched ? hit.result.csv : s.csv };
     });
     setSheets(nextSheets);
+    // A delivery worked as the boards alone is downloaded as the boards alone: the kinds it was
+    // narrowed to are ticked for the download, where the files have them.
+    if (kindsOff.length > 0) setDownloadKinds(kindsInFiles.filter((t) => kindsOnOrder.some((k) => !kindsOff.includes(k) && typeKey(k) === typeKey(t))));
 
     const cells = results.reduce((n, r) => n + (r.result.refused ? 0 : r.result.changes.length), 0);
     const rowsAdded = results.reduce((n, r) => n + r.result.appended, 0);
@@ -902,6 +905,39 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
     if (narrowedFiles.length === 0) { setError(`None of the loaded files has a product of ${downloadKinds.join(" or ")}.`); return; }
     setSaved(narrowedFiles.map((n) => downloadOnly(n.sheet, n.out.csv)).join(", "));
   }
+  const narrowedProducts = narrowedFiles.reduce((n, f) => n + f.out.products, 0);
+  const kindsDownload = sheets.length > 0 && kindsInFiles.length > 1 && (
+    <fieldset className="mt-4 rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2.5">
+      <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-[var(--ink-soft)]">Download only some kinds of product</legend>
+      <p className="mb-2 text-xs text-[var(--ink-soft)]">
+        {edited.length > 0
+          ? <>Tick the kinds and the <strong>updated</strong> file comes down with those products alone, every row of each, under the same headings &mdash; so importing it touches nothing else.</>
+          : <>Nothing has been applied yet, so this would be the file <strong>as you loaded it</strong>, cut down to the kinds ticked. For the updated file, apply the delivery or the change first, then download here.</>}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {kindsInFiles.map((t) => {
+          const on = downloadKinds.some((k) => typeKey(k) === typeKey(t));
+          return (
+            <label key={t} className={`flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-sm ${on ? "border-[var(--meta)] bg-[var(--meta-tint)] text-[var(--meta-ink)]" : "border-[var(--line)] text-[var(--ink-soft)]"}`}>
+              <input type="checkbox" checked={on} onChange={(e) => setDownloadKinds((k) => (e.target.checked ? [...k, t] : k.filter((x) => typeKey(x) !== typeKey(t))))} />
+              <span>{t}</span>
+            </label>
+          );
+        })}
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <Button size="sm" variant="primary" icon="⬇️" disabled={downloadKinds.length === 0 || narrowedFiles.length === 0} onClick={downloadOnlyAll}>
+          {downloadKinds.length === 0
+            ? "Download only the kinds ticked"
+            : `Download ${edited.length > 0 ? "the updated file" : "the file as loaded"}, only ${downloadKinds.join(" and ")} — ${narrowedProducts} product${narrowedProducts === 1 ? "" : "s"}${narrowedFiles.length > 1 ? ` in ${narrowedFiles.length} files` : ""}`}
+        </Button>
+        {kindsOfDelivery.length > 0 && !kindsOfDelivery.every((t) => downloadKinds.some((k) => typeKey(k) === typeKey(t))) && (
+          <Button size="sm" onClick={() => setDownloadKinds(kindsOfDelivery)}>Same as the delivery: {kindsOfDelivery.join(" and ")}</Button>
+        )}
+        {downloadKinds.length > 0 && <Button size="sm" onClick={() => setDownloadKinds([])}>Clear</Button>}
+      </div>
+    </fieldset>
+  );
 
   const wholeFile = preview ? isWholeFile(preview.plan.scope) : false;
   const refused = preview?.results.some((r) => r.result.refused) === true;
@@ -1067,34 +1103,7 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
             ))}
           </ul>
         )}
-        {sheets.length > 0 && kindsInFiles.length > 1 && (
-          <fieldset className="mt-4 rounded-xl border border-[var(--line-soft)] px-3 py-2.5">
-            <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-[var(--ink-soft)]">Download only some kinds of product</legend>
-            <p className="mb-2 text-xs text-[var(--ink-soft)]">Tick the kinds and the {edited.length > 0 ? "updated file comes down" : "file comes down"} with those products alone, every row of each, under the same headings &mdash; so importing it touches nothing else.</p>
-            <div className="flex flex-wrap gap-2">
-              {kindsInFiles.map((t) => {
-                const on = downloadKinds.some((k) => typeKey(k) === typeKey(t));
-                return (
-                  <label key={t} className={`flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-sm ${on ? "border-[var(--meta)] bg-[var(--meta-tint)] text-[var(--meta-ink)]" : "border-[var(--line)] text-[var(--ink-soft)]"}`}>
-                    <input type="checkbox" id={`download-kind-${t.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`} checked={on} onChange={(e) => setDownloadKinds((k) => (e.target.checked ? [...k, t] : k.filter((x) => typeKey(x) !== typeKey(t))))} />
-                    <span>{t}</span>
-                  </label>
-                );
-              })}
-            </div>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <Button size="sm" variant="primary" icon="⬇️" disabled={downloadKinds.length === 0 || narrowedFiles.length === 0} onClick={downloadOnlyAll}>
-                {downloadKinds.length === 0
-                  ? "Download only the kinds ticked"
-                  : `Download only ${downloadKinds.join(" and ")} — ${narrowedFiles.reduce((n, f) => n + f.out.products, 0)} product${narrowedFiles.reduce((n, f) => n + f.out.products, 0) === 1 ? "" : "s"} in ${narrowedFiles.length} file${narrowedFiles.length === 1 ? "" : "s"}`}
-              </Button>
-              {kindsOfDelivery.length > 0 && !kindsOfDelivery.every((t) => downloadKinds.some((k) => typeKey(k) === typeKey(t))) && (
-                <Button size="sm" onClick={() => setDownloadKinds(kindsOfDelivery)}>Same as the delivery: {kindsOfDelivery.join(" and ")}</Button>
-              )}
-              {downloadKinds.length > 0 && <Button size="sm" onClick={() => setDownloadKinds([])}>Clear</Button>}
-            </div>
-          </fieldset>
-        )}
+        {kindsDownload}
       </Card>
 
       {error && <Alert tone="danger">{error}</Alert>}
@@ -1263,6 +1272,7 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
                   </li>
                 ))}
               </ul>
+              {kindsDownload}
             </div>
           )}
 

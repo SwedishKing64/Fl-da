@@ -1445,8 +1445,9 @@ export async function sendInstructionAction(batchId: string, message: string): P
         directives,
       );
       if (reading) {
-        directives = reading.directives;
-        await prisma.importBatch.update({ where: { id: batchId }, data: { directives: JSON.stringify(reading.directives) } });
+        // What the build found on the order is the build's to say, whatever the reading made of it.
+        directives = { ...reading.directives, typesSeen: directives.typesSeen };
+        await prisma.importBatch.update({ where: { id: batchId }, data: { directives: JSON.stringify(directives) } });
         // Brand, Type, tags and packages are decided when products are BUILT, so a batch already
         // built has to be built again for them to take — it used to only re-price, and "package
         // them with the Griffon" changed nothing while the reply said it would.
@@ -1467,7 +1468,7 @@ export async function sendInstructionAction(batchId: string, message: string): P
           }
         }
         await prisma.batchInstruction.create({ data: { batchId, role: "ASSISTANT", body: `${reading.reply}${outcome}` } });
-        await logAudit("batch.instruction", { batchId, userId: user.id, details: reading.directives });
+        await logAudit("batch.instruction", { batchId, userId: user.id, details: directives });
       }
     }
 
@@ -1518,6 +1519,48 @@ export async function setSkippedProductsAction(batchId: string, skip: string[]):
         said = `${said} Built again with ${restored.join(", ")} back in.`.trim();
       } else {
         said = `${said} ${restored.join(", ")} will be back the next time the products are built — the review page has edits, so they were not rebuilt now.`.trim();
+      }
+    }
+    revalidatePath(`/batches/${batchId}`);
+    revalidatePath(`/batches/${batchId}/review`);
+    return { ok: true, data: { removed: gone.length, rebuilt, said } };
+  });
+}
+
+/**
+ * Which kinds of product this batch works with.
+ *
+ * A Burton order carries boards, bindings, boots, outerwear and gloves at once, and the person
+ * wants to do the boards today. Ticking kinds here keeps the directive; products of other kinds
+ * are taken out of the batch, and a kind ticked back is built again. No kinds ticked means all.
+ */
+export async function setBuildTypesAction(batchId: string, types: string[]): Promise<ActionResult<{ removed: number; rebuilt: boolean; said: string }>> {
+  return safely(async () => {
+    const user = await requireUser();
+    const batch = await prisma.importBatch.findUniqueOrThrow({ where: { id: batchId }, select: { directives: true, status: true } });
+    if (["EXPORTED", "PUSHED"].includes(batch.status)) return { ok: false, error: "This batch has been exported, so what it builds is no longer being changed." };
+    const before = parseDirectives(batch.directives);
+    const next = [...new Set(types.map((x) => x.trim()).filter(Boolean))];
+    await prisma.importBatch.update({ where: { id: batchId }, data: { directives: JSON.stringify({ ...before, types: next }) } });
+    await logAudit("batch.instruction", { batchId, userId: user.id, details: { types: next } });
+    const { isOfType, typeKey } = await import("@/lib/catalog/instructions");
+    const built = await prisma.product.findMany({ where: { batchId }, select: { id: true, productType: true } });
+    const gone = next.length > 0 ? built.filter((p) => !isOfType(p, next)) : [];
+    if (gone.length > 0) await prisma.product.deleteMany({ where: { id: { in: gone.map((p) => p.id) } } });
+    // A kind newly let in — or the filter lifted — only a rebuild brings back.
+    const widened = next.length === 0
+      ? before.types.length > 0
+      : next.some((t) => before.types.length > 0 && !before.types.some((b) => typeKey(b) === typeKey(t)));
+    let rebuilt = false;
+    let said = gone.length > 0 ? `${gone.length} product${gone.length === 1 ? "" : "s"} of other kinds left for later.` : "";
+    if (widened && built.length > 0) {
+      const { untouchedSinceBuilt } = await import("@/lib/catalog/pipeline");
+      if (await untouchedSinceBuilt(batchId)) {
+        await autoApplyMappings(batchId, user.id);
+        rebuilt = true;
+        said = `${said} Built again with ${next.length ? next.join(", ") : "every kind"} in.`.trim();
+      } else {
+        said = `${said} ${next.length ? next.join(", ") : "The other kinds"} will be in the next time the products are built — the review page has edits, so they were not rebuilt now.`.trim();
       }
     }
     revalidatePath(`/batches/${batchId}`);

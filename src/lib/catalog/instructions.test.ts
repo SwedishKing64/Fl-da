@@ -66,3 +66,26 @@ describe("what the person said not to build", () => {
     expect(describeDirectives({ ...NO_DIRECTIVES, skip: ["Kore 94", "socks"] })).toContain("Not built: Kore 94, socks");
   });
 });
+
+describe("the kinds of product to work with", () => {
+  it("places a product by its Type, or by the category it was filed under, however the kind is spelled", async () => {
+    const { isOfType, typeKey, describeDirectives, NO_DIRECTIVES } = await import("./instructions");
+    expect(typeKey("Snowboard Bindings")).toBe(typeKey("snowboard-binding"));
+    expect(isOfType({ productType: "Snowboards" }, ["snowboards"])).toBe(true);
+    expect(isOfType({ productType: "Snowboards" }, ["Snowboard"])).toBe(true);
+    expect(isOfType({ productType: "Snowboard Bindings" }, ["Snowboards"])).toBe(false);
+    expect(isOfType({ productType: "", category: "snowboards" }, ["Snowboards"])).toBe(true);
+    expect(isOfType({ productType: "Jackets" }, ["Snowboards", "Jackets"])).toBe(true);
+    expect(isOfType({ productType: "Gloves" }, [])).toBe(true);
+    expect(isOfType({ productType: "Gloves" }, ["", " "])).toBe(true);
+    expect(describeDirectives({ ...NO_DIRECTIVES, types: ["Snowboards", "Snowboard Bindings"] })).toContain("Only these kinds: Snowboards, Snowboard Bindings");
+    // What the build found is not a directive, and is not described as one.
+    expect(describeDirectives({ ...NO_DIRECTIVES, typesSeen: ["Snowboards", "Gloves"] })).toEqual([]);
+  });
+
+  it("keeps the kinds the build found when an older batch's directives are read", async () => {
+    const { parseDirectives } = await import("./instructions");
+    expect(parseDirectives(JSON.stringify({ skip: ["socks"] })).types).toEqual([]);
+    expect(parseDirectives(JSON.stringify({ types: ["Snowboards"], typesSeen: ["Snowboards", "Gloves"] })).typesSeen).toEqual(["Snowboards", "Gloves"]);
+  });
+});

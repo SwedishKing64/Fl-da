@@ -2,7 +2,7 @@
 
 import type { Prisma } from "@prisma/client";
 import { productTitle, seasonTagFrom, seoTitle } from "./titles";
-import { isSkipped, parseDirectives } from "./instructions";
+import { isOfType, isSkipped, parseDirectives, typeKey } from "./instructions";
 import { prisma, parseJson } from "./db";
 import { extractFile, type UploadKind } from "./extract";
 import { applyMapping, headerHash, looksLikeReference, mappingProblems, repairTemplate, seasonFrom, suggestMapping, suggestOptions, type Mapping, type MappingOptions, type SavedOptions } from "./mapping";
@@ -794,6 +794,32 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
     if (left.length > 0) {
       for (const fileId of [...new Set(items.map((i) => i.fileId))]) {
         await noteOnFile(fileId, `Not built, as asked: ${left.map((g) => productTitle(g.title, seasonTagFrom(g.tags))).join(", ")}.`);
+      }
+    }
+  }
+
+  // The kinds of product the order holds, kept with the batch so the page can offer them to work
+  // with one at a time; then only the kinds the person chose, when they chose.
+  {
+    const seen = [...new Set(grouped.map((g) => g.productType.trim() || g.category.trim()).filter(Boolean))].sort();
+    const fresh = parseDirectives((await prisma.importBatch.findUnique({ where: { id: batchId }, select: { directives: true } }))?.directives ?? "");
+    if (seen.join("|") !== fresh.typesSeen.join("|")) {
+      await prisma.importBatch.update({ where: { id: batchId }, data: { directives: JSON.stringify({ ...fresh, typesSeen: seen }) } });
+    }
+    if (directives.types.length > 0) {
+      const left = grouped.filter((g) => !isOfType(g, directives.types));
+      for (const g of left) grouped.splice(grouped.indexOf(g), 1);
+      if (left.length > 0) {
+        const kinds = [...new Set(left.map((g) => g.productType.trim() || g.category.trim() || "other"))];
+        for (const fileId of [...new Set(items.map((i) => i.fileId))]) {
+          await noteOnFile(fileId, `Working with ${directives.types.join(", ")} only: ${left.length} product${left.length === 1 ? "" : "s"} of other kinds (${kinds.join(", ")}) ${left.length === 1 ? "was" : "were"} left for later. Tick a kind on the batch page to bring it in.`);
+        }
+      }
+      const unknown = directives.types.filter((t) => !seen.some((k) => typeKey(k) === typeKey(t)));
+      if (unknown.length > 0) {
+        for (const fileId of [...new Set(items.map((i) => i.fileId))]) {
+          await noteOnFile(fileId, `Nothing on this order is a ${unknown.join(" or ")}. The kinds it holds: ${seen.join(", ") || "none found"}.`);
+        }
       }
     }
   }

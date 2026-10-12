@@ -14,6 +14,7 @@ import { BuildProductsButton, DeleteFileButton, DeleteBatchButton, RetryExtracti
 import { ExtractedRows } from "./ExtractedRows";
 import { LinksPanel } from "./review/LinksPanel";
 import { BuildList } from "./BuildList";
+import { TypeList } from "./TypeList";
 import { guarded } from "@/app/(catalog)/page-failed";
 
 /**
@@ -48,7 +49,7 @@ async function renderBatchPage(props: PageProps<"/batches/[id]">) {
   // The products, for their page links: asked for here, right after the build, where the person
   // is — the review page asks too, but a step on another page was a step nobody saw.
   const products = batch._count.products > 0
-    ? await prisma.product.findMany({ where: { batchId: id }, select: { id: true, title: true, handle: true, lookupStatus: true, lookupSource: true }, orderBy: { sortOrder: "asc" } })
+    ? await prisma.product.findMany({ where: { batchId: id }, select: { id: true, title: true, handle: true, productType: true, lookupStatus: true, lookupSource: true }, orderBy: { sortOrder: "asc" } })
     : [];
   // A product the shop already lists keeps the page it has — unless every product here is new,
   // which the person has said, and a handle that happens to match is not a listing.
@@ -114,6 +115,9 @@ async function renderBatchPage(props: PageProps<"/batches/[id]">) {
               />
             ))}
           </Card>
+          {(products.length > 0 || directives.types.length > 0) && (
+            <TypeList batchId={id} locked={locked} built={products.map((p) => p.productType)} seen={directives.typesSeen} chosen={directives.types} />
+          )}
           {(products.length > 0 || directives.skip.length > 0) && (
             <BuildList batchId={id} locked={locked} built={products.map((p) => ({ title: p.title, handle: p.handle }))} skipped={directives.skip} />
           )}

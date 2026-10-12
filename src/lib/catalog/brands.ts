@@ -94,6 +94,7 @@ export function brandsAsked(instruction: string, onOrder: string[]): string[] | 
   const KEEP = /\b(ONLY|JUST|START WITH|STARTING WITH|BEGIN WITH|FIRST|SOLELY|NOTHING BUT)\b/;
   const DROP = /\b(LEAVE OUT|LEAVE|WITHOUT|SKIP|NOT|EXCLUDE|EXCEPT|DROP|IGNORE|MINUS|THEN)\b/;
   const LATER = /\b(LATER|SEPARATELY|AFTERWARDS|AFTER|NEXT TIME|ANOTHER TIME|SECOND)\b/;
+  const JOINED = /^((AND|PLUS|WITH|ALSO|OR)( THE)?|)$/;
   const kept: string[] = [], dropped: string[] = [];
   // Each brand is judged by the words between it and its neighbours, so "only Burton, Anon
   // separately" does not read "separately" against Burton.
@@ -108,11 +109,22 @@ export function brandsAsked(instruction: string, onOrder: string[]): string[] | 
     // can too: "Anon separately", "Anon later", "Burton first".
     if (DROP.test(before) || LATER.test(after)) dropped.push(f.b);
     else if (KEEP.test(before) || /\b(FIRST|ONLY)\b/.test(after)) kept.push(f.b);
-    // "only Burton and Anon", "leave out Anon and Burton": the second goes the way of the first.
-    else if (i > 0 && /^(AND|PLUS|WITH|ALSO|OR|)$/.test(before)) (kept.includes(found[i - 1].b) ? kept : dropped.includes(found[i - 1].b) ? dropped : []).push(f.b);
+    // "only Burton and Anon", "leave out Anon and the Burton": the second goes the way of the first.
+    else if (i > 0 && JOINED.test(before)) (kept.includes(found[i - 1].b) ? kept : dropped.includes(found[i - 1].b) ? dropped : []).push(f.b);
   });
+  // "Burton and Anon only", "Burton and Anon later": what is said after the last goes for the
+  // ones joined to it before, where nothing was said about them on their own.
+  for (let i = found.length - 2; i >= 0; i--) {
+    const f = found[i], next = found[i + 1];
+    if (kept.includes(f.b) || dropped.includes(f.b)) continue;
+    const between = t.slice(f.end, next.at + 1).trim();
+    if (!JOINED.test(between)) continue;
+    if (kept.includes(next.b)) kept.push(f.b);
+    else if (dropped.includes(next.b)) dropped.push(f.b);
+  }
   if (kept.length === 0 && dropped.length === 0) return null;
-  const keep = kept.length > 0 ? kept : brands.filter((b) => !dropped.includes(b));
+  // In the order's own order, however the instruction listed them.
+  const keep = kept.length > 0 ? brands.filter((b) => kept.includes(b)) : brands.filter((b) => !dropped.includes(b));
   const out = keep.filter((b) => !dropped.includes(b));
   return out.length === 0 || out.length === brands.length ? null : out;
 }

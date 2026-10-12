@@ -4,9 +4,10 @@ import { useRef, useState } from "react";
 import { joinOrderAction, readPageAction, rememberListingsAction, logAdjustmentAction, planAdjustmentAction, readInstructionSheetAction, readInvoiceAction, readReferenceAction, readSheetAgainstFilesAction } from "@/app/(catalog)/actions";
 import { applyPlan, describeFile, foldPlans, isWholeFile, whyNoMatch, type AdjustResult, type FoldStep, type Plan } from "@/lib/catalog/adjust";
 import { csvFilename, escapeCsvField } from "@/lib/catalog/csv";
-import { reconcile, type InvoiceFields, type Reconciliation } from "@/lib/catalog/reconcile";
+import { reconcile, type InvoiceFields, type InvoiceLine, type Reconciliation } from "@/lib/catalog/reconcile";
 import { buildDelivery, joinToReference, type FreshProduct } from "@/lib/catalog/delivery";
 import { deliveryAsked, narrowToWindow, parseWindow } from "@/lib/catalog/deliveries";
+import { kindOfLine, kindsAsked, typesByBarcode } from "@/lib/catalog/kinds";
 import { brandsAsked } from "@/lib/catalog/brands";
 import { fitlessOf, type PageDetails } from "@/lib/catalog/page-types";
 import { BulkLinks } from "./BulkLinks";
@@ -219,9 +220,20 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
   const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
   const vendorNames = brandsOnOrder.find((b) => same(b, vendor));
   const brandsSetAside = [...new Set([...brandsOff, ...(vendorNames ? brandsOnOrder.filter((b) => !same(b, vendor)) : [])])];
-  /** The invoice as this delivery: every line, or only the lines due in the window asked for, of the brands kept. */
+  /**
+   * The kinds of product on the order, and which are set aside. A Burton order carries boards,
+   * bindings, boots, outerwear and gloves on one form; the shop does the boards today and the
+   * rest another day. Each line's kind is what the form says, or the Type of the listing its
+   * barcode lands on. See kindOfLine.
+   */
+  const [kindsOff, setKindsOff] = useState<string[]>([]);
+  const typeByBarcode = typesByBarcode(sheets.flatMap((x) => listingsFromCsv(x.csv)));
+  const kindOf = (l: InvoiceLine) => kindOfLine(l, typeByBarcode);
+  const kindsOnOrder = [...new Set((invoice?.lines ?? []).map(kindOf))].sort();
+  const kindCount = (k: string) => (invoice?.lines ?? []).filter((l) => kindOf(l) === k).length;
+  /** The invoice as this delivery: every line, or only the lines due in the window asked for, of the brands and kinds kept. */
   const order: Invoice | null = invoice
-    ? { ...invoice, lines: (narrowed ? narrowed.lines : invoice.lines).filter((l) => !brandsSetAside.includes((l.brand ?? "").trim())) }
+    ? { ...invoice, lines: (narrowed ? narrowed.lines : invoice.lines).filter((l) => !brandsSetAside.includes((l.brand ?? "").trim()) && !kindsOff.includes(kindOf(l))) }
     : invoice;
   const referenceRef = useRef<HTMLInputElement>(null);
   const [references, setReferences] = useState<Reference[]>([]);
@@ -679,6 +691,14 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
       // One brand kept is also whose delivery this is, for whatever has to be built.
       if (brandsKept.length === 1 && !vendor.trim()) setVendor(brandsKept[0]);
       setSaved(`Only ${brandsKept.join(" and ")}: ${off.join(" and ")} ${off.length === 1 ? "is" : "are"} set aside, and the delivery above is now the ${brandsKept.join(" and ")} lines`);
+      return;
+    }
+    // "Only the snowboards" the same way: the order above is narrowed to those kinds.
+    const kindsKept = invoice ? kindsAsked(text, kindsOnOrder) : null;
+    if (kindsKept) {
+      const off = kindsOnOrder.filter((k) => !kindsKept.includes(k));
+      setKindsOff(off); setInstruction(""); clearPreview(); setError(null);
+      setSaved(`Only ${kindsKept.join(" and ")}: ${off.join(", ")} ${off.length === 1 ? "is" : "are"} set aside, and the delivery above is now the ${kindsKept.join(" and ")} lines (${kindsKept.reduce((n, k) => n + kindCount(k), 0)} of ${invoice!.lines.length})`);
       return;
     }
     const asked = invoice ? deliveryAsked(text) : null;
@@ -1332,6 +1352,26 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
                         <span>{b} <span className="text-xs text-[var(--ink-soft)]">· {brandCount(b)} line{brandCount(b) === 1 ? "" : "s"}{Boolean(vendorNames) && !same(b, vendor) ? " · set aside while the delivery is " + vendor.trim() + "'s" : ""}</span></span>
                       </label>
                     ))}
+                  </div>
+                </fieldset>
+              )}
+
+              {kindsOnOrder.length > 1 && (
+                <fieldset className="rounded-xl border border-[var(--line-soft)] px-3 py-2.5">
+                  <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-[var(--ink-soft)]">Kinds of product on this order</legend>
+                  <p className="mb-2 text-xs text-[var(--ink-soft)]">Tick the kinds to do now; the rest are set aside for another run. Or say it below: &ldquo;only the snowboards&rdquo;.</p>
+                  <div className="flex flex-wrap gap-2">
+                    {kindsOnOrder.map((k) => {
+                      const on = !kindsOff.includes(k);
+                      return (
+                        <label key={k} className={`flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-sm ${on ? "border-[var(--meta)] bg-[var(--meta-tint)] text-[var(--meta-ink)]" : "border-[var(--line)] text-[var(--ink-soft)]"}`}>
+                          <input type="checkbox" id={`invoice-kind-${k.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`} checked={on} onChange={(e) => { setKindsOff((off) => (e.target.checked ? off.filter((x) => x !== k) : [...off, k])); clearPreview(); }} />
+                          <span>{k}</span>
+                          <span className="text-xs opacity-70">{on ? `${kindCount(k)} line${kindCount(k) === 1 ? "" : "s"}` : "set aside"}</span>
+                        </label>
+                      );
+                    })}
+                    {kindsOff.length > 0 && <Button size="sm" icon="📦" onClick={() => { setKindsOff([]); clearPreview(); }}>All of them</Button>}
                   </div>
                 </fieldset>
               )}

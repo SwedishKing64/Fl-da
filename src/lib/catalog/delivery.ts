@@ -32,7 +32,7 @@ import { expandShorthand } from "./shorthand";
 import { colourName } from "./colour";
 import { writeOutSize } from "./options";
 import { quote, verifyOnlyIntended, type Change } from "./adjust";
-import { csvType, productCategoryFor } from "./pipeline-pure";
+import { csvType, productCategoryFor, spellType } from "./pipeline-pure";
 import { houseBody } from "./body";
 import { enrichFromSpecs } from "./specs";
 import { productTitle, seasonTagFrom, seoTitle } from "./titles";
@@ -89,6 +89,65 @@ export interface DeliveryOptions {
    * ski's page without being asked.
    */
   pages?: Record<number, PageDetails>;
+  /**
+   * What the person said about each line matched on its NAME rather than a barcode: the same
+   * product (its stock goes up), a new year's model of it (built as a new product), or not that
+   * product at all (left alone). Keyed by lineKey of the line as the invoice gave it. A name match
+   * with no decision is taken as the same product, as it always was.
+   */
+  decisions?: Record<string, MatchDecision>;
+}
+
+export type MatchDecision = "same" | "new" | "skip";
+
+/** A line's own key, the same whatever was read into its title afterwards. */
+export function lineKey(line: InvoiceLine): string {
+  return [line.sku, line.barcode, line.title, line.size ?? "", line.colour ?? ""].map((v) => v.trim().toLowerCase()).join("\u0000");
+}
+
+/**
+ * A line placed on a listing by its NAME, for the person to confirm. Two kinds: a line the
+ * season's own matching put on a listing of this season, and a line it could not place at all
+ * whose name is on a listing of ANOTHER season — last year's Blaze 94, when the order is for next
+ * year's. The first is taken as the same product unless they say otherwise; the second as a new
+ * year's model, to be built, unless they say it is the same product and its stock should go up.
+ */
+export interface NameCandidate { line: InvoiceLine; match: Match; otherSeason: boolean }
+
+export function nameCandidates(seasoned: Reconciliation, loose: Reconciliation): NameCandidate[] {
+  const out: NameCandidate[] = seasoned.matched.filter((m) => m.key === "name").map((m) => ({ line: m.line, match: m, otherSeason: false }));
+  for (const line of seasoned.unmatched) {
+    const lm = loose.matched.find((m) => m.line === line && m.key === "name");
+    if (lm) out.push({ line, match: lm, otherSeason: true });
+  }
+  return out;
+}
+
+/**
+ * The reconciliation with the person's say on the name matches applied. A line they called a new
+ * year's model leaves the carry-overs for the lines to build; one they said is the same product
+ * joins them, on the listing of whatever season; one they said is not that product is held back
+ * and said so.
+ */
+export function decideByName(seasoned: Reconciliation, loose: Reconciliation, decisionOf: (line: InvoiceLine) => MatchDecision | undefined): { reconciliation: Reconciliation; skipped: Array<{ line: InvoiceLine; reason: string }> } {
+  const matched: Match[] = [];
+  const unmatched: InvoiceLine[] = [];
+  const skipped: Array<{ line: InvoiceLine; reason: string }> = [];
+  const notIt = (m: Match) => ({ line: m.line, reason: `matched ${m.handle} on its name, and you said it is not that product` });
+  for (const m of seasoned.matched) {
+    const d = m.key === "name" ? decisionOf(m.line) : undefined;
+    if (d === "new") unmatched.push(m.line);
+    else if (d === "skip") skipped.push(notIt(m));
+    else matched.push(m);
+  }
+  for (const line of seasoned.unmatched) {
+    const lm = loose.matched.find((m) => m.line === line && m.key === "name");
+    const d = lm ? decisionOf(line) : undefined;
+    if (lm && d === "same") matched.push(lm);
+    else if (lm && d === "skip") skipped.push(notIt(lm));
+    else unmatched.push(line);
+  }
+  return { reconciliation: { ...seasoned, matched, unmatched }, skipped };
 }
 
 /** A product the delivery had to build, as it will appear in the file. */
@@ -170,7 +229,12 @@ export function buildDelivery(csv: string, invoiced: InvoiceLine[], options: Del
   // The order's wording, put into the shop's before anything is matched: see joinToReference.
   const joined = joinToReference(ordered, options);
   const lines = joined.lines;
-  const reconciliation = reconcile(csv, lines, { season: options.season });
+  // The order's own lines keep their place through the join, so a decision made on the invoice's
+  // wording finds the line however the spec sheet renamed it.
+  const seasoned = reconcile(csv, lines, { season: options.season });
+  const loose = (options.season ?? "").trim() && seasoned.unmatched.length > 0 ? reconcile(csv, lines, {}) : seasoned;
+  const decided = decideByName(seasoned, loose, (line) => options.decisions?.[lineKey(invoiced[lines.indexOf(line)] ?? line)]);
+  const reconciliation = decided.reconciliation;
   // A delivery ADDS by default. It is the whole point of this path: the goods are arriving.
   const fields: InvoiceFields = { rrp: true, quantity: true, stock: "add", draft: true, dropTags: ["snow sale", "snow-sale"], ...options.fields };
   const reorder = applyInvoice(csv, reconciliation.matched, fields);
@@ -181,7 +245,7 @@ export function buildDelivery(csv: string, invoiced: InvoiceLine[], options: Del
     };
   }
 
-  const heldBack: Array<{ line: InvoiceLine; reason: string }> = reconciliation.ambiguous.map((a) => ({ line: a.line, reason: a.reason }));
+  const heldBack: Array<{ line: InvoiceLine; reason: string }> = [...reconciliation.ambiguous.map((a) => ({ line: a.line, reason: a.reason })), ...decided.skipped];
   const warnings = [...joined.warnings, ...reorder.warnings];
   let csvSoFar = reorder.csv;
   let appended = 0;
@@ -685,7 +749,7 @@ function appendFresh(
       handle: product.handle,
       title: product.title,
       vendor: product.vendor ?? "",
-      type: product.productType ?? "",
+      type: spellType(product.productType ?? ""),
       tags: product.tags ?? [],
       variants: product.variants.map((v) => ({
         option: [v.option1Value, v.option2Value, v.option3Value].filter(Boolean).join(" / "),

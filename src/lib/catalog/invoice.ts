@@ -181,7 +181,7 @@ function looksLikeItemCode(value: string): boolean {
   return value.length >= 3 && value.length <= 40 && (value.match(/\s/g) ?? []).length <= 1 && /^[A-Za-z0-9]/.test(value);
 }
 
-interface Section { at: number; end: number; sku: number; title: number; rrp: number; cost: number; colour: number; qty: number; sizes: Array<[number, string]> }
+interface Section { at: number; end: number; sku: number; title: number; rrp: number; cost: number; colour: number; qty: number; size: number; sizes: Array<[number, string]> }
 
 function sectionsOf(grid: string[][]): Section[] {
   const heads: number[] = [];
@@ -204,7 +204,9 @@ function sectionsOf(grid: string[][]): Section[] {
     // through with no cost.
     const indent = find(/^indent( price)?$/);
     const cost = indent >= 0 ? indent : find(/^(w s|ws|wholesale|whsl|dealer|cost)( price)?$/);
-    return { at, end: n + 1 < heads.length ? heads[n + 1] : grid.length, sku, title: sku + 1, rrp: find(RRP), cost, colour: find(/^colou?r$/), qty, sizes };
+    // A form with one line per size says the size in a column of its own, beside the quantity.
+    const size = sizes.length === 0 ? find(/^(size|sizes|length|size desc(ription)?)$/) : -1;
+    return { at, end: n + 1 < heads.length ? heads[n + 1] : grid.length, sku, title: sku + 1, rrp: find(RRP), cost, colour: find(/^colou?r$/), qty, size, sizes };
   });
 }
 
@@ -256,7 +258,8 @@ function readOrder(name: string, grid: string[][]): InvoiceRead | null {
       // Skipped when the row already gave its lengths, where it is their sum.
       if (onThisRow === 0 && section.qty >= 0) {
         const quantity = orderedQuantity(text(row[section.qty]));
-        if (quantity !== null) lines.push({ ...base, quantity });
+        const size = section.size >= 0 ? text(row[section.size]) : "";
+        if (quantity !== null) lines.push({ ...base, quantity, ...(size && size.length <= 12 && !/[/,]/.test(size) ? { size } : {}) });
       }
     }
   }
@@ -265,7 +268,7 @@ function readOrder(name: string, grid: string[][]): InvoiceRead | null {
     lines,
     priceList,
     sheet: name,
-    columns: { barcode: "", sku: "Item No.", rrp: "RRP", quantity: sizeGrid ? "the length columns" : "QTY", title: 'the column beside "Item No."', size: sizeGrid ? "the column heading" : "", colour: "" },
+    columns: { barcode: "", sku: "Item No.", rrp: "RRP", quantity: sizeGrid ? "the length columns" : "QTY", title: 'the column beside "Item No."', size: sizeGrid ? "the column heading" : lines.some((l) => l.size) ? "Size" : "", colour: "" },
     warnings: [],
   };
 }

@@ -5,7 +5,7 @@ import { joinOrderAction, readPageAction, rememberListingsAction, logAdjustmentA
 import { applyPlan, describeFile, foldPlans, isWholeFile, whyNoMatch, type AdjustResult, type FoldStep, type Plan } from "@/lib/catalog/adjust";
 import { csvFilename, escapeCsvField } from "@/lib/catalog/csv";
 import { reconcile, type InvoiceFields, type InvoiceLine, type Reconciliation } from "@/lib/catalog/reconcile";
-import { buildDelivery, joinToReference, type FreshProduct } from "@/lib/catalog/delivery";
+import { buildDelivery, decideByName, joinToReference, lineKey, nameCandidates, type FreshProduct, type MatchDecision } from "@/lib/catalog/delivery";
 import { deliveryAsked, narrowToWindow, parseWindow } from "@/lib/catalog/deliveries";
 import { kindOfLine, kindsAsked, typeKey, typesByBarcode } from "@/lib/catalog/kinds";
 import { kindsSuffix, onlyKinds } from "@/lib/catalog/narrow-export";
@@ -228,6 +228,12 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
    * barcode lands on. See kindOfLine.
    */
   const [kindsOff, setKindsOff] = useState<string[]>([]);
+  /**
+   * What the person said about each line placed on a listing by its NAME — an invoice with no
+   * barcodes is placed on nothing else. The same product, a new year's model, or not it. Keyed by
+   * the line as the invoice gave it, so the key holds through the join and the filters above.
+   */
+  const [decisions, setDecisions] = useState<Record<string, MatchDecision>>({});
   const typeByBarcode = typesByBarcode(sheets.flatMap((x) => listingsFromCsv(x.csv)));
   const kindOf = (l: InvoiceLine) => kindOfLine(l, typeByBarcode);
   const kindsOnOrder = [...new Set((invoice?.lines ?? []).map(kindOf))].sort();
@@ -358,7 +364,7 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
       setError(`None of ${files.map((f) => f.name).join(", ")} reads as an order or invoice — it needs a column identifying each line and a column of prices or quantities. Add the order form, then these as its spec sheets.`);
       return;
     }
-    setInvoice(order.data); setLinks({}); setLinkNotes({}); setBrandsOff([]); setApplied(null); setAgainConfirmed(false);
+    setInvoice(order.data); setLinks({}); setLinkNotes({}); setBrandsOff([]); setDecisions({}); setApplied(null); setAgainConfirmed(false);
     const rest = readings.filter((r) => r !== order);
     const sheetsOnly = rest.filter((r) => /\.(xlsx?|csv)$/i.test(r.file.name));
     const skipped = rest.filter((r) => !sheetsOnly.includes(r));
@@ -476,7 +482,7 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
       const r = await readInvoiceAction({ name: file.name, type: sent.file.type, base64: await read(sent.file, file.name) });
       if (!r.ok) { setError(r.error); setInvoice(null); setLinks({}); setLinkNotes({}); return; }
       const data = r.data!;
-      setInvoice({ ...data, filename: file.name }); setLinks({}); setLinkNotes({}); setBrandsOff([]); setApplied(null); setAgainConfirmed(false);
+      setInvoice({ ...data, filename: file.name }); setLinks({}); setLinkNotes({}); setBrandsOff([]); setDecisions({}); setApplied(null); setAgainConfirmed(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -627,7 +633,7 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
 
     const results = sheets.map((s) => ({
       name: s.name,
-      result: buildDelivery(s.csv, order.lines, {
+      result: buildDelivery(s.csv, order.lines, { decisions,
         season, vendor, specs, decided, sourceOf, listings, priceList: order.priceList ?? [],
         fields: { ...fields, stock, draft: toDraft },
         reorderOnly: s.name !== home, builtBy,
@@ -983,9 +989,30 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
   const invoiceLines = order
     ? (loadedSpecs.length > 0 ? joinToReference(order.lines, { season, vendor, specs: loadedSpecs, sourceOf: specSources(references) }).lines : order.lines)
     : [];
-  const against: Against = invoice
+  // The joined lines keep the order's order, so a joined line's key is its order line's.
+  const keyOfJoined = (l: InvoiceLine) => lineKey(order?.lines[invoiceLines.indexOf(l)] ?? l);
+  const seasonedAgainst: Against = invoice
     ? sheets.map((s) => ({ name: s.name, reconciliation: reconcile(s.csv, invoiceLines, { season }) }))
     : [];
+  // The same without the season, for the lines whose name is on a listing of another year.
+  const looseAgainst: Against = seasonedAgainst.map((a, i) => (season.trim() && a.reconciliation.unmatched.length > 0 ? { name: a.name, reconciliation: reconcile(sheets[i].csv, invoiceLines, {}) } : a));
+  /** Every line placed by its name, once, for the person to confirm: first the file that placed it. */
+  const toConfirm = (() => {
+    const seen = new Set<string>();
+    const out: Array<{ key: string; file: string; line: InvoiceLine; handle: string; on: string; otherSeason: boolean; listing: string }> = [];
+    seasonedAgainst.forEach((a, i) => {
+      for (const c of nameCandidates(a.reconciliation, looseAgainst[i].reconciliation)) {
+        const key = keyOfJoined(c.line);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const listing = listingsFromCsv(sheets[i].csv).find((l) => l.handle === c.match.handle);
+        out.push({ key, file: a.name, line: c.line, handle: c.match.handle, on: c.match.on, otherSeason: c.otherSeason, listing: listing?.title ?? c.match.handle });
+      }
+    });
+    return out;
+  })();
+  const undecided = toConfirm.filter((c) => !decisions[c.key]);
+  const against: Against = seasonedAgainst.map((a, i) => ({ name: a.name, reconciliation: decideByName(a.reconciliation, looseAgainst[i].reconciliation, (l) => decisions[keyOfJoined(l)]).reconciliation }));
   const placed = placedLines(against);
   // What the delivery would build, counted once across the loaded files: a line is new only if no
   // file has it. Worked out from the same reconciliation the summary shows, not from a second pass.
@@ -1007,7 +1034,7 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
   // be shown before anything is written. New products go on the home file only; a new colourway
   // goes on whichever file holds its listing.
   const previewed = order && homeSheet
-    ? sheets.map((s) => buildDelivery(s.csv, order.lines, {
+    ? sheets.map((s) => buildDelivery(s.csv, order.lines, { decisions,
         season, vendor, specs: loadedSpecs, sourceOf: specSources(references),
         listings: sheets.flatMap((x) => listingsFromCsv(x.csv)), priceList: order.priceList ?? [],
         fields: { ...fields, stock, draft: toDraft }, reorderOnly: s.name !== homeSheet.name, builtBy,
@@ -1383,6 +1410,40 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
                 })}
               </ul>
 
+              {toConfirm.length > 0 && (
+                <fieldset className="rounded-xl border-2 border-amber-300 bg-amber-50/60 px-3 py-2.5">
+                  <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-amber-900">Matched on the name &mdash; are they the same product?</legend>
+                  <p className="mb-2 text-xs text-[var(--ink-soft)]">
+                    {toConfirm.length === 1 ? "This line has" : `These ${toConfirm.length} lines have`} no barcode the files know, so {toConfirm.length === 1 ? "it was" : "they were"} placed by name. Say for each whether it is the <strong>same product</strong> (its stock goes up), a <strong>new year&rsquo;s model</strong> (built as a new product), or <strong>not it</strong> (left alone). The delivery waits until every one is decided.
+                  </p>
+                  {undecided.length > 0 && (
+                    <div className="mb-2 flex flex-wrap gap-2">
+                      <Button size="sm" onClick={() => setDecisions((d) => ({ ...d, ...Object.fromEntries(undecided.map((c) => [c.key, c.otherSeason ? "new" : "same"])) }))}>Take the suggestions for the {undecided.length} undecided</Button>
+                      <Button size="sm" onClick={() => setDecisions((d) => ({ ...d, ...Object.fromEntries(undecided.map((c) => [c.key, "same"])) }))}>All the same product</Button>
+                      <Button size="sm" onClick={() => setDecisions((d) => ({ ...d, ...Object.fromEntries(undecided.map((c) => [c.key, "new"])) }))}>All new models</Button>
+                    </div>
+                  )}
+                  <ul className="divide-y divide-amber-200 text-sm">
+                    {toConfirm.map((c) => (
+                      <li key={c.key} className="flex flex-wrap items-center justify-between gap-2 py-1.5">
+                        <span className="min-w-0">
+                          <span className="font-medium">{c.line.title || c.line.sku}{c.line.size ? ` — ${c.line.size}` : ""}{c.line.colour ? ` · ${c.line.colour}` : ""}</span>
+                          <span className="block text-xs text-[var(--ink-soft)]">looks like <strong>{c.listing}</strong> ({c.handle}) in {c.file}{c.otherSeason ? " — another season's listing, so probably this year's model of it" : ` — matched on “${c.on}”`}</span>
+                        </span>
+                        <span className="flex flex-wrap gap-3 text-xs">
+                          {([["same", "Same product"], ["new", "New year's model"], ["skip", "Not it"]] as Array<[MatchDecision, string]>).map(([value, label]) => (
+                            <label key={value} className={`flex items-center gap-1 rounded-full border px-2 py-1 ${decisions[c.key] === value ? "border-[var(--meta)] bg-[var(--meta-tint)] text-[var(--meta-ink)]" : "border-[var(--line)]"}`}>
+                              <input type="radio" name={`decide-${c.key.replace(/[^a-z0-9]+/g, "-")}`} checked={decisions[c.key] === value} onChange={() => { setDecisions((d) => ({ ...d, [c.key]: value })); clearPreview(); }} />
+                              {label}
+                            </label>
+                          ))}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </fieldset>
+              )}
+
               <label className="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--line-soft)] px-3 py-2.5 text-sm">
                 <span className="font-medium">Season this delivery is for</span>
                 <input
@@ -1536,8 +1597,8 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
               )}
 
               <div className="flex flex-wrap items-center gap-2">
-                <Button variant="primary" icon="📦" disabled={busy !== null || (placed === 0 && !(buildNew && toBuild > 0))} onClick={applyDeliveryNow}>
-                  {busy === "applying" ? progress || "Working…" : `${applied === (order?.filename ?? "") && order ? "Apply the delivery again" : "Apply the delivery"} — ${placed} carry-over${placed === 1 ? "" : "s"}${buildNew && toBuild > 0 ? `, ${toBuild} to build` : ""}`}
+                <Button variant="primary" icon="📦" disabled={busy !== null || undecided.length > 0 || (placed === 0 && !(buildNew && toBuild > 0))} onClick={applyDeliveryNow}>
+                  {busy === "applying" ? progress || "Working…" : undecided.length > 0 ? `Decide the ${undecided.length} name match${undecided.length === 1 ? "" : "es"} above first` : `${applied === (order?.filename ?? "") && order ? "Apply the delivery again" : "Apply the delivery"} — ${placed} carry-over${placed === 1 ? "" : "s"}${buildNew && toBuild > 0 ? `, ${toBuild} to build` : ""}`}
                 </Button>
                 {busy === "applying" && progress && <span className="text-xs text-[var(--ink-soft)]">Each page is given a minute or so; one that takes longer is built without it, and can be read again afterwards.</span>}
                 {placed === 0 && !buildNew && <span className="text-xs text-[var(--ink-soft)]">{whyNothing(invoice, against)}</span>}

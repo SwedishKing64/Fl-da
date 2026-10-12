@@ -112,6 +112,41 @@ describe("a link into a Shopify store", () => {
     expect(out.features).toEqual(["GORE-TEX 2L", "Pit zips"]);
   });
 
+  it("reads the page as well, for the details the theme writes onto it", async () => {
+    // The store's data is the description; the tech specs are on the page alone.
+    const html = `<html><head><title>Custom</title></head><body><h1>${JS.title}</h1>${JS.description}<h2>Tech Specs</h2><table><tr><td>Bend</td><td>Camber</td></tr><tr><td>Shape</td><td>Directional</td></tr></table></body></html>`;
+    const fetcher = (async (url: string) => (/\.js$/.test(String(url)) ? new Response(JSON.stringify(JS), { status: 200 }) : new Response(html, { status: 200, headers: { "content-type": "text/html" } }))) as unknown as typeof fetch;
+    const seen: string[] = [];
+    let viaModel = 0;
+    const out = await readProductPage("https://www.burton.com/en-au/products/custom", { title: "Custom Camber 2027", brand: "Burton" }, {
+      fetcher,
+      viaModel: async () => { viaModel++; return null; },
+      ask: async (_system, content) => {
+        seen.push(content);
+        return JSON.stringify({ confident: true, pageTitle: JS.title, description: "Storm days.", features: ["Bend: Camber", "Shape: Directional"], imageNumbers: [1], pictureColour: "", note: "ok" });
+      },
+    });
+    expect(seen[0]).toContain("## From the page");
+    expect(seen[0]).toContain("Bend | Camber");
+    expect(seen[0].match(/Pit zips/g)).toHaveLength(1);
+    expect(out.features).toEqual(["Bend: Camber", "Shape: Directional"]);
+    expect(viaModel).toBe(0);
+  });
+
+  it("when the site refuses the page and the store's data has no details, reads the page through the API for them", async () => {
+    const fetcher = (async (url: string) => (/\.js$/.test(String(url)) ? new Response(JSON.stringify(JS), { status: 200 }) : new Response("blocked", { status: 403 }))) as unknown as typeof fetch;
+    const out = await readProductPage("https://www.burton.com/en-au/products/custom", { title: "Custom Camber 2027", brand: "Burton", colours: ["True Black"] }, {
+      fetcher,
+      ask: async () => JSON.stringify({ confident: true, pageTitle: JS.title, description: "Storm days.", features: [], imageNumbers: [1], pictureColour: "", note: "No details on the page." }),
+      viaModel: async () => ({ description: "Fetched copy.", features: ["Bend: Camber", "Core: Super Fly II 700G"], images: [], pageTitle: JS.title, confident: true, sourceUrl: "x", via: "ai", note: "through the API" }),
+    });
+    expect(out.features).toEqual(["Bend: Camber", "Core: Super Fly II 700G"]);
+    expect(out.description).toBe("Storm days.");
+    expect(out.images).toEqual(["https://cdn.shopify.com/s/files/1/black-1.png?v=1"]);
+    expect(out.pictureColour).toBe("True Black");
+    expect(out.note).toMatch(/read through the API/);
+  });
+
   it("with no model, takes what the store declares", async () => {
     const fetcher = (async () => new Response(JSON.stringify(JS), { status: 200 })) as unknown as typeof fetch;
     const out = await readProductPage("https://www.burton.com/en-au/products/cyclic", { title: "Cyclic", colours: ["Chinchilla Gray"] }, { fetcher });

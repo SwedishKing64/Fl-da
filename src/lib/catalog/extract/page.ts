@@ -449,13 +449,39 @@ export async function readProductPage(link: string, hint: PageHint, deps: { fetc
   const store = await fetchShopifyProduct(link, deps.fetcher).catch(() => null);
   if (store) {
     const d = distillPage(storeAsHtml(store.product), link);
+    // The store's data is the description and the pictures. What the theme writes onto the page
+    // itself — Burton's tech specs, a size chart — is not in it, so the page is read as well
+    // where the site lets this server have it, and its lines put after the store's. Burton does
+    // not let it: see below.
+    const page = await fetchHtml(link, deps.fetcher).then((f) => distillPage(f.html, f.url)).catch(() => null);
+    if (page) {
+      const have = new Set(d.text.split("\n"));
+      const more = page.text.split("\n").filter((l) => !have.has(l));
+      if (more.length > 0) d.text = `${d.text}\n\n## From the page\n${more.join("\n")}`.slice(0, MAX_TEXT);
+      if (!d.metaDescription) d.metaDescription = page.metaDescription;
+    }
     const { pictures, matched } = storePictures(store.product, hint.colours ?? []);
     d.images = pictures.slice(0, MAX_IMAGES);
     d.structured = { name: store.product.title, description: d.structured.description, brand: store.product.vendor, images: pictures.slice(0, 3).map((c) => c.url) };
     const withColour = (out: PageDetails): PageDetails => (matched ? { ...out, pictureColour: matched } : out);
     if (!aiAvailable() && !deps.ask) return withColour(basicDetails(d));
     try {
-      return withColour(await extractFromPage(d, hint, deps.ask, by));
+      const out = withColour(await extractFromPage(d, hint, deps.ask, by));
+      // No details in the store's data, and the page refused this server: the page is fetched
+      // through the API, which the site may let in, for its details alone. The store's
+      // description and its colour-matched pictures stay.
+      if (out.features.length === 0 && !page && (aiAvailable() || deps.viaModel) && !outOfTime(by)) {
+        const fetched = await viaModel(link, hint, by).catch(() => null);
+        if (fetched && fetched.features.length > 0) {
+          return {
+            ...out,
+            features: fetched.features,
+            description: out.description || fetched.description,
+            note: [out.note, "The site would not show its page to this server, so the details were read through the API."].filter(Boolean).join(" "),
+          };
+        }
+      }
+      return out;
     } catch (err) {
       const slow = outOfTime(by) || (err instanceof Error && /timeout|abort/i.test(err.name + err.message));
       return withColour(basicDetails(d, slow

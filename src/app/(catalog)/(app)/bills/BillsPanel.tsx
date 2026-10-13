@@ -1,9 +1,11 @@
 "use client";
 
 import { useRef, useState, useSyncExternalStore } from "react";
-import { readBillAction } from "@/app/(catalog)/actions";
+import { readBillAction, readBillPageAction } from "@/app/(catalog)/actions";
 import { Alert, Button, Card, Details, INPUT, cx } from "@/app/(catalog)/ui";
 import { fitsUpload, shrinkImage, tooBig } from "@/app/(catalog)/shrink";
+import { isPdf, openPdf } from "@/app/(catalog)/pdf-pages";
+import { groupPages, type ReadPage } from "@/lib/catalog/bills/split";
 import { DEFAULT_OPTIONS, billsFileName, checkBill, lineAmount, quickBooksWorkbook, type Bill, type BillLine, type QuickBooksOptions } from "@/lib/catalog/bills/quickbooks";
 
 /**
@@ -15,7 +17,7 @@ import { DEFAULT_OPTIONS, billsFileName, checkBill, lineAmount, quickBooksWorkbo
  * gave. The category the bills go to is set once and remembered in this browser.
  */
 
-const read = (file: File | Blob, name = "that file") => new Promise<string>((resolve, reject) => {
+const read64 = (file: File | Blob, name = "that file") => new Promise<string>((resolve, reject) => {
   const r = new FileReader();
   r.onload = () => resolve(String(r.result).split(",", 2)[1] ?? "");
   r.onerror = () => reject(new Error(`Could not read ${name}`));
@@ -67,28 +69,81 @@ export function BillsPanel({ aiEnabled }: { aiEnabled: boolean }) {
   const [saved, setSaved] = useState<string | null>(null);
   const setOption = <K extends keyof QuickBooksOptions>(key: K, value: QuickBooksOptions[K]) => remember({ ...options, [key]: value });
 
+  /**
+   * A PDF of more than one page — a day's invoices scanned together — drawn page by page here,
+   * each page read on its own, and the pages put back together as one bill per invoice.
+   */
+  async function readBatch(file: File, pdf: Awaited<ReturnType<typeof openPdf>>): Promise<{ bills: Bill[]; failed: string[] }> {
+    const read: ReadPage[] = [];
+    const failed: string[] = [];
+    let next = 1;
+    let done = 0;
+    try {
+      // Three pages at a time: each read takes a while, and the server takes several at once.
+      const worker = async () => {
+        for (let n = next++; n <= pdf.pages; n = next++) {
+          try {
+            const image = await pdf.page(n);
+            const r = await readBillPageAction({ file: { name: image.name, type: image.type, base64: await read64(image) }, source: `${file.name} p.${n}` });
+            if (r.ok) read.push({ ...r.data!, page: n });
+            else failed.push(`${file.name} page ${n}: ${r.error}`);
+          } catch (err) {
+            failed.push(`${file.name} page ${n}: ${err instanceof Error ? err.message : String(err)}`);
+          }
+          setProgress(`Reading ${file.name}: ${++done} of ${pdf.pages} pages…`);
+        }
+      };
+      setProgress(`Reading ${file.name}: 0 of ${pdf.pages} pages…`);
+      await Promise.all([worker(), worker(), worker()]);
+      failed.sort((x, y) => x.localeCompare(y, undefined, { numeric: true }));
+    } finally {
+      await pdf.close();
+    }
+    return { bills: groupPages(file.name, read), failed };
+  }
+
   async function readInvoices() {
     if (files.length === 0) return;
     setBusy(true); setError(null); setSaved(null);
     try {
-      // One invoice per file, or every file a page of one invoice.
-      const groups: File[][] = onePerInvoice ? files.map((f) => [f]) : [files];
       const got: Bill[] = [];
+      const failed: string[] = [];
+      // A PDF of several pages is a batch, split into its invoices whatever else was chosen.
+      const singles: File[] = [];
+      for (const file of files) {
+        if (isPdf(file)) {
+          setProgress(`Opening ${file.name}…`);
+          const pdf = await openPdf(file).catch(() => null);
+          if (pdf && (pdf.pages > 1 || !fitsUpload(file.size))) {
+            const batch = await readBatch(file, pdf);
+            got.push(...batch.bills);
+            failed.push(...batch.failed);
+            continue;
+          }
+          await pdf?.close();
+        }
+        singles.push(file);
+      }
+      // One invoice per file, or every file a page of one invoice.
+      const groups: File[][] = singles.length === 0 ? [] : onePerInvoice ? singles.map((f) => [f]) : [singles];
       for (const [i, group] of groups.entries()) {
         const sent: Array<{ name: string; type: string; base64: string }> = [];
+        let tooLarge = "";
         for (const file of group) {
           setProgress(`Preparing ${file.name}…`);
           const small = await shrinkImage(file);
-          if (!fitsUpload(small.file.size)) { setError(tooBig(file, small.file.size)); return; }
-          sent.push({ name: file.name, type: small.file.type || file.type, base64: await read(small.file, file.name) });
+          if (!fitsUpload(small.file.size)) { tooLarge = tooBig(file, small.file.size); break; }
+          sent.push({ name: file.name, type: small.file.type || file.type, base64: await read64(small.file, file.name) });
         }
+        if (tooLarge) { failed.push(tooLarge); continue; }
         setProgress(groups.length === 1 ? "Reading the invoice…" : `Reading invoice ${i + 1} of ${groups.length}…`);
         const r = await readBillAction({ files: sent });
-        if (!r.ok) { setError(`${group.map((f) => f.name).join(", ")}: ${r.error}`); continue; }
+        if (!r.ok) { failed.push(`${group.map((f) => f.name).join(", ")}: ${r.error}`); continue; }
         got.push(r.data!);
       }
       setBills((b) => [...b, ...got]);
       setFiles([]);
+      if (failed.length > 0) setError(failed.join("\n"));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -121,7 +176,7 @@ export function BillsPanel({ aiEnabled }: { aiEnabled: boolean }) {
 
       <Card title="The invoices">
         <p className="mb-3 text-xs text-[var(--ink-soft)]">
-          A PDF, a photo, an iPhone HEIC, or a spreadsheet. Each is read for the books — the supplier, the invoice number, the dates, the goods, the freight, the GST and the total — and comes up below as a bill to check before it goes in the file.
+          A PDF, a photo, an iPhone HEIC, or a spreadsheet. Each is read for the books — the supplier, the invoice number, the dates, the goods, the freight, the GST and the total — and comes up below as a bill to check before it goes in the file. A scanned PDF of several invoices, however big, is read page by page and split into one bill per invoice.
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <Button icon="🧾" size="sm" disabled={busy} onClick={() => fileRef.current?.click()}>{files.length > 0 ? "Choose different files" : "Choose the invoices"}</Button>
@@ -138,7 +193,7 @@ export function BillsPanel({ aiEnabled }: { aiEnabled: boolean }) {
           <Button variant="primary" icon="✨" disabled={busy || files.length === 0 || !aiEnabled} onClick={() => void readInvoices()}>{busy ? progress || "Reading…" : files.length > 1 && onePerInvoice ? `Read the ${files.length} invoices` : "Read the invoice"}</Button>
           {busy && <span className="text-xs text-[var(--ink-soft)]">An invoice takes a minute or so.</span>}
         </div>
-        {error && <Alert tone="danger" className="mt-3">{error}</Alert>}
+        {error && <Alert tone="danger" className="mt-3 whitespace-pre-line">{error}</Alert>}
       </Card>
 
       <Details summary="How the bills are written for QuickBooks" hint="One row per bill: Supplier, Bill no., Bill date, Due date, Category, Description, Amount with GST in it, GST. This browser remembers the category.">

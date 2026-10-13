@@ -12,7 +12,7 @@ export default async function BillsPage() {
     <>
       <PageHeader
         title="Bills for QuickBooks"
-        subtitle="Supplier invoices read for the books — who, when, how much, how much of it GST — checked on screen and saved as one CSV that QuickBooks Online imports as bills."
+        subtitle="Supplier invoices read for the books — who, when, how much, how much of it GST — checked on screen and saved as the spreadsheet QuickBooks Online imports as bills. A scanned batch of invoices is split into one bill each."
       />
       <BillsPanel aiEnabled={aiAvailable()} />
     </>

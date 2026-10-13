@@ -97,12 +97,21 @@ plain-number bill number is written as a number. The reader (`bills/read-bill.ts
 supplier, number, dates, total and GST with the API. QuickBooks takes up to 100 bills per file;
 suppliers and the category must exist there first.
 
+**A batch of invoices in one PDF.** The shop scans a day's invoices into one PDF (65MB at
+600dpi, several suppliers, some invoices several pages). A PDF of more than one page, or one over
+the upload limit, is drawn page by page in the browser (`pdf-pages.ts`, at the 1568px the API
+reads at, a few hundred KB each), each page read on its own (`readBillPage`), and the pages put
+back together by `bills/split.ts`: same invoice number, "Page 2 of 3", or a page with no number
+that is not a first page carries on the invoice before; a new number or a first page starts the
+next. Totals come from the last page that prints them. One row per invoice in the sheet.
+
 ## Decisions and history, newest first
 
 - 2026-10-13 Repository moved to `RubinAlp/Rubin`; the business has its own Vercel project, Neon
   database and Blob store, with the old data copied in. Settings gained "Copy from the old site"
   to bring the old Blob files across. Packs carry `backpacks`. The Burton RRP problem is fixed.
-  Bills for QuickBooks writes the shop's own one-row-per-bill sheet instead of the line layout.
+  Bills for QuickBooks writes the shop's own one-row-per-bill sheet instead of the line layout,
+  and splits a scanned batch PDF of any size into one bill per invoice.
 
 - 2026-10-12 Name matches confirmed before a delivery applies; order forms with a size column
   per line read the size. Packs filed on the Outdoor menu; Type spelling; retagging on Type change.

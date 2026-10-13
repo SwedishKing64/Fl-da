@@ -38,9 +38,19 @@ const BillSchema = z.object({
   gst: z.number().nullable().describe("The GST as printed. Null if not printed."),
   total: z.number().nullable().describe("The amount payable as printed. Null if not printed."),
   unsure: z.array(z.string()).describe("Figures that could be read two ways, each as \"field: the reading given, or the other\". Empty when every figure is plain."),
+  startsInvoice: z.boolean().describe("When reading a single page out of a scanned batch: true where this page is the FIRST page of an invoice — the letterhead with the invoice number, date and the start of the lines, or \"Page 1 of N\". False for a page that carries on an invoice from the page before. True when the whole invoice is given."),
+  printedPage: z.number().nullable().describe("The page number printed on the page, as in \"Page 2 of 3\" → 2. Null if none is printed."),
+  printedPages: z.number().nullable().describe("The page count printed on the page, as in \"Page 2 of 3\" → 3. Null if none is printed."),
 });
 
 export type BillReading = z.infer<typeof BillSchema>;
+
+/** Where one page of a scanned batch sits in its invoice, as the page itself says. */
+export interface PageMark {
+  startsInvoice: boolean;
+  printedPage: number | null;
+  printedPages: number | null;
+}
 
 const SYSTEM = `You read a supplier's invoice for the bookkeeper of a ski and snowboard shop in Australia, so it can be entered as a bill in QuickBooks.
 
@@ -81,6 +91,19 @@ export function gridAsText(name: string, grid: string[][], limit = 400): string 
 
 /** The invoice's pages read as one bill. */
 export async function readBill(pages: BillPage[], source: string, deps: { ask?: BillAsker } = {}): Promise<Bill> {
+  return (await readBillMarked(pages, source, deps)).bill;
+}
+
+/**
+ * One page of a scanned batch read on its own, with what it says about where it sits — the first
+ * page of an invoice, or one carrying on from the page before. `groupPages` puts the pages back
+ * together as invoices.
+ */
+export async function readBillPage(page: BillPage, source: string, deps: { ask?: BillAsker } = {}): Promise<{ bill: Bill; mark: PageMark }> {
+  return readBillMarked([page], source, deps, "This is ONE page out of a scanned batch of several suppliers' invoices. Read what is on this page alone, and say whether it starts an invoice or carries one on.");
+}
+
+async function readBillMarked(pages: BillPage[], source: string, deps: { ask?: BillAsker }, ask = "Read this invoice as a bill for the books."): Promise<{ bill: Bill; mark: PageMark }> {
   if (pages.length === 0) throw new Error("No pages to read.");
   if (!deps.ask && !aiAvailable()) throw new Error("No API key is set, so the invoice cannot be read. Add ANTHROPIC_API_KEY in Settings.");
   const content: Anthropic.MessageParam["content"] = [];
@@ -90,15 +113,15 @@ export async function readBill(pages: BillPage[], source: string, deps: { ask?: 
     else if (p.kind === "image") content.push({ type: "image", source: { type: "base64", media_type: p.mediaType, data: p.data.toString("base64") } });
     else content.push({ type: "text", text: p.text });
   });
-  content.push({ type: "text", text: "Read this invoice as a bill for the books." });
+  content.push({ type: "text", text: ask });
   const text = await (deps.ask ?? askModel)(SYSTEM, content);
   if (!text) throw new Error("The reader gave no answer for the invoice.");
   const read = BillSchema.parse(JSON.parse(text));
-  return asBill(read, source);
+  return { bill: asBill(read, source), mark: { startsInvoice: read.startsInvoice, printedPage: read.printedPage, printedPages: read.printedPages } };
 }
 
 /** The reading as a bill on the page, with what is obviously derivable filled in. */
-export function asBill(read: BillReading, source: string): Bill {
+export function asBill(read: Omit<BillReading, keyof PageMark>, source: string): Bill {
   const lines = read.lines.map((l) => ({ ...l, description: l.description.trim() }));
   const freightLines = lines.filter((l) => l.kind === "freight");
   const freight = read.freight ?? (freightLines.length ? freightLines.reduce((n, l) => n + (l.amount ?? 0), 0) : null);

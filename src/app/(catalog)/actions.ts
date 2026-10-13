@@ -1103,34 +1103,56 @@ export async function transcribeDocumentAction(input: { files: Array<{ name: str
  * A supplier's invoice read as a bill for QuickBooks: who, when, how much, how much of it GST.
  * A PDF, a photo, or a spreadsheet; several photos are the pages of one invoice.
  */
-export async function readBillAction(input: { files: Array<{ name: string; type: string; base64: string }> }): Promise<ActionResult<import("@/lib/catalog/bills/quickbooks").Bill>> {
+type SentFile = { name: string; type: string; base64: string };
+
+/** A sent file as a page the bill reader takes, or what is wrong with it. */
+async function billPageOf(file: SentFile): Promise<import("@/lib/catalog/bills/read-bill").BillPage[] | string> {
+  const { isHeic, heicToJpeg } = await import("@/lib/catalog/extract/heic");
+  const { gridAsText } = await import("@/lib/catalog/bills/read-bill");
+  let buffer: Buffer = Buffer.from(file.base64, "base64");
+  if (buffer.byteLength > MAX_UPLOAD) {
+    return `${file.name} is ${readableSize(buffer.byteLength)}, and an upload has to stay under ${readableSize(MAX_UPLOAD)}. A photo is shrunk before it is sent, so this is a PDF too big to send — split it.`;
+  }
+  let type = file.type;
+  if (isHeic(buffer, file.name, file.type)) { buffer = await heicToJpeg(buffer); type = "image/jpeg"; }
+  const isPdf = /\.pdf$/i.test(file.name) || type === "application/pdf";
+  const isWorkbook = /\.xlsx?$/i.test(file.name) || /spreadsheet|excel/i.test(type);
+  const isCsv = /\.csv$/i.test(file.name) || type === "text/csv";
+  if (isPdf) return [{ kind: "pdf", data: buffer }];
+  if (isWorkbook) return (await (await import("@/lib/catalog/extract/tabular")).sheetGrids(buffer)).map((g) => ({ kind: "text" as const, text: gridAsText(g.name, g.grid) }));
+  if (isCsv) return [{ kind: "text", text: gridAsText(file.name, (await import("@/lib/catalog/csv")).parseCsv(buffer.toString("utf8"))) }];
+  if (/^image\/(jpeg|png|gif|webp)$/.test(type)) return [{ kind: "image", mediaType: type as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: buffer }];
+  if (/\.(jpe?g)$/i.test(file.name)) return [{ kind: "image", mediaType: "image/jpeg", data: buffer }];
+  if (/\.png$/i.test(file.name)) return [{ kind: "image", mediaType: "image/png", data: buffer }];
+  return `${file.name} is not a PDF, a photo or a spreadsheet.`;
+}
+
+export async function readBillAction(input: { files: SentFile[] }): Promise<ActionResult<import("@/lib/catalog/bills/quickbooks").Bill>> {
   return safely(async () => {
     const user = await requireUser();
-    const { isHeic, heicToJpeg } = await import("@/lib/catalog/extract/heic");
-    const { readBill, gridAsText } = await import("@/lib/catalog/bills/read-bill");
+    const { readBill } = await import("@/lib/catalog/bills/read-bill");
     const pages: import("@/lib/catalog/bills/read-bill").BillPage[] = [];
     for (const file of input.files) {
-      let buffer: Buffer = Buffer.from(file.base64, "base64");
-      if (buffer.byteLength > MAX_UPLOAD) {
-        return { ok: false, error: `${file.name} is ${readableSize(buffer.byteLength)}, and an upload has to stay under ${readableSize(MAX_UPLOAD)}. A photo is shrunk before it is sent, so this is a PDF too big to send — split it.` };
-      }
-      let type = file.type;
-      if (isHeic(buffer, file.name, file.type)) { buffer = await heicToJpeg(buffer); type = "image/jpeg"; }
-      const isPdf = /\.pdf$/i.test(file.name) || type === "application/pdf";
-      const isWorkbook = /\.xlsx?$/i.test(file.name) || /spreadsheet|excel/i.test(type);
-      const isCsv = /\.csv$/i.test(file.name) || type === "text/csv";
-      if (isPdf) pages.push({ kind: "pdf", data: buffer });
-      else if (isWorkbook) for (const g of await (await import("@/lib/catalog/extract/tabular")).sheetGrids(buffer)) pages.push({ kind: "text", text: gridAsText(g.name, g.grid) });
-      else if (isCsv) pages.push({ kind: "text", text: gridAsText(file.name, (await import("@/lib/catalog/csv")).parseCsv(buffer.toString("utf8"))) });
-      else if (/^image\/(jpeg|png|gif|webp)$/.test(type)) pages.push({ kind: "image", mediaType: type as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: buffer });
-      else if (/\.(jpe?g)$/i.test(file.name)) pages.push({ kind: "image", mediaType: "image/jpeg", data: buffer });
-      else if (/\.png$/i.test(file.name)) pages.push({ kind: "image", mediaType: "image/png", data: buffer });
-      else return { ok: false, error: `${file.name} is not a PDF, a photo or a spreadsheet.` };
+      const got = await billPageOf(file);
+      if (typeof got === "string") return { ok: false, error: got };
+      pages.push(...got);
     }
     if (pages.length === 0) return { ok: false, error: "No file was received." };
     const bill = await readBill(pages, input.files.map((f) => f.name).join(", "));
     await logAudit("bill.read", { userId: user.id, details: { source: bill.source, supplier: bill.supplier, billNo: bill.billNo, total: bill.total } }).catch(() => undefined);
     return { ok: true, data: bill };
+  });
+}
+
+/** One page of a scanned batch, rendered in the browser, read on its own and marked with where it sits. */
+export async function readBillPageAction(input: { file: SentFile; source: string }): Promise<ActionResult<{ bill: import("@/lib/catalog/bills/quickbooks").Bill; mark: import("@/lib/catalog/bills/read-bill").PageMark }>> {
+  return safely(async () => {
+    await requireUser();
+    const { readBillPage } = await import("@/lib/catalog/bills/read-bill");
+    const got = await billPageOf(input.file);
+    if (typeof got === "string") return { ok: false, error: got };
+    if (got.length !== 1) return { ok: false, error: `${input.file.name} is not one page.` };
+    return { ok: true, data: await readBillPage(got[0], input.source) };
   });
 }
 

@@ -1134,6 +1134,32 @@ export async function readBillAction(input: { files: Array<{ name: string; type:
   });
 }
 
+/**
+ * Copy the old Rubin's data and files into this one. Admin only; runs in steps the page drives.
+ * The old site's connection string and token arrive with every step and are kept nowhere.
+ */
+export async function copyFromOldSiteAction(input: { databaseUrl: string; blobToken: string; state: import("@/lib/catalog/migrate").CopyState | null }): Promise<ActionResult<{ state: import("@/lib/catalog/migrate").CopyState; lines: string[]; done: boolean }>> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const { START, blobFiles, checkSourceUrl, copyStep, prismaStore, sourceClient } = await import("@/lib/catalog/migrate");
+    const { findBlobToken } = await import("@/lib/catalog/blob-token");
+    const bad = checkSourceUrl(input.databaseUrl);
+    if (bad) return { ok: false, error: bad };
+    const mine = findBlobToken();
+    const oldToken = input.blobToken.trim();
+    if (oldToken && !mine) return { ok: false, error: "This site has no file store of its own yet (no BLOB_READ_WRITE_TOKEN), so the files cannot be copied in. Add a Blob store to the project and redeploy, or leave the token out." };
+    if (oldToken && mine && oldToken === mine.token) return { ok: false, error: "That is this site's own file store token, not the old site's." };
+    const source = sourceClient(input.databaseUrl);
+    try {
+      const out = await copyStep(input.state ?? START, prismaStore(source), oldToken && mine ? blobFiles(oldToken, mine.token) : null);
+      if (out.done) await logAudit("site.copied", { userId: user.id, details: { counts: out.state.counts, files: out.state.files.copied } }).catch(() => undefined);
+      return { ok: true, data: out };
+    } finally {
+      await source.$disconnect().catch(() => undefined);
+    }
+  });
+}
+
 export async function readInvoiceAction(file: { name: string; type: string; base64: string }): Promise<ActionResult<InvoiceRead & { source: string }>> {
   return safely(async () => {
     await requireUser();

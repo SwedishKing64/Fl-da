@@ -1,0 +1,242 @@
+{
+  "atomic": {
+    "summary": {
+      "units": 23,
+      "variants": 7,
+      "products": 3,
+      "totalRetailIncGst": 10348.4,
+      "totalGst": 940.74,
+      "totalExGstRevenue": 9407.66,
+      "totalLandedCost": 4544,
+      "totalNetProfit": 4863.66,
+      "averageMarginPct": 51.7,
+      "lowMarginVariants": 0,
+      "errors": 0,
+      "warnings": 10
+    },
+    "variants": [
+      {
+        "sku": "",
+        "landedCostAud": 450,
+        "retailPrice": 999,
+        "exGstRevenue": 908.18,
+        "gstComponent": 90.82,
+        "profitPerUnit": 458.18,
+        "marginPct": 50.5
+      },
+      {
+        "sku": "",
+        "landedCostAud": 450,
+        "retailPrice": 999,
+        "exGstRevenue": 908.18,
+        "gstComponent": 90.82,
+        "profitPerUnit": 458.18,
+        "marginPct": 50.5
+      },
+      {
+        "sku": "",
+        "landedCostAud": 450,
+        "retailPrice": 999,
+        "exGstRevenue": 908.18,
+        "gstComponent": 90.82,
+        "profitPerUnit": 458.18,
+        "marginPct": 50.5
+      },
+      {
+        "sku": "",
+        "landedCostAud": 320,
+        "retailPrice": 749,
+        "exGstRevenue": 680.91,
+        "gstComponent": 68.09,
+        "profitPerUnit": 360.91,
+        "marginPct": 53
+      },
+      {
+        "sku": "",
+        "landedCostAud": 320,
+        "retailPrice": 749,
+        "exGstRevenue": 680.91,
+        "gstComponent": 68.09,
+        "profitPerUnit": 360.91,
+        "marginPct": 53
+      },
+      {
+        "sku": "",
+        "landedCostAud": 320,
+        "retailPrice": 749,
+        "exGstRevenue": 680.91,
+        "gstComponent": 68.09,
+        "profitPerUnit": 360.91,
+        "marginPct": 53
+      },
+      {
+        "sku": "",
+        "landedCostAud": 9.5,
+        "retailPrice": 29.95,
+        "exGstRevenue": 27.23,
+        "gstComponent": 2.72,
+        "profitPerUnit": 17.73,
+        "marginPct": 65.1
+      }
+    ],
+    "errors": [],
+    "warnings": [
+      "Bent 90 Skis 2026: Only 1 image - the shop wants 6-8 from the supplier's site",
+      "Bent 90 Skis 2026 / (no sku): No SKU",
+      "Bent 90 Skis 2026 / (no sku): No SKU",
+      "Bent 90 Skis 2026 / (no sku): No SKU",
+      "Hawx Ultra 100 2026: Only 1 image - the shop wants 6-8 from the supplier's site",
+      "Hawx Ultra 100 2026 / (no sku): No SKU",
+      "Hawx Ultra 100 2026 / (no sku): No SKU",
+      "Hawx Ultra 100 2026 / (no sku): No SKU",
+      "Alps Beanie 2026: No image - add one or export anyway",
+      "Alps Beanie 2026 / (no sku): No SKU"
+    ]
+  },
+  "volkl": {
+    "summary": {
+      "units": 11,
+      "variants": 5,
+      "products": 2,
+      "totalRetailIncGst": 0,
+      "totalGst": 0,
+      "totalExGstRevenue": 0,
+      "totalLandedCost": 5859.19,
+      "totalNetProfit": -5859.19,
+      "averageMarginPct": 0,
+      "lowMarginVariants": 0,
+      "errors": 0,
+      "warnings": 7
+    },
+    "variants": [
+      {
+        "sku": "V2410170",
+        "landedCostAud": 868.61,
+        "retailPrice": 0,
+        "exGstRevenue": 0,
+        "gstComponent": 0,
+        "profitPerUnit": -868.61,
+        "marginPct": 0
+      },
+      {
+        "sku": "V2410177",
+        "landedCostAud": 868.61,
+        "retailPrice": 0,
+        "exGstRevenue": 0,
+        "gstComponent": 0,
+        "profitPerUnit": -868.61,
+        "marginPct": 0
+      },
+      {
+        "sku": "V2410184",
+        "landedCostAud": 868.61,
+        "retailPrice": 0,
+        "exGstRevenue": 0,
+        "gstComponent": 0,
+        "profitPerUnit": -868.61,
+        "marginPct": 0
+      },
+      {
+        "sku": "M7201100",
+        "landedCostAud": 252.69,
+        "retailPrice": 0,
+        "exGstRevenue": 0,
+        "gstComponent": 0,
+        "profitPerUnit": -252.69,
+        "marginPct": 0
+      },
+      {
+        "sku": "M7201110",
+        "landedCostAud": 252.69,
+        "retailPrice": 0,
+        "exGstRevenue": 0,
+        "gstComponent": 0,
+        "profitPerUnit": -252.69,
+        "marginPct": 0
+      }
+    ],
+    "errors": [],
+    "warnings": [
+      "M6 Mantra 2026: No image - add one or export anyway",
+      "M6 Mantra 2026 / V2410170: No recommended retail — the price column will be empty, to fill in Shopify or here",
+      "M6 Mantra 2026 / V2410177: No recommended retail — the price column will be empty, to fill in Shopify or here",
+      "M6 Mantra 2026 / V2410184: No recommended retail — the price column will be empty, to fill in Shopify or here",
+      "Griffon 13 ID Bindings 2026: No image - add one or export anyway",
+      "Griffon 13 ID Bindings 2026 / M7201100: No recommended retail — the price column will be empty, to fill in Shopify or here",
+      "Griffon 13 ID Bindings 2026 / M7201110: No recommended retail — the price column will be empty, to fill in Shopify or here"
+    ]
+  },
+  "burton": {
+    "summary": {
+      "units": 11,
+      "variants": 5,
+      "products": 2,
+      "totalRetailIncGst": 0,
+      "totalGst": 0,
+      "totalExGstRevenue": 0,
+      "totalLandedCost": 3625,
+      "totalNetProfit": -3625,
+      "averageMarginPct": 0,
+      "lowMarginVariants": 0,
+      "errors": 0,
+      "warnings": 7
+    },
+    "variants": [
+      {
+        "sku": "BUR-CUST-154",
+        "landedCostAud": 425,
+        "retailPrice": 0,
+        "exGstRevenue": 0,
+        "gstComponent": 0,
+        "profitPerUnit": -425,
+        "marginPct": 0
+      },
+      {
+        "sku": "BUR-CUST-158",
+        "landedCostAud": 425,
+        "retailPrice": 0,
+        "exGstRevenue": 0,
+        "gstComponent": 0,
+        "profitPerUnit": -425,
+        "marginPct": 0
+      },
+      {
+        "sku": "BUR-CUST-162",
+        "landedCostAud": 425,
+        "retailPrice": 0,
+        "exGstRevenue": 0,
+        "gstComponent": 0,
+        "profitPerUnit": -425,
+        "marginPct": 0
+      },
+      {
+        "sku": "BUR-CART-M",
+        "landedCostAud": 215,
+        "retailPrice": 0,
+        "exGstRevenue": 0,
+        "gstComponent": 0,
+        "profitPerUnit": -215,
+        "marginPct": 0
+      },
+      {
+        "sku": "BUR-CART-L",
+        "landedCostAud": 215,
+        "retailPrice": 0,
+        "exGstRevenue": 0,
+        "gstComponent": 0,
+        "profitPerUnit": -215,
+        "marginPct": 0
+      }
+    ],
+    "errors": [],
+    "warnings": [
+      "Custom Snowboard 2027: No image - add one or export anyway",
+      "Custom Snowboard 2027 / BUR-CUST-154: No recommended retail — the price column will be empty, to fill in Shopify or here",
+      "Custom Snowboard 2027 / BUR-CUST-158: No recommended retail — the price column will be empty, to fill in Shopify or here",
+      "Custom Snowboard 2027 / BUR-CUST-162: No recommended retail — the price column will be empty, to fill in Shopify or here",
+      "Cartel Bindings 2026: No image - add one or export anyway",
+      "Cartel Bindings 2026 / BUR-CART-M: No recommended retail — the price column will be empty, to fill in Shopify or here",
+      "Cartel Bindings 2026 / BUR-CART-L: No recommended retail — the price column will be empty, to fill in Shopify or here"
+    ]
+  }
+}

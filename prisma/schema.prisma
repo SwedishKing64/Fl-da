@@ -1,0 +1,501 @@
+// Ski retailer product automation — data model.
+//
+// Dev default is SQLite (DATABASE_URL="file:./dev.db"). For production Postgres, change
+// `provider = "sqlite"` to `provider = "postgresql"` and point DATABASE_URL at the database;
+// no other schema changes are needed (JSON columns are stored as strings for portability).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Auth
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         String   @default("STAFF") // ADMIN | STAFF
+  createdAt    DateTime @default(now())
+
+  sessions  Session[]
+  batches   ImportBatch[]
+  auditLogs AuditLog[]
+  feedback  ExportFeedback[]
+}
+
+model Session {
+  id        String   @id
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Suppliers & mapping templates
+// ---------------------------------------------------------------------------
+
+model Supplier {
+  id                  String   @id @default(cuid())
+  name                String   @unique
+  defaultCurrency     String   @default("AUD") // AUD | USD | EUR | NZD | GBP
+  defaultGstTreatment String   @default("EXCLUSIVE") // INCLUSIVE | EXCLUSIVE | NONE
+  defaultBrand        String?
+  notes               String?
+  createdAt           DateTime @default(now())
+
+  templates MappingTemplate[]
+  batches   ImportBatch[]
+}
+
+/// One saved column mapping per supplier file layout. `mappings` is JSON:
+/// { "<source header>": "<canonical field>" }. `options` is JSON with parse hints
+/// (header row index, sheet name, fixed values such as brand or currency).
+model MappingTemplate {
+  id          String   @id @default(cuid())
+  supplierId  String
+  name        String
+  headerHash  String? // fingerprint of the source header row for auto-detection
+  mappings    String // JSON
+  options     String   @default("{}") // JSON
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  supplier    Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  @@index([supplierId])
+}
+
+// ---------------------------------------------------------------------------
+// Import batches
+// ---------------------------------------------------------------------------
+
+/// status: UPLOADED -> EXTRACTED -> MAPPED -> REVIEW -> EXPORTED | PUSHED | ROLLED_BACK
+model ImportBatch {
+  id              String   @id @default(cuid())
+  name            String
+  status          String   @default("UPLOADED")
+  supplierId      String?
+  createdById     String
+  currency        String   @default("AUD")
+  fxRateToAud     Float    @default(1) // multiply invoice-currency cost by this to get AUD
+  gstTreatment    String   @default("EXCLUSIVE") // how invoice cost prices are expressed
+  freightTotalAud Float    @default(0) // batch-level freight, allocated per unit
+  freightMode     String   @default("PER_UNIT") // PER_UNIT (split evenly by qty) | BY_VALUE (pro-rata by cost)
+  publishOnExport Boolean  @default(false) // unused: every export is a draft, see csv.ts
+  splitExportBy   String   @default("BRAND") // NONE | BRAND | PRODUCT_TYPE — one CSV per group
+  notes           String?
+  directives      String   @default("") // JSON: what the written instructions told the build to do
+  // The initials that go in the 123abc- tag: whoever built these listings. Eleven different ones
+  // appear across the shop's exports, mixed within every file, so it cannot be derived and must
+  // be carried per batch. Defaults to the person who created it.
+  builtBy         String   @default("")
+  summary         String? // JSON snapshot of last computed batch summary
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  exportedAt      DateTime?
+
+  supplier  Supplier?           @relation(fields: [supplierId], references: [id])
+  createdBy User                @relation(fields: [createdById], references: [id])
+  files     SourceFile[]
+  lineItems ExtractedLineItem[]
+  products  Product[]
+  exports   ExportFile[]
+  auditLogs AuditLog[]
+  unassignedImages UnassignedImage[]
+  feedback  ExportFeedback[]
+  instructions BatchInstruction[]
+
+  @@index([createdById])
+  @@index([status])
+}
+
+model SourceFile {
+  id               String   @id @default(cuid())
+  batchId          String
+  filename         String
+  mimeType         String
+  sizeBytes        Int
+  storagePath      String
+  kind             String   @default("INVOICE") // INVOICE | SPEC_SHEET | PRODUCT_PHOTO | AUTO (let the AI decide)
+  detectedKind     String? // what the AI decided the document is
+  extractionStatus String   @default("PENDING") // PENDING | DONE | FAILED
+  /// When the read now running began — a read runs after the request that started it has answered, and one still running long after this is one the host cut off.
+  readStartedAt    DateTime?
+  extractionMethod String? // CSV | XLSX | PDF_TEXT | PDF_AI | IMAGE_AI | AI_TEXT | HEURISTIC
+  extractionError  String?
+  headers          String? // JSON string[] of detected source headers
+  rawRows          String? // JSON array of { [header]: string }
+  extractedText    String?
+  /// The supplier's price list off an order form — every priced row, ordered or not — as JSON.
+  /// Read once, from the upload itself: a package is priced from a binding nobody ordered.
+  priceList        String   @default("[]")
+  createdAt        DateTime @default(now())
+
+  batch     ImportBatch         @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  lineItems ExtractedLineItem[]
+
+  @@index([batchId])
+}
+
+/// One raw row from a source file, plus the canonical normalized record after mapping.
+model ExtractedLineItem {
+  id           String   @id @default(cuid())
+  batchId      String
+  sourceFileId String
+  rowIndex     Int
+  raw          String // JSON { [sourceHeader]: string }
+  normalized   String? // JSON CanonicalLineItem after mapping
+  variantId    String?  @unique
+  createdAt    DateTime @default(now())
+
+  batch      ImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  sourceFile SourceFile  @relation(fields: [sourceFileId], references: [id], onDelete: Cascade)
+  variant    Variant?    @relation(fields: [variantId], references: [id])
+
+  @@index([batchId])
+}
+
+// ---------------------------------------------------------------------------
+// Canonical products & variants (what becomes the CSV)
+// ---------------------------------------------------------------------------
+
+model Product {
+  id              String   @id @default(cuid())
+  batchId         String
+  handle          String
+  title           String
+  bodyHtml        String   @default("")
+  vendor          String   @default("")
+  productType     String   @default("")
+  category        String   @default("") // internal category key: skis | snowboards | boots | bindings | poles | apparel | accessories | other
+  tags            String   @default("") // comma separated
+  collections     String   @default("") // comma separated collection titles (import-only Collection column)
+  published       Boolean  @default(false)
+  status          String   @default("draft") // draft | active
+  seoTitle        String   @default("")
+  seoDescription  String   @default("")
+  option1Name     String?
+  option2Name     String?
+  option3Name     String?
+  metafields      String   @default("{}") // JSON { [key]: value } keyed by ski metafield key
+  reconcileStatus String   @default("UNKNOWN") // UNKNOWN | NEW | VARIANT_ADD | UPDATE
+  shopifyProductId String?
+  // What the web lookup did about the columns the invoice left empty.
+  lookupStatus    String   @default("NONE") // NONE | FOUND | UNSURE | NOT_FOUND | FAILED
+  lookupSource    String   @default("") // the manufacturer page the copy was taken from
+  lookupAt        DateTime?
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  batch    ImportBatch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  variants Variant[]
+  images   ProductImage[]
+
+  @@index([batchId])
+  @@index([batchId, handle])
+}
+
+model Variant {
+  id             String  @id @default(cuid())
+  productId      String
+  sku            String  @default("")
+  barcode        String  @default("")
+  option1Value   String?
+  option2Value   String?
+  option3Value   String?
+  grams          Int     @default(0)
+  quantity       Int     @default(0)
+  sortOrder      Int     @default(0)
+
+  // --- pricing inputs ---
+  costPrice        Float   @default(0) // as printed on the invoice, in costCurrency
+  costCurrency     String  @default("AUD")
+  gstTreatment     String  @default("EXCLUSIVE") // INCLUSIVE | EXCLUSIVE | NONE
+  fxRateToAud      Float   @default(1)
+  freightPerUnitAud Float  @default(0)
+  pricingRuleId    String?
+  retailOverride   Float? // user-entered GST-inclusive retail price, wins over rule
+  compareAtPrice   Float?
+
+  // --- pricing outputs (recomputed whenever inputs change) ---
+  landedCostAud  Float @default(0)
+  retailPrice    Float @default(0) // GST-inclusive, goes to Variant Price
+  exGstRevenue   Float @default(0)
+  gstComponent   Float @default(0)
+  profitPerUnit  Float @default(0)
+  marginPct      Float @default(0)
+  markupPct      Float @default(0)
+
+  reconcileStatus  String  @default("UNKNOWN") // UNKNOWN | NEW | VARIANT_ADD | UPDATE
+  shopifyVariantId String?
+  shopifyInventoryItemId String?
+  locationQuantities String @default("{}") // JSON { [locationId]: qty } for multi-location pushes
+  warningsDismissed String @default("[]") // JSON string[] of dismissed warning codes
+
+  product  Product            @relation(fields: [productId], references: [id], onDelete: Cascade)
+  lineItem ExtractedLineItem?
+  images   ProductImage[]
+
+  @@index([productId])
+  @@index([sku])
+}
+
+model ProductImage {
+  id        String   @id @default(cuid())
+  productId String
+  variantId String? // null => product-level image
+  url       String
+  position  Int      @default(1)
+  altText   String   @default("")
+  source    String   @default("SUPPLIER") // SUPPLIER | LIBRARY | MANUAL
+  validated Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  product Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant Variant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+
+  @@index([productId])
+}
+
+// ---------------------------------------------------------------------------
+// Configuration: pricing rules, category rules, settings
+// ---------------------------------------------------------------------------
+
+/// Markup/margin rules, most specific wins: PRODUCT (by sku/model) > BRAND > CATEGORY > DEFAULT,
+/// then by `priority` descending.
+model PricingRule {
+  id         String   @id @default(cuid())
+  name       String
+  scope      String // DEFAULT | CATEGORY | BRAND | PRODUCT
+  matchValue String   @default("") // category key, brand name, or sku/model code
+  mode       String // MARGIN (percent of ex-GST sell price) | MARKUP (percent on landed cost)
+  percent    Float // e.g. 40 => 40%
+  roundTo    String   @default("0.99") // price ending rule: NONE | 0.99 | 0.95 | 1.00 | 5.00
+  priority   Int      @default(0)
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+/// Category detection & enrichment rules. `pattern` is a case-insensitive regex tested against
+/// title/type/description; first match by priority wins.
+model CategoryRule {
+  id            String   @id @default(cuid())
+  category      String // skis | snowboards | boots | bindings | poles | helmets | goggles | apparel | accessories | other
+  pattern       String
+  productType   String
+  collections   String   @default("") // comma separated
+  tags          String   @default("")
+  option1       String? // canonical field used as Option1 (e.g. length)
+  option2       String?
+  option3       String?
+  priority      Int      @default(0)
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+}
+
+/// Tag / collection / type / metafield rules applied to every product when it is built and
+/// again on export. `matchField` is one of: any | title | brand | category | productType | sku | tags.
+/// `pattern` is a case-insensitive regex (or plain text) tested against that field.
+model TagRule {
+  id             String   @id @default(cuid())
+  name           String
+  matchField     String   @default("any")
+  pattern        String
+  addTags        String   @default("") // comma separated
+  addCollections String   @default("") // comma separated
+  setProductType String   @default("")
+  setMetafields  String   @default("{}") // JSON { [metafieldKey]: value }
+  priority       Int      @default(0)
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+/// Conventions learned from a Shopify export of products already built for a brand or type.
+/// New imports pick these up so they are tagged and structured the same way.
+model ProductTemplate {
+  id             String   @id @default(cuid())
+  name           String
+  scope          String   @default("BRAND") // BRAND | PRODUCT_TYPE | CATEGORY
+  matchValue     String   @default("")
+  /// Optional extra constraint: a brand template learned from a skis-only export should not
+  /// tag that brand's beanies as skis.
+  matchProductType String @default("")
+  notes            String @default("")
+  sourceFileName String   @default("")
+  productCount   Int      @default(0)
+  setProductType String   @default("")
+  addTags        String   @default("") // comma separated
+  addCollections String   @default("") // comma separated
+  optionNames    String   @default("") // comma separated, e.g. "Length, Colour"
+  setMetafields  String   @default("{}") // JSON { [metafieldKey]: value }
+  analysis       String   @default("{}") // JSON TemplateAnalysis, kept so the UI can show what was read
+  priority       Int      @default(0)
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+/// Product photos uploaded to a batch that have not been attached to a product yet.
+model UnassignedImage {
+  id        String   @id @default(cuid())
+  batchId   String
+  filename  String
+  url       String
+  hint      String   @default("") // what the AI saw in the photo (brand / model / colour) to help matching
+  createdAt DateTime @default(now())
+
+  batch ImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([batchId])
+}
+
+/// Brand + model code (+ optional colour) -> image URLs, grows automatically on export.
+model ImageLibraryEntry {
+  id        String   @id @default(cuid())
+  brand     String
+  modelCode String
+  colour    String   @default("")
+  urls      String // JSON string[]
+  source    String   @default("MANUAL") // MANUAL | SUPPLIER | EXPORT
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([brand, modelCode, colour])
+}
+
+/// Key/value app settings as JSON (gst rate, min margin, fx rates, shopify credentials, locations).
+model AppSetting {
+  key       String   @id
+  value     String // JSON
+  updatedAt DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Exports, Shopify catalog cache, audit
+// ---------------------------------------------------------------------------
+
+/**
+ * What someone said about an invoice before it was built.
+ *
+ * "This is an Oakley closeout, it needs the 2998 tag and everything is 30% off" is not something a
+ * column mapping can express, so it is said in words and read into directives the build obeys.
+ */
+model BatchInstruction {
+  id        String   @id @default(cuid())
+  batchId   String
+  userId    String?
+  role      String // USER | ASSISTANT
+  body      String
+  createdAt DateTime @default(now())
+
+  batch ImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([batchId, createdAt])
+}
+
+/**
+ * What someone said after looking at a finished CSV, and what was done about it.
+ *
+ * The point is not the conversation — it is that a correction made once becomes a standing
+ * instruction, so the next invoice does not repeat the mistake. `appliedRule` records the house
+ * rule a message turned into, when it turned into one.
+ */
+model ExportFeedback {
+  id          String   @id @default(cuid())
+  batchId     String
+  userId      String?
+  role        String // USER | ASSISTANT
+  body        String
+  proposal    String   @default("") // the standing rule the assistant suggested, if any
+  appliedRule String   @default("") // the rule text actually saved to house rules
+  createdAt   DateTime @default(now())
+
+  batch ImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  user  User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([batchId, createdAt])
+}
+
+model ExportFile {
+  id          String   @id @default(cuid())
+  batchId     String
+  filename    String
+  storagePath String
+  partIndex   Int      @default(1)
+  partCount   Int      @default(1)
+  rowCount    Int
+  sizeBytes   Int
+  createdAt   DateTime @default(now())
+
+  batch ImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([batchId])
+}
+
+/// Local cache of the live Shopify catalog for duplicate detection (pulled via Admin API).
+model ShopifyCatalogItem {
+  id               String   @id @default(cuid())
+  shopifyProductId String
+  shopifyVariantId String
+  inventoryItemId  String?
+  handle           String
+  title            String
+  vendor           String   @default("")
+  sku              String   @default("")
+  barcode          String   @default("")
+  price            Float?
+  option1          String?
+  option2          String?
+  option3          String?
+  syncedAt         DateTime @default(now())
+
+  @@unique([shopifyVariantId])
+  @@index([sku])
+  @@index([handle])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  batchId   String?
+  userId    String?
+  action    String
+  details   String   @default("{}") // JSON
+  createdAt DateTime @default(now())
+
+  batch ImportBatch? @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  user  User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([batchId])
+  @@index([createdAt])
+}
+
+/// The shop's own listings, remembered from every Shopify export loaded into the app: what the
+/// shop has already decided about a model (its riding-style shelves), for next season's listing
+/// of the same model to carry. One row per handle, replaced whenever a newer export is loaded.
+model ShopListing {
+  id          String   @id @default(cuid())
+  handle      String   @unique
+  title       String
+  vendor      String   @default("")
+  productType String   @default("")
+  tags        String   @default("") // comma separated, as the export writes them
+  price       Float?   // recommended retail as listed: Compare At where set, else Price
+  bindingOption String @default("") // a package's binding, e.g. "Marker Squire - Black"
+  barcodes    String   @default("") // every variant's barcode, comma separated, so an order line can be placed by EAN
+  updatedAt   DateTime @updatedAt
+
+  @@index([vendor])
+}

@@ -1,0 +1,8 @@
+node_modules
+.next
+.git
+storage
+prisma/*.db
+prisma/*.db-journal
+.env*
+coverage

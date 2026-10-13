@@ -1,0 +1,17 @@
+# Local or VPS demo: `docker compose up --build`, then open http://localhost:3000/catalog
+services:
+  importer:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      # Public origin Shopify can fetch uploaded images from (set to your real host in production).
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost:3000}
+      # Optional: enables PDF/scan/photo extraction and AI product copy.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    volumes:
+      - importer-data:/data
+    restart: unless-stopped
+
+volumes:
+  importer-data:

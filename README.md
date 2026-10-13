@@ -1,46 +1,108 @@
-# Afterword
+# Rubin
 
-**Understand what your customers actually say — don't just collect stars.**
+An internal tool for a Sydney ski/snowboard retailer that turns supplier invoices, order
+confirmations and spec sheets into a ready-to-upload Shopify product CSV (or pushes products
+straight to Shopify via the Admin API).
 
-Every Shopify review app (Judge.me, Loox, Yotpo) is a *collect-and-display* tool. Afterword
-is a *read-and-act* tool: it reads each post-purchase reply, tags the themes, scores sentiment,
-flags what's urgent, ranks **what to fix first**, drafts replies to unhappy customers, and turns
-glowing ones into one-click testimonials.
+**Flow:** upload files (invoices, spec sheets, catalogue pages, product photos; CSV/XLSX are
+parsed directly, everything else is read and classified by Claude) → columns are matched to
+product fields automatically (a supplier's layout is remembered; the mapping screen only
+appears when something is unrecognised) → products are grouped into variants, categorised,
+tagged by your Rules, priced by your markup rules and given images → review everything in a
+spreadsheet-style grid grouped by brand → export one validated Shopify CSV per brand (or per
+product type) or push to the store → every batch is logged.
 
-See [TEARDOWN.md](TEARDOWN.md) for the competitive analysis this is built against.
+**Rules** (`/rules`): tag, collection, product-type and metafield rules with a live tester, plus
+the category/option rules. **Pricing** (`/pricing`): an interactive price calculator, the
+markup/margin rules and GST/FX settings.
 
-## What's here
-
-- **The insight engine** (`src/lib/analyze.ts`, `src/lib/insights.ts`) — pure, deterministic,
-  fully tested. Turns replies into sentiment + themes + severity + drafted response, then
-  aggregates into a score and a ranked "fix first" list. Swap `analyzeFeedback` for an LLM call
-  behind the same signature to go from good to great.
-- **The product UI** — a marketing page (`/`) and the live **dashboard** (`/app`) running on
-  mock feedback so it works with zero setup.
-- **The Shopify app skeleton** — real OAuth + webhook-HMAC + scheduled-send:
-  - `GET /api/auth` → install, `GET /api/auth/callback` → token exchange + webhook registration
-  - `POST /api/webhooks/orders-fulfilled` → schedule a follow-up (HMAC-verified)
-  - `POST /api/cron/dispatch` → send everything that's due
-  - **Mandatory GDPR compliance webhooks** (App Store requires all three; HMAC-verified):
-    - `POST /api/webhooks/customers-data-request`
-    - `POST /api/webhooks/customers-redact`
-    - `POST /api/webhooks/shop-redact`
-    Register these three URLs in the Partner Dashboard → *App setup → Compliance webhooks*
-    (or under `[webhooks]` in `shopify.app.toml`). They already verify the HMAC and, for
-    the redact topics, purge the shop/customer from the current in-memory stores — swap
-    those stubs for real DB deletes in production.
-  - Needs a Shopify Partner app + the env in [.env.example](.env.example) to run live.
-
-## Develop
+## Run it
 
 ```sh
-npm run dev          # http://localhost:3000  (/ and /app)
-npm test             # vitest — engine + schedule tests
-npx tsc --noEmit
+cp .env.example .env.local            # set DATABASE_URL (SQLite default is fine) and ANTHROPIC_API_KEY
+npm install                           # also runs `prisma generate`
+npm run db:push                       # create the SQLite schema (or your Postgres schema)
+npm run catalog:seed -- --admin you@shop.com "Your Name" a-strong-password
+npm run dev                           # open http://localhost:3000
 ```
 
-## Status
+Or simply `npm run demo`, which does all of that with defaults. Without `--admin`, the first
+visit shows a one-time setup screen to create the
+admin account. `catalog:seed` also loads the recommended pricing rules (40% margin skis,
+keystone accessories, …) and category rules; both are editable under **Pricing & categories**.
 
-Prototype: the insight engine and dashboard are real and tested on mock data; the Shopify
-integration is a wired skeleton awaiting Partner credentials + a real DB/email provider
-(token storage and sending are in-memory stubs, clearly marked). Deployable to Vercel.
+Sample supplier files to try are in `samples/`:
+
+| File | What it exercises |
+|---|---|
+| `atomic-prebook.csv` | Tidy AUD ex-GST pre-book with style codes, EANs, RRPs and image URLs |
+| `volkl-invoice.xlsx` | USD invoice, no GST, preamble rows above the header, line totals instead of unit prices |
+| `burton-invoice.pdf` / `.txt` | Text-only PDF, AUD inc-GST prices, sizes and lengths embedded in descriptions |
+
+`samples/expected/` holds the Shopify CSV and profit figures each sample must produce; the
+regression test in `src/lib/catalog/samples.test.ts` fails if they drift. Regenerate them
+with `npm run catalog:fixtures` after an intentional change.
+
+## Deploy to Vercel
+
+Vercel has no persistent disk, so the app needs a Postgres database and a Blob store there.
+Both are one click in the Vercel dashboard and their credentials are injected automatically.
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FSwedishKing64%2Fafterword%2Ftree%2Fclaude%2Fski-retailer-shopify-automation-wzossf&project-name=rubin&stores=%5B%7B%22type%22%3A%22integration%22%2C%22integrationSlug%22%3A%22neon%22%2C%22productSlug%22%3A%22neon%22%7D%2C%7B%22type%22%3A%22blob%22%7D%5D&env=ANTHROPIC_API_KEY&envDescription=Optional%3A%20enables%20PDF%2Fscan%2Fphoto%20invoice%20reading%20and%20AI%20product%20copy)
+
+Manual steps if you prefer:
+
+1. vercel.com → **Add New → Project** → import this repository (choose the branch you want to deploy).
+2. In the project: **Storage → Create Database → Neon (Postgres)** and **Storage → Create → Blob**. Connect both to the project; this sets `DATABASE_URL` and `BLOB_READ_WRITE_TOKEN`.
+3. Optionally add `ANTHROPIC_API_KEY` under **Settings → Environment Variables**.
+4. **Deploy** (or redeploy after adding storage). The build (`npm run vercel-build`) switches Prisma to Postgres, syncs the schema and builds the app.
+5. Open `https://<your-project>.vercel.app` and create the first admin account; default pricing and category rules load automatically.
+
+## Pricing & profit engine
+
+Everything is in `src/lib/catalog/pricing.ts` (pure, unit tested):
+
+```
+landed cost   = cost ÷ (1 + GST) if the invoice is GST-inclusive, else cost
+                × FX rate to AUD + freight allocation
+ex-GST sell   = landed ÷ (1 − margin)            (MARGIN rule)
+              = landed × (1 + markup)            (MARKUP rule)
+retail        = ex-GST sell × (1 + GST), rounded UP to the rule's price ending (.99 …)
+ex-GST rev    = retail ÷ (1 + GST)
+profit / unit = ex-GST revenue − landed cost     ← GST is never counted as profit
+batch profit  = Σ ex-GST revenue − Σ landed cost
+```
+
+Rules resolve product (SKU/model) → brand → category → default. Rows under the configurable
+minimum margin are flagged as warnings; a manual retail override recalculates profit live in
+the grid.
+
+## Shopify CSV rules implemented
+
+`src/lib/catalog/csv.ts` (unit tested): row-per-variant with product fields only on the first
+row of each handle, extra image rows, `Title`/`Default Title` for option-less products, up to
+three options chosen per category (length + colour for skis, size + width + colour for
+boots …) with the rest written as `… (product.metafields.ski.<key>)` columns, an import-only
+`Collection` column, straight quotes, plain decimal prices, public-HTTPS-only image URLs,
+`Status = draft` unless the batch is marked publish, automatic splitting under 15MB without
+splitting a handle, and a re-parse validator that checks duplicate/conflicting handles,
+inconsistent option names, duplicate option values and required columns before a file is
+released.
+
+## Shopify Admin API (Phase 2)
+
+Under **Shopify**, paste a custom-app Admin API token. *Sync catalog* caches every product /
+variant / SKU for duplicate detection; *Check against Shopify* on a batch classifies each
+product as **new**, **adds variants** or **updates existing** and surfaces it in the grid.
+*Push to Shopify* uses `productSet` behind an explicit confirmation and can be rolled back
+(products it created are deleted, prices it changed are restored). Multi-location inventory
+is supported via per-variant location quantities when locations are loaded.
+
+## Tests
+
+```sh
+npm test            # vitest: pricing engine, CSV generator/validator/splitter, extraction,
+                    # mapping/categorisation/grouping, validation, Shopify input, sample fixtures
+npx tsc --noEmit
+npx eslint
+```

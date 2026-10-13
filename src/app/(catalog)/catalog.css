@@ -1,0 +1,43 @@
+/* Review grid styles */
+/* The review grid.
+ *
+ * Seventeen columns of mostly numbers. Density was the whole problem: at 12.5px in 34px rows with
+ * one hairline between every column, a row read as a wall and nothing said which cells took an
+ * edit. Three things fix it — room (bigger type, taller rows, real padding), bands (a rule and a
+ * heading every few columns, so the eye has somewhere to rest), and a plain distinction between
+ * what you type into and what the app works out for you. */
+.grid-wrap { overflow: auto; max-height: calc(100vh - 300px); border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.review-grid { border-collapse: separate; border-spacing: 0; font-size: 13.5px; min-width: 1720px; }
+.review-grid th { position: sticky; top: 27px; z-index: 2; background: #f7f8fa; border-bottom: 1px solid var(--line); padding: 9px 12px; text-align: left; font-weight: 600; white-space: nowrap; color: var(--ink-2); }
+/* The band headings sit above the column names, and both stay put when the grid scrolls. */
+.review-grid tr.band-row th { top: 0; z-index: 3; height: 27px; padding: 4px 12px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--ink-soft); background: #eef1f5; border-bottom: 1px solid var(--line-soft); }
+.review-grid th.band-start, .review-grid td.band-start { border-left: 1px solid var(--line); }
+/* Worked out from the other columns, so not somewhere to type. */
+.review-grid th.calculated { color: var(--ink-soft); font-weight: 500; }
+.review-grid td.calculated .cell { color: var(--ink-2); background: rgba(0, 0, 0, 0.022); }
+.review-grid td { border-bottom: 1px solid var(--line-soft); padding: 0; vertical-align: middle; white-space: nowrap; height: 42px; }
+.review-grid tr.product-row td { background: #f3f5f8; font-weight: 500; border-top: 2px solid var(--line); border-bottom: 1px solid var(--line); }
+.review-grid tr.variant-row td { background: #fff; }
+.review-grid tr.row-error td { box-shadow: inset 3px 0 0 var(--detractor); }
+.review-grid tr.row-warning td { box-shadow: inset 3px 0 0 var(--passive); }
+.review-grid tr.selected td { background: var(--meta-tint); }
+.review-grid tr.variant-row:hover td { background: #f5f9ff; }
+.review-grid .cell { display: block; padding: 9px 12px; min-width: 60px; overflow: hidden; text-overflow: ellipsis; max-width: 300px; }
+/* An editable cell says so before it is clicked: a dotted rule under the value, solid on hover. */
+.review-grid .cell.editable { cursor: cell; box-shadow: inset 0 -1px 0 rgba(8, 102, 255, 0.28); }
+.review-grid .cell.editable:hover { background: rgba(8, 102, 255, 0.07); box-shadow: inset 0 -2px 0 var(--meta); }
+.review-grid .cell.focused { outline: 2px solid var(--violet); outline-offset: -2px; }
+.review-grid .cell.num { text-align: right; font-variant-numeric: tabular-nums; }
+.review-grid .cell input:not([type="checkbox"]), .review-grid .cell select { width: 100%; height: 100%; border: 0; outline: 2px solid var(--violet); outline-offset: -2px; padding: 8px 11px; font: inherit; background: #fff; }
+.review-grid .cell input[type="checkbox"] { margin: 0; vertical-align: middle; }
+.review-grid td:first-child .cell, .review-grid td:nth-child(2) .cell { min-width: 0; }
+.review-grid .thumb { width: 32px; height: 32px; object-fit: cover; border-radius: 4px; border: 1px solid var(--line); background: #eee; }
+.review-grid .flag { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; }
+.review-grid .flag.error { background: var(--detractor); }
+.review-grid .flag.warning { background: var(--passive); }
+.summary-bar { position: sticky; bottom: 0; z-index: 3; display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 14px 18px; border: 1px solid var(--line); border-radius: 12px; background: #fff; padding: 14px 18px; margin-top: 12px; box-shadow: var(--shadow); }
+.summary-bar .k { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-soft); }
+.summary-bar .v { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.dropzone { border: 2px dashed var(--line); border-radius: 12px; padding: 28px; text-align: center; color: var(--ink-soft); transition: background 0.15s, border-color 0.15s; }
+.dropzone.active { border-color: var(--violet); background: var(--violet-soft); color: var(--violet); }
+.review-grid tr.section-row td { background: var(--meta-tint-2); color: var(--meta-ink); font-size: 12.5px; height: 38px; border-top: 2px solid var(--meta); }

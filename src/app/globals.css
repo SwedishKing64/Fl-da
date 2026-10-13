@@ -1,32 +1,63 @@
 @import "tailwindcss";
 
-/* Afterword — clean, modern commerce SaaS. Distinct from the travel work: warm off-white
-   ground, near-black ink, a confident violet brand, and clear sentiment semantics. */
+/* Rubin, in Meta blue.
+   One blue, spent on the things you press and the place you are. The workspace is a quiet light
+   grey with white cards on it, the way a feed is, because it is where numbers are read. The chrome
+   around it is the blue itself, deep at the top and brighter at the foot. Everything else is grey
+   or black: a warning keeps its own hue on purpose, so a warning never looks like the brand.
+   Controls are big, round-cornered and plainly labelled: this is run by shop staff between
+   customers, on whatever screen is nearest. */
 :root {
   --paper: #ffffff;
-  --canvas: #f7f6f3;
-  --ink: #17150f;
-  --ink-2: #56514a;
-  --ink-soft: #8b857c;
-  --line: #e7e3dc;
-  --line-soft: #f0ede7;
-  --violet: #5b4bd6;
-  --violet-soft: #efeaff;
-  --promoter: #12a594;
-  --passive: #d99a2b;
-  --detractor: #e05543;
-  --promoter-tint: #e6f6f2;
-  --passive-tint: #faf1dd;
-  --detractor-tint: #fbe9e5;
-  --shadow-sm: 0 1px 2px rgba(23, 21, 15, 0.05), 0 1px 3px rgba(23, 21, 15, 0.04);
-  --shadow: 0 12px 34px -18px rgba(23, 21, 15, 0.22);
-  --r: 16px;
-  --sans: var(--font-body), system-ui, -apple-system, "Segoe UI", sans-serif;
+  --canvas: #f0f2f5;
+  --ink: #050505;
+  --ink-2: #3b3f45;
+  --ink-soft: #65676b;
+  --line: #d9dde3;
+  --line-soft: #e9ebef;
+
+  /* Meta blue, and the shades it takes on a button under the cursor, as a tint behind a selected
+     thing, and as a deep bezel. */
+  --meta: #0866ff;
+  --meta-deep: #0a4fc2;
+  --meta-bright: #3b8bff;
+  --meta-tint: #e7f0ff;
+  --meta-tint-2: #d4e4ff;
+  --meta-ink: #0b3d91;
+  --sky: #a6d0ff;
+  --night: #0b2b61;
+  --night-2: #0d3a85;
+  --night-3: #0f4fb0;
+
+  /* The older names the components were written against, all pointing at the blue. */
+  --rubin: var(--meta);
+  --rubin-deep: var(--meta-deep);
+  --rubin-bright: var(--meta-bright);
+  --rubin-tint: var(--meta-tint);
+  --gold: var(--sky);
+  --gold-deep: var(--meta-bright);
+  --violet: var(--meta);
+  --violet-soft: var(--meta-tint);
+
+  --promoter: #0f9b7e;
+  --passive: #c8891a;
+  --detractor: #cf3126;
+  --promoter-tint: #e9f7f3;
+  --passive-tint: #fbf2e0;
+  --detractor-tint: #fceceb;
+
+  --shadow-sm: 0 1px 2px rgba(5, 5, 5, 0.06), 0 1px 3px rgba(5, 5, 5, 0.04);
+  --shadow: 0 18px 44px -24px rgba(8, 102, 255, 0.35);
+  --shadow-lift: 0 12px 28px -14px rgba(8, 102, 255, 0.24);
+  --ring: 0 0 0 3px rgba(8, 102, 255, 0.18);
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --r: 12px;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
 
 @theme inline {
-  --font-sans: var(--font-body);
+  --font-sans: var(--sans);
 }
 
 html {
@@ -39,6 +70,8 @@ body {
   background: var(--canvas);
   color: var(--ink);
   font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.45;
   -webkit-font-smoothing: antialiased;
   margin: 0;
   min-height: 100vh;
@@ -346,3 +379,324 @@ p {
     transition: none !important;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Motion. Small and purposeful: things that arrive rise into place, things you
+   can press answer to the cursor, and anything working says so. Everything is
+   dropped for a viewer who has asked for less movement.
+   --------------------------------------------------------------------------- */
+
+@keyframes rb-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes rb-sheen {
+  from { background-position: -200% 0; }
+  to { background-position: 200% 0; }
+}
+
+@keyframes rb-pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(11, 78, 162, 0.35); }
+  70% { box-shadow: 0 0 0 10px rgba(11, 78, 162, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(11, 78, 162, 0); }
+}
+
+.rise { animation: rb-rise 0.42s var(--ease) both; }
+.rise-1 { animation-delay: 0.04s; }
+.rise-2 { animation-delay: 0.08s; }
+.rise-3 { animation-delay: 0.12s; }
+.rise-4 { animation-delay: 0.16s; }
+
+/* A card you can act on lifts a little under the cursor. */
+.lift { transition: transform 0.22s var(--ease), box-shadow 0.22s var(--ease), border-color 0.22s var(--ease); }
+.lift:hover { transform: translateY(-2px); box-shadow: var(--shadow-lift); border-color: color-mix(in srgb, var(--meta) 35%, var(--line)); }
+
+/* The band of colour the logo has, for headers and the primary button. */
+
+/* Something is loading and there is nothing to show yet. */
+.shimmer {
+  background: linear-gradient(90deg, var(--line-soft) 25%, #fff 50%, var(--line-soft) 75%);
+  background-size: 200% 100%;
+  animation: rb-sheen 1.4s linear infinite;
+}
+
+.pulse-ring { animation: rb-pulse-ring 1.8s var(--ease) infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rise, .shimmer, .pulse-ring { animation: none !important; }
+  .lift { transition: none; }
+  .lift:hover { transform: none; }
+}
+
+/* ---------------------------------------------------------------------------
+   Rubin chrome
+   --------------------------------------------------------------------------- */
+
+/* The blue bezel the workspace sits in. */
+.night { background: linear-gradient(170deg, var(--night) 0%, var(--night-2) 55%, var(--night-3) 100%); }
+.rubin-gradient { background: linear-gradient(135deg, var(--meta-deep) 0%, var(--meta) 60%, var(--meta-bright) 100%); }
+
+/* The one gem on the page: a ruby that catches the light as you approach it. */
+.gem {
+  position: relative;
+  overflow: hidden;
+}
+.gem::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 38%, rgba(255, 255, 255, 0.28) 50%, transparent 62%);
+  transform: translateX(-120%);
+  transition: transform 0.65s var(--ease);
+}
+.gem:hover::after { transform: translateX(120%); }
+
+/* Nav */
+.nav-link {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  border-radius: 10px;
+  padding: 11px 12px;
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.78);
+  transition: color 0.18s var(--ease), background 0.18s var(--ease), transform 0.18s var(--ease);
+}
+.nav-link:hover { color: #fff; background: rgba(255, 255, 255, 0.1); transform: translateX(2px); }
+.nav-link.on { color: #fff; background: rgba(255, 255, 255, 0.16); font-weight: 600; }
+.nav-link.on::before {
+  content: "";
+  position: absolute;
+  left: -11px;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: #fff;
+}
+.nav-link .ico { width: 18px; height: 18px; flex: none; opacity: 0.95; }
+
+/* Where you are in a batch: four steps, and the ones behind you stay lit. */
+.steps { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.step {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border-radius: 999px;
+  padding: 6px 14px 6px 8px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--ink-soft);
+  transition: all 0.2s var(--ease);
+}
+.step .n {
+  display: grid;
+  place-items: center;
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+.step.done { color: var(--meta); }
+.step.done .n { background: var(--meta); border-color: var(--meta); color: #fff; }
+.step.on { color: var(--meta-ink); background: var(--meta-tint); font-weight: 700; }
+.step.on .n { background: var(--meta); border-color: var(--meta); color: #fff; box-shadow: var(--ring); }
+a.step:hover { background: var(--meta-tint); color: var(--meta-ink); }
+.step-sep { color: var(--line); font-size: 12px; }
+
+/* A number worth reading from across the room. */
+.stat {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  padding: 14px 16px;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.22s var(--ease), box-shadow 0.22s var(--ease);
+}
+.stat:hover { transform: translateY(-2px); box-shadow: var(--shadow-lift); }
+.stat::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--meta);
+  opacity: 0.85;
+}
+.stat.gold::before { background: var(--meta-bright); }
+.stat .k { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-soft); }
+.stat .v { margin-top: 3px; font-size: 26px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: var(--ink); }
+.stat .s { margin-top: 2px; font-size: 11.5px; color: var(--ink-soft); }
+
+/* A key on the keyboard, written down. */
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: #fff;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-2);
+}
+
+/* Command palette */
+.palette-back {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  justify-content: center;
+  /* Hug the results. Left to stretch, the panel fills the overlay and three matches sit at the
+     top of a tall empty box. */
+  align-items: flex-start;
+  padding: 12vh 16px 16px;
+  background: rgba(11, 43, 97, 0.42);
+  backdrop-filter: blur(3px);
+  animation: rb-fade 0.16s var(--ease) both;
+}
+.palette {
+  width: min(620px, 100%);
+  max-height: 64vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 30px 80px -30px rgba(11, 43, 97, 0.5);
+  animation: rb-pop 0.2s var(--ease) both;
+}
+.palette input {
+  border: 0;
+  border-bottom: 1px solid var(--line-soft);
+  padding: 16px 18px;
+  font: inherit;
+  font-size: 15px;
+  outline: none;
+}
+.palette-list { overflow: auto; padding: 6px; }
+.palette-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  border-radius: 10px;
+  padding: 9px 12px;
+  text-align: left;
+  font-size: 13.5px;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.palette-item .hint { margin-left: auto; font-size: 11px; color: var(--ink-soft); }
+.palette-item.on { background: var(--meta-tint); color: var(--meta-ink); font-weight: 600; }
+.palette-group { padding: 10px 12px 4px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); }
+
+@keyframes rb-fade { from { opacity: 0 } to { opacity: 1 } }
+@keyframes rb-pop { from { opacity: 0; transform: translateY(-8px) scale(0.985) } to { opacity: 1; transform: none } }
+@media (prefers-reduced-motion: reduce) {
+  .palette-back, .palette { animation: none }
+  .gem::after { display: none }
+}
+
+/* ---------------------------------------------------------------------------
+   Home: three jobs, each a card you can press, with the one next step on it.
+   --------------------------------------------------------------------------- */
+.job {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fff;
+  padding: 22px 22px 20px;
+  box-shadow: var(--shadow-sm);
+  color: inherit;
+}
+.job .job-ico {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--meta-tint);
+  color: var(--meta);
+}
+.job .job-ico svg { width: 24px; height: 24px; }
+.job h2 { font-size: 19px; font-weight: 700; letter-spacing: -0.015em; }
+.job p { font-size: 14.5px; color: var(--ink-2); }
+.job .job-go {
+  margin-top: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  border-radius: 10px;
+  background: var(--meta);
+  color: #fff;
+  font-weight: 600;
+  font-size: 15px;
+  padding: 10px 16px;
+  transition: background 0.18s var(--ease);
+}
+.job:hover .job-go { background: var(--meta-deep); }
+
+/* A batch on the way: what it is and the one thing to do next. */
+.next-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  background: var(--meta-tint);
+  color: var(--meta-ink);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 4px 11px;
+}
+.next-step.done { background: var(--promoter-tint); color: var(--promoter); }
+
+/* ---------------------------------------------------------------------------
+   Emoji chips. A button and a menu item lead with a picture of what they do,
+   sat in a little round chip the way a reaction sits on a post.
+   --------------------------------------------------------------------------- */
+.emo-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin-left: -4px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.22);
+  font-size: 14px;
+  line-height: 1;
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+}
+.emo-btn.emo-sm { width: 20px; height: 20px; font-size: 12px; margin-left: -3px; }
+/* On a white button the chip is the blue tint. */
+button:not(.bg-\[var\(--meta\)\]) > .emo-btn, a:not(.bg-\[var\(--meta\)\]) > .emo-btn { background: var(--meta-tint); }
+.nav-link .emo {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+  font-size: 16px;
+  line-height: 1;
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+  transition: background 0.18s var(--ease), transform 0.18s var(--ease);
+}
+.nav-link:hover .emo { background: rgba(255, 255, 255, 0.24); transform: scale(1.06); }
+.nav-link.on .emo { background: #fff; }
+.job .job-ico { font-size: 26px; line-height: 1; font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }

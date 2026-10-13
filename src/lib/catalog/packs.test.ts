@@ -49,6 +49,7 @@ describe("where a pack is filed", () => {
     expect(exos.tags).toEqual(expect.arrayContaining(["hiking packs", "packs-and-bags", "outdoor", "osprey", "mens"]));
     expect(exos.tags.filter((t) => /ski|accessor/.test(t))).toEqual([]);
     expect(hikelite.productType).toBe("Daypacks");
-    expect(hikelite.tags).toEqual(expect.arrayContaining(["daypacks", "packs-and-bags", "outdoor"]));
+    expect(hikelite.tags).toEqual(expect.arrayContaining(["daypacks", "backpacks", "packs-and-bags", "outdoor"]));
+    expect(exos.tags).toContain("backpacks");
   });
 });

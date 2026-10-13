@@ -29,7 +29,8 @@ export type CopiedModel = (typeof COPY_ORDER)[number];
 /**
  * Tables the new site seeds with defaults on its first visit — rules, templates, the shop memory.
  * The old site's are the shop's real ones, so where the old site has any, the new site's are
- * cleared before the copy rather than left beside them.
+ * cleared before the copy rather than left beside them — unless the old site's rows are already
+ * here, copied by hand, when what the new site has since learned is kept.
  */
 export const REPLACED: ReadonlySet<string> = new Set(["PricingRule", "CategoryRule", "TagRule", "ProductTemplate", "ShopListing", "ShopifyCatalogItem", "ImageLibraryEntry"]);
 
@@ -66,6 +67,8 @@ export interface Store {
   read(model: CopiedModel, offset: number, take: number): Promise<Row[]>;
   write(model: CopiedModel, rows: Row[]): Promise<number>;
   clear(model: CopiedModel): Promise<void>;
+  /** Whether the new site already holds this row of the old site's, by its id. */
+  has(model: CopiedModel, row: Row): Promise<boolean>;
   upsertSettings(rows: Row[]): Promise<number>;
   usersByEmail(emails: string[]): Promise<Array<{ id: string; email: string }>>;
   rewriteHost(column: { model: string; field: string }, oldHost: string, newHost: string): Promise<void>;
@@ -100,7 +103,7 @@ export async function copyStep(state: CopyState, store: Store, files: Files | nu
     const model = COPY_ORDER[s.table];
     if (s.offset === 0 && REPLACED.has(model)) {
       const first = await store.read(model, 0, 1);
-      if (first.length > 0) { await store.clear(model); lines.push(`${model}: the new site's own rows cleared for the old site's.`); }
+      if (first.length > 0 && !(await store.has(model, first[0]))) { await store.clear(model); lines.push(`${model}: the new site's own rows cleared for the old site's.`); }
     }
     const rows = await store.read(model, s.offset, CHUNK);
     if (rows.length === 0) {
@@ -172,7 +175,7 @@ export async function copyStep(state: CopyState, store: Store, files: Files | nu
 // ---------------------------------------------------------------------------------------------
 
 type AnyModel = {
-  findMany: (args: { skip: number; take: number; orderBy: Record<string, "asc"> }) => Promise<Row[]>;
+  findMany: (args: { where?: Row; skip: number; take: number; orderBy: Record<string, "asc"> }) => Promise<Row[]>;
   createMany: (args: { data: Row[]; skipDuplicates?: boolean }) => Promise<{ count: number }>;
   deleteMany: () => Promise<{ count: number }>;
   upsert: (args: { where: Row; create: Row; update: Row }) => Promise<Row>;
@@ -201,6 +204,10 @@ export function prismaStore(source: PrismaClient, target: unknown = prisma): Sto
       return count;
     },
     async clear(model) { await modelOf(target, model).deleteMany(); },
+    async has(model, row) {
+      const id = idFieldOf(model);
+      return (await modelOf(target, model).findMany({ where: { [id]: row[id] }, skip: 0, take: 1, orderBy: { [id]: "asc" } })).length > 0;
+    },
     async upsertSettings(rows) {
       let n = 0;
       for (const r of rows) { await modelOf(target, "AppSetting").upsert({ where: { key: r.key }, create: r, update: { value: r.value } }); n++; }

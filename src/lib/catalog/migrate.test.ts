@@ -27,6 +27,7 @@ function fakeStore(source: Partial<Record<CopiedModel, Row[]>>, existingUsers: A
     async read(model, offset, take) { return (source[model] ?? []).slice(offset, offset + take); },
     async write(model, rows) { target[model] = [...(target[model] ?? []), ...rows]; return rows.length; },
     async clear(model) { cleared.push(model); target[model] = []; },
+    async has(model, row) { return (target[model] ?? []).some((r) => r.id === row.id); },
     async upsertSettings(rows) { target.AppSetting = rows; return rows.length; },
     async usersByEmail(emails) { return existingUsers.filter((u) => emails.includes(u.email)); },
     async rewriteHost(column, oldHost, newHost) { rewrites.push(`${column.model}.${column.field}: ${oldHost} -> ${newHost}`); },
@@ -63,6 +64,14 @@ describe("copying the old site into the new one", () => {
     expect(target.AppSetting).toEqual([{ key: "gst", value: "0.1" }]);
     expect(lines.join(" ")).toMatch(/No file-store token given/);
     expect(state.counts.ImportBatch).toBe(2);
+  });
+
+  it("keeps what the new site has learned when the old site's rows were already copied by hand", async () => {
+    const { store, target, cleared } = fakeStore(old);
+    target.CategoryRule = [{ id: "r1", pattern: "skis" }, { id: "r-new", pattern: "packs" }];
+    await runToEnd(store, null);
+    expect(cleared).toEqual([]);
+    expect(target.CategoryRule.map((r) => r.id)).toContain("r-new");
   });
 
   it("carries on from where a step stopped, table by table, within the budget", async () => {

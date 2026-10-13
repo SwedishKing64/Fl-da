@@ -80,7 +80,9 @@ spells the menu's ampersand out ("Packs and Bags", "Climbing and Abseiling"). Pa
 the Outdoor menu by what they are: hiking packs from 40 litres, daypacks under, travel packs,
 hydration packs, duffels; a ski, board or boot bag is an accessory. When a learned convention
 changes a product's Type, the shelf tags move with it. Price bands, sizes and colours are
-Shopify's own tags and are never written.
+Shopify's own tags and are never written. Daypacks, hiking packs and travel packs also carry
+`backpacks` (the shop asked for it on 2026-10-13); duffels and the hydration shelf, which holds
+bare reservoirs, do not.
 
 **Invoices with handwriting.** On a photographed order, "YT 23/24/25/27" headings are seasons, a
 three-or-four-digit amount beside a line is the RRP, a percentage is a discount, struck lines are
@@ -95,6 +97,10 @@ before GST, day/month/year. QuickBooks takes up to 100 bills per file; suppliers
 must exist there first.
 
 ## Decisions and history, newest first
+
+- 2026-10-13 Repository moved to `RubinAlp/Rubin`; the business has its own Vercel project, Neon
+  database and Blob store, with the old data copied in. Settings gained "Copy from the old site"
+  to bring the old Blob files across. Packs carry `backpacks`. The Burton RRP problem is fixed.
 
 - 2026-10-12 Name matches confirmed before a delivery applies; order forms with a size column
   per line read the size. Packs filed on the Outdoor menu; Type spelling; retagging on Type change.
@@ -114,11 +120,9 @@ must exist there first.
 
 Open at handover:
 
-- The production site (`afterword-ashen.vercel.app`) had a dead `DATABASE_URL` and never took the
-  preview builds; the business should deploy a fresh Vercel project (see the README).
-- Why the RRP from one Burton invoice CSV did not land was never diagnosed; the file was never sent.
-- The "backpacks" tag some older packs carry is not written; the shop's own listings are
-  inconsistent about it.
+- Files and hosted pictures still live in the old personal Vercel project's Blob store until
+  "Copy from the old site" is run on Settings; then the old project, its Neon database and Blob
+  store are deleted and the personal API key revoked.
 - The first real invoice through Bills for QuickBooks, and the first Burton board page read for
   specs, were not run with a live API key in the development environment; check them.
 

@@ -4,16 +4,15 @@ import { useRef, useState, useSyncExternalStore } from "react";
 import { readBillAction } from "@/app/(catalog)/actions";
 import { Alert, Button, Card, Details, INPUT, cx } from "@/app/(catalog)/ui";
 import { fitsUpload, shrinkImage, tooBig } from "@/app/(catalog)/shrink";
-import { DEFAULT_OPTIONS, QUICKBOOKS_COLUMNS, billsFileName, checkBill, lineAmount, quickBooksCsv, quickBooksRows, type Bill, type BillLine, type QuickBooksOptions } from "@/lib/catalog/bills/quickbooks";
+import { DEFAULT_OPTIONS, billsFileName, checkBill, lineAmount, quickBooksWorkbook, type Bill, type BillLine, type QuickBooksOptions } from "@/lib/catalog/bills/quickbooks";
 
 /**
- * Supplier invoices in, one CSV for QuickBooks out.
+ * Supplier invoices in, the shop's QuickBooks bill sheet out.
  *
  * Each invoice is read for the books — supplier, number, dates, goods, freight, GST, total — and
  * shown as a bill to check: every figure is a box, what does not add up is said beside it, and
- * the file is written only from what is on the screen. The QuickBooks side of it — the account
- * the goods go to, the tax codes, whether amounts carry GST, the date order — is set once and
- * remembered in this browser.
+ * the file is written only from what is on the screen, one row per bill in the layout the shop
+ * gave. The category the bills go to is set once and remembered in this browser.
  */
 
 const read = (file: File | Blob, name = "that file") => new Promise<string>((resolve, reject) => {
@@ -23,7 +22,8 @@ const read = (file: File | Blob, name = "that file") => new Promise<string>((res
   r.readAsDataURL(file);
 });
 
-const REMEMBERED = "rubin.quickbooks.options";
+// A new key, so an account remembered for the old layout does not stand in for the category.
+const REMEMBERED = "rubin.quickbooks.sheet";
 
 /**
  * The QuickBooks side of it, kept in this browser. Read through a store so the page renders with
@@ -99,11 +99,13 @@ export function BillsPanel({ aiEnabled }: { aiEnabled: boolean }) {
   const edit = (i: number, change: (b: Bill) => Bill) => setBills((all) => all.map((b, k) => (k === i ? change(b) : b)));
   const editLine = (i: number, k: number, change: (l: BillLine) => BillLine) => edit(i, (b) => ({ ...b, lines: b.lines.map((l, n) => (n === k ? change(l) : l)) }));
 
-  function download() {
+  async function download() {
     if (bills.length === 0) return;
-    const csv = quickBooksCsv(bills, options);
+    setError(null);
+    let sheet: ArrayBuffer;
+    try { sheet = await quickBooksWorkbook(bills, options); } catch (err) { setError(err instanceof Error ? err.message : String(err)); return; }
     const name = billsFileName(bills);
-    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const url = URL.createObjectURL(new Blob([sheet], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
     const link = document.createElement("a");
     link.href = url; link.download = name;
     document.body.appendChild(link); link.click(); link.remove();
@@ -112,7 +114,6 @@ export function BillsPanel({ aiEnabled }: { aiEnabled: boolean }) {
   }
 
   const problems = bills.map(checkBill);
-  const rows = bills.reduce((n, b) => n + quickBooksRows(b, options).length, 0);
 
   return (
     <div className="space-y-4">
@@ -140,46 +141,12 @@ export function BillsPanel({ aiEnabled }: { aiEnabled: boolean }) {
         {error && <Alert tone="danger" className="mt-3">{error}</Alert>}
       </Card>
 
-      <Details summary="How the bills are written for QuickBooks" hint="The account, the tax codes, GST in or out of the amounts, and the date order. Set once; this browser remembers it.">
-        <div className="grid gap-3 text-sm sm:grid-cols-2">
-          <label className="block">
-            <span className="text-xs font-medium text-[var(--ink-soft)]">Account the goods go to</span>
-            <input id="qb-account" className={cx(INPUT, "mt-1")} value={options.account} onChange={(e) => setOption("account", e.target.value)} placeholder="Purchases, or Cost of Goods Sold" />
-          </label>
-          <label className="block">
-            <span className="text-xs font-medium text-[var(--ink-soft)]">Account freight goes to</span>
-            <input id="qb-freight-account" className={cx(INPUT, "mt-1")} value={options.freightAccount} onChange={(e) => setOption("freightAccount", e.target.value)} placeholder="Freight — empty for the same as the goods" />
-          </label>
-          <label className="block">
-            <span className="text-xs font-medium text-[var(--ink-soft)]">Tax code for lines with GST</span>
-            <input id="qb-tax-code" className={cx(INPUT, "mt-1")} value={options.taxCode} onChange={(e) => setOption("taxCode", e.target.value)} placeholder="GST" />
-          </label>
-          <label className="block">
-            <span className="text-xs font-medium text-[var(--ink-soft)]">Tax code for lines without GST</span>
-            <input id="qb-tax-free-code" className={cx(INPUT, "mt-1")} value={options.taxFreeCode} onChange={(e) => setOption("taxFreeCode", e.target.value)} placeholder="GST free" />
-          </label>
-          <label className="block">
-            <span className="text-xs font-medium text-[var(--ink-soft)]">Location, if the company uses them</span>
-            <input id="qb-location" className={cx(INPUT, "mt-1")} value={options.location} onChange={(e) => setOption("location", e.target.value)} placeholder="Leave empty if not" />
-          </label>
-          <div className="space-y-2">
-            <span className="block text-xs font-medium text-[var(--ink-soft)]">One row per</span>
-            <label className="flex items-center gap-2"><input type="radio" name="qb-detail" checked={options.detail === "bill"} onChange={() => setOption("detail", "bill")} /> bill: the goods as one line, freight as another</label>
-            <label className="flex items-center gap-2"><input type="radio" name="qb-detail" checked={options.detail === "lines"} onChange={() => setOption("detail", "lines")} /> line of the invoice</label>
-          </div>
-          <div className="space-y-2">
-            <span className="block text-xs font-medium text-[var(--ink-soft)]">Line amounts are</span>
-            <label className="flex items-center gap-2"><input type="radio" name="qb-amounts" checked={options.amounts === "exclusive"} onChange={() => setOption("amounts", "exclusive")} /> before GST, with the GST in its own column</label>
-            <label className="flex items-center gap-2"><input type="radio" name="qb-amounts" checked={options.amounts === "inclusive"} onChange={() => setOption("amounts", "inclusive")} /> with the GST in them</label>
-          </div>
-          <div className="space-y-2">
-            <span className="block text-xs font-medium text-[var(--ink-soft)]">Dates written as</span>
-            <label className="flex items-center gap-2"><input type="radio" name="qb-dates" checked={options.dateFormat === "dmy"} onChange={() => setOption("dateFormat", "dmy")} /> day/month/year, 28/09/2026</label>
-            <label className="flex items-center gap-2"><input type="radio" name="qb-dates" checked={options.dateFormat === "mdy"} onChange={() => setOption("dateFormat", "mdy")} /> month/day/year, 09/28/2026</label>
-            <label className="flex items-center gap-2"><input type="radio" name="qb-dates" checked={options.dateFormat === "ymd"} onChange={() => setOption("dateFormat", "ymd")} /> year-month-day, 2026-09-28</label>
-          </div>
-        </div>
-        <p className="mt-3 text-xs text-[var(--ink-soft)]">The supplier, the account and the tax codes have to exist in QuickBooks under these names; the import matches them by name and lets you map any it cannot find. Tell it the amounts are {options.amounts === "exclusive" ? "exclusive" : "inclusive"} of tax when it asks.</p>
+      <Details summary="How the bills are written for QuickBooks" hint="One row per bill: Supplier, Bill no., Bill date, Due date, Category, Description, Amount with GST in it, GST. This browser remembers the category.">
+        <label className="block max-w-md text-sm">
+          <span className="text-xs font-medium text-[var(--ink-soft)]">Category the bills go to</span>
+          <input id="qb-category" className={cx(INPUT, "mt-1")} value={options.category} onChange={(e) => setOption("category", e.target.value)} placeholder={DEFAULT_OPTIONS.category} />
+        </label>
+        <p className="mt-3 text-xs text-[var(--ink-soft)]">The supplier and the category have to exist in QuickBooks under these names; the import matches them by name and lets you map any it cannot find. The amount is the whole invoice, freight and GST in it.</p>
       </Details>
 
       {bills.map((bill, i) => {
@@ -231,7 +198,7 @@ export function BillsPanel({ aiEnabled }: { aiEnabled: boolean }) {
                 </select>
               </label>
             </div>
-            <Details className="mt-3" summary={`The lines · ${bill.lines.length}`} hint={options.detail === "lines" ? "These go into the file, one row each." : "For checking; the file carries the goods as one line."}>
+            <Details className="mt-3" summary={`The lines · ${bill.lines.length}`} hint="For checking; the file carries the whole bill as one row.">
               <div className="overflow-auto rounded-lg border border-[var(--line-soft)]">
                 <table className="w-full text-xs">
                   <thead className="bg-[var(--meta-tint)] text-left">
@@ -271,11 +238,11 @@ export function BillsPanel({ aiEnabled }: { aiEnabled: boolean }) {
       })}
 
       {bills.length > 0 && (
-        <Card title={<>The file for QuickBooks <span className="font-normal text-[var(--ink-soft)]">· {bills.length} bill{bills.length === 1 ? "" : "s"}, {rows} row{rows === 1 ? "" : "s"}</span></>} actions={<Button variant="primary" icon="⬇️" onClick={download}>Download for QuickBooks</Button>}>
+        <Card title={<>The file for QuickBooks <span className="font-normal text-[var(--ink-soft)]">· {bills.length} bill{bills.length === 1 ? "" : "s"}</span></>} actions={<Button variant="primary" icon="⬇️" onClick={() => void download()}>Download for QuickBooks</Button>}>
           {problems.some((p) => p.length > 0) && <Alert tone="warning" className="mb-3">{problems.filter((p) => p.length > 0).length} of the bills have something to check, marked above. They are still written; fix them here or in QuickBooks after.</Alert>}
           {saved && <Alert tone="success" className="mb-3">Saved {saved}.</Alert>}
           <p className="text-xs text-[var(--ink-soft)]">
-            In QuickBooks Online: <strong>Settings → Import data → Bills</strong>, choose the file, match the columns — {QUICKBOOKS_COLUMNS.join(", ")} — and say the amounts are {options.amounts} of tax. QuickBooks takes up to 100 bills in one file, and the suppliers and accounts have to exist there first.
+            A spreadsheet in the shop&rsquo;s layout, one row per bill. In QuickBooks Online: <strong>Settings → Import data → Bills</strong>, choose the file, match the columns, and say the amounts are inclusive of tax. QuickBooks takes up to 100 bills in one file, and the suppliers and the category have to exist there first.
           </p>
         </Card>
       )}

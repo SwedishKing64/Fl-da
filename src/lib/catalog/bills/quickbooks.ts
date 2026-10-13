@@ -1,14 +1,12 @@
-import { escapeCsvField } from "../csv";
-
 /**
  * A supplier's invoice as a bill for QuickBooks Online.
  *
  * The shop's bookkeeping wants each supplier invoice entered as a bill: who it is from, its
- * number and dates, what it comes to and how much of that is GST. QuickBooks Online imports
- * bills from a CSV with one row per line of the bill, the rows of one bill sharing its number —
- * Bill no., Supplier, Bill date, Due date, Terms, Location, Memo, Account, Line description,
- * Line amount, Line tax code, Line tax amount, Currency. This is that file, from what the reader
- * found on the invoice and the person corrected on screen.
+ * number and dates, what it comes to and how much of that is GST. The shop gave the sheet it
+ * imports into QuickBooks Online: one row per bill — Supplier, Bill no., Bill date, Due date,
+ * Category, Description, Amount, GST — the amount being the whole invoice with GST in it, freight
+ * included, and the category "Cost of sales:Stock Purchase". This is that sheet, from what the
+ * reader found on the invoice and the person corrected on screen.
  */
 export interface BillLine {
   description: string;
@@ -43,45 +41,17 @@ export interface Bill {
 }
 
 export interface QuickBooksOptions {
-  /** The expense or cost-of-sales account the goods go to, as QuickBooks names it. */
-  account: string;
-  /** Where freight goes; empty means the same account as the goods. */
-  freightAccount: string;
-  /** The tax code for lines that carry GST, and for lines that do not, as the company's QuickBooks spells them. */
-  taxCode: string;
-  taxFreeCode: string;
-  /** One row for the whole bill (and one for freight), or a row per line of the invoice. */
-  detail: "bill" | "lines";
-  /** Whether Line amount carries GST in it. QuickBooks asks the same on import. */
-  amounts: "exclusive" | "inclusive";
-  dateFormat: "dmy" | "mdy" | "ymd";
-  location: string;
+  /** The account the bill goes to, as QuickBooks names it: "Cost of sales:Stock Purchase". */
+  category: string;
 }
 
-export const DEFAULT_OPTIONS: QuickBooksOptions = {
-  account: "Purchases",
-  freightAccount: "Freight",
-  taxCode: "GST",
-  taxFreeCode: "GST free",
-  detail: "bill",
-  amounts: "exclusive",
-  dateFormat: "dmy",
-  location: "",
-};
+export const DEFAULT_OPTIONS: QuickBooksOptions = { category: "Cost of sales:Stock Purchase" };
 
-export const QUICKBOOKS_COLUMNS = ["BillNo", "Supplier", "BillDate", "DueDate", "Terms", "Location", "Memo", "Account", "LineDescription", "LineAmount", "LineTaxCode", "LineTaxAmount", "Currency"] as const;
+/** The shop's own bill sheet, heading for heading — "Amount " carries the trailing space it has there. */
+export const QUICKBOOKS_COLUMNS = ["Supplier", "Bill no.", "Bill date", "Due date", "Category", "Description", "Amount ", "GST"] as const;
 
 const GST_RATE = 0.1;
 const round = (n: number): number => Math.round(n * 100) / 100;
-const money = (n: number | null): string => (n === null || !Number.isFinite(n) ? "" : n.toFixed(2));
-
-/** A date as QuickBooks will read it. One it could not read stays as it was printed. */
-export function qbDate(value: string, format: QuickBooksOptions["dateFormat"]): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
-  if (!m) return value.trim();
-  const [, y, mo, d] = m;
-  return format === "dmy" ? `${d}/${mo}/${y}` : format === "mdy" ? `${mo}/${d}/${y}` : `${y}-${mo}-${d}`;
-}
 
 /** Days after the bill date the terms allow: "30 days", "Net 30", "EOM 60". Thirty when they do not say. */
 export function daysOf(terms: string): number {
@@ -148,48 +118,76 @@ export function checkBill(b: Bill): string[] {
   return [...out, ...b.unsure.map((u) => `Check: ${u}`)];
 }
 
-export interface QuickBooksRow { cells: string[]; bill: Bill }
-
-/** The bill's rows for the file. */
-export function quickBooksRows(b: Bill, o: QuickBooksOptions): QuickBooksRow[] {
-  const dueDate = b.dueDate.trim() || dueDateFrom(b.billDate, b.terms);
-  const gstOn = taxed(b);
-  const code = gstOn ? o.taxCode : o.taxFreeCode;
-  const head = [b.billNo.trim(), b.supplier.trim(), qbDate(b.billDate, o.dateFormat), qbDate(dueDate, o.dateFormat), b.terms.trim(), o.location.trim(), b.memo.trim()];
-  const row = (account: string, description: string, exAmount: number | null, gst: number | null): QuickBooksRow => {
-    const tax = exAmount === null ? null : gst !== null ? round(gst) : gstOn ? round(exAmount * GST_RATE) : 0;
-    const amount = exAmount === null ? null : o.amounts === "inclusive" ? round(exAmount + (tax ?? 0)) : exAmount;
-    return { cells: [...head, account, description, money(amount), code, money(tax), b.currency.trim() || "AUD"], bill: b };
-  };
-  const freightAccount = o.freightAccount.trim() || o.account;
-  const freight = freightOf(b);
-  const goods = goodsOf(b);
-  if (o.detail === "lines" && b.lines.length > 0) {
-    const rows = b.lines.filter((l) => l.kind !== "freight").map((l) => row(o.account, l.description.trim() || "Goods", lineAmount(l), l.gst));
-    // The GST the invoice prints, when the lines did not carry their own, shared out by amount so the file agrees with the invoice.
-    if (b.gst !== null && b.lines.every((l) => l.gst === null) && gstOn) {
-      const base = (goods ?? 0) + freight;
-      const share = base > 0 ? b.gst / base : GST_RATE;
-      rows.forEach((r, i) => { const l = b.lines.filter((x) => x.kind !== "freight")[i]; const a = lineAmount(l); r.cells[11] = money(a === null ? null : round(a * share)); if (o.amounts === "inclusive" && a !== null) r.cells[9] = money(round(a + round(a * share))); });
-    }
-    if (freight > 0) rows.push(row(freightAccount, "Freight", freight, b.gst !== null && gstOn ? round(freight * ((b.gst) / ((goods ?? 0) + freight))) : null));
-    return rows;
-  }
-  const gstOnGoods = b.gst === null ? null : freight > 0 && goods !== null && goods + freight > 0 ? round(b.gst * (goods / (goods + freight))) : round(b.gst);
-  const rows = [row(o.account, b.memo.trim() || `${b.supplier.trim()} invoice ${b.billNo.trim()}`.trim(), goods, gstOnGoods)];
-  if (freight > 0) rows.push(row(freightAccount, "Freight", freight, b.gst === null || gstOnGoods === null ? null : round(b.gst - gstOnGoods)));
-  return rows;
+/** The GST on the bill: as printed, or worked out from what the invoice says about GST. */
+export function gstOf(b: Bill): number {
+  if (b.gst !== null && Number.isFinite(b.gst)) return round(b.gst);
+  if (!taxed(b)) return 0;
+  if (b.gstTreatment === "INCLUSIVE" && b.total !== null) return round(b.total / 11);
+  return round(((goodsOf(b) ?? 0) + freightOf(b)) * GST_RATE);
 }
 
-/** Every bill as one file for QuickBooks. */
-export function quickBooksCsv(bills: Bill[], o: QuickBooksOptions): string {
-  const lines = [QUICKBOOKS_COLUMNS.join(","), ...bills.flatMap((b) => quickBooksRows(b, o).map((r) => r.cells.map(escapeCsvField).join(",")))];
-  return lines.join("\r\n") + "\r\n";
+/** What the bill comes to with GST in it: the amount payable as printed, or the goods, freight and GST added up. */
+export function amountOf(b: Bill): number | null {
+  if (b.total !== null && Number.isFinite(b.total)) return round(b.total);
+  const goods = goodsOf(b);
+  if (goods === null) return null;
+  return round(goods + freightOf(b) + (b.gstTreatment === "INCLUSIVE" ? 0 : gstOf(b)));
+}
+
+export interface QuickBooksRow {
+  supplier: string;
+  /** A plain number where the invoice's number is one, as the shop's sheet holds it. */
+  billNo: string | number;
+  /** YYYY-MM-DD, or as printed where it could not be read. */
+  billDate: string;
+  dueDate: string;
+  category: string;
+  description: string;
+  amount: number | null;
+  gst: number;
+}
+
+/** The bill as one row of the shop's sheet: the whole invoice, freight and all, GST in the amount. */
+export function quickBooksRow(b: Bill, o: QuickBooksOptions): QuickBooksRow {
+  const no = b.billNo.trim();
+  return {
+    supplier: b.supplier.trim(),
+    billNo: /^[1-9]\d{0,14}$/.test(no) ? Number(no) : no,
+    billDate: b.billDate.trim(),
+    dueDate: b.dueDate.trim() || dueDateFrom(b.billDate, b.terms),
+    category: o.category.trim() || DEFAULT_OPTIONS.category,
+    description: "",
+    amount: amountOf(b),
+    gst: gstOf(b),
+  };
+}
+
+const asDate = (value: string): Date | string => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  return m ? new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))) : value;
+};
+
+/** Every bill as the shop's QuickBooks sheet: one row each, dates as dates, money to two places. */
+export async function quickBooksWorkbook(bills: Bill[], o: QuickBooksOptions): Promise<ArrayBuffer> {
+  const { default: ExcelJS } = await import("exceljs");
+  const book = new ExcelJS.Workbook();
+  const sheet = book.addWorksheet("Sheet1");
+  sheet.columns = [17, 10, 10.71, 10.71, 26.29, 11.14, 10.71, 9.14].map((width) => ({ width }));
+  sheet.addRow([...QUICKBOOKS_COLUMNS]);
+  for (const b of bills) {
+    const r = quickBooksRow(b, o);
+    sheet.addRow([r.supplier, r.billNo, asDate(r.billDate), asDate(r.dueDate), r.category, r.description || null, r.amount, r.gst]);
+  }
+  sheet.eachRow((row, n) => {
+    for (const col of [3, 4]) if (row.getCell(col).value instanceof Date) row.getCell(col).numFmt = "mm-dd-yy";
+    for (const col of [7, 8]) if (n === 1 || typeof row.getCell(col).value === "number") row.getCell(col).numFmt = "0.00";
+  });
+  return (await book.xlsx.writeBuffer()) as ArrayBuffer;
 }
 
 /** A name for the file: the day it was made, and the one supplier where there is one. */
 export function billsFileName(bills: Bill[], today = new Date()): string {
   const suppliers = [...new Set(bills.map((b) => b.supplier.trim().split(/\s+/)[0] ?? "").filter(Boolean))];
   const who = suppliers.length === 1 ? `-${suppliers[0].toLowerCase().replace(/[^a-z0-9]+/g, "")}` : "";
-  return `quickbooks-bills${who}-${today.toISOString().slice(0, 10)}.csv`;
+  return `quickbooks-bills${who}-${today.toISOString().slice(0, 10)}.xlsx`;
 }

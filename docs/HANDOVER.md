@@ -88,19 +88,21 @@ bare reservoirs, do not.
 three-or-four-digit amount beside a line is the RRP, a percentage is a discount, struck lines are
 skipped, and every other remark is kept as a note on the line.
 
-**QuickBooks.** Bills go out in the standard QuickBooks Online bill-import layout (BillNo,
-Supplier, BillDate, DueDate, Terms, Location, Memo, Account, LineDescription, LineAmount,
-LineTaxCode, LineTaxAmount, Currency), one row per bill for the goods and one for freight, or one
-per invoice line. Account, tax codes, GST in or out of the amounts and the date order are set on
-the page and remembered in the browser. Defaults: Purchases, Freight, GST, GST free, amounts
-before GST, day/month/year. QuickBooks takes up to 100 bills per file; suppliers and accounts
-must exist there first.
+**QuickBooks.** The shop gave its own bill sheet (2026-10-13), and the file follows it exactly: an
+.xlsx, one row per bill, headings Supplier, Bill no., Bill date, Due date, Category, Description,
+"Amount " (with its trailing space), GST. The amount is the whole invoice with GST in it, freight
+included; GST is the figure printed on the invoice. Category defaults to "Cost of sales:Stock
+Purchase" and is remembered in the browser; Description is left empty. Dates are real dates, a
+plain-number bill number is written as a number. The reader (`bills/read-bill.ts`) finds the
+supplier, number, dates, total and GST with the API. QuickBooks takes up to 100 bills per file;
+suppliers and the category must exist there first.
 
 ## Decisions and history, newest first
 
 - 2026-10-13 Repository moved to `RubinAlp/Rubin`; the business has its own Vercel project, Neon
   database and Blob store, with the old data copied in. Settings gained "Copy from the old site"
   to bring the old Blob files across. Packs carry `backpacks`. The Burton RRP problem is fixed.
+  Bills for QuickBooks writes the shop's own one-row-per-bill sheet instead of the line layout.
 
 - 2026-10-12 Name matches confirmed before a delivery applies; order forms with a size column
   per line read the size. Packs filed on the Outdoor menu; Type spelling; retagging on Type change.

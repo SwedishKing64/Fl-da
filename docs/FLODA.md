@@ -67,10 +67,13 @@ that belonged to one shop.
   GST. The profile's currency and tax name are used in prompts and labels, and the tax rate is
   the one used in pricing, but a shop in two currencies is not supported.
 - The desktop installers are unsigned until there is a Windows code-signing certificate and an
-  Apple Developer account. Windows shows a SmartScreen notice. The Mac app is ad-hoc signed
-  (`desktop/after-pack.cjs`), so macOS says "unidentified developer" and right-click → Open gets
-  past it; without that signature Apple silicon reports the app as "damaged". If a copy from an
-  earlier build says damaged: `xattr -dr com.apple.quarantine /Applications/Flöda.app`.
+  Apple Developer account. Windows shows a SmartScreen notice. The Mac app is ad-hoc signed under
+  the hardened runtime with Electron's entitlements (`desktop/after-pack.cjs`,
+  `entitlements.mac.plist`), so macOS says "unidentified developer" and right-click → Open gets
+  past it. Without a signature Apple silicon reports the app as "damaged", and without the JIT
+  entitlement macOS 26 stops Electron as it starts (a trap in V8 before any of Flöda's code
+  runs). The bundle is `Floda.app` on disk and "Flöda" everywhere a person sees it. If a copy
+  from an earlier build says damaged: `xattr -dr com.apple.quarantine /Applications/Flöda.app`.
 - One shop per install. The conventions are process-wide state, which is right for an installed
   copy and for one hosted copy per shop, and wrong for several shops in one deployment.
 

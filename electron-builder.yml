@@ -2,7 +2,9 @@
 # makes the installer for the platform it runs on. The GitHub workflow in .github/workflows/desktop.yml
 # runs both on a Windows and a macOS runner and attaches the installers to a release.
 appId: ai.floda.app
-productName: Flöda
+# ASCII on disk (Floda.app, Floda.exe): a path with an umlaut tripped codesign on the build
+# runner. The name people see — in the Dock, the menu bar, the installer — is still Flöda.
+productName: Floda
 copyright: Flöda
 # No asar: the server's native modules (Prisma's engine, sharp) load from plain files, and there
 # is nothing here worth hiding from the person who installed it.
@@ -37,6 +39,7 @@ nsis:
   perMachine: false
   deleteAppDataOnUninstall: false
   shortcutName: Flöda
+  uninstallDisplayName: Flöda
 mac:
   target:
     - target: dmg
@@ -49,6 +52,9 @@ mac:
   identity: null
   hardenedRuntime: false
   gatekeeperAssess: false
+  extendInfo:
+    CFBundleDisplayName: Flöda
+    CFBundleName: Flöda
 linux:
   target:
     - AppImage

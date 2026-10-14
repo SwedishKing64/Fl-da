@@ -46,14 +46,6 @@ const JOBS = [
     goIcon: "📷",
     icon: "📸",
   },
-  {
-    href: "/bills",
-    title: "Enter invoices in QuickBooks",
-    text: "Supplier invoices read for the books — supplier, number, dates, GST, total — checked on screen and saved as one CSV that QuickBooks imports as bills.",
-    go: "Read the invoices",
-    goIcon: "🧾",
-    icon: "📒",
-  },
 ];
 
 export default async function DashboardPage() {
@@ -79,7 +71,7 @@ export default async function DashboardPage() {
   return (
     <>
       <PageHeader title="What would you like to do?" subtitle="Pick a job. Each one walks you through it a step at a time." />
-      <div className="mb-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="mb-8 grid gap-4 md:grid-cols-3">
         {JOBS.map((j, i) => (
           <Link key={j.href} href={j.href} className={`job lift rise rise-${i + 1}`}>
             <span className="job-ico" aria-hidden>{j.icon}</span>

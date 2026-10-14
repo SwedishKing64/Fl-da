@@ -1,8 +1,8 @@
 # Flöda
 
 Supplier paperwork in, shop-ready listings out. Flöda turns supplier invoices, order
-confirmations, spec sheets and photographed paperwork into ready-to-upload Shopify product CSVs,
-stock and price changes, and QuickBooks bills.
+confirmations, spec sheets and photographed paperwork into ready-to-upload Shopify product CSVs
+and stock and price changes.
 
 Flöda is the product made from Rubin, the tool built inside Alpsport, a Sydney ski and snowboard
 retailer; see `docs/FLODA.md` for the plan to make it work for any specialty retailer, and

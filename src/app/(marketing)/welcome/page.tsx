@@ -5,7 +5,7 @@ import "./welcome.css";
 
 export const metadata: Metadata = {
   title: "Flöda",
-  description: "Supplier paperwork in, shop-ready listings out. Flöda reads invoices, order forms, spec sheets and photographed paperwork into Shopify products, stock updates, price changes and QuickBooks bills.",
+  description: "Supplier paperwork in, shop-ready listings out. Flöda reads invoices, order forms, spec sheets and photographed paperwork into Shopify products, stock updates and price changes.",
 };
 
 /**
@@ -39,7 +39,7 @@ export default function WelcomePage() {
             <span className="eyebrow">For retailers on Shopify</span>
             <h1>Supplier paperwork in. <span className="grad">Shop-ready listings out.</span></h1>
             <p className="lede">
-              Flöda reads the invoices, order confirmations, spec sheets and scribbled-on order forms your suppliers send, and turns them into Shopify products, stock updates, price changes and QuickBooks bills. Every cell checked on screen before anything touches your store.
+              Flöda reads the invoices, order confirmations, spec sheets and scribbled-on order forms your suppliers send, and turns them into Shopify products, stock updates and price changes. Every cell checked on screen before anything touches your store.
             </p>
             <div className="ctas">
               <a href="#register" className="btn btn-meta">Register interest</a>
@@ -97,13 +97,12 @@ export default function WelcomePage() {
           <div className="wrap">
             <div className="head">
               <span className="eyebrow">What it does</span>
-              <h2>Four jobs a buying season is made of.</h2>
+              <h2>Three jobs a buying season is made of.</h2>
             </div>
-            <div className="grid two">
+            <div className="grid three">
               <div><span className="emo" aria-hidden>📦</span><h3>New products</h3><p className="soft">Invoices and order confirmations into ready-to-import listings.</p><ul><li>Reads CSV, Excel, PDF and photos</li><li>Joins the order form to the spec sheet and barcode list</li><li>Pulls descriptions, specs and colour-matched pictures from the brand&rsquo;s page</li><li>Pick which kinds of product to build today</li></ul></div>
               <div><span className="emo" aria-hidden>🏷️</span><h3>Prices and stock</h3><p className="soft">Changes to what you already sell, said in plain words.</p><ul><li>&ldquo;All 2026 jackets 30% off and into clearance&rdquo;</li><li>A delivery added to stock, matched line by line</li><li>Mount charges, cost changes, title years</li><li>Every cell that moves, shown first</li></ul></div>
               <div><span className="emo" aria-hidden>📸</span><h3>Tidy a document</h3><p className="soft">A photo of scribbled-on paperwork into a table you can check.</p><ul><li>Print and pen read together</li><li>Doubtful readings marked, with the other reading</li><li>Saved as a CSV the other jobs take</li></ul></div>
-              <div><span className="emo" aria-hidden>📒</span><h3>Bills for QuickBooks</h3><p className="soft">Supplier invoices read for the books.</p><ul><li>Supplier, number, dates, goods, freight, GST, total</li><li>Checked on screen, what doesn&rsquo;t add up said</li><li>One file QuickBooks Online imports as bills</li></ul></div>
             </div>
           </div>
         </section>

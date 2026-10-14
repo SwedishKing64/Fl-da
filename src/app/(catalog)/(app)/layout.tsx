@@ -17,7 +17,6 @@ const PAGES: PaletteItem[] = [
   { id: "p-new", label: "Start a new import", hint: "an invoice or order", group: "Pages", href: "/batches/new" },
   { id: "p-bulk", label: "Prices and stock", hint: "sales, clearance, deliveries", group: "Pages", href: "/bulk" },
   { id: "p-tidy", label: "Tidy a document", hint: "a photo into a table", group: "Pages", href: "/tidy" },
-  { id: "p-bills", label: "Bills for QuickBooks", hint: "invoices into a bills CSV", group: "Pages", href: "/bills" },
   { id: "p-pricing", label: "Price calculator", group: "Pages", href: "/pricing" },
   { id: "p-history", label: "History", group: "Pages", href: "/history" },
   { id: "p-settings", label: "Settings", group: "Pages", href: "/settings" },

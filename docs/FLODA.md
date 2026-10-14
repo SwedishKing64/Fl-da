@@ -24,7 +24,7 @@ holds only the supplier knowledge that is the same at every retailer.
 | Price endings and the recommended-retail pricing policy | A per-shop pricing setting |
 | Shopify's own tags (price bands, sizes, colours) | Already generic |
 | Supplier readers: Burton, Volkl, Head, Osprey, Swany and the rest | Stay shared; every shop that onboards improves them for all |
-| Document reading, delivery matching, bulk changes, QuickBooks bills | Already generic |
+| Document reading, delivery matching, bulk changes | Already generic |
 
 ## The plan, in order
 

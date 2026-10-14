@@ -1,0 +1,49 @@
+# How the desktop app is packaged. Run `npm run desktop:build` first; `npm run desktop:dist` then
+# makes the installer for the platform it runs on. The GitHub workflow in .github/workflows/desktop.yml
+# runs both on a Windows and a macOS runner and attaches the installers to a release.
+appId: ai.floda.app
+productName: Flöda
+copyright: Flöda
+# No asar: the server's native modules (Prisma's engine, sharp) load from plain files, and there
+# is nothing here worth hiding from the person who installed it.
+asar: false
+# The native modules come prebuilt for Node's ABI and run under Electron-as-Node unchanged.
+npmRebuild: false
+directories:
+  output: dist-desktop
+files:
+  - desktop/**
+  - package.json
+  - "!**/*.map"
+extraResources:
+  - from: .next/standalone
+    to: standalone
+    filter:
+      - "**/*"
+      - "!**/*.map"
+  - from: prisma/template.db
+    to: template.db
+  - from: desktop/floda.json
+    to: floda.json
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  artifactName: "Floda-Setup-${version}.${ext}"
+nsis:
+  oneClick: true
+  perMachine: false
+  deleteAppDataOnUninstall: false
+  shortcutName: Flöda
+mac:
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+  category: public.app-category.business
+  artifactName: "Floda-${version}-${arch}.${ext}"
+  # Unsigned until there is an Apple Developer account: the first open is right-click → Open.
+  identity: null
+linux:
+  target:
+    - AppImage
+  artifactName: "Floda-${version}.${ext}"

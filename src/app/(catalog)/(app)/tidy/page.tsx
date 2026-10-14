@@ -1,5 +1,5 @@
 import { requireUser } from "@/lib/catalog/auth";
-import { aiAvailable } from "@/lib/catalog/extract/ai";
+import { aiAvailable } from "@/lib/catalog/anthropic";
 import { PageHeader } from "@/app/(catalog)/ui";
 import { TidyPanel } from "./TidyPanel";
 

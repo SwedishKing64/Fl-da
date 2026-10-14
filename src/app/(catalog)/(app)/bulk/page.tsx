@@ -12,7 +12,7 @@ import { BulkPanel } from "./BulkPanel";
 export const maxDuration = 300;
 
 export default async function BulkPage() {
-  // The house tag names who built a product — 123abc-zb — so the page knows whose work this is.
+  // The marker tag names who built a product, so the page knows whose work this is.
   const user = await requireUser();
   const builtBy = initialsFrom(user.name || user.email);
   return (

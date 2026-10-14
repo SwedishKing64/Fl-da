@@ -12,9 +12,10 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
+import { anthropicClient, EXTRACTION_MODEL } from "./anthropic";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
-import { EXTRACTION_MODEL } from "./extract/ai";
+
 import { retrying } from "./api-errors";
 import type { CanonicalLineItem } from "./types";
 
@@ -36,8 +37,7 @@ A line matches a row only when it is the same MODEL. Rules:
 - A women's line is not a kids' model; a kids' line is not an adult model.
 - When two rows would fit equally, or none fits, answer with an empty code. A wrong match puts another product's description on this one, which is worse than no description.`;
 
-let client: Anthropic | null = null;
-const getClient = (): Anthropic => (client ??= new Anthropic({ maxRetries: 6 }));
+const getClient = (): Anthropic => anthropicClient(6);
 
 /** Send the question and hand back the model's JSON text. Swappable, so the checks can be tested. */
 type Ask = (content: string) => Promise<string | undefined>;

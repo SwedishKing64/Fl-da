@@ -58,7 +58,7 @@ export function BatchSettingsForm({ batch, suppliers, disabled }: { batch: Batch
           <option value="BRAND">One CSV per brand</option><option value="PRODUCT_TYPE">One CSV per product type</option><option value="NONE">Single CSV</option>
         </select>
       </Field>
-      <Field label="Built by" hint="Your initials. They become the suffix on the 123abc- tag, which says who built the listing — the catalogue has eleven of these and every export mixes several, so it cannot be worked out from the product.">
+      <Field label="Built by" hint="Your initials. They become the suffix on the shop's marker tag, which says who built the listing, so it cannot be worked out from the product.">
         <input value={form.builtBy} onChange={(e) => set("builtBy", e.target.value.replace(/[^A-Za-z]/g, "").slice(0, 3))} disabled={disabled} placeholder="js" className={INPUT} />
       </Field>
       <Field label="Notes"><textarea rows={2} value={form.notes} onChange={(e) => set("notes", e.target.value)} disabled={disabled} className={INPUT} /></Field>

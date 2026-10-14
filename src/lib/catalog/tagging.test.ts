@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { BACKCOUNTRY_SHELF_TAGS, isBackcountryShelf, isSkin, skinType, sectionsFor, productTypeFor, headingTags, spellHeading, BACKCOUNTRY_BINDING_TAG, BACKCOUNTRY_BOOT_TAG, BOARD_DISCIPLINES, crossShelfTags, DEFAULT_TAGGING, EVERGREEN_SEASON, SKI_DISCIPLINES, BAG_TAGS, MANUAL_SEASON, TOURING_SKI_TAG, bagTags, clothingContextTags, isSkinAccessory, bindingType, bootTags, disciplinesFor, snowboardBindingTags, needsBindingKind, TAG_SPELLING, generalTags, isHardgood, isManualTag, isNotOurs, isNotLearnable, isRuleGenerated, isShopifyGenerated, needsSectionChoice, normaliseGenders, seasonFor, slugTag, tagsFor, withoutGenerated, HOUSE_TAG_PREFIX, houseTagFor, initialsFrom } from "./tagging";
-import { ALPSPORT_TAXONOMY, resolveType } from "./taxonomy";
+import { backcountryShelfTags, isBackcountryShelf, isSkin, skinType, sectionsFor, productTypeFor, headingTags, spellHeading, BACKCOUNTRY_BINDING_TAG, BACKCOUNTRY_BOOT_TAG, BOARD_DISCIPLINES, crossShelfTags, DEFAULT_TAGGING, EVERGREEN_SEASON, SKI_DISCIPLINES, BAG_TAGS, MANUAL_SEASON, TOURING_SKI_TAG, bagTags, clothingContextTags, isSkinAccessory, bindingType, bootTags, disciplinesFor, snowboardBindingTags, needsBindingKind, TAG_SPELLING, generalTags, isHardgood, isManualTag, isNotOurs, isNotLearnable, isRuleGenerated, isShopifyGenerated, needsSectionChoice, normaliseGenders, seasonFor, slugTag, tagsFor, withoutGenerated, HOUSE_TAG_PREFIX, houseTagFor, initialsFrom } from "./tagging";
+import { SNOW_OUTDOOR_TAXONOMY, resolveType } from "./taxonomy";
 
 describe("the six general tags", () => {
   it("writes them in the shop's order: type, section, season, house, vendor, gender", () => {
@@ -777,7 +777,7 @@ describe("every backcountry shelf carries its section", () => {
    * the section tag that page never shows it.
    */
   it("covers every shelf in the Backcountry menu", () => {
-    const backcountry = ALPSPORT_TAXONOMY.find((s) => s.top === "Backcountry")!;
+    const backcountry = SNOW_OUTDOOR_TAXONOMY.find((s) => s.top === "Backcountry")!;
     for (const group of backcountry.groups) {
       for (const leaf of group.leaves) {
         const tags = generalTags({ type: leaf, vendor: "Test", genders: [] });
@@ -800,7 +800,7 @@ describe("every backcountry shelf carries its section", () => {
     expect(isBackcountryShelf("avalanche-equipment")).toBe(true);
     expect(isBackcountryShelf("back-country-gear")).toBe(true);
     // The set is keyed by slug, so either spelling of a shelf finds it.
-    expect(BACKCOUNTRY_SHELF_TAGS.has("back-country-gear")).toBe(true);
+    expect(backcountryShelfTags().has("back-country-gear")).toBe(true);
     expect(isBackcountryShelf("climbing skins")).toBe(true);
     expect(isBackcountryShelf("climbing-skins")).toBe(true);
   });

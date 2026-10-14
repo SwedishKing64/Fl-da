@@ -11,9 +11,10 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
+import { anthropicClient, EXTRACTION_MODEL, aiAvailable } from "./anthropic";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
-import { EXTRACTION_MODEL, aiAvailable } from "./extract/ai";
+
 import { retrying } from "./api-errors";
 
 const DirectivesSchema = z.object({
@@ -71,11 +72,7 @@ Only fill a field they actually asked for. Everything else stays empty, null or 
 
 Then write one short line back confirming what you will do, in their terms, so they can see you understood before the invoice is read. If they said something you cannot act on — a stock update, a change to one product, anything outside these fields — say so plainly in that line and say what they can do instead; never imply it will be done.`;
 
-let client: Anthropic | null = null;
-function getClient(): Anthropic {
-  if (!client) client = new Anthropic({ maxRetries: 6 }); // see getClient in adjust-plan.ts: two retries does not ride out "overloaded"
-  return client;
-}
+const getClient = (): Anthropic => anthropicClient(6);
 
 export function instructionsAvailable(): boolean {
   return aiAvailable();

@@ -26,7 +26,7 @@ export function Status({ aiConfigured, storage, latency, blobFrom, blobNames }: 
         </Alert>
       )}
       {storage === "disk" && <Alert tone="info">Files are stored on this machine&apos;s disk. Set APP_PUBLIC_URL so Shopify can fetch uploaded images.</Alert>}
-      <Alert tone={aiConfigured ? "success" : "warning"}>{aiConfigured ? "ANTHROPIC_API_KEY is set: PDFs, photos and the web lookup all work." : "ANTHROPIC_API_KEY is not set. Spreadsheets and CSVs still work — the shop's sale template is read without it — but PDFs, photos and the web lookup cannot run."}</Alert>
+      <Alert tone={aiConfigured ? "success" : "warning"}>{aiConfigured ? "An API key is in place: PDFs, photos and the web lookup all work." : "No API key is in place. Spreadsheets and CSVs still work, but PDFs, photos and the web lookup cannot run. Add one under Reading documents."}</Alert>
       {latency && <Alert tone={latency.ms < 40 ? "success" : latency.ms < 120 ? "info" : "warning"}>
         {`The database answers in about ${latency.ms}ms${latency.region ? `, from ${latency.region}` : ""}. `}
         {latency.ms < 40

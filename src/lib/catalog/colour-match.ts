@@ -12,10 +12,12 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
+import { retailer } from "./shop-profile";
+import { anthropicClient, EXTRACTION_MODEL, aiAvailable } from "./anthropic";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import sharp from "sharp";
-import { EXTRACTION_MODEL, aiAvailable } from "./extract/ai";
+
 
 /** The most pictures shown in one look. A page rarely has more that are the product's own. */
 export const MOST_PICTURES = 16;
@@ -32,7 +34,7 @@ const Verdict = z.object({
   note: z.string().describe("One short sentence: which colours the pictures show."),
 });
 
-const SYSTEM = `You are shown the pictures from one product's web page, for a ski and snowboard retailer in Australia who ordered the product in one colour and needs the pictures of that colour only. Look at each picture and say what colour the product in it is, and whether that is the colour ordered. A brand's colour names are what they are: "True Black" is black, "Bear Hug Brown" is brown, "Stout White" is off-white. A lifestyle shot counts by the colour of this product in it. Be plain about a different colour and say "unsure" rather than guess when you cannot see.`;
+const SYSTEM = () => `You are shown the pictures from one product's web page, for ${retailer()} who ordered the product in one colour and needs the pictures of that colour only. Look at each picture and say what colour the product in it is, and whether that is the colour ordered. A brand's colour names are what they are: "True Black" is black, "Bear Hug Brown" is brown, "Stout White" is off-white. A lifestyle shot counts by the colour of this product in it. Be plain about a different colour and say "unsure" rather than guess when you cannot see.`;
 
 export interface ColourLook {
   /** The indexes, in the order given, of the pictures to keep. */
@@ -45,8 +47,7 @@ export interface ColourLook {
   looked: boolean;
 }
 
-let client: Anthropic | null = null;
-const getClient = (): Anthropic => (client ??= new Anthropic({ maxRetries: 1 }));
+const getClient = (): Anthropic => anthropicClient(1);
 
 export type Looker = (system: string, content: Anthropic.MessageParam["content"]) => Promise<string | undefined>;
 const askModel: Looker = async (system, content) => {
@@ -98,7 +99,7 @@ export async function pickColour(pictures: Buffer[], colours: string[], title: s
 
   let text: string | undefined;
   try {
-    text = await ask(SYSTEM, content);
+    text = await ask(SYSTEM(), content);
   } catch {
     return keepAll(pictures.length);
   }

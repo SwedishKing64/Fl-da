@@ -1,8 +1,10 @@
 # Rubin — handover
 
-> This copy of the code is **Flöda**, the product being made from Rubin. Alpsport's own Rubin
-> lives in the business's repository and is not changed from here. See `FLODA.md` for what
-> differs and the plan. Everything below describes the code as it was when the two split.
+> This copy of the code is **Flöda**, the product made from Rubin. Alpsport's own Rubin lives in
+> the business's repository and is not changed from here. See `FLODA.md` for what Flöda is and
+> what differs. Everything below describes what the shop told us and decided while Rubin was
+> built; in Flöda those conventions are the snow-and-outdoor rules pack, and the shop's own are
+> learned from its export.
 
 Read this first. It is what a new Claude session (or a new developer) needs to know that is not in
 the code: what the shop is, what it asked for, the rules it told us, what was decided, and what is
@@ -10,18 +12,18 @@ still open. The code is the source of truth for behaviour; this is the source of
 
 Rubin is an internal tool for Alpsport, a ski and snowboard retailer in Sydney, run by Justin. It
 turns supplier paperwork into Shopify product CSVs, applies price and stock changes to Shopify
-exports, tidies photographed paperwork into tables, and writes supplier invoices out as bills for
-QuickBooks Online. The shop imports the CSVs into Shopify by hand; nothing here talks to the store.
+exports, and tidies photographed paperwork into tables. The shop imports the CSVs into Shopify by
+hand; nothing here talks to the store. (Rubin also writes supplier invoices out as bills for
+QuickBooks Online; Flöda does not — that section was taken out of this copy on 2026-10-14.)
 
 ## The pages
 
 | Menu | Route | What it does |
 | --- | --- | --- |
-| Home | `/` | Three or four job cards, "carry on where you left off", numbers and activity folded away. |
+| Home | `/` | Three job cards, "carry on where you left off", numbers and activity folded away. |
 | New products | `/batches` | An import batch: upload invoices, order forms, spec sheets and photos; chat the instructions; build products; review and price; export one CSV per brand or kind. |
 | Prices and stock | `/bulk` | Load Shopify exports, say a change in words (a sale, a clearance, a mount charge, a cost change) or add a delivery (order form plus spec sheet plus invoices), check every changed cell, download the updated file, or only some kinds of product from it. |
 | Tidy a document | `/tidy` | A photo or PDF of scribbled-on paperwork read into an editable table and saved as a CSV the other pages take. |
-| Bills for QuickBooks | `/bills` | Supplier invoices read for the books and written as one bill-import CSV. |
 | Price calculator | `/pricing` | The markup and margin rules, GST and FX. |
 | History | `/history` | The audit log. |
 | Settings | `/settings` | Users, API key, rules. |
@@ -92,32 +94,9 @@ bare reservoirs, do not.
 three-or-four-digit amount beside a line is the RRP, a percentage is a discount, struck lines are
 skipped, and every other remark is kept as a note on the line.
 
-**QuickBooks.** The shop gave its own bill sheet (2026-10-13), and the file follows it exactly: an
-.xlsx, one row per bill, headings Supplier, Bill no., Bill date, Due date, Category, Description,
-"Amount " (with its trailing space), GST. The amount is the whole invoice with GST in it, freight
-included; GST is the figure printed on the invoice. Category defaults to "Cost of sales:Stock
-Purchase" and is remembered in the browser; Description is left empty. Dates are real dates, a
-plain-number bill number is written as a number. The reader (`bills/read-bill.ts`) finds the
-supplier, number, dates, total and GST with the API. QuickBooks takes up to 100 bills per file;
-suppliers and the category must exist there first.
-
-**Supplier names on bills.** The shop asked (2026-10-14) that each bill carry the supplier's name
-as its QuickBooks supplier list has it, not as the invoice prints it. The list is QuickBooks'
-"Supplier Contact List" export, loaded on the Bills page and kept in AppSetting
-`quickbooks.suppliers` — names and the "Full name" column only, never phones, emails or
-addresses, and never committed. `bills/suppliers.ts` matches ignoring Pty Ltd, Limited,
-Australia, punctuation and one-letter slips in long words ("Burton Snowboards Australia Pty Ltd"
-→ "Burton Australia Pty Ltd"); a one-word list name only matches an invoice name that starts with
-it; a tie it cannot break is offered as a choice. A supplier not on the list is flagged, since
-QuickBooks would create a new supplier for it.
-
-**A batch of invoices in one PDF.** The shop scans a day's invoices into one PDF (65MB at
-600dpi, several suppliers, some invoices several pages). A PDF of more than one page, or one over
-the upload limit, is drawn page by page in the browser (`pdf-pages.ts`, at the 1568px the API
-reads at, a few hundred KB each), each page read on its own (`readBillPage`), and the pages put
-back together by `bills/split.ts`: same invoice number, "Page 2 of 3", or a page with no number
-that is not a first page carries on the invoice before; a new number or a first page starts the
-next. Totals come from the last page that prints them. One row per invoice in the sheet.
+**QuickBooks (Rubin only).** Rubin reads supplier invoices into QuickBooks bill sheets. Flöda
+removed that section; the rules the shop gave for it (its one-row-per-bill sheet, supplier names
+from its QuickBooks list, batch PDFs split into one bill per invoice) live in Rubin's handover.
 
 ## Decisions and history, newest first
 
@@ -146,17 +125,14 @@ next. Totals come from the last page that prints them. One row per invoice in th
 
 Open at handover:
 
-- Files and hosted pictures still live in the old personal Vercel project's Blob store until
-  "Copy from the old site" is run on Settings; then the old project, its Neon database and Blob
-  store are deleted and the personal API key revoked.
-- The first real invoice through Bills for QuickBooks, and the first Burton board page read for
-  specs, were not run with a live API key in the development environment; check them.
+- The first Burton board page read for specs was not run with a live API key in the development
+  environment; check it.
 
 ## Working on it
 
-- `npm run demo` starts the app on :3000 with a SQLite database and a demo login
-  (justin@alpsport.test / password123; a fresh database shows the setup form first). Start it in
-  the background; the first page load is slow.
+- `npm run demo` starts the app on :3000 with a SQLite database; a fresh database opens on the
+  setup walk-through. `npm run catalog:seed -- --admin … --snow` makes an account and switches
+  the snow pack on without it. Start it in the background; the first page load is slow.
 - `npx vitest run` is the gate before any commit. Some tests read real supplier files from the
   developer's uploads folder and fail with ENOENT when those files are absent; that is
   environmental, not a regression. Anything else failing is.
@@ -175,9 +151,9 @@ Open at handover:
 | Delivery to an export | `src/lib/catalog/delivery.ts`, `reconcile.ts`, `reference-match.ts`, `specs.ts` |
 | Kinds of product | `src/lib/catalog/kinds.ts`, `instructions.ts` (`types`, `typesSeen`), `narrow-export.ts` |
 | Pages and pictures | `src/lib/catalog/extract/page.ts`, `shopify-store.ts`, `pictures.ts`, `colour-match.ts` |
-| Categorising and tagging | `src/lib/catalog/grouping.ts`, `categorize.ts`, `accessories.ts`, `packs.ts`, `product-tags.ts`, `tagging.ts`, `taxonomy.ts`, `tag-spelling.ts` |
-| Invoice reading | `src/lib/catalog/invoice.ts` (spreadsheets), `extract/ai.ts` (PDF and photo), `extract/transcribe.ts` (Tidy), `bills/read-bill.ts` (QuickBooks) |
-| QuickBooks file | `src/lib/catalog/bills/quickbooks.ts` |
+| Categorising and tagging | `src/lib/catalog/grouping.ts`, `categorize.ts`, `accessories.ts`, `packs.ts`, `product-tags.ts`, `tagging.ts`, `taxonomy.ts` (the vocabulary in force), `tag-spelling.ts`, `learn.ts` (from the shop's export), `shop-profile.ts` |
+| Setup, clients, licences, desktop | `src/app/(catalog)/(setup)/setup/`, `(app)/clients/`, `src/lib/catalog/licence.ts`, `licence-store.ts`, `desktop/`, `scripts/desktop-build.mjs` |
+| Invoice reading | `src/lib/catalog/invoice.ts` (spreadsheets), `extract/ai.ts` (PDF and photo), `extract/transcribe.ts` (Tidy) |
 | Prices and stock page | `src/app/(catalog)/(app)/bulk/BulkPanel.tsx` |
 | Batch page | `src/app/(catalog)/(app)/batches/[id]/` (`BuildList`, `TypeList`, `LinksPanel`) |
 | Theme | `src/app/globals.css`, `src/app/(catalog)/ui.tsx`, `(app)/NavLinks.tsx`, `(app)/page.tsx` |

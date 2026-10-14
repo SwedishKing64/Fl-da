@@ -14,9 +14,10 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
+import { anthropicClient, EXTRACTION_MODEL, aiAvailable } from "../anthropic";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
-import { EXTRACTION_MODEL, aiAvailable } from "./ai";
+
 import { retrying } from "../api-errors";
 import { escapeCsvField } from "../csv";
 
@@ -59,8 +60,7 @@ Rules:
 - A quantity written in pen that replaces a printed one is the quantity. A line struck through in pen is still transcribed, with "struck out" in notes.
 - Never invent a price, a code or a size that is not on the page.`;
 
-let client: Anthropic | null = null;
-const getClient = (): Anthropic => (client ??= new Anthropic({ maxRetries: 2 }));
+const getClient = (): Anthropic => anthropicClient(2);
 const LOOK_MS = 240_000;
 
 export type Page = { kind: "image"; mediaType: "image/jpeg" | "image/png" | "image/gif" | "image/webp"; data: Buffer } | { kind: "pdf"; data: Buffer };

@@ -1,7 +1,8 @@
 import { extractCsv, extractXlsx } from "./tabular";
 import { extractPdfText } from "./pdf";
 import { extractHeuristic } from "./heuristic";
-import { aiAvailable, aiDocumentMeta, aiExtractionToTable, extractFromImage, extractFromPdf, extractFromText, type DocumentType } from "./ai";
+import { aiAvailable } from "../anthropic";
+import { aiDocumentMeta, aiExtractionToTable, extractFromImage, extractFromPdf, extractFromText, type DocumentType } from "./ai";
 import type { ExtractedTable } from "./types";
 
 export type { ExtractedTable } from "./types";

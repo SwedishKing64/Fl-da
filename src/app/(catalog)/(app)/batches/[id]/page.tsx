@@ -1,3 +1,4 @@
+import { aiAvailable } from "@/lib/catalog/anthropic";
 import { notFound } from "next/navigation";
 import { prisma, parseJson } from "@/lib/catalog/db";
 import { Badge, Card, Details, Empty, LinkButton, PageHeader, fmtDate, statusTone } from "@/app/(catalog)/ui";
@@ -72,17 +73,17 @@ async function renderBatchPage(props: PageProps<"/batches/[id]">) {
       <Steps batchId={id} current="upload" status={batch.status} />
       <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <div className="min-w-0 space-y-6">
-          {batch._count.products > 0 && <BuildCheck batchId={id} needed={!reviewed} aiEnabled={Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN)} locked={locked} />}
+          {batch._count.products > 0 && <BuildCheck batchId={id} needed={!reviewed} aiEnabled={aiAvailable()} locked={locked} />}
           <InstructionChat
             batchId={id}
             locked={locked}
-            aiEnabled={Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN)}
+            aiEnabled={aiAvailable()}
             directives={describeDirectives(parseDirectives(batch.directives))}
             allNew={allNew}
             initial={batch.instructions.map((m) => ({ id: m.id, role: m.role, body: m.body, createdAt: m.createdAt.toISOString() }))}
           />
           <Card title="Supplier files">
-            {locked ? <Empty>This batch has been exported; files are locked for audit.</Empty> : <UploadPanel batchId={id} aiEnabled={settings ? Boolean(process.env.ANTHROPIC_API_KEY) : false} hasProducts={batch._count.products > 0} productCount={batch._count.products} reading={batch.files.filter((f) => f.extractionStatus === "PENDING" && !stalled(f)).length} pendingSince={batch.files.filter((f) => f.extractionStatus === "PENDING" && !stalled(f)).map(startedAt)} allNew={allNew} buildNow={batch._count.products === 0 && !batch.files.some((f) => f.extractionStatus === "PENDING" && !stalled(f)) && batch.files.some((f) => f.extractionStatus === "DONE" && !["SPEC_SHEET", "PRODUCT_PHOTO", "SHOP_EXPORT"].includes(f.detectedKind ?? f.kind))} retryable={batch.files.filter((f) => !locked && (stalled(f) || (f.extractionStatus === "FAILED" && ranOutOfTime(f.extractionError)))).map((f) => ({ id: f.id, filename: f.filename }))} />}
+            {locked ? <Empty>This batch has been exported; files are locked for audit.</Empty> : <UploadPanel batchId={id} aiEnabled={settings ? aiAvailable() : false} hasProducts={batch._count.products > 0} productCount={batch._count.products} reading={batch.files.filter((f) => f.extractionStatus === "PENDING" && !stalled(f)).length} pendingSince={batch.files.filter((f) => f.extractionStatus === "PENDING" && !stalled(f)).map(startedAt)} allNew={allNew} buildNow={batch._count.products === 0 && !batch.files.some((f) => f.extractionStatus === "PENDING" && !stalled(f)) && batch.files.some((f) => f.extractionStatus === "DONE" && !["SPEC_SHEET", "PRODUCT_PHOTO", "SHOP_EXPORT"].includes(f.detectedKind ?? f.kind))} retryable={batch.files.filter((f) => !locked && (stalled(f) || (f.extractionStatus === "FAILED" && ranOutOfTime(f.extractionError)))).map((f) => ({ id: f.id, filename: f.filename }))} />}
             {batch.files.length > 0 && (
               <table className="mt-4 w-full text-sm">
                 <thead className="text-left text-xs text-[var(--ink-soft)]"><tr><th className="py-1">File</th><th>Kind</th><th>Extraction</th><th className="text-right">Rows</th><th /></tr></thead>

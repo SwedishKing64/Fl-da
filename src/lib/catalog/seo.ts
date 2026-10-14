@@ -1,11 +1,13 @@
 // AI-written SEO titles/descriptions and product copy, with a deterministic template fallback.
 
 import Anthropic from "@anthropic-ai/sdk";
+import { englishVariant, retailer, shopName } from "./shop-profile";
+import { anthropicClient, EXTRACTION_MODEL, aiAvailable } from "./anthropic";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { prisma, parseJson } from "./db";
 import { getSettings } from "./settings";
-import { aiAvailable, EXTRACTION_MODEL } from "./extract/ai";
+
 import { templateGuidance, type ProductTemplateLike } from "./templates";
 
 const SeoSchema = z.object({
@@ -14,11 +16,7 @@ const SeoSchema = z.object({
   bodyHtml: z.string().describe("2-3 short paragraphs of product copy as simple HTML (<p>, <ul>, <li>) using only facts from the input"),
 });
 
-let client: Anthropic | null = null;
-function getClient(): Anthropic {
-  if (!client) client = new Anthropic({ maxRetries: 6 }); // see getClient in adjust-plan.ts: two retries does not ride out "overloaded"
-  return client;
-}
+const getClient = (): Anthropic => anthropicClient(6);
 
 export interface SeoInput {
   title: string;
@@ -35,10 +33,10 @@ export interface SeoInput {
   guidance?: string;
 }
 
-export function templateSeo(input: SeoInput, shopName = "Sydney Ski Shop"): z.infer<typeof SeoSchema> {
+export function templateSeo(input: SeoInput, shop = shopName()): z.infer<typeof SeoSchema> {
   const specs = Object.entries(input.metafields).filter(([, v]) => v).map(([k, v]) => `${k.replace(/_/g, " ")}: ${v}`);
-  const seoTitle = `${input.title} | ${shopName}`.slice(0, 60);
-  const seoDescription = `Shop the ${input.title}${input.productType ? ` (${input.productType})` : ""} from ${input.vendor || "top brands"}${input.options.length ? ` in ${input.options.join(" and ")}` : ""}. Expert advice and fast shipping from ${shopName}.`.slice(0, 155);
+  const seoTitle = `${input.title} | ${shop}`.slice(0, 60);
+  const seoDescription = `Shop the ${input.title}${input.productType ? ` (${input.productType})` : ""} from ${input.vendor || "top brands"}${input.options.length ? ` in ${input.options.join(" and ")}` : ""}. Expert advice and fast shipping from ${shop}.`.slice(0, 155);
   const bodyHtml = [
     input.description ? `<p>${escapeHtml(input.description)}</p>` : `<p>${escapeHtml(input.title)}${input.vendor ? ` by ${escapeHtml(input.vendor)}` : ""}.</p>`,
     specs.length ? `<ul>${specs.map((s) => `<li>${escapeHtml(s)}</li>`).join("")}</ul>` : "",
@@ -58,7 +56,7 @@ export async function generateSeo(input: SeoInput): Promise<{ result: z.infer<ty
       model: EXTRACTION_MODEL,
       max_tokens: 4000,
       system: [
-        `You write product copy for an Australian ski and snowboard retailer's Shopify store. Tone: ${settings.seoTone}. Australian English. Use only facts given; never invent specs. seoTitle max 60 characters, seoDescription 120-155 characters.`,
+        `You write product copy for the Shopify store of ${retailer()}. Tone: ${settings.seoTone}. ${englishVariant()}. Use only facts given; never invent specs. seoTitle max 60 characters, seoDescription 120-155 characters.`,
         // The shop's own written conventions outrank the generic instructions above, but never
         // licence inventing a spec that is not in the input.
         input.guidance?.trim()

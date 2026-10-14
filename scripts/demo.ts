@@ -1,5 +1,5 @@
-// One-command local demo: creates the SQLite database, loads default rules, starts the dev
-// server. Usage: `npm run demo` then open http://localhost:3000/catalog
+// One-command local run: creates the SQLite database and starts the dev server. The app opens on
+// its setup walk-through the first time. Usage: `npm run demo` then open http://localhost:3000
 import { spawnSync, spawn } from "node:child_process";
 
 const env = {
@@ -21,7 +21,6 @@ function run(args: string[]) {
 console.log("[demo] preparing database…");
 run(["prisma", "generate"]);
 run(["prisma", "db", "push", "--skip-generate"]);
-run(["tsx", "prisma/seed.ts"]);
-console.log("\n[demo] starting dev server → http://localhost:3000/catalog\n");
+console.log("\n[demo] starting dev server → http://localhost:3000\n");
 const dev = spawn(npx, ["next", "dev", "-p", process.env.PORT || "3000"], { stdio: "inherit", env, shell: process.platform === "win32" });
 dev.on("exit", (code) => process.exit(code ?? 0));

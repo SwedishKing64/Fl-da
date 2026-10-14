@@ -2,6 +2,9 @@ import Link from "next/link";
 import { prisma, parseJson } from "@/lib/catalog/db";
 import { Badge, Card, Details, Empty, PageHeader, Stat, fmtDate, statusTone } from "@/app/(catalog)/ui";
 import type { ReviewSummary } from "@/lib/catalog/review-types";
+import { apiKeySource } from "@/lib/catalog/anthropic";
+import { getLearnedVocabulary, getShopProfile } from "@/lib/catalog/shop-profile";
+import { GettingStarted } from "./GettingStarted";
 
 /**
  * Home. Three jobs the shop comes here to do, each a card you press, and the batches on the way
@@ -46,24 +49,19 @@ const JOBS = [
     goIcon: "📷",
     icon: "📸",
   },
-  {
-    href: "/bills",
-    title: "Enter invoices in QuickBooks",
-    text: "Supplier invoices read for the books — supplier, number, dates, GST, total — checked on screen and saved as one CSV that QuickBooks imports as bills.",
-    go: "Read the invoices",
-    goIcon: "🧾",
-    icon: "📒",
-  },
 ];
 
 export default async function DashboardPage() {
-  const [batches, recent, exported, audit] = await Promise.all([
+  const [batches, recent, exported, audit, profile, learned, staff] = await Promise.all([
     prisma.importBatch.count(),
     prisma.importBatch.findMany({ orderBy: { updatedAt: "desc" }, take: 8, include: { supplier: true, _count: { select: { products: true, files: true } } } }),
     // Capped: this reads a JSON blob per batch, and a shop two seasons in has hundreds. The
     // figures below it are a headline, not an accounting record.
     prisma.importBatch.findMany({ where: { status: { in: ["EXPORTED", "PUSHED"] } }, select: { summary: true }, orderBy: { exportedAt: "desc" }, take: 200 }),
     prisma.auditLog.findMany({ orderBy: { createdAt: "desc" }, take: 8, include: { user: true, batch: true } }),
+    getShopProfile(),
+    getLearnedVocabulary(),
+    prisma.user.count(),
   ]);
 
   let products = 0, variants = 0, units = 0;
@@ -79,7 +77,8 @@ export default async function DashboardPage() {
   return (
     <>
       <PageHeader title="What would you like to do?" subtitle="Pick a job. Each one walks you through it a step at a time." />
-      <div className="mb-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <GettingStarted profile={profile} learned={Boolean(learned)} aiReady={apiKeySource() !== "none"} staff={staff} imports={batches} />
+      <div className="mb-8 grid gap-4 md:grid-cols-3">
         {JOBS.map((j, i) => (
           <Link key={j.href} href={j.href} className={`job lift rise rise-${i + 1}`}>
             <span className="job-ico" aria-hidden>{j.icon}</span>

@@ -11,9 +11,11 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
+import { retailer } from "../shop-profile";
+import { anthropicClient, EXTRACTION_MODEL, aiAvailable } from "../anthropic";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
-import { EXTRACTION_MODEL, aiAvailable } from "./ai";
+
 import { retrying } from "../api-errors";
 import { cleanProductUrl, type PageDetails } from "../page-types";
 import { fetchShopifyProduct, storeAsHtml, storePictures } from "./shopify-store";
@@ -268,7 +270,7 @@ const ReadSchema = z.object({
   note: z.string().describe("One short sentence for the person: what the page gave and what it did not, and, where a colour was ordered, whether the pictures are of that colour."),
 });
 
-const SYSTEM = `You read one product's web page for a ski and snowboard retailer in Australia who is building a Shopify listing, and report what the page says about the product.
+const SYSTEM = () => `You read one product's web page for ${retailer()} who is building a Shopify listing, and report what the page says about the product.
 
 You are given the product the retailer ordered, then the page: its title, what it declares about itself, its visible text with headings and lists kept as lines, and a numbered list of the pictures on it.
 
@@ -276,8 +278,7 @@ Report only what the page carries. Quote the manufacturer's wording; do not para
 
 If the page is not for this product, say so with confident false and report nothing from it that you would not stand behind.`;
 
-let client: Anthropic | null = null;
-const getClient = (): Anthropic => (client ??= new Anthropic({ maxRetries: 6 }));
+const getClient = (): Anthropic => anthropicClient(6);
 
 /** A read's time limit: when it must be done by, and what that leaves now. */
 export interface Deadline { at: number }
@@ -350,7 +351,7 @@ export async function extractFromPage(d: Distilled, hint: PageHint, ask: AskPage
     ...d.images.map((c, i) => `${i + 1}. ${c.url}${c.alt ? `  — ${c.alt}` : ""}`),
   ].filter((l) => l !== "").join("\n");
 
-  const text = await ask(SYSTEM, content, by);
+  const text = await ask(SYSTEM(), content, by);
   if (!text) return basicDetails(d, "The page could not be read by the model, so only what it declares about itself was taken.");
   // What the model is asked for has every field; what it sends back is taken even when a field is missing.
   const parsed = ReadSchema.extend({ pictureColour: z.string().optional() }).safeParse(JSON.parse(text));
@@ -383,7 +384,7 @@ export async function extractFromPage(d: Distilled, hint: PageHint, ask: AskPage
  * through. It returns the page's words and not its picture list, so what comes back is the
  * description and the details; the pictures have to be added in the grid.
  */
-const FETCH_SYSTEM = `You read one product's web page for a ski and snowboard retailer in Australia who is building a Shopify listing. Fetch the page you are given and report what it says about the product.
+const FETCH_SYSTEM = () => `You read one product's web page for ${retailer()} who is building a Shopify listing. Fetch the page you are given and report what it says about the product.
 
 Quote the manufacturer's wording; do not paraphrase it and do not write marketing copy of your own. The details section is often headed "Details", "Specs", "Technical specifications", "Features" or "Product information": report its lines exactly as written, keeping each label with its value. Say plainly if the page could not be fetched, if it is not for this product, or if it is a different model year.`;
 
@@ -394,7 +395,7 @@ export async function readViaModelFetch(link: string, hint: PageHint, by: Deadli
   const research = await retrying(() => getClient().messages.stream({
     model: EXTRACTION_MODEL,
     max_tokens: 8000,
-    system: FETCH_SYSTEM,
+    system: FETCH_SYSTEM(),
     thinking: { type: "adaptive" },
     output_config: { effort: "low" },
     tools: [{ type: "web_fetch_20260209", name: "web_fetch", max_uses: 2 }],

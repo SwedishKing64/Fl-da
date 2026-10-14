@@ -1,8 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Ship the SQLite template used when no database is configured (see scripts/vercel-build.mjs).
-  outputFileTracingIncludes: { "/*": ["prisma/template.db"] },
+  // The desktop app runs the server as a folder of its own (see scripts/desktop-build.mjs).
+  ...(process.env.FLODA_DESKTOP_BUILD ? { output: "standalone" as const } : {}),
+  // Ship the SQLite template used when no database is configured (see scripts/vercel-build.mjs),
+  // and Prisma's engine, which the tracer does not always follow.
+  outputFileTracingIncludes: { "/*": ["prisma/template.db", "node_modules/.prisma/client/*.node", "node_modules/.prisma/client/schema.prisma"] },
   experimental: {
     serverActions: {
       /**

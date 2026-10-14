@@ -3,7 +3,7 @@
 import { prisma } from "./db";
 import { ACCESSORIES_PATTERN, BINDINGS_PATTERN, DEFAULT_CATEGORY_RULES, OLD_ACCESSORIES_PATTERN, OLD_BINDINGS_PATTERN } from "./categorize";
 import { DEFAULT_TAG_RULES } from "./rules";
-import { isValidType } from "./taxonomy";
+import { activeConventions, isValidType } from "./taxonomy";
 
 /**
  * No pricing rules. The price is the supplier's recommended retail, so there is nothing for a
@@ -154,6 +154,9 @@ export async function repairCategoryRules(): Promise<number> {
 }
 
 async function repairCategoryRulesNow(): Promise<number> {
+  // The defaults are the snow-and-outdoor pack's. A shop on a blank vocabulary writes its own
+  // rules, and nothing here knows better than it does.
+  if (activeConventions().pack !== "snow-outdoor") return 0;
   // A bindings rule still on the old default learns the binding model names. One somebody has
   // edited is theirs and is left alone.
   await prisma.categoryRule.updateMany({ where: { category: "bindings", pattern: OLD_BINDINGS_PATTERN }, data: { pattern: BINDINGS_PATTERN } }).catch(() => undefined);
@@ -181,4 +184,25 @@ async function repairCategoryRulesNow(): Promise<number> {
     }
   }
   return repaired;
+}
+
+/**
+ * Take the seeded rules back out, when the shop switches the snow-and-outdoor pack off.
+ *
+ * Only rows that still read exactly as seeded are removed: a rule someone has edited is theirs,
+ * whatever it started as.
+ */
+export async function unseedDefaults(): Promise<{ categoryRules: number; tagRules: number }> {
+  let categoryRules = 0;
+  for (const r of DEFAULT_CATEGORY_RULES) {
+    const { count } = await prisma.categoryRule.deleteMany({ where: { category: r.category, pattern: r.pattern, productType: r.productType } });
+    categoryRules += count;
+  }
+  let tagRules = 0;
+  for (const r of DEFAULT_TAG_RULES) {
+    const { count } = await prisma.tagRule.deleteMany({ where: { name: r.name, pattern: r.pattern } });
+    tagRules += count;
+  }
+  once.clear();
+  return { categoryRules, tagRules };
 }

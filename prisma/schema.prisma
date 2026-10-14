@@ -499,3 +499,27 @@ model ShopListing {
 
   @@index([vendor])
 }
+
+// ---------------------------------------------------------------------------
+// Clients of Flöda itself (only on the vendor's own deployment; see licence.ts)
+// ---------------------------------------------------------------------------
+
+/// A retailer Flöda is sold to: who they are, what they are on, and the key their copy runs under.
+model Client {
+  id          String    @id @default(cuid())
+  name        String
+  contact     String    @default("")
+  email       String    @default("")
+  plan        String    @default("founding") // founding | standard | trial
+  status      String    @default("TRIAL") // TRIAL | ACTIVE | PAUSED | ENDED
+  licenceKey  String    @unique
+  notes       String    @default("")
+  expiresAt   DateTime?
+  /// What the client's copy last told us when it checked in.
+  lastSeenAt  DateTime?
+  lastVersion String    @default("")
+  lastInstall String    @default("") // the install's own id, so two copies on one key show up
+  checkIns    Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}

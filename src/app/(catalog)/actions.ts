@@ -22,7 +22,7 @@ import { readInvoiceGrids, type InvoiceRead } from "@/lib/catalog/invoice";
 import { describeApiError } from "@/lib/catalog/api-errors";
 import type { CanonicalLineItem } from "@/lib/catalog/types";
 import { MAX_UPLOAD, readableSize } from "@/lib/catalog/image-size";
-import { aiAvailable } from "@/lib/catalog/extract/ai";
+import { aiAvailable } from "@/lib/catalog/anthropic";
 import { initialsFrom } from "@/lib/catalog/tagging";
 import { answerFeedback, feedbackAvailable, withRule, type FeedbackTurn } from "@/lib/catalog/feedback";
 import { describeDirectives, instructionsAvailable, parseDirectives, readInstructions, NO_DIRECTIVES } from "@/lib/catalog/instructions";
@@ -104,12 +104,12 @@ export async function setupAction(_prev: ActionResult | null, formData: FormData
   try {
     const data = schema.parse({ name: formData.get("name"), email: String(formData.get("email") ?? "").trim().toLowerCase(), password: formData.get("password") });
     const user = await prisma.user.create({ data: { name: data.name, email: data.email, passwordHash: hashPassword(data.password), role: "ADMIN" } });
-    await seedDefaults();
     await createSession(user.id);
   } catch (err) {
     return fail(err);
   }
-  redirect("/");
+  // The rules are seeded when the shop says what it sells, on the next step of setup.
+  redirect("/setup");
 }
 
 export async function logoutAction(): Promise<void> {
@@ -154,7 +154,7 @@ const batchSchema = z.object({
   freightTotalAud: z.coerce.number().min(0).default(0),
   freightMode: z.enum(["PER_UNIT", "BY_VALUE"]).default("PER_UNIT"),
   splitExportBy: z.enum(["NONE", "BRAND", "PRODUCT_TYPE"]).default("BRAND"),
-  // Letters only: it becomes the suffix on the 123abc- tag, and the catalogue writes it lowercase.
+  // Letters only: it becomes the suffix on the shop's marker tag, and the catalogue writes it lowercase.
   builtBy: z.string().regex(/^[A-Za-z]{0,3}$/, "Initials only, up to three letters").optional(),
   notes: z.string().optional(),
 });
@@ -177,7 +177,7 @@ export async function createBatchAction(_prev: ActionResult | null, formData: Fo
     const settings = await getSettings();
     const fx = data.currency === "AUD" ? 1 : data.fxRateToAud !== 1 ? data.fxRateToAud : settings.fxRates[data.currency] ?? 1;
     const batch = await prisma.importBatch.create({
-      // The 123abc- marker names whoever built the listings, so it starts as the person creating the
+      // The marker tag names whoever built the listings, so it starts as the person creating the
       // batch and can be changed in batch settings when someone builds on another's behalf.
       data: { name: data.name, supplierId, createdById: user.id, builtBy: initialsFrom(user.name || user.email), currency: data.currency, gstTreatment: data.gstTreatment, fxRateToAud: fx, freightTotalAud: data.freightTotalAud, freightMode: data.freightMode, splitExportBy: data.splitExportBy, notes: data.notes || null },
     });
@@ -1099,106 +1099,6 @@ export async function transcribeDocumentAction(input: { files: Array<{ name: str
   });
 }
 
-/**
- * A supplier's invoice read as a bill for QuickBooks: who, when, how much, how much of it GST.
- * A PDF, a photo, or a spreadsheet; several photos are the pages of one invoice.
- */
-type SentFile = { name: string; type: string; base64: string };
-
-/** A sent file as a page the bill reader takes, or what is wrong with it. */
-async function billPageOf(file: SentFile): Promise<import("@/lib/catalog/bills/read-bill").BillPage[] | string> {
-  const { isHeic, heicToJpeg } = await import("@/lib/catalog/extract/heic");
-  const { gridAsText } = await import("@/lib/catalog/bills/read-bill");
-  let buffer: Buffer = Buffer.from(file.base64, "base64");
-  if (buffer.byteLength > MAX_UPLOAD) {
-    return `${file.name} is ${readableSize(buffer.byteLength)}, and an upload has to stay under ${readableSize(MAX_UPLOAD)}. A photo is shrunk before it is sent, so this is a PDF too big to send — split it.`;
-  }
-  let type = file.type;
-  if (isHeic(buffer, file.name, file.type)) { buffer = await heicToJpeg(buffer); type = "image/jpeg"; }
-  const isPdf = /\.pdf$/i.test(file.name) || type === "application/pdf";
-  const isWorkbook = /\.xlsx?$/i.test(file.name) || /spreadsheet|excel/i.test(type);
-  const isCsv = /\.csv$/i.test(file.name) || type === "text/csv";
-  if (isPdf) return [{ kind: "pdf", data: buffer }];
-  if (isWorkbook) return (await (await import("@/lib/catalog/extract/tabular")).sheetGrids(buffer)).map((g) => ({ kind: "text" as const, text: gridAsText(g.name, g.grid) }));
-  if (isCsv) return [{ kind: "text", text: gridAsText(file.name, (await import("@/lib/catalog/csv")).parseCsv(buffer.toString("utf8"))) }];
-  if (/^image\/(jpeg|png|gif|webp)$/.test(type)) return [{ kind: "image", mediaType: type as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: buffer }];
-  if (/\.(jpe?g)$/i.test(file.name)) return [{ kind: "image", mediaType: "image/jpeg", data: buffer }];
-  if (/\.png$/i.test(file.name)) return [{ kind: "image", mediaType: "image/png", data: buffer }];
-  return `${file.name} is not a PDF, a photo or a spreadsheet.`;
-}
-
-export async function readBillAction(input: { files: SentFile[] }): Promise<ActionResult<import("@/lib/catalog/bills/quickbooks").Bill>> {
-  return safely(async () => {
-    const user = await requireUser();
-    const { readBill } = await import("@/lib/catalog/bills/read-bill");
-    const pages: import("@/lib/catalog/bills/read-bill").BillPage[] = [];
-    for (const file of input.files) {
-      const got = await billPageOf(file);
-      if (typeof got === "string") return { ok: false, error: got };
-      pages.push(...got);
-    }
-    if (pages.length === 0) return { ok: false, error: "No file was received." };
-    const bill = await readBill(pages, input.files.map((f) => f.name).join(", "));
-    await logAudit("bill.read", { userId: user.id, details: { source: bill.source, supplier: bill.supplier, billNo: bill.billNo, total: bill.total } }).catch(() => undefined);
-    return { ok: true, data: bill };
-  });
-}
-
-/** The shop's supplier list — QuickBooks' supplier contact export — kept for naming bills. Only the names are stored. */
-export async function saveSupplierListAction(file: SentFile): Promise<ActionResult<import("@/lib/catalog/bills/suppliers").SupplierList>> {
-  return safely(async () => {
-    const user = await requireUser();
-    const buffer = Buffer.from(file.base64, "base64");
-    const { parseSupplierList } = await import("@/lib/catalog/bills/suppliers");
-    const grids = /\.csv$/i.test(file.name)
-      ? [{ grid: (await import("@/lib/catalog/csv")).parseCsv(buffer.toString("utf8")) }]
-      : await (await import("@/lib/catalog/extract/tabular")).sheetGrids(buffer);
-    const entries = grids.map((g) => parseSupplierList(g.grid)).find((e) => e.length > 0) ?? [];
-    if (entries.length === 0) return { ok: false, error: `${file.name} has no column headed "Supplier". Use the supplier contact list exported from QuickBooks.` };
-    const list = { entries, file: file.name, updatedAt: new Date().toISOString() };
-    await (await import("@/lib/catalog/bills/supplier-list")).saveSupplierList(list);
-    await logAudit("suppliers.list", { userId: user.id, details: { file: file.name, suppliers: entries.length } }).catch(() => undefined);
-    return { ok: true, data: list };
-  });
-}
-
-/** One page of a scanned batch, rendered in the browser, read on its own and marked with where it sits. */
-export async function readBillPageAction(input: { file: SentFile; source: string }): Promise<ActionResult<{ bill: import("@/lib/catalog/bills/quickbooks").Bill; mark: import("@/lib/catalog/bills/read-bill").PageMark }>> {
-  return safely(async () => {
-    await requireUser();
-    const { readBillPage } = await import("@/lib/catalog/bills/read-bill");
-    const got = await billPageOf(input.file);
-    if (typeof got === "string") return { ok: false, error: got };
-    if (got.length !== 1) return { ok: false, error: `${input.file.name} is not one page.` };
-    return { ok: true, data: await readBillPage(got[0], input.source) };
-  });
-}
-
-/**
- * Copy the old Rubin's data and files into this one. Admin only; runs in steps the page drives.
- * The old site's connection string and token arrive with every step and are kept nowhere.
- */
-export async function copyFromOldSiteAction(input: { databaseUrl: string; blobToken: string; state: import("@/lib/catalog/migrate").CopyState | null }): Promise<ActionResult<{ state: import("@/lib/catalog/migrate").CopyState; lines: string[]; done: boolean }>> {
-  const user = await requireUser("ADMIN");
-  return safely(async () => {
-    const { START, blobFiles, checkSourceUrl, copyStep, prismaStore, sourceClient } = await import("@/lib/catalog/migrate");
-    const { findBlobToken } = await import("@/lib/catalog/blob-token");
-    const bad = checkSourceUrl(input.databaseUrl);
-    if (bad) return { ok: false, error: bad };
-    const mine = findBlobToken();
-    const oldToken = input.blobToken.trim();
-    if (oldToken && !mine) return { ok: false, error: "This site has no file store of its own yet (no BLOB_READ_WRITE_TOKEN), so the files cannot be copied in. Add a Blob store to the project and redeploy, or leave the token out." };
-    if (oldToken && mine && oldToken === mine.token) return { ok: false, error: "That is this site's own file store token, not the old site's." };
-    const source = sourceClient(input.databaseUrl);
-    try {
-      const out = await copyStep(input.state ?? START, prismaStore(source), oldToken && mine ? blobFiles(oldToken, mine.token) : null);
-      if (out.done) await logAudit("site.copied", { userId: user.id, details: { counts: out.state.counts, files: out.state.files.copied } }).catch(() => undefined);
-      return { ok: true, data: out };
-    } finally {
-      await source.$disconnect().catch(() => undefined);
-    }
-  });
-}
 
 export async function readInvoiceAction(file: { name: string; type: string; base64: string }): Promise<ActionResult<InvoiceRead & { source: string }>> {
   return safely(async () => {
@@ -1291,7 +1191,7 @@ export async function readInvoiceAction(file: { name: string; type: string; base
  * listing of a model — built from an order in an import batch, days later — carries the shelves
  * the shop gave it. Only the handle, title, vendor, type and tags travel. See shop-memory.
  */
-export async function rememberListingsAction(listings: Array<{ handle: string; title: string; vendor: string; productType: string; tags: string[]; price?: number | null; bindingOption?: string }>): Promise<ActionResult<{ remembered: number }>> {
+export async function rememberListingsAction(listings: Array<{ handle: string; title: string; vendor: string; productType: string; tags: string[]; price?: number | null; bindingOption?: string; barcodes?: string[] }>): Promise<ActionResult<{ remembered: number }>> {
   await requireUser();
   try {
     const { rememberListings } = await import("@/lib/catalog/shop-memory-store");
@@ -1708,4 +1608,278 @@ export async function clearInstructionsAction(batchId: string): Promise<ActionRe
   } catch (err) {
     return fail(err);
   }
+}
+
+
+// ---------------------------------------------------------------------------
+// Setup: the shop, what it sells, what it has taught Flöda, how documents are read
+// ---------------------------------------------------------------------------
+
+const shopSchema = z.object({
+  name: z.string().trim().min(1, "Give the shop its name"),
+  sells: z.string().trim().min(1, "Say what the shop sells"),
+  country: z.string().trim().min(2).max(2),
+  currency: z.string().trim().regex(/^[A-Z]{3}$/, "A three-letter currency code"),
+  taxName: z.string().trim().max(24),
+  taxRate: z.coerce.number().min(0).max(1),
+  pack: z.enum(["snow-outdoor", "general"]),
+  marker: z.string().trim().toLowerCase().regex(/^[a-z0-9]{0,12}$/, "Letters and digits only, up to twelve"),
+});
+
+/**
+ * Who the shop is and what it sells. Switching the snow-and-outdoor pack on seeds its rules once;
+ * switching it off takes the seeded ones back out and leaves anything a person wrote.
+ */
+export async function saveShopAction(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const raw = Object.fromEntries(formData.entries());
+    const data = shopSchema.parse({ ...raw, taxRate: Number(raw.taxRate ?? 0) / 100 });
+    const { getShopProfile, saveShopProfile } = await import("@/lib/catalog/shop-profile");
+    const before = await getShopProfile();
+    await saveShopProfile(data);
+    if (data.pack === "snow-outdoor" && before.pack !== "snow-outdoor") await seedDefaults();
+    if (data.pack !== "snow-outdoor" && before.pack === "snow-outdoor") await (await import("@/lib/catalog/seed")).unseedDefaults();
+    await saveSettings({ gstRate: data.taxRate });
+    await logAudit("shop.saved", { userId: user.id, details: { pack: data.pack, country: data.country, currency: data.currency } });
+    revalidatePath("", "layout");
+    return { ok: true, message: "Saved" };
+  });
+}
+
+/** What the shop's own export showed about how it files and tags products. Replaces what was learned before. */
+export async function learnVocabularyAction(learned: import("@/lib/catalog/taxonomy").LearnedVocabulary): Promise<ActionResult<{ types: number }>> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const { saveLearnedVocabulary, saveShopProfile } = await import("@/lib/catalog/shop-profile");
+    const clean: import("@/lib/catalog/taxonomy").LearnedVocabulary = {
+      types: learned.types.slice(0, 2000).map((t) => ({ type: String(t.type).trim().slice(0, 120), count: Number(t.count) || 0, sections: (t.sections ?? []).map(String).slice(0, 12), ...(t.spelling ? { spelling: String(t.spelling).slice(0, 120) } : {}) })).filter((t) => t.type),
+      sections: (learned.sections ?? []).map(String).slice(0, 40),
+      spelling: Object.fromEntries(Object.entries(learned.spelling ?? {}).slice(0, 4000).map(([k, v]) => [String(k).slice(0, 120), String(v).slice(0, 120)])),
+      vendors: (learned.vendors ?? []).slice(0, 2000).map((v) => ({ name: String(v.name).slice(0, 120), count: Number(v.count) || 0 })),
+      products: Number(learned.products) || 0,
+      file: String(learned.file ?? "").slice(0, 200),
+      learnedAt: new Date().toISOString(),
+    };
+    await saveLearnedVocabulary(clean);
+    await saveShopProfile({ skipped: { learn: false } });
+    await logAudit("shop.learned", { userId: user.id, details: { file: clean.file, products: clean.products, types: clean.types.length, sections: clean.sections } });
+    revalidatePath("", "layout");
+    return { ok: true, data: { types: clean.types.length } };
+  });
+}
+
+/**
+ * The conventions per brand and kind of product, read out of the export in the browser and kept as
+ * product templates. Templates learned from an earlier export are replaced; ones a person made by
+ * hand are left.
+ */
+export async function learnTemplatesAction(input: { file: string; groups: import("@/lib/catalog/templates").TemplateGroup[] }): Promise<ActionResult<{ templates: number }>> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const groups = input.groups.filter((g) => g.analysis && g.analysis.productCount > 0).slice(0, 1500);
+    await prisma.productTemplate.deleteMany({ where: { sourceFileName: { startsWith: "export:" } } });
+    let made = 0;
+    for (const g of groups) {
+      const a = g.analysis;
+      const vendor = String(g.vendor ?? "").trim().slice(0, 120);
+      const productType = String(g.productType ?? "").trim().slice(0, 120);
+      if (!vendor && !productType) continue;
+      await prisma.productTemplate.create({
+        data: {
+          name: [vendor, productType].filter(Boolean).join(" · ").slice(0, 160),
+          scope: vendor ? "BRAND" : "PRODUCT_TYPE",
+          matchValue: vendor || productType,
+          matchProductType: vendor ? productType : "",
+          sourceFileName: `export:${String(input.file ?? "").slice(0, 150)}`,
+          productCount: a.productCount,
+          setProductType: productType,
+          addTags: (a.commonTags ?? []).slice(0, 40).join(", "),
+          addCollections: (a.collections ?? []).slice(0, 20).join(", "),
+          optionNames: (a.optionNames ?? []).slice(0, 3).join(", "),
+          setMetafields: JSON.stringify(a.metafields ?? {}),
+          analysis: JSON.stringify({ ...a, tagCounts: (a.tagCounts ?? []).slice(0, 60) }),
+          priority: Math.min(a.productCount, 1000),
+          active: true,
+        },
+      });
+      made++;
+    }
+    await logAudit("shop.templates", { userId: user.id, details: { file: input.file, templates: made } });
+    return { ok: true, data: { templates: made } };
+  });
+}
+
+/** The key the shop reads documents with, when the host sets none. Tried once before it is kept. */
+export async function saveApiKeyAction(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const key = String(formData.get("key") ?? "").trim();
+    const { saveStoredApiKey, saveShopProfile } = await import("@/lib/catalog/shop-profile");
+    if (!key) {
+      await saveStoredApiKey("");
+      return { ok: true, message: "The key has been removed." };
+    }
+    if (!/^sk-ant-[A-Za-z0-9_-]{20,}$/.test(key)) return { ok: false, error: "That does not look like an Anthropic API key. It starts with sk-ant- and is pasted whole." };
+    const { default: Anthropic } = await import("@anthropic-ai/sdk");
+    try {
+      await new Anthropic({ apiKey: key, maxRetries: 1 }).models.list({ limit: 1 });
+    } catch (err) {
+      const why = describeApiError(err) ?? said(err);
+      return { ok: false, error: `The key was refused, so it was not kept: ${why}` };
+    }
+    await saveStoredApiKey(key);
+    await saveShopProfile({ skipped: { ai: false } });
+    await logAudit("shop.apikey", { userId: user.id, details: { set: true } });
+    revalidatePath("", "layout");
+    return { ok: true, message: "The key works and has been kept." };
+  });
+}
+
+/** A step of setup put off until later. It stays on the Home checklist. */
+export async function skipSetupStepAction(step: "learn" | "ai"): Promise<ActionResult> {
+  await requireUser("ADMIN");
+  return safely(async () => {
+    const { saveShopProfile } = await import("@/lib/catalog/shop-profile");
+    await saveShopProfile({ skipped: { [step]: true } });
+    revalidatePath("", "layout");
+    return { ok: true };
+  });
+}
+
+export async function finishSetupAction(): Promise<void> {
+  await requireUser("ADMIN");
+  const { saveShopProfile } = await import("@/lib/catalog/shop-profile");
+  await saveShopProfile({ setupDone: true });
+  revalidatePath("", "layout");
+  redirect("/");
+}
+
+
+// ---------------------------------------------------------------------------
+// Clients of Flöda (the vendor's own deployment) and this copy's licence
+// ---------------------------------------------------------------------------
+
+async function requireVendorAdmin() {
+  const user = await requireUser("ADMIN");
+  const { vendorMode } = await import("@/lib/catalog/licence");
+  if (!vendorMode()) throw new Error("This is not the vendor's deployment.");
+  return user;
+}
+
+const clientSchema = z.object({
+  name: z.string().trim().min(1, "The client needs a name").max(120),
+  contact: z.string().trim().max(120).default(""),
+  email: z.string().trim().max(200).default(""),
+  plan: z.enum(["trial", "founding", "standard"]).default("founding"),
+  status: z.enum(["TRIAL", "ACTIVE", "PAUSED", "ENDED"]).default("TRIAL"),
+  expiresAt: z.string().trim().default(""),
+  notes: z.string().trim().max(2000).default(""),
+});
+
+function expiry(value: string): Date | null {
+  if (!value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+export async function createClientAction(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  return safely(async () => {
+    const user = await requireVendorAdmin();
+    const data = clientSchema.parse(Object.fromEntries(formData.entries()));
+    const { newLicenceKey } = await import("@/lib/catalog/licence");
+    const client = await prisma.client.create({ data: { ...data, expiresAt: expiry(data.expiresAt), licenceKey: newLicenceKey() } });
+    await logAudit("client.created", { userId: user.id, details: { client: client.id, name: client.name, plan: client.plan } });
+    revalidatePath("/clients");
+    return { ok: true, message: `${client.name} added. Their key is ${client.licenceKey}.` };
+  });
+}
+
+export async function updateClientAction(id: string, patch: { status?: string; plan?: string; expiresAt?: string; notes?: string; contact?: string; email?: string; name?: string }): Promise<ActionResult> {
+  return safely(async () => {
+    const user = await requireVendorAdmin();
+    const data = clientSchema.partial().parse(patch);
+    const { expiresAt, ...rest } = data;
+    await prisma.client.update({ where: { id }, data: { ...rest, ...(expiresAt === undefined ? {} : { expiresAt: expiry(expiresAt) }) } });
+    await logAudit("client.updated", { userId: user.id, details: { client: id, keys: Object.keys(data) } });
+    revalidatePath("/clients");
+    return { ok: true, message: "Saved" };
+  });
+}
+
+/** A new key for a client whose old one has leaked or been lost. Their copy must enter the new one. */
+export async function regenerateClientKeyAction(id: string): Promise<ActionResult<{ key: string }>> {
+  return safely(async () => {
+    const user = await requireVendorAdmin();
+    const { newLicenceKey } = await import("@/lib/catalog/licence");
+    const key = newLicenceKey();
+    await prisma.client.update({ where: { id }, data: { licenceKey: key } });
+    await logAudit("client.rekeyed", { userId: user.id, details: { client: id } });
+    revalidatePath("/clients");
+    return { ok: true, data: { key } };
+  });
+}
+
+export async function deleteClientAction(id: string): Promise<ActionResult> {
+  return safely(async () => {
+    const user = await requireVendorAdmin();
+    const client = await prisma.client.delete({ where: { id } });
+    await logAudit("client.deleted", { userId: user.id, details: { client: id, name: client.name } });
+    revalidatePath("/clients");
+    return { ok: true };
+  });
+}
+
+/** A lead from the landing page becomes a client on a 30-day trial, with a key to send them. */
+export async function clientFromLeadAction(at: string): Promise<ActionResult<{ key: string }>> {
+  return safely(async () => {
+    const user = await requireVendorAdmin();
+    const { newLicenceKey } = await import("@/lib/catalog/licence");
+    const row = await prisma.appSetting.findUnique({ where: { key: "floda.leads" } });
+    const leads = parseJson<Array<{ email: string; shop: string; sells: string; platform: string; note: string; at: string }>>(row?.value, []);
+    const lead = leads.find((l) => l.at === at);
+    if (!lead) return { ok: false, error: "That lead is no longer there." };
+    const key = newLicenceKey();
+    const client = await prisma.client.create({
+      data: { name: lead.shop, email: lead.email, plan: "trial", status: "TRIAL", expiresAt: new Date(Date.now() + 30 * 86_400_000), licenceKey: key, notes: [lead.sells && `Sells: ${lead.sells}`, lead.platform && `Platform: ${lead.platform}`, lead.note && `Note: ${lead.note}`].filter(Boolean).join("\n") },
+    });
+    const rest = leads.filter((l) => l.at !== at);
+    await prisma.appSetting.update({ where: { key: "floda.leads" }, data: { value: JSON.stringify(rest) } });
+    await logAudit("client.from_lead", { userId: user.id, details: { client: client.id, name: client.name } });
+    revalidatePath("/clients");
+    return { ok: true, data: { key } };
+  });
+}
+
+export async function dismissLeadAction(at: string): Promise<ActionResult> {
+  return safely(async () => {
+    await requireVendorAdmin();
+    const row = await prisma.appSetting.findUnique({ where: { key: "floda.leads" } });
+    const leads = parseJson<Array<{ at: string }>>(row?.value, []);
+    await prisma.appSetting.upsert({ where: { key: "floda.leads" }, create: { key: "floda.leads", value: "[]" }, update: { value: JSON.stringify(leads.filter((l) => l.at !== at)) } });
+    revalidatePath("/clients");
+    return { ok: true };
+  });
+}
+
+/** This copy's licence key, entered by the shop and tried against Flöda now. */
+export async function activateLicenceAction(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  return safely(async () => {
+    const user = await requireUser("ADMIN");
+    const { normaliseKey, licenceServer } = await import("@/lib/catalog/licence");
+    if (!licenceServer()) return { ok: false, error: "This copy is not set up to check a licence." };
+    const key = normaliseKey(String(formData.get("licence") ?? ""));
+    if (!key) return { ok: false, error: "That is not a Flöda licence key. It looks like FL-XXXX-XXXX-XXXX-XXXX." };
+    const { activate } = await import("@/lib/catalog/licence-store");
+    let licence;
+    try {
+      licence = await activate(key);
+    } catch (err) {
+      return { ok: false, error: `Flöda could not be reached to check the key: ${said(err)}` };
+    }
+    await logAudit("licence.entered", { userId: user.id, details: { status: licence.status, client: licence.client } });
+    revalidatePath("", "layout");
+    if (licence.why) return { ok: false, error: `Flöda says: ${licence.why} The key has been kept; contact hello@floda.ai.` };
+    return { ok: true, message: `Licensed to ${licence.client}${licence.expiresAt ? ` until ${new Date(licence.expiresAt).toLocaleDateString("en-AU")}` : ""}.` };
+  });
 }

@@ -10,11 +10,10 @@
  * vendor in lower case; the fourteen products with no gender tag are exactly the unisex ones.
  */
 
-import { ALPSPORT_TAXONOMY, PRODUCT_TYPES, TYPE_SECTIONS, clothingContextsFor, headingsFor, isValidType, resolveType } from "./taxonomy";
+import { SNOW_OUTDOOR_TAXONOMY, activeTree, clothingContextsFor, headingsFor, isValidType, markerPrefix, productTypes, resolveType, sectionNames, tagAlso, tagSpelling, typeSections } from "./taxonomy";
 import { classifyBinding, classifySnowboardBinding, type BindingKind } from "./bindings";
 import { classifySkiBoot, classifySnowboardBoot } from "./boots";
 import { accessoryKind } from "./accessories";
-import { LIVE_TAG_SPELLING, TAG_ALSO } from "./tag-spelling";
 
 export type Gender = "mens" | "womens" | "kids";
 
@@ -34,19 +33,27 @@ export interface TaggingSettings {
 }
 
 /**
- * The fixed half of the shop's marker. The other half says who built the product.
+ * The fixed half of the marker the shop Flöda was built in writes. The other half says who built
+ * the product.
  *
  * Across the 967 products in their ten exports the marker comes in eleven forms — 123abc-zb on
  * 453, -bj on 229, -js on 120, -ay on 98, and seven rarer ones — and every single export mixes
  * several. It is not per brand, per supplier or per file: it is the initials of whoever built the
  * listing. Hard-coding one of them, as this did, got 12% of the catalogue right.
+ *
+ * Each shop sets its own marker in setup (`Conventions.marker`); this is only that shop's.
  */
 export const HOUSE_TAG_PREFIX = "123abc";
 
-/** The marker for one person's initials. Falls back to the prefix alone when nobody is named. */
+/**
+ * The marker for one person's initials, on the shop's own prefix. Falls back to the prefix alone
+ * when nobody is named, and to nothing at all when the shop writes no marker.
+ */
 export function houseTagFor(initials: string): string {
+  const prefix = markerPrefix();
+  if (!prefix) return "";
   const suffix = initials.trim().toLowerCase().replace(/[^a-z]/g, "").slice(0, 3);
-  return suffix ? `${HOUSE_TAG_PREFIX}-${suffix}` : HOUSE_TAG_PREFIX;
+  return suffix ? `${prefix}-${suffix}` : prefix;
 }
 
 /**
@@ -60,23 +67,27 @@ export function initialsFrom(name: string): string {
   return (words[0][0] + words[words.length - 1][0]).toLowerCase().replace(/[^a-z]/g, "");
 }
 
+/**
+ * The settings a caller that names nothing gets. The marker is read when asked for, since it is
+ * the shop's to set; a caller spreading this and overriding `houseTag` loses nothing.
+ */
 export const DEFAULT_TAGGING: TaggingSettings = {
-  houseTag: HOUSE_TAG_PREFIX,
+  get houseTag() { return houseTagFor(""); },
   currentYear: 2026,
 };
 
 /** The ski disciplines a product can be filed under. A ski may be several at once. */
 export const SKI_DISCIPLINES: string[] =
-  ALPSPORT_TAXONOMY.find((s) => s.top === "Ski")?.groups.find((g) => g.heading === "Ski Categories")?.leaves ?? [];
+  SNOW_OUTDOOR_TAXONOMY.find((s) => s.top === "Ski")?.groups.find((g) => g.heading === "Ski Categories")?.leaves ?? [];
 
 /** The snowboard equivalents. */
 export const BOARD_DISCIPLINES: string[] =
-  ALPSPORT_TAXONOMY.find((s) => s.top === "Snowboard")?.groups.find((g) => g.heading === "Snowboard Categories")?.leaves ?? [];
+  SNOW_OUTDOOR_TAXONOMY.find((s) => s.top === "Snowboard")?.groups.find((g) => g.heading === "Snowboard Categories")?.leaves ?? [];
 
 /** Which disciplines are open to a product, given what it is. Empty for anything but a ski or board. */
 export function disciplinesFor(type: string): string[] {
   const resolved = resolveType(type) ?? type.trim();
-  const sections = TYPE_SECTIONS[resolved] ?? [];
+  const sections = typeSections()[resolved] ?? [];
   if (/\bskis?\b/i.test(resolved) || sections.includes("Ski")) {
     if (/snowboard/i.test(resolved)) return BOARD_DISCIPLINES;
     return SKI_DISCIPLINES;
@@ -118,7 +129,7 @@ export function bootTags(type: string, describedAs?: string): string[] {
   if (!describedAs?.trim()) return [];
   const text = [describedAs, resolved].filter(Boolean).join(" ");
   if (/snowboard/i.test(resolved)) return classifySnowboardBoot(text).tags;
-  if ((TYPE_SECTIONS[resolved] ?? []).includes("Ski") || /\bski\b/i.test(resolved)) return classifySkiBoot(text).tags;
+  if ((typeSections()[resolved] ?? []).includes("Ski") || /\bski\b/i.test(resolved)) return classifySkiBoot(text).tags;
   return [];
 }
 
@@ -266,7 +277,7 @@ export function bagTags(type: string, describedAs?: string): string[] {
   // These are the snow shelves. A sleeping bag is a bag and a duffel holds a week of clothes, but
   // neither belongs beside the board bags — the word in the Type is not what puts it there, the
   // menu the product sits in is. An unrecognised Type has no menu, so the product is read instead.
-  const sections = TYPE_SECTIONS[resolved] ?? [];
+  const sections = typeSections()[resolved] ?? [];
   const snow = sections.some((s) => s === "Ski" || s === "Snowboard");
   if (!snow && sections.length > 0) return [];
   if (!snow && !SNOW_BAG.test(`${resolved} ${describedAs ?? ""}`)) return [];
@@ -356,7 +367,7 @@ const HARDGOOD_NOUNS = new Set(["snowboards", "skis", "boards", "packages"]);
 
 export function isHardgood(type: string): boolean {
   const resolved = resolveType(type) ?? type.trim();
-  const sections = TYPE_SECTIONS[resolved] ?? [];
+  const sections = typeSections()[resolved] ?? [];
   if (!sections.some((s) => s === "Ski" || s === "Snowboard")) return false;
   const lastWord = resolved.toLowerCase().split(/[^a-z]+/).filter(Boolean).pop() ?? "";
   return HARDGOOD_NOUNS.has(lastWord);
@@ -369,10 +380,16 @@ export function seasonFor(type: string, settings: TaggingSettings = DEFAULT_TAGG
 
 /**
  * Tags whose live spelling is not the slug of their name — the shop's own, read out of its exports.
- * See `tag-spelling.ts`: a heading is hyphenated and a sub-link is usually spaced, with enough
- * exceptions that the catalogue is the authority rather than a rule.
+ * See `tag-spelling.ts` for the snow pack's, and `learn.ts` for how a shop's own are read: a
+ * heading is hyphenated and a sub-link is usually spaced, with enough exceptions that the
+ * catalogue is the authority rather than a rule. Always the table in force; see `taxonomy.ts`.
  */
-export const TAG_SPELLING: Record<string, string> = { ...LIVE_TAG_SPELLING };
+export const TAG_SPELLING: Record<string, string> = new Proxy({} as Record<string, string>, {
+  get: (_t, key) => (typeof key === "string" ? tagSpelling()[key] : undefined),
+  has: (_t, key) => typeof key === "string" && key in tagSpelling(),
+  ownKeys: () => Reflect.ownKeys(tagSpelling()),
+  getOwnPropertyDescriptor: (_t, key) => (typeof key === "string" && key in tagSpelling() ? { value: tagSpelling()[key], enumerable: true, configurable: true } : undefined),
+});
 
 /**
  * Every tag a shelf is written as, in the order they belong on the product.
@@ -382,8 +399,8 @@ export const TAG_SPELLING: Record<string, string> = { ...LIVE_TAG_SPELLING };
  * product off its page.
  */
 export function tagsFor(name: string): string[] {
-  const primary = TAG_SPELLING[name] ?? slugTag(name);
-  const also = TAG_ALSO[name] ?? [];
+  const primary = tagSpelling()[name] ?? slugTag(name);
+  const also = tagAlso()[name] ?? [];
   return [primary, ...also].filter((tag, i, all) => tag && all.indexOf(tag) === i);
 }
 
@@ -435,11 +452,11 @@ export function isRuleGenerated(tag: string): boolean {
   if (/^(19|20)\d{2}$/.test(value)) return true; // a season
   if (["mens", "womens", "kids"].includes(value)) return true;
   // The house marker by shape, since the suffix varies with whoever built the product.
-  // The marker, with or without whoever built the listing on the end of it.
-  if (/^123abc(-|$)/.test(value)) return true;
-  if (["ski", "snowboard", "clothing", "backcountry", "outdoor"].includes(value)) return true;
+  const marker = markerPrefix();
+  if (marker && (value === marker || value.startsWith(`${marker}-`))) return true;
+  if (sectionNames().some((s) => slugTag(tagsFor(s)[0]) === value)) return true;
   if (RULE_TAGS.has(value)) return true;
-  return PRODUCT_TYPES.some((t) => slugTag(TAG_SPELLING[t] ?? t) === value);
+  return productTypes().some((t) => slugTag(tagSpelling()[t] ?? t) === value);
 }
 
 /** The tags the rules add beyond a product's Type: shelves, packages, closures and disciplines. */
@@ -507,7 +524,7 @@ export function generalTags(input: TagInput, settings: TaggingSettings = DEFAULT
   for (const tag of headingTags(type, input.section ?? input.clothingContext)) push(tag);
 
   const chosen = sectionsFor(type, input.section);
-  for (const value of chosen) push(slugTag(value));
+  for (const value of chosen) push(tagsFor(value)[0]);
 
   // Outdoor does not run on a season: a tent or a stove is the same product next winter, so it
   // carries the evergreen marker rather than a year. Verified against the shop's own instruction
@@ -518,7 +535,7 @@ export function generalTags(input: TagInput, settings: TaggingSettings = DEFAULT
   push(slugTag(input.vendor));
   for (const gender of gendersFor(type, input.genders)) push(gender);
 
-  if (input.withBindings) push(TAG_SPELLING[packageTagFor(type)] ?? slugTag(packageTagFor(type)));
+  if (input.withBindings) push(tagsFor(packageTagFor(type))[0]);
 
   for (const tag of clothingContextTags(type, input.clothingContext)) push(tag);
 
@@ -656,7 +673,7 @@ const BOTH_SECTIONS = new Set<string>(["Gaiters"]);
  */
 export function sectionsFor(type: string, told?: string): string[] {
   const resolved = resolveType(type) ?? type.trim();
-  const sections = TYPE_SECTIONS[resolved] ?? [];
+  const sections = typeSections()[resolved] ?? [];
   if (BOTH_SECTIONS.has(resolved)) return sections;
   const chosen = told?.trim();
   if (chosen) return sections.find((s) => slugTag(s) === slugTag(chosen)) ? [chosen] : [chosen];
@@ -665,7 +682,7 @@ export function sectionsFor(type: string, told?: string): string[] {
 
 /** Which menus a Type could be filed under, for asking a person when it is genuinely ambiguous. */
 export function candidateSections(type: string): string[] {
-  return TYPE_SECTIONS[resolveType(type) ?? type] ?? [];
+  return typeSections()[resolveType(type) ?? type] ?? [];
 }
 
 /** True when a Type sits in more than one menu, so the section tag cannot be inferred. */
@@ -675,7 +692,10 @@ export function needsSectionChoice(type: string): boolean {
   return candidateSections(type).length > 1;
 }
 
-export const KNOWN_TYPES = PRODUCT_TYPES;
+/** Every Type in force. A function, because the vocabulary is the shop's and can change. */
+export function knownTypes(): string[] {
+  return productTypes();
+}
 
 /**
  * Every shelf that lives under the Backcountry menu, by the tag that reaches it.
@@ -684,15 +704,22 @@ export const KNOWN_TYPES = PRODUCT_TYPES;
  * there. These are the tags that oblige a product to carry the section as well — whichever menu
  * the product was filed under, and whichever route it took to the shelf.
  */
-export const BACKCOUNTRY_SHELF_TAGS: ReadonlySet<string> = new Set<string>([
-  ...(ALPSPORT_TAXONOMY.find((s) => s.top === "Backcountry")?.groups.flatMap((g) => [
-    ...tagsFor(g.heading),
-    ...g.leaves.flatMap((leaf) => tagsFor(leaf)),
-  ]) ?? []),
-  ...SKIN_TAGS,
-  TOURING_SKI_TAG,
-].map(slugTag));
+let backcountryCache: { tree: unknown; tags: ReadonlySet<string> } | null = null;
+export function backcountryShelfTags(): ReadonlySet<string> {
+  const tree = activeTree();
+  if (backcountryCache && backcountryCache.tree === tree) return backcountryCache.tags;
+  const tags = new Set<string>([
+    ...(tree.find((s) => s.top === "Backcountry")?.groups.flatMap((g) => [
+      ...tagsFor(g.heading),
+      ...g.leaves.flatMap((leaf) => tagsFor(leaf)),
+    ]) ?? []),
+    ...SKIN_TAGS,
+    TOURING_SKI_TAG,
+  ].map(slugTag));
+  backcountryCache = { tree, tags };
+  return tags;
+}
 
 export function isBackcountryShelf(tag: string): boolean {
-  return BACKCOUNTRY_SHELF_TAGS.has(slugTag(tag));
+  return backcountryShelfTags().has(slugTag(tag));
 }

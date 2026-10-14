@@ -231,7 +231,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   locations: [],
   publicBaseUrl: "",
   seoTone:
-    "Friendly, knowledgeable Sydney ski shop. Plain English, no hype, mention who the product suits and key specs.",
+    "Friendly, knowledgeable specialist shop. Plain English, no hype, mention who the product suits and key specs.",
   houseRules: "",
 };
 

@@ -1,3 +1,4 @@
+import { aiAvailable } from "@/lib/catalog/anthropic";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/catalog/db";
 import { loadReview } from "@/lib/catalog/pipeline";
@@ -40,7 +41,7 @@ export default async function ExportPage(props: PageProps<"/batches/[id]/export"
           />
           <FeedbackChat
             batchId={id}
-            aiEnabled={Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN)}
+            aiEnabled={aiAvailable()}
             initial={batch.feedback.map((f) => ({ id: f.id, role: f.role, body: f.body, proposal: f.proposal, appliedRule: f.appliedRule, createdAt: f.createdAt.toISOString() }))}
           />
           <Card title="Activity on this batch">

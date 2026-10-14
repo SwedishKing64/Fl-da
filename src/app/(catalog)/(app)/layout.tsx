@@ -20,6 +20,7 @@ const PAGES: PaletteItem[] = [
   { id: "p-pricing", label: "Price calculator", group: "Pages", href: "/pricing" },
   { id: "p-history", label: "History", group: "Pages", href: "/history" },
   { id: "p-settings", label: "Settings", group: "Pages", href: "/settings" },
+  { id: "p-setup", label: "Setup", hint: "the shop, its catalogue, the key", group: "Pages", href: "/setup" },
 ];
 
 export default async function CatalogLayout({ children }: { children: React.ReactNode }) {

@@ -74,10 +74,10 @@ export function describeApiError(err: unknown): string | null {
     case "timeout_error": return "The reading service took too long and this was not read. Nothing was changed. Try again in a minute.";
     case "api_error": return "The reading service had a fault of its own and this was not read. Nothing was changed. Try again in a minute.";
     case "authentication_error":
-    case "permission_error": return "The reading service refused the API key. Check ANTHROPIC_API_KEY in Settings.";
+    case "permission_error": return "The reading service refused the API key. Check the key under Reading documents in Settings.";
     case "billing_error": return "The reading service refused this for a billing reason on the API account. Nothing was changed.";
   }
-  if (status === 401 || status === 403) return "The reading service refused the API key. Check ANTHROPIC_API_KEY in Settings.";
+  if (status === 401 || status === 403) return "The reading service refused the API key. Check the key under Reading documents in Settings.";
   // Anything else from the API still never reaches the page as its JSON body.
   return `The reading service could not read this${status ? ` (error ${status})` : ""}. Nothing was changed. Try again, and if it keeps happening, report it.`;
 }

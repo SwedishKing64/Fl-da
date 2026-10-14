@@ -11,6 +11,8 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
+import { retailer } from "../shop-profile";
+import { anthropicClient } from "../anthropic";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { EXTRACTION_MODEL, aiAvailable } from "./ai";
@@ -38,7 +40,7 @@ export interface LookupRequest {
   category?: string;
 }
 
-const RESEARCH_SYSTEM = `You research products for a ski and snowboard retailer in Australia who is building Shopify listings from supplier invoices.
+const RESEARCH_SYSTEM = () => `You research products for ${retailer()} who is building Shopify listings from supplier invoices.
 
 For the product you are given, find the manufacturer's own page for it and report:
 - which brand makes it
@@ -59,11 +61,7 @@ function describe(request: LookupRequest): string {
   ].filter(Boolean).join("\n");
 }
 
-let client: Anthropic | null = null;
-function getClient(): Anthropic {
-  if (!client) client = new Anthropic({ maxRetries: 6 }); // see getClient in adjust-plan.ts: two retries does not ride out "overloaded"
-  return client;
-}
+const getClient = (): Anthropic => anthropicClient(6);
 
 export function lookupAvailable(): boolean {
   return aiAvailable();
@@ -79,7 +77,7 @@ export async function lookupProduct(request: LookupRequest): Promise<ProductLook
   const research = await retrying(() => getClient().messages.stream({
     model: EXTRACTION_MODEL,
     max_tokens: 8000,
-    system: RESEARCH_SYSTEM,
+    system: RESEARCH_SYSTEM(),
     thinking: { type: "adaptive" },
     output_config: { effort: "low" },
     tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 6 }],

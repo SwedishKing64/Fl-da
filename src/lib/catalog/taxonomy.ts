@@ -1,5 +1,15 @@
 /**
- * The alpsport.com.au navigation, which is what decides where a product lives on the site.
+ * The vocabulary of product Types, and where each one lives on the shop's site.
+ *
+ * Nothing about one shop is fixed here. The vocabulary in force is built from two things: a
+ * *rules pack* the shop switched on (the snow-and-outdoor menu below, transcribed from the ski
+ * shop Flöda was built in, or nothing at all) and what was *learned* from the shop's own Shopify
+ * export — its Types, which menu tags go with each, and how each shelf tag is spelled. See
+ * `activateConventions` at the foot of the file; `shop-profile.ts` loads the shop's choice and
+ * calls it once per request.
+ *
+ * The rest of this header describes the snow-and-outdoor menu, since the same reading applies to
+ * any menu a shop has.
  *
  * The Shopify `Type` column holds the most specific thing the product *is*: "Snowboard Boots",
  * "Synthetic Sleeping Bags". The drop-down menu it sits under — Clothing, Ski, Snowboard,
@@ -15,6 +25,8 @@
  * a Type that has nowhere to live on the website.
  */
 
+import { LIVE_TAG_SPELLING, TAG_ALSO } from "./tag-spelling";
+
 export interface TaxonomyGroup {
   /** The bold heading. This is the value written to the Shopify `Type` column. */
   heading: string;
@@ -28,7 +40,7 @@ export interface TaxonomySection {
   groups: TaxonomyGroup[];
 }
 
-export const ALPSPORT_TAXONOMY: TaxonomySection[] = [
+export const SNOW_OUTDOOR_TAXONOMY: TaxonomySection[] = [
   {
     top: "Clothing",
     groups: [
@@ -120,53 +132,204 @@ export function isAccessoryHeading(heading: string): boolean {
  */
 const AUDIENCE_HEADINGS = new Set(["Mens Clothing", "Womens Clothing", "Kids Clothing"]);
 
+// ---------------------------------------------------------------------------------------------
+// The vocabulary in force
+// ---------------------------------------------------------------------------------------------
+
+/** A Type learned from the shop's own export, with what the export showed about it. */
+export interface LearnedType {
+  type: string;
+  /** How many products carried it. */
+  count: number;
+  /** The menu tags its products carry (the shop's own, as written): where it is filed. */
+  sections: string[];
+  /** The tag the shop writes for the Type itself, where one was found. */
+  spelling?: string;
+}
+
+/** Everything learned from one Shopify export about how the shop files and tags its products. */
+export interface LearnedVocabulary {
+  types: LearnedType[];
+  /** The menu tags, as written, that run across several Types. */
+  sections: string[];
+  /** Type or section name → the tag the shop writes for it. */
+  spelling: Record<string, string>;
+  vendors: Array<{ name: string; count: number }>;
+  products: number;
+  file: string;
+  learnedAt: string;
+}
+
+/** Which rules pack is on: the snow-and-outdoor menu and its rules, or a blank vocabulary. */
+export type RulesPack = "snow-outdoor" | "general";
+
+/** What decides the vocabulary: the pack, what was learned, and the shop's marker tag. */
+export interface Conventions {
+  pack: RulesPack;
+  learned: LearnedVocabulary | null;
+  /**
+   * The fixed half of a marker tag written on everything built here, with the builder's initials
+   * on the end ("123abc-zb"). Empty means the shop writes no marker.
+   */
+  marker: string;
+}
+
+interface Vocabulary {
+  tree: TaxonomySection[];
+  productTypes: string[];
+  typeSections: Record<string, string[]>;
+  typeParents: Record<string, string[]>;
+  typeLeaves: Record<string, string[]>;
+  spelling: Record<string, string>;
+  also: Record<string, readonly string[]>;
+  sections: string[];
+}
+
+/** Blank: no pack, nothing learned, no marker. What a fresh install runs on until setup. */
+export const BLANK_CONVENTIONS: Conventions = { pack: "general", learned: null, marker: "" };
+
+/** The conventions of the shop Flöda was built in; the tests are written against them. */
+export const ALPSPORT_CONVENTIONS: Conventions = { pack: "snow-outdoor", learned: null, marker: "123abc" };
+
+/**
+ * The menu draws an ampersand and the catalogue spells it out, so the two have to meet: without
+ * this, the shop's own Type values — "Packs and Bags", "Climbing and Abseiling" — fail to resolve
+ * back to the menu headings they came from, and a product re-read from an export loses its place.
+ */
+const norm = (value: string) => value.trim().toLowerCase().replace(/&/g, " and ").replace(/[^a-z0-9]+/g, " ").trim();
+
+function fromTree(tree: TaxonomySection[]): Pick<Vocabulary, "productTypes" | "typeSections" | "typeParents" | "typeLeaves" | "sections"> {
+  const productTypes: string[] = [];
+  const sections: Record<string, Set<string>> = {};
+  const parents: Record<string, Set<string>> = {};
+  const addSection = (type: string, top: string) => { (sections[type] ??= new Set()).add(top); };
+  for (const section of tree) {
+    for (const group of section.groups) {
+      // Every heading is a Type: all 673 typed products in the shop's exports carry one. The
+      // sub-links stay resolvable too, since an invoice names them freely — they are mapped up to
+      // the heading they sit under rather than written to the column.
+      if (!AUDIENCE_HEADINGS.has(group.heading)) {
+        if (!productTypes.includes(group.heading)) productTypes.push(group.heading);
+        addSection(group.heading, section.top);
+      }
+      for (const leaf of group.leaves) {
+        if (isAudienceLeaf(leaf)) continue;
+        if (!productTypes.includes(leaf)) productTypes.push(leaf);
+        addSection(leaf, section.top);
+        (parents[leaf] ??= new Set()).add(group.heading);
+      }
+    }
+  }
+  return {
+    productTypes,
+    typeSections: Object.fromEntries(Object.entries(sections).map(([k, v]) => [k, [...v]])),
+    typeParents: Object.fromEntries(Object.entries(parents).map(([k, v]) => [k, [...v]])),
+    typeLeaves: Object.fromEntries(tree.flatMap((s) => s.groups.map((g) => [g.heading, g.leaves] as const))),
+    sections: tree.map((s) => s.top),
+  };
+}
+
+function build(conventions: Conventions): Vocabulary {
+  const tree = conventions.pack === "snow-outdoor" ? SNOW_OUTDOOR_TAXONOMY : [];
+  const base = fromTree(tree);
+  const spelling: Record<string, string> = conventions.pack === "snow-outdoor" ? { ...LIVE_TAG_SPELLING } : {};
+  const also: Record<string, readonly string[]> = conventions.pack === "snow-outdoor" ? { ...TAG_ALSO } : {};
+  const sections = [...base.sections];
+  const learned = conventions.learned;
+  if (learned) {
+    const known = (value: string) => base.productTypes.find((t) => norm(t) === norm(value));
+    for (const section of learned.sections) if (!sections.some((s) => norm(s) === norm(section))) sections.push(section);
+    for (const entry of learned.types) {
+      const type = entry.type.trim();
+      if (!type) continue;
+      const existing = known(type);
+      if (!existing) {
+        // A Type the pack does not know is a heading of its own, filed where the export files it.
+        base.productTypes.push(type);
+        base.typeLeaves[type] = [];
+        if (entry.sections.length) base.typeSections[type] = [...entry.sections];
+      } else if (entry.sections.length && !base.typeSections[existing]?.length) {
+        base.typeSections[existing] = [...entry.sections];
+      }
+      if (entry.spelling) spelling[existing ?? type] = entry.spelling;
+    }
+    for (const [name, tag] of Object.entries(learned.spelling)) {
+      if (!tag) continue;
+      spelling[known(name) ?? name] = tag;
+    }
+    // A learned section's own name is the tag the shop writes, however it is spelled.
+    for (const section of learned.sections) spelling[section] ??= section;
+  }
+  return { tree, ...base, spelling, also, sections };
+}
+
+let conventions: Conventions = BLANK_CONVENTIONS;
+let active: Vocabulary = build(conventions);
+
+/**
+ * Put a shop's conventions in force for this process. Called by `shop-profile.ts` with what the
+ * shop chose and learned, and by tests with `ALPSPORT_CONVENTIONS`. The vocabulary is process-wide:
+ * Flöda runs one shop per install.
+ */
+export function activateConventions(next: Conventions): void {
+  conventions = next;
+  active = build(next);
+}
+
+export function activeConventions(): Conventions {
+  return conventions;
+}
+
+/** The menu tree in force: the snow-and-outdoor menu, or nothing. */
+export function activeTree(): TaxonomySection[] {
+  return active.tree;
+}
+
 /**
  * Every valid value for the Shopify `Type` column.
  *
  * A group whose sub-links only split by audience contributes its heading ("Snowboard Boots"), and
  * so does an accessories heading. Every sub-link that names a kind of product contributes itself
- * ("Synthetic Sleeping Bags").
+ * ("Synthetic Sleeping Bags"). A Type learned from the shop's export is added as a heading.
  */
-export const PRODUCT_TYPES: string[] = (() => {
-  const out: string[] = [];
-  for (const section of ALPSPORT_TAXONOMY) {
-    for (const group of section.groups) {
-      // Every heading is a Type: all 673 typed products in the shop's exports carry one. The
-      // sub-links stay resolvable too, since an invoice names them freely — they are mapped up to
-      // the heading they sit under rather than written to the column.
-      if (!AUDIENCE_HEADINGS.has(group.heading) && !out.includes(group.heading)) out.push(group.heading);
-      for (const leaf of group.leaves.filter((l) => !isAudienceLeaf(l))) if (!out.includes(leaf)) out.push(leaf);
-    }
-  }
-  return out;
-})();
+export function productTypes(): string[] {
+  return active.productTypes;
+}
 
 /** Type → the top-level menus it can appear under. This is what gets written as a tag. */
-export const TYPE_SECTIONS: Record<string, string[]> = (() => {
-  const out: Record<string, Set<string>> = {};
-  const add = (type: string, top: string) => { (out[type] ??= new Set()).add(top); };
-  for (const section of ALPSPORT_TAXONOMY) {
-    for (const group of section.groups) {
-      if (!AUDIENCE_HEADINGS.has(group.heading)) add(group.heading, section.top);
-      for (const leaf of group.leaves.filter((l) => !isAudienceLeaf(l))) add(leaf, section.top);
-    }
-  }
-  return Object.fromEntries(Object.entries(out).map(([k, v]) => [k, [...v]]));
-})();
+export function typeSections(): Record<string, string[]> {
+  return active.typeSections;
+}
 
 /** Type → the group headings it sits beneath, for showing a person where a match landed. */
-export const TYPE_PARENTS: Record<string, string[]> = (() => {
-  const out: Record<string, Set<string>> = {};
-  for (const section of ALPSPORT_TAXONOMY) {
-    for (const group of section.groups) {
-      for (const leaf of group.leaves) {
-        if (isAudienceLeaf(leaf)) continue;
-        (out[leaf] ??= new Set()).add(group.heading);
-      }
-    }
-  }
-  return Object.fromEntries(Object.entries(out).map(([k, v]) => [k, [...v]]));
-})();
+export function typeParents(): Record<string, string[]> {
+  return active.typeParents;
+}
+
+/** heading → its sub-links, kept whole so the UI can show what sits under a group. */
+export function typeLeaves(): Record<string, string[]> {
+  return active.typeLeaves;
+}
+
+/** The top-level menus in force, in order: the pack's, then the learned ones. */
+export function sectionNames(): string[] {
+  return active.sections;
+}
+
+/** Type or section → the tag the shop writes for it, where that is not the plain slug. */
+export function tagSpelling(): Record<string, string> {
+  return active.spelling;
+}
+
+/** Type → the further tags it carries beside its own. */
+export function tagAlso(): Record<string, readonly string[]> {
+  return active.also;
+}
+
+/** The fixed half of the shop's marker tag; empty when the shop writes none. */
+export function markerPrefix(): string {
+  return conventions.marker.trim().toLowerCase();
+}
 
 /**
  * The two clothing headings that say what a garment is *for* rather than who wears it. A snow
@@ -180,17 +343,12 @@ export const CLOTHING_CONTEXTS = ["Snow Clothing", "Outdoor Clothing"] as const;
 /** The context headings a garment sits under. Empty for one the menu does not place. */
 export function clothingContextsFor(type: string): string[] {
   const resolved = resolveType(type) ?? type.trim();
-  const clothing = ALPSPORT_TAXONOMY.find((s) => s.top === "Clothing");
+  const clothing = active.tree.find((s) => s.top === "Clothing");
   if (!clothing) return [];
   return clothing.groups
     .filter((g) => (CLOTHING_CONTEXTS as readonly string[]).includes(g.heading) && g.leaves.includes(resolved))
     .map((g) => g.heading);
 }
-
-/** heading → its sub-links, kept whole so the UI can show what sits under a group. */
-export const TYPE_LEAVES: Record<string, string[]> = Object.fromEntries(
-  ALPSPORT_TAXONOMY.flatMap((s) => s.groups.map((g) => [g.heading, g.leaves] as const)),
-);
 
 /**
  * The heading a product is filed under — which is what the Shopify `Type` column holds.
@@ -205,8 +363,8 @@ export const TYPE_LEAVES: Record<string, string[]> = Object.fromEntries(
  */
 export function headingsFor(type: string): string[] {
   const resolved = resolveType(type) ?? type.trim();
-  if (TYPE_LEAVES[resolved]) return [resolved]; // it is already a heading
-  const parents = (TYPE_PARENTS[resolved] ?? []).filter((h) => !AUDIENCE_HEADINGS.has(h));
+  if (active.typeLeaves[resolved]) return [resolved]; // it is already a heading
+  const parents = (active.typeParents[resolved] ?? []).filter((h) => !AUDIENCE_HEADINGS.has(h));
   return order(parents);
 }
 
@@ -235,13 +393,6 @@ function order(headings: string[]): string[] {
 }
 
 /**
- * The menu draws an ampersand and the catalogue spells it out, so the two have to meet: without
- * this, the shop's own Type values — "Packs and Bags", "Climbing and Abseiling" — fail to resolve
- * back to the menu headings they came from, and a product re-read from an export loses its place.
- */
-const norm = (value: string) => value.trim().toLowerCase().replace(/&/g, " and ").replace(/[^a-z0-9]+/g, " ").trim();
-
-/**
  * Spellings that appear in the existing catalogue but not in the menu. The site hyphenates
  * "Back-Country" in one place and not another, so both have to resolve.
  */
@@ -256,9 +407,10 @@ const ALIASES: Record<string, string> = {
 export function resolveType(value: string): string | undefined {
   const want = norm(value);
   if (!want) return undefined;
-  const exact = PRODUCT_TYPES.find((t) => norm(t) === want);
+  const exact = active.productTypes.find((t) => norm(t) === want);
   if (exact) return exact;
-  return ALIASES[want];
+  const alias = ALIASES[want];
+  return alias && active.productTypes.includes(alias) ? alias : undefined;
 }
 
 /** True when this names a place a product can legitimately be filed. */

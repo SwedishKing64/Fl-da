@@ -6,6 +6,7 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "./db";
+import { ensureConventions } from "./shop-profile";
 
 export const SESSION_COOKIE = "catalog_session";
 const SESSION_DAYS = 14;
@@ -68,6 +69,7 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
 
 /** For pages: redirect to login (or to setup when no users exist yet). */
 export async function requireUser(role?: Role): Promise<CurrentUser> {
+  await ensureConventions();
   const user = await getCurrentUser();
   if (!user) {
     const count = await prisma.user.count();
@@ -79,6 +81,7 @@ export async function requireUser(role?: Role): Promise<CurrentUser> {
 
 /** For route handlers: returns null instead of redirecting. */
 export async function requireApiUser(role?: Role): Promise<CurrentUser | null> {
+  await ensureConventions();
   const user = await getCurrentUser();
   if (!user) return null;
   if (role === "ADMIN" && user.role !== "ADMIN") return null;

@@ -13,6 +13,7 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
+import { anthropicClient } from "./anthropic";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { EXTRACTION_MODEL, aiAvailable } from "./extract/ai";
@@ -49,11 +50,7 @@ Mark it as about one product when the correction plainly could not apply to a fu
 
 Never claim to have changed anything. You are proposing; a person decides.`;
 
-let client: Anthropic | null = null;
-function getClient(): Anthropic {
-  if (!client) client = new Anthropic({ maxRetries: 6 }); // see getClient in adjust-plan.ts: two retries does not ride out "overloaded"
-  return client;
-}
+const getClient = (): Anthropic => anthropicClient(6);
 
 export function feedbackAvailable(): boolean {
   return aiAvailable();

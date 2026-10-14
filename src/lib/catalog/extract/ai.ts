@@ -4,6 +4,8 @@
 // is visible in a product photo. Structured outputs keep the response schema-valid.
 
 import Anthropic from "@anthropic-ai/sdk";
+import { retailer, taxName } from "../shop-profile";
+import { anthropicClient } from "../anthropic";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import type { ExtractedTable } from "./types";
@@ -52,7 +54,7 @@ const ExtractionSchema = z.object({
 
 export type AiExtraction = z.infer<typeof ExtractionSchema>;
 
-const SYSTEM = `You read documents uploaded by a ski and snowboard retailer in Australia who is building Shopify products. Work out what each document is, then extract only what is relevant.
+const SYSTEM = () => `You read documents uploaded by ${retailer()} who is building Shopify products. Work out what each document is, then extract only what is relevant.
 
 Document types:
 - INVOICE / order confirmation: one item per purchasable variant line (each length/size/colour is its own item) with unit cost and quantity.
@@ -101,17 +103,11 @@ Rules:
 - Never invent values. Leave a string empty or a number null when the document does not state it.
 - Ignore freight, deposit, discount, subtotal and tax summary lines - they are not products.
 - On an INVOICE or PRICE_LIST, leave description, flex, abilityLevel, dinRange, terrain, tags and imageUrls empty on every item and keep summary to one short sentence: the shop fills those in from the brand's own pages, and a photographed invoice has to be read quickly.
-- gstTreatment: EXCLUSIVE when prices are marked ex GST / plus GST, INCLUSIVE when marked inc GST, NONE when the supplier is overseas and no GST applies, otherwise UNKNOWN.`;
+- gstTreatment: EXCLUSIVE when prices are marked ex ${taxName()} / plus ${taxName()}, INCLUSIVE when marked inc ${taxName()}, NONE when the supplier is overseas and no ${taxName()} applies, otherwise UNKNOWN.`;
 
-let client: Anthropic | null = null;
-function getClient(): Anthropic {
-  if (!client) client = new Anthropic({ maxRetries: 6 }); // see getClient in adjust-plan.ts: two retries does not ride out "overloaded"
-  return client;
-}
+const getClient = (): Anthropic => anthropicClient(6);
 
-export function aiAvailable(): boolean {
-  return Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
-}
+export { aiAvailable } from "../anthropic";
 
 type ContentBlocks = Anthropic.MessageParam["content"];
 
@@ -148,7 +144,7 @@ async function runExtraction(content: ContentBlocks, options: { visual?: boolean
   const params = {
     model: EXTRACTION_MODEL,
     max_tokens: 16000,
-    system: SYSTEM,
+    system: SYSTEM(),
     thinking: { type: "adaptive" as const },
     output_config: { format: zodOutputFormat(ExtractionSchema), effort: "medium" as const },
     messages: [{ role: "user" as const, content }],

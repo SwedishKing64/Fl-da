@@ -123,9 +123,6 @@ from its QuickBooks list, batch PDFs split into one bill per invoice) live in Ru
 
 Open at handover:
 
-- Files and hosted pictures still live in the old personal Vercel project's Blob store until
-  "Copy from the old site" is run on Settings; then the old project, its Neon database and Blob
-  store are deleted and the personal API key revoked.
 - The first Burton board page read for specs was not run with a live API key in the development
   environment; check it.
 

@@ -16,13 +16,14 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
+import { anthropicClient } from "./anthropic";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { prisma } from "./db";
 import { EXTRACTION_MODEL, aiAvailable } from "./extract/ai";
 import { retrying } from "./api-errors";
 import { logAudit } from "./audit";
-import { isValidType, PRODUCT_TYPES } from "./taxonomy";
+import { isValidType, productTypes } from "./taxonomy";
 import { houseTags } from "./product-tags";
 import { buildHandle } from "./handle";
 import { productTitle, seasonTagFrom } from "./titles";
@@ -65,8 +66,7 @@ Read the instruction chat as the person's standing orders. Where they asked for 
 
 Only change what you are sure of. A wrong title or Type is worse than one left for the person.`;
 
-let client: Anthropic | null = null;
-const getClient = (): Anthropic => (client ??= new Anthropic({ maxRetries: 6 }));
+const getClient = (): Anthropic => anthropicClient(6);
 
 type Ask = (system: string, content: string) => Promise<string | undefined>;
 const askModel: Ask = async (system, content) => {
@@ -107,7 +107,7 @@ export async function describeBatch(batchId: string): Promise<string> {
     `Files: ${batch.files.map((f) => `${f.filename} [${f.detectedKind ?? f.kind}]${f.extractionError ? ` — ${f.extractionError.replace(/\s+/g, " ").slice(0, 600)}` : ""}`).join("; ") || "(none)"}`,
     `Directives in force: ${describeDirectives(parseDirectives(batch.directives)).join("; ") || "(none)"}`,
     `Instruction chat:${thread.length ? "\n" + thread.map((t) => `  ${t.role}: ${t.body.replace(/\s+/g, " ").slice(0, 500)}`).join("\n") : " (nothing said)"}`,
-    `The shop's Types: ${PRODUCT_TYPES.join(", ")}`,
+    `The shop's Types: ${productTypes().join(", ")}`,
     `How the shop already lists these brands (vendor | title | type | tags):${sample.length ? "\n" + sample.join("\n") : " (no listings remembered — upload the shop's export to the batch)"}`,
     `Products built (${batch.products.length}):`,
     ...lines,

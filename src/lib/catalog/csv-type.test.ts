@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { csvType } from "./pipeline-pure";
-import { PRODUCT_TYPES, TYPE_LEAVES } from "./taxonomy";
+import { productTypes, typeLeaves } from "./taxonomy";
 
 /**
  * The Shopify Type column takes the menu heading, not the shelf under it.
@@ -37,8 +37,8 @@ describe("the Type column", () => {
 
   it("never writes a value that is not a heading, for any type the app can produce", () => {
     // Every type the taxonomy admits must map to something a heading-only column would accept.
-    const headings = new Set(PRODUCT_TYPES.filter((t) => csvType(t, []) === t));
-    for (const type of PRODUCT_TYPES) expect(headings.has(csvType(type, []))).toBe(true);
+    const headings = new Set(productTypes().filter((t) => csvType(t, []) === t));
+    for (const type of productTypes()) expect(headings.has(csvType(type, []))).toBe(true);
   });
 
   it("passes through something it has never heard of rather than blanking the column", () => {
@@ -83,7 +83,7 @@ describe("snow accessories", () => {
   it("uses only headings the shop actually has", () => {
     // Every Type this can produce has to be one of the menu's headings — the fault that started
     // this was a value invented from a leaf.
-    const headings = new Set(Object.keys(TYPE_LEAVES));
+    const headings = new Set(Object.keys(typeLeaves()));
     for (const shelf of ["Helmets", "Goggles", "Gloves", "Snow Jackets", "Snow Pants", "Ski Poles", "Ski Tuning"]) {
       expect(headings.has(csvType(shelf, []))).toBe(true);
     }

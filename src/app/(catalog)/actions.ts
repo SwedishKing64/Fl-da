@@ -104,12 +104,12 @@ export async function setupAction(_prev: ActionResult | null, formData: FormData
   try {
     const data = schema.parse({ name: formData.get("name"), email: String(formData.get("email") ?? "").trim().toLowerCase(), password: formData.get("password") });
     const user = await prisma.user.create({ data: { name: data.name, email: data.email, passwordHash: hashPassword(data.password), role: "ADMIN" } });
-    await seedDefaults();
     await createSession(user.id);
   } catch (err) {
     return fail(err);
   }
-  redirect("/");
+  // The rules are seeded when the shop says what it sells, on the next step of setup.
+  redirect("/setup");
 }
 
 export async function logoutAction(): Promise<void> {
@@ -154,7 +154,7 @@ const batchSchema = z.object({
   freightTotalAud: z.coerce.number().min(0).default(0),
   freightMode: z.enum(["PER_UNIT", "BY_VALUE"]).default("PER_UNIT"),
   splitExportBy: z.enum(["NONE", "BRAND", "PRODUCT_TYPE"]).default("BRAND"),
-  // Letters only: it becomes the suffix on the 123abc- tag, and the catalogue writes it lowercase.
+  // Letters only: it becomes the suffix on the shop's marker tag, and the catalogue writes it lowercase.
   builtBy: z.string().regex(/^[A-Za-z]{0,3}$/, "Initials only, up to three letters").optional(),
   notes: z.string().optional(),
 });
@@ -177,7 +177,7 @@ export async function createBatchAction(_prev: ActionResult | null, formData: Fo
     const settings = await getSettings();
     const fx = data.currency === "AUD" ? 1 : data.fxRateToAud !== 1 ? data.fxRateToAud : settings.fxRates[data.currency] ?? 1;
     const batch = await prisma.importBatch.create({
-      // The 123abc- marker names whoever built the listings, so it starts as the person creating the
+      // The marker tag names whoever built the listings, so it starts as the person creating the
       // batch and can be changed in batch settings when someone builds on another's behalf.
       data: { name: data.name, supplierId, createdById: user.id, builtBy: initialsFrom(user.name || user.email), currency: data.currency, gstTreatment: data.gstTreatment, fxRateToAud: fx, freightTotalAud: data.freightTotalAud, freightMode: data.freightMode, splitExportBy: data.splitExportBy, notes: data.notes || null },
     });
@@ -1099,31 +1099,6 @@ export async function transcribeDocumentAction(input: { files: Array<{ name: str
   });
 }
 
-/**
- * Copy the old Rubin's data and files into this one. Admin only; runs in steps the page drives.
- * The old site's connection string and token arrive with every step and are kept nowhere.
- */
-export async function copyFromOldSiteAction(input: { databaseUrl: string; blobToken: string; state: import("@/lib/catalog/migrate").CopyState | null }): Promise<ActionResult<{ state: import("@/lib/catalog/migrate").CopyState; lines: string[]; done: boolean }>> {
-  const user = await requireUser("ADMIN");
-  return safely(async () => {
-    const { START, blobFiles, checkSourceUrl, copyStep, prismaStore, sourceClient } = await import("@/lib/catalog/migrate");
-    const { findBlobToken } = await import("@/lib/catalog/blob-token");
-    const bad = checkSourceUrl(input.databaseUrl);
-    if (bad) return { ok: false, error: bad };
-    const mine = findBlobToken();
-    const oldToken = input.blobToken.trim();
-    if (oldToken && !mine) return { ok: false, error: "This site has no file store of its own yet (no BLOB_READ_WRITE_TOKEN), so the files cannot be copied in. Add a Blob store to the project and redeploy, or leave the token out." };
-    if (oldToken && mine && oldToken === mine.token) return { ok: false, error: "That is this site's own file store token, not the old site's." };
-    const source = sourceClient(input.databaseUrl);
-    try {
-      const out = await copyStep(input.state ?? START, prismaStore(source), oldToken && mine ? blobFiles(oldToken, mine.token) : null);
-      if (out.done) await logAudit("site.copied", { userId: user.id, details: { counts: out.state.counts, files: out.state.files.copied } }).catch(() => undefined);
-      return { ok: true, data: out };
-    } finally {
-      await source.$disconnect().catch(() => undefined);
-    }
-  });
-}
 
 export async function readInvoiceAction(file: { name: string; type: string; base64: string }): Promise<ActionResult<InvoiceRead & { source: string }>> {
   return safely(async () => {
@@ -1216,7 +1191,7 @@ export async function readInvoiceAction(file: { name: string; type: string; base
  * listing of a model — built from an order in an import batch, days later — carries the shelves
  * the shop gave it. Only the handle, title, vendor, type and tags travel. See shop-memory.
  */
-export async function rememberListingsAction(listings: Array<{ handle: string; title: string; vendor: string; productType: string; tags: string[]; price?: number | null; bindingOption?: string }>): Promise<ActionResult<{ remembered: number }>> {
+export async function rememberListingsAction(listings: Array<{ handle: string; title: string; vendor: string; productType: string; tags: string[]; price?: number | null; bindingOption?: string; barcodes?: string[] }>): Promise<ActionResult<{ remembered: number }>> {
   await requireUser();
   try {
     const { rememberListings } = await import("@/lib/catalog/shop-memory-store");
@@ -1633,4 +1608,149 @@ export async function clearInstructionsAction(batchId: string): Promise<ActionRe
   } catch (err) {
     return fail(err);
   }
+}
+
+
+// ---------------------------------------------------------------------------
+// Setup: the shop, what it sells, what it has taught Flöda, how documents are read
+// ---------------------------------------------------------------------------
+
+const shopSchema = z.object({
+  name: z.string().trim().min(1, "Give the shop its name"),
+  sells: z.string().trim().min(1, "Say what the shop sells"),
+  country: z.string().trim().min(2).max(2),
+  currency: z.string().trim().regex(/^[A-Z]{3}$/, "A three-letter currency code"),
+  taxName: z.string().trim().max(24),
+  taxRate: z.coerce.number().min(0).max(1),
+  pack: z.enum(["snow-outdoor", "general"]),
+  marker: z.string().trim().toLowerCase().regex(/^[a-z0-9]{0,12}$/, "Letters and digits only, up to twelve"),
+});
+
+/**
+ * Who the shop is and what it sells. Switching the snow-and-outdoor pack on seeds its rules once;
+ * switching it off takes the seeded ones back out and leaves anything a person wrote.
+ */
+export async function saveShopAction(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const raw = Object.fromEntries(formData.entries());
+    const data = shopSchema.parse({ ...raw, taxRate: Number(raw.taxRate ?? 0) / 100 });
+    const { getShopProfile, saveShopProfile } = await import("@/lib/catalog/shop-profile");
+    const before = await getShopProfile();
+    await saveShopProfile(data);
+    if (data.pack === "snow-outdoor" && before.pack !== "snow-outdoor") await seedDefaults();
+    if (data.pack !== "snow-outdoor" && before.pack === "snow-outdoor") await (await import("@/lib/catalog/seed")).unseedDefaults();
+    await saveSettings({ gstRate: data.taxRate });
+    await logAudit("shop.saved", { userId: user.id, details: { pack: data.pack, country: data.country, currency: data.currency } });
+    revalidatePath("", "layout");
+    return { ok: true, message: "Saved" };
+  });
+}
+
+/** What the shop's own export showed about how it files and tags products. Replaces what was learned before. */
+export async function learnVocabularyAction(learned: import("@/lib/catalog/taxonomy").LearnedVocabulary): Promise<ActionResult<{ types: number }>> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const { saveLearnedVocabulary, saveShopProfile } = await import("@/lib/catalog/shop-profile");
+    const clean: import("@/lib/catalog/taxonomy").LearnedVocabulary = {
+      types: learned.types.slice(0, 2000).map((t) => ({ type: String(t.type).trim().slice(0, 120), count: Number(t.count) || 0, sections: (t.sections ?? []).map(String).slice(0, 12), ...(t.spelling ? { spelling: String(t.spelling).slice(0, 120) } : {}) })).filter((t) => t.type),
+      sections: (learned.sections ?? []).map(String).slice(0, 40),
+      spelling: Object.fromEntries(Object.entries(learned.spelling ?? {}).slice(0, 4000).map(([k, v]) => [String(k).slice(0, 120), String(v).slice(0, 120)])),
+      vendors: (learned.vendors ?? []).slice(0, 2000).map((v) => ({ name: String(v.name).slice(0, 120), count: Number(v.count) || 0 })),
+      products: Number(learned.products) || 0,
+      file: String(learned.file ?? "").slice(0, 200),
+      learnedAt: new Date().toISOString(),
+    };
+    await saveLearnedVocabulary(clean);
+    await saveShopProfile({ skipped: { learn: false } });
+    await logAudit("shop.learned", { userId: user.id, details: { file: clean.file, products: clean.products, types: clean.types.length, sections: clean.sections } });
+    revalidatePath("", "layout");
+    return { ok: true, data: { types: clean.types.length } };
+  });
+}
+
+/**
+ * The conventions per brand and kind of product, read out of the export in the browser and kept as
+ * product templates. Templates learned from an earlier export are replaced; ones a person made by
+ * hand are left.
+ */
+export async function learnTemplatesAction(input: { file: string; groups: import("@/lib/catalog/templates").TemplateGroup[] }): Promise<ActionResult<{ templates: number }>> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const groups = input.groups.filter((g) => g.analysis && g.analysis.productCount > 0).slice(0, 1500);
+    await prisma.productTemplate.deleteMany({ where: { sourceFileName: { startsWith: "export:" } } });
+    let made = 0;
+    for (const g of groups) {
+      const a = g.analysis;
+      const vendor = String(g.vendor ?? "").trim().slice(0, 120);
+      const productType = String(g.productType ?? "").trim().slice(0, 120);
+      if (!vendor && !productType) continue;
+      await prisma.productTemplate.create({
+        data: {
+          name: [vendor, productType].filter(Boolean).join(" · ").slice(0, 160),
+          scope: vendor ? "BRAND" : "PRODUCT_TYPE",
+          matchValue: vendor || productType,
+          matchProductType: vendor ? productType : "",
+          sourceFileName: `export:${String(input.file ?? "").slice(0, 150)}`,
+          productCount: a.productCount,
+          setProductType: productType,
+          addTags: (a.commonTags ?? []).slice(0, 40).join(", "),
+          addCollections: (a.collections ?? []).slice(0, 20).join(", "),
+          optionNames: (a.optionNames ?? []).slice(0, 3).join(", "),
+          setMetafields: JSON.stringify(a.metafields ?? {}),
+          analysis: JSON.stringify({ ...a, tagCounts: (a.tagCounts ?? []).slice(0, 60) }),
+          priority: Math.min(a.productCount, 1000),
+          active: true,
+        },
+      });
+      made++;
+    }
+    await logAudit("shop.templates", { userId: user.id, details: { file: input.file, templates: made } });
+    return { ok: true, data: { templates: made } };
+  });
+}
+
+/** The key the shop reads documents with, when the host sets none. Tried once before it is kept. */
+export async function saveApiKeyAction(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const key = String(formData.get("key") ?? "").trim();
+    const { saveStoredApiKey, saveShopProfile } = await import("@/lib/catalog/shop-profile");
+    if (!key) {
+      await saveStoredApiKey("");
+      return { ok: true, message: "The key has been removed." };
+    }
+    if (!/^sk-ant-[A-Za-z0-9_-]{20,}$/.test(key)) return { ok: false, error: "That does not look like an Anthropic API key. It starts with sk-ant- and is pasted whole." };
+    const { default: Anthropic } = await import("@anthropic-ai/sdk");
+    try {
+      await new Anthropic({ apiKey: key, maxRetries: 1 }).models.list({ limit: 1 });
+    } catch (err) {
+      const why = describeApiError(err) ?? said(err);
+      return { ok: false, error: `The key was refused, so it was not kept: ${why}` };
+    }
+    await saveStoredApiKey(key);
+    await saveShopProfile({ skipped: { ai: false } });
+    await logAudit("shop.apikey", { userId: user.id, details: { set: true } });
+    revalidatePath("", "layout");
+    return { ok: true, message: "The key works and has been kept." };
+  });
+}
+
+/** A step of setup put off until later. It stays on the Home checklist. */
+export async function skipSetupStepAction(step: "learn" | "ai"): Promise<ActionResult> {
+  await requireUser("ADMIN");
+  return safely(async () => {
+    const { saveShopProfile } = await import("@/lib/catalog/shop-profile");
+    await saveShopProfile({ skipped: { [step]: true } });
+    revalidatePath("", "layout");
+    return { ok: true };
+  });
+}
+
+export async function finishSetupAction(): Promise<void> {
+  await requireUser("ADMIN");
+  const { saveShopProfile } = await import("@/lib/catalog/shop-profile");
+  await saveShopProfile({ setupDone: true });
+  revalidatePath("", "layout");
+  redirect("/");
 }

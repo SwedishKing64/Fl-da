@@ -9,6 +9,8 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
+import { retailer } from "./shop-profile";
+import { anthropicClient } from "./anthropic";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { EXTRACTION_MODEL, aiAvailable } from "./extract/ai";
@@ -59,7 +61,7 @@ export interface PlannedChange {
   category: string;
 }
 
-const SYSTEM = `You turn an instruction from a ski shop's staff into edits to a Shopify product export.
+const SYSTEM = () => `You turn an instruction from the staff of ${retailer()} into edits to a Shopify product export.
 
 The shop's rules, which you follow without being told:
 - The recommended retail price lives in the Compare At column. Putting something "on sale", "on clearance" or "X% off" means the discount comes off the RECOMMENDED RETAIL, not off whatever the price happens to be today, so a product marked down twice does not compound. Use from: "rrp" unless the instruction plainly says otherwise.
@@ -85,7 +87,6 @@ If the instruction does not narrow the products at all, leave every scope field 
 
 That last rule is about the scope and nothing else. When the instruction says plainly what to do — add a tag, take 30% off — always return that operation. Whether it turns out to change anything is not your decision: the products it matches may already be that way, and the page works that out for itself and says so.`;
 
-let client: Anthropic | null = null;
 /**
  * More patience than the SDK's default of two retries.
  *
@@ -94,7 +95,7 @@ let client: Anthropic | null = null;
  * which is what "things were missing" turned out to be. The SDK backs off exponentially and honours
  * the server's retry-after, so more attempts cost time on a bad minute and nothing on a good one.
  */
-const getClient = (): Anthropic => (client ??= new Anthropic({ maxRetries: 6 }));
+const getClient = (): Anthropic => anthropicClient(6);
 
 export function planningAvailable(): boolean {
   return aiAvailable();
@@ -379,7 +380,7 @@ export async function planAdjustment(
   const response = await retrying(() => getClient().messages.stream({
     model: EXTRACTION_MODEL,
     max_tokens: 2000,
-    system: SYSTEM,
+    system: SYSTEM(),
     output_config: { format: zodOutputFormat(PlanSchema), effort: "low" },
     messages: [{ role: "user", content: context }],
   }).finalMessage());
@@ -482,7 +483,7 @@ export interface SplitInstructions {
   unclear: string;
 }
 
-const SPLIT_SYSTEM = `You are reading a sheet of instructions from a ski shop's buyer. It lists the changes to make to products the shop already sells — what moves into clearance, what goes on sale and by how much, what comes off the site, what gets retagged.
+const SPLIT_SYSTEM = () => `You are reading a sheet of instructions from the buyer at ${retailer()}. It lists the changes to make to products the shop already sells — what moves into clearance, what goes on sale and by how much, what comes off the site, what gets retagged.
 
 Break it into the separate changes it asks for. One entry per change.
 
@@ -532,7 +533,7 @@ export async function splitInstructions(input: string | { pdf: Buffer } | { imag
   const response = await retrying(() => getClient().messages.stream({
     model: EXTRACTION_MODEL,
     max_tokens: 8000,
-    system: SPLIT_SYSTEM,
+    system: SPLIT_SYSTEM(),
     output_config: { format: zodOutputFormat(SplitSchema), effort: "low" },
     messages: [{ role: "user", content }],
   }).finalMessage());
@@ -605,7 +606,7 @@ export interface Screened {
   why: string;
 }
 
-const SCREEN_SYSTEM = `You are matching a ski shop's sheet of seasonal changes against the Shopify exports they have actually loaded.
+const SCREEN_SYSTEM = () => `You are matching a sheet of seasonal changes from ${retailer()} against the Shopify exports they have actually loaded.
 
 For each numbered instruction, say whether any product in those exports could possibly match it.
 
@@ -649,7 +650,7 @@ export async function screenInstructions(
     response = await retrying(() => getClient().messages.stream({
       model: EXTRACTION_MODEL,
       max_tokens: 8000,
-      system: SCREEN_SYSTEM,
+      system: SCREEN_SYSTEM(),
       output_config: { format: zodOutputFormat(ScreenSchema), effort: "low" },
       messages: [{ role: "user", content: context }],
     }).finalMessage());

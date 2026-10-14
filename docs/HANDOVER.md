@@ -1,5 +1,9 @@
 # Rubin — handover
 
+> This copy of the code is **Floda**, the product being made from Rubin. Alpsport's own Rubin
+> lives in the business's repository and is not changed from here. See `FLODA.md` for what
+> differs and the plan. Everything below describes the code as it was when the two split.
+
 Read this first. It is what a new Claude session (or a new developer) needs to know that is not in
 the code: what the shop is, what it asked for, the rules it told us, what was decided, and what is
 still open. The code is the source of truth for behaviour; this is the source of truth for *why*.

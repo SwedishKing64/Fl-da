@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Rubin",
-  description: "Shopify catalogue tools for a ski shop: supplier invoices in, ready-to-import products out.",
+  title: "Floda",
+  description: "Supplier paperwork in, shop-ready listings out.",
 };
 
 export default function RootLayout({

@@ -1,0 +1,122 @@
+/*
+ * Floda's own face, separate from the app's working theme.
+ *
+ * Ice, pine and amber: the colours of a shop floor in a mountain town in the morning. A serif
+ * for the big words because the product is about paperwork, and paperwork is set in serif; the
+ * system sans for everything that has to be read fast. No web fonts, so the page is as quick as
+ * the product claims to be.
+ */
+.floda {
+  --f-ice: #f3f6f7;
+  --f-paper: #ffffff;
+  --f-ink: #0e1b1e;
+  --f-ink-2: #3a4a4e;
+  --f-ink-soft: #66767a;
+  --f-line: #d8e0e2;
+  --f-pine: #0e5c57;
+  --f-pine-deep: #0a4541;
+  --f-pine-tint: #e2f0ee;
+  --f-amber: #f2b134;
+  --f-amber-ink: #6b4a00;
+  --f-amber-tint: #fdf2d8;
+  --f-serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  --f-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --f-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  background: var(--f-ice);
+  color: var(--f-ink);
+  font-family: var(--f-sans);
+  font-size: 17px;
+  line-height: 1.55;
+  min-height: 100vh;
+}
+.floda * { box-sizing: border-box; }
+.floda a { color: inherit; text-decoration: none; }
+.floda .wrap { width: min(1120px, 100% - 32px); margin-inline: auto; }
+.floda h1, .floda h2, .floda h3 { font-family: var(--f-serif); font-weight: 600; letter-spacing: -0.01em; text-wrap: balance; margin: 0; }
+.floda h1 { font-size: clamp(38px, 6vw, 64px); line-height: 1.04; }
+.floda h2 { font-size: clamp(28px, 3.6vw, 40px); line-height: 1.1; }
+.floda h3 { font-size: 21px; line-height: 1.25; }
+.floda p { margin: 0; }
+.floda .eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--f-pine); }
+.floda .lede { font-size: 19px; color: var(--f-ink-2); max-width: 58ch; }
+.floda .soft { color: var(--f-ink-soft); }
+.floda .btn { display: inline-flex; align-items: center; gap: 8px; padding: 13px 20px; border-radius: 999px; font-weight: 700; font-size: 15px; border: 1.5px solid transparent; cursor: pointer; transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease; }
+.floda .btn:hover { transform: translateY(-1px); }
+.floda .btn:focus-visible { outline: 3px solid var(--f-amber); outline-offset: 2px; }
+.floda .btn-pine { background: var(--f-pine); color: #fff; box-shadow: 0 14px 30px -16px rgba(14, 92, 87, 0.6); }
+.floda .btn-pine:hover { background: var(--f-pine-deep); }
+.floda .btn-ghost { border-color: var(--f-line); background: var(--f-paper); color: var(--f-ink); }
+.floda .btn-ghost:hover { border-color: var(--f-pine); }
+
+/* Top bar */
+.floda .bar { position: sticky; top: 0; z-index: 10; background: rgba(243, 246, 247, 0.85); backdrop-filter: blur(10px); border-bottom: 1px solid var(--f-line); }
+.floda .bar .wrap { display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 64px; }
+.floda .mark { display: inline-flex; align-items: center; gap: 10px; font-family: var(--f-serif); font-size: 24px; font-weight: 700; letter-spacing: -0.02em; }
+.floda .mark .dot { width: 28px; height: 28px; border-radius: 9px; background: var(--f-pine); position: relative; }
+.floda .mark .dot::after { content: ""; position: absolute; inset: 7px 7px 7px 13px; border-radius: 3px 8px 8px 3px; background: var(--f-amber); }
+.floda .bar nav { display: none; gap: 24px; font-size: 15px; font-weight: 600; color: var(--f-ink-2); }
+.floda .bar nav a:hover { color: var(--f-pine); }
+@media (min-width: 760px) { .floda .bar nav { display: flex; } }
+
+/* Hero */
+.floda .hero { padding-block: 72px 48px; display: grid; gap: 40px; align-items: center; }
+@media (min-width: 900px) { .floda .hero { grid-template-columns: 1.05fr 1fr; padding-block: 96px 72px; } }
+.floda .hero .ctas { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
+.floda .hero .note { margin-top: 16px; font-size: 14px; color: var(--f-ink-soft); }
+
+/* The before-and-after: a scribbled-on order form becoming listings. */
+.floda .demo { display: grid; gap: 14px; }
+.floda .sheet { background: var(--f-paper); border: 1px solid var(--f-line); border-radius: 16px; padding: 18px 20px; box-shadow: 0 24px 50px -30px rgba(14, 27, 30, 0.35); }
+.floda .sheet .title { font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--f-ink-soft); margin-bottom: 10px; }
+.floda .form-line { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; font-family: var(--f-mono); font-size: 13px; padding: 6px 0; border-top: 1px dashed var(--f-line); color: var(--f-ink-2); }
+.floda .form-line:first-of-type { border-top: 0; }
+.floda .pen { color: #b3261e; font-family: "Bradley Hand", "Segoe Print", "Comic Sans MS", cursive; font-size: 15px; font-weight: 700; transform: rotate(-3deg); display: inline-block; }
+.floda .arrow { text-align: center; color: var(--f-pine); font-weight: 700; font-size: 14px; letter-spacing: 0.08em; text-transform: uppercase; }
+.floda .listing { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--f-line); font-size: 14px; }
+.floda .listing:first-of-type { border-top: 0; }
+.floda .listing b { display: block; font-weight: 700; }
+.floda .listing .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.floda .tag { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--f-pine-tint); color: var(--f-pine-deep); }
+.floda .tag.amber { background: var(--f-amber-tint); color: var(--f-amber-ink); }
+.floda .price { font-variant-numeric: tabular-nums; font-weight: 700; }
+
+/* Sections */
+.floda section.band { padding-block: 72px; }
+.floda section.band.paper { background: var(--f-paper); border-block: 1px solid var(--f-line); }
+.floda section.band.pine { background: var(--f-pine-deep); color: #fff; }
+.floda section.band.pine .eyebrow { color: var(--f-amber); }
+.floda section.band.pine .soft { color: rgba(255, 255, 255, 0.72); }
+.floda .head { max-width: 62ch; margin-bottom: 36px; display: grid; gap: 12px; }
+.floda .steps { display: grid; gap: 20px; counter-reset: step; }
+@media (min-width: 760px) { .floda .steps { grid-template-columns: repeat(3, 1fr); } }
+.floda .step { background: var(--f-paper); border: 1px solid var(--f-line); border-radius: 16px; padding: 22px; display: grid; gap: 10px; }
+.floda .step .n { width: 34px; height: 34px; border-radius: 10px; background: var(--f-amber); color: var(--f-ink); display: grid; place-items: center; font-weight: 800; font-variant-numeric: tabular-nums; }
+.floda .jobs { display: grid; gap: 20px; }
+@media (min-width: 760px) { .floda .jobs { grid-template-columns: repeat(2, 1fr); } }
+.floda .job { border: 1px solid var(--f-line); border-radius: 16px; padding: 24px; background: var(--f-ice); display: grid; gap: 10px; }
+.floda .job .ico { font-size: 26px; }
+.floda .job ul { margin: 6px 0 0; padding-left: 18px; color: var(--f-ink-2); font-size: 15px; display: grid; gap: 4px; }
+.floda .proof { display: grid; gap: 24px; }
+@media (min-width: 760px) { .floda .proof { grid-template-columns: repeat(3, 1fr); } }
+.floda .proof .num { font-family: var(--f-serif); font-size: 44px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; color: var(--f-amber); }
+.floda .proof p { margin-top: 8px; }
+.floda .quote { font-family: var(--f-serif); font-size: 22px; line-height: 1.4; max-width: 52ch; }
+.floda .fit { display: grid; gap: 16px; }
+@media (min-width: 760px) { .floda .fit { grid-template-columns: repeat(3, 1fr); } }
+.floda .fit .card { border: 1px solid var(--f-line); border-radius: 16px; padding: 20px; background: var(--f-paper); }
+.floda .fit .card.now { border-color: var(--f-pine); box-shadow: 0 0 0 3px var(--f-pine-tint); }
+.floda .fit .label { font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--f-ink-soft); margin-bottom: 6px; }
+
+/* Register interest */
+.floda .signup { display: grid; gap: 24px; align-items: start; }
+@media (min-width: 900px) { .floda .signup { grid-template-columns: 1fr 1fr; gap: 48px; } }
+.floda form { display: grid; gap: 12px; background: var(--f-paper); border: 1px solid var(--f-line); border-radius: 16px; padding: 22px; }
+.floda label { display: grid; gap: 6px; font-size: 14px; font-weight: 600; }
+.floda input, .floda select, .floda textarea { font: inherit; font-size: 16px; padding: 11px 13px; border-radius: 10px; border: 1.5px solid var(--f-line); background: var(--f-paper); color: var(--f-ink); width: 100%; }
+.floda input:focus, .floda select:focus, .floda textarea:focus { outline: none; border-color: var(--f-pine); box-shadow: 0 0 0 3px var(--f-pine-tint); }
+.floda .thanks { background: var(--f-pine-tint); border: 1px solid var(--f-pine); border-radius: 16px; padding: 22px; display: grid; gap: 8px; }
+.floda .err { color: #b3261e; font-size: 14px; }
+.floda footer { padding-block: 32px; border-top: 1px solid var(--f-line); font-size: 14px; color: var(--f-ink-soft); }
+.floda footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: space-between; }
+
+@media (prefers-reduced-motion: reduce) { .floda .btn { transition: none; } .floda .btn:hover { transform: none; } }

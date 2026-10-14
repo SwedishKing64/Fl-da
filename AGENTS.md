@@ -6,7 +6,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 # Read the handover first
 
-`docs/HANDOVER.md` holds what the shop told us and what was decided — the binding lists, the mount
+`docs/FLODA.md` says what this repository is for and the plan. `docs/HANDOVER.md` holds what the shop told us and what was decided — the binding lists, the mount
 charge rules, how kinds of product and name matches work, the tag spellings, what is still open.
 Read it before changing behaviour, and add to it when the shop tells you something new.
 # Ship it: merge and deploy without asking

@@ -1,13 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC = ["/login", "/setup"];
+const PUBLIC = ["/login", "/setup", "/welcome"];
 
-/** Redirect signed-out visitors to the login page. */
+/** A signed-out visitor to the front door sees the landing page; anywhere else, the login page. */
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   if (PUBLIC.some((p) => pathname.startsWith(p))) return NextResponse.next();
   if (!request.cookies.get("catalog_session")?.value) {
     const url = request.nextUrl.clone();
+    if (pathname === "/") { url.pathname = "/welcome"; url.search = ""; return NextResponse.redirect(url); }
     url.pathname = "/login";
     url.searchParams.set("next", pathname);
     return NextResponse.redirect(url);

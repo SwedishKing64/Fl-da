@@ -1144,6 +1144,24 @@ export async function readBillAction(input: { files: SentFile[] }): Promise<Acti
   });
 }
 
+/** The shop's supplier list — QuickBooks' supplier contact export — kept for naming bills. Only the names are stored. */
+export async function saveSupplierListAction(file: SentFile): Promise<ActionResult<import("@/lib/catalog/bills/suppliers").SupplierList>> {
+  return safely(async () => {
+    const user = await requireUser();
+    const buffer = Buffer.from(file.base64, "base64");
+    const { parseSupplierList } = await import("@/lib/catalog/bills/suppliers");
+    const grids = /\.csv$/i.test(file.name)
+      ? [{ grid: (await import("@/lib/catalog/csv")).parseCsv(buffer.toString("utf8")) }]
+      : await (await import("@/lib/catalog/extract/tabular")).sheetGrids(buffer);
+    const entries = grids.map((g) => parseSupplierList(g.grid)).find((e) => e.length > 0) ?? [];
+    if (entries.length === 0) return { ok: false, error: `${file.name} has no column headed "Supplier". Use the supplier contact list exported from QuickBooks.` };
+    const list = { entries, file: file.name, updatedAt: new Date().toISOString() };
+    await (await import("@/lib/catalog/bills/supplier-list")).saveSupplierList(list);
+    await logAudit("suppliers.list", { userId: user.id, details: { file: file.name, suppliers: entries.length } }).catch(() => undefined);
+    return { ok: true, data: list };
+  });
+}
+
 /** One page of a scanned batch, rendered in the browser, read on its own and marked with where it sits. */
 export async function readBillPageAction(input: { file: SentFile; source: string }): Promise<ActionResult<{ bill: import("@/lib/catalog/bills/quickbooks").Bill; mark: import("@/lib/catalog/bills/read-bill").PageMark }>> {
   return safely(async () => {

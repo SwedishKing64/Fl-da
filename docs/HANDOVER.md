@@ -97,6 +97,16 @@ plain-number bill number is written as a number. The reader (`bills/read-bill.ts
 supplier, number, dates, total and GST with the API. QuickBooks takes up to 100 bills per file;
 suppliers and the category must exist there first.
 
+**Supplier names on bills.** The shop asked (2026-10-14) that each bill carry the supplier's name
+as its QuickBooks supplier list has it, not as the invoice prints it. The list is QuickBooks'
+"Supplier Contact List" export, loaded on the Bills page and kept in AppSetting
+`quickbooks.suppliers` — names and the "Full name" column only, never phones, emails or
+addresses, and never committed. `bills/suppliers.ts` matches ignoring Pty Ltd, Limited,
+Australia, punctuation and one-letter slips in long words ("Burton Snowboards Australia Pty Ltd"
+→ "Burton Australia Pty Ltd"); a one-word list name only matches an invoice name that starts with
+it; a tie it cannot break is offered as a choice. A supplier not on the list is flagged, since
+QuickBooks would create a new supplier for it.
+
 **A batch of invoices in one PDF.** The shop scans a day's invoices into one PDF (65MB at
 600dpi, several suppliers, some invoices several pages). A PDF of more than one page, or one over
 the upload limit, is drawn page by page in the browser (`pdf-pages.ts`, at the 1568px the API
@@ -112,6 +122,7 @@ next. Totals come from the last page that prints them. One row per invoice in th
   to bring the old Blob files across. Packs carry `backpacks`. The Burton RRP problem is fixed.
   Bills for QuickBooks writes the shop's own one-row-per-bill sheet instead of the line layout,
   and splits a scanned batch PDF of any size into one bill per invoice.
+- 2026-10-14 Bills take the supplier's name from the shop's QuickBooks supplier list.
 
 - 2026-10-12 Name matches confirmed before a delivery applies; order forms with a size column
   per line read the size. Packs filed on the Outdoor menu; Type spelling; retagging on Type change.

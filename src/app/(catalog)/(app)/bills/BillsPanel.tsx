@@ -1,11 +1,12 @@
 "use client";
 
 import { useRef, useState, useSyncExternalStore } from "react";
-import { readBillAction, readBillPageAction } from "@/app/(catalog)/actions";
+import { readBillAction, readBillPageAction, saveSupplierListAction } from "@/app/(catalog)/actions";
 import { Alert, Button, Card, Details, INPUT, cx } from "@/app/(catalog)/ui";
 import { fitsUpload, shrinkImage, tooBig } from "@/app/(catalog)/shrink";
 import { isPdf, openPdf } from "@/app/(catalog)/pdf-pages";
 import { groupPages, type ReadPage } from "@/lib/catalog/bills/split";
+import { matchSupplier, nameFromList, type SupplierList } from "@/lib/catalog/bills/suppliers";
 import { DEFAULT_OPTIONS, billsFileName, checkBill, lineAmount, quickBooksWorkbook, type Bill, type BillLine, type QuickBooksOptions } from "@/lib/catalog/bills/quickbooks";
 
 /**
@@ -57,8 +58,14 @@ const blankLine = (): BillLine => ({ description: "", quantity: null, unitPrice:
 type HeadKey = "supplier" | "billNo" | "billDate" | "dueDate" | "terms" | "currency" | "memo";
 type TotalKey = "subtotal" | "freight" | "gst" | "total";
 
-export function BillsPanel({ aiEnabled }: { aiEnabled: boolean }) {
+export function BillsPanel({ aiEnabled, suppliers }: { aiEnabled: boolean; suppliers: SupplierList | null }) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLInputElement>(null);
+  const [list, setList] = useState<SupplierList | null>(suppliers);
+  const [listBusy, setListBusy] = useState(false);
+  const [listError, setListError] = useState<string | null>(null);
+  const listNames = new Set(list?.entries.map((e) => e.name) ?? []);
+  const named = (b: Bill): Bill => (list ? nameFromList(b, list.entries) : b);
   const [files, setFiles] = useState<File[]>([]);
   const [onePerInvoice, setOnePerInvoice] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -141,13 +148,29 @@ export function BillsPanel({ aiEnabled }: { aiEnabled: boolean }) {
         if (!r.ok) { failed.push(`${group.map((f) => f.name).join(", ")}: ${r.error}`); continue; }
         got.push(r.data!);
       }
-      setBills((b) => [...b, ...got]);
+      setBills((b) => [...b, ...got.map(named)]);
       setFiles([]);
       if (failed.length > 0) setError(failed.join("\n"));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false); setProgress("");
+    }
+  }
+
+  async function loadSupplierList(file: File) {
+    setListBusy(true); setListError(null);
+    try {
+      const r = await saveSupplierListAction({ name: file.name, type: file.type, base64: await read64(file, file.name) });
+      if (!r.ok) { setListError(r.error); return; }
+      const next = r.data!;
+      setList(next);
+      // The bills already on screen are named again from what their invoices printed.
+      setBills((all) => all.map((b) => nameFromList(b, next.entries)));
+    } catch (err) {
+      setListError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setListBusy(false);
     }
   }
 
@@ -196,6 +219,19 @@ export function BillsPanel({ aiEnabled }: { aiEnabled: boolean }) {
         {error && <Alert tone="danger" className="mt-3 whitespace-pre-line">{error}</Alert>}
       </Card>
 
+      <Card title="Supplier names">
+        <p className="mb-3 text-xs text-[var(--ink-soft)]">
+          Each bill is written with the supplier&rsquo;s name as your QuickBooks has it, taken from your supplier list, so QuickBooks puts it against the right supplier rather than making a new one. Load the supplier contact list exported from QuickBooks; only the names are kept, never the phone numbers, emails or addresses. Load it again whenever suppliers are added.
+        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button size="sm" icon="📇" disabled={listBusy} onClick={() => listRef.current?.click()}>{listBusy ? "Loading…" : list ? "Load a newer list" : "Load the supplier list"}</Button>
+          <input ref={listRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void loadSupplierList(f); }} />
+          <span className="text-sm text-[var(--ink-soft)]">{list ? <>{list.entries.length} suppliers, from {list.file}, loaded {new Date(list.updatedAt).toLocaleDateString("en-AU")}</> : "No list loaded yet: bills keep the name printed on the invoice."}</span>
+        </div>
+        {listError && <Alert tone="danger" className="mt-3">{listError}</Alert>}
+        {list && <datalist id="qb-suppliers">{list.entries.map((e) => <option key={e.name} value={e.name} />)}</datalist>}
+      </Card>
+
       <Details summary="How the bills are written for QuickBooks" hint="One row per bill: Supplier, Bill no., Bill date, Due date, Category, Description, Amount with GST in it, GST. This browser remembers the category.">
         <label className="block max-w-md text-sm">
           <span className="text-xs font-medium text-[var(--ink-soft)]">Category the bills go to</span>
@@ -232,7 +268,8 @@ export function BillsPanel({ aiEnabled }: { aiEnabled: boolean }) {
               ] as Array<[HeadKey, string, string]>).map(([key, label, span]) => (
                 <label key={key} className={cx("block", span)}>
                   <span className="text-xs font-medium text-[var(--ink-soft)]">{label}</span>
-                  <input className={cx(INPUT, "mt-1")} value={bill[key]} onChange={(e) => edit(i, (b) => ({ ...b, [key]: e.target.value }))} />
+                  <input className={cx(INPUT, "mt-1")} list={key === "supplier" && list ? "qb-suppliers" : undefined} value={bill[key]} onChange={(e) => edit(i, (b) => ({ ...b, [key]: e.target.value }))} />
+                  {key === "supplier" && list && <SupplierNote bill={bill} onList={listNames.has(bill.supplier)} list={list} pick={(name) => edit(i, (b) => ({ ...b, supplier: name }))} />}
                 </label>
               ))}
             </div>
@@ -302,5 +339,20 @@ export function BillsPanel({ aiEnabled }: { aiEnabled: boolean }) {
         </Card>
       )}
     </div>
+  );
+}
+
+/** Under the supplier's name: whether it is on the shop's list, what the invoice printed, and the choices where it is not clear. */
+function SupplierNote({ bill, onList, list, pick }: { bill: Bill; onList: boolean; list: SupplierList; pick: (name: string) => void }) {
+  const printed = bill.printedSupplier ?? "";
+  if (onList) {
+    return <span className="mt-1 block text-xs text-[var(--ink-soft)]">✅ On the supplier list{printed && printed !== bill.supplier ? <> · the invoice says &ldquo;{printed}&rdquo;</> : null}</span>;
+  }
+  const match = matchSupplier(bill.supplier || printed, list.entries);
+  return (
+    <span className="mt-1 block text-xs text-amber-700">
+      ⚠️ Not on the supplier list, so QuickBooks would make a new supplier.{" "}
+      {match.kind === "unsure" ? <>Could be:{" "}{match.names.map((n, k) => <button key={n} type="button" className="underline" onClick={() => pick(n)}>{k > 0 ? ", " : ""}{n}</button>)}</> : "Pick the right one from the list as you type, or add it in QuickBooks first."}
+    </span>
   );
 }

@@ -23,6 +23,8 @@ export interface Bill {
   /** The file it was read from, for the screen. */
   source: string;
   supplier: string;
+  /** The supplier's name as the invoice printed it, where the shop's supplier list renamed it. */
+  printedSupplier?: string;
   billNo: string;
   /** YYYY-MM-DD where it could be read; otherwise as printed. */
   billDate: string;

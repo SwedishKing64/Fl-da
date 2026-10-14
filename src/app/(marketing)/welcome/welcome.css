@@ -1,157 +1,266 @@
 /*
- * Flöda's front door: Vercel's bones, Meta's skin.
+ * Flöda's front door.
  *
- * The layout and type are the Bay Area launch page — a centred headline set tight and heavy in
- * San Francisco, a product window under it on a glow, a feature grid drawn in hairlines, a dark
- * band of numbers, a quiet footer. The wordmark is Flöda typed in black. The palette and the controls are Meta's: #0866ff on white and
- * Meta grey, pill buttons, rounded chips, soft blue tints. No web fonts; the system face is the
- * point.
+ * Meta's design language on a launch page: one blue (#0866ff) spent on what you press and what
+ * matters, white and Meta grey for the ground, pill buttons, soft rounded cards, the system face
+ * set heavy and tight for headlines. Everything moves on scroll (Motion.tsx) and nothing moves
+ * for a viewer who has asked it not to. The wordmark is Flöda typed in black.
  */
 .floda {
-  --f-white: #ffffff;
-  --f-grey: #f0f2f5;
-  --f-grey-2: #e4e6eb;
-  --f-ink: #050505;
-  --f-ink-2: #3b3f45;
-  --f-soft: #65676b;
-  --f-line: #e4e6eb;
-  --f-line-2: #d9dde3;
   --f-meta: #0866ff;
   --f-meta-deep: #0a4fc2;
   --f-meta-bright: #3b8bff;
   --f-tint: #e7f0ff;
   --f-tint-2: #d4e4ff;
-  --f-night: #0b2b61;
-  --f-night-2: #061a3d;
-  --f-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --f-ink: #050505;
+  --f-ink-2: #3b3f45;
+  --f-soft: #65676b;
+  --f-grey: #f0f2f5;
+  --f-grey-2: #e4e6eb;
+  --f-line: #e4e6eb;
+  --f-line-2: #d9dde3;
+  --f-white: #ffffff;
+  --f-night: #0a1020;
+  --f-night-2: #111a33;
+  --f-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --f-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --f-ease: cubic-bezier(0.22, 1, 0.36, 1);
-  background: var(--f-white);
-  color: var(--f-ink);
+  --f-r: 18px;
   font-family: var(--f-sans);
-  font-size: 17px;
-  line-height: 1.5;
-  min-height: 100vh;
+  color: var(--f-ink);
+  background: var(--f-white);
   -webkit-font-smoothing: antialiased;
+  line-height: 1.5;
+  overflow-x: clip;
 }
-.floda * { box-sizing: border-box; }
+.floda *, .floda *::before, .floda *::after { box-sizing: border-box; }
 .floda a { color: inherit; text-decoration: none; }
-.floda p { margin: 0; }
+.floda h1, .floda h2, .floda h3, .floda p, .floda ul, .floda ol { margin: 0; }
+.floda h1 { font-size: clamp(40px, 6.4vw, 80px); line-height: 0.98; letter-spacing: -0.045em; font-weight: 800; text-wrap: balance; }
+.floda h2 { font-size: clamp(30px, 4.2vw, 50px); line-height: 1.04; letter-spacing: -0.035em; font-weight: 800; text-wrap: balance; }
+.floda h3 { font-size: 19px; line-height: 1.25; letter-spacing: -0.015em; font-weight: 700; }
 .floda .wrap { width: min(1152px, 100% - 32px); margin-inline: auto; }
-.floda h1, .floda h2, .floda h3 { margin: 0; text-wrap: balance; font-weight: 800; letter-spacing: -0.035em; }
-.floda h1 { font-size: clamp(44px, 7.2vw, 88px); line-height: 0.98; }
-.floda h2 { font-size: clamp(32px, 4.4vw, 52px); line-height: 1.02; }
-.floda h3 { font-size: 19px; line-height: 1.3; letter-spacing: -0.015em; font-weight: 700; }
-.floda .mono { font-family: var(--f-mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--f-soft); }
-.floda .eyebrow { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--f-meta); background: var(--f-tint); border-radius: 999px; padding: 6px 12px; }
-.floda .eyebrow::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--f-meta); }
-.floda .lede { font-size: 19px; line-height: 1.5; color: var(--f-ink-2); max-width: 60ch; }
 .floda .soft { color: var(--f-soft); }
-.floda .grad { background: linear-gradient(92deg, var(--f-meta) 0%, var(--f-meta-bright) 55%, #7fb3ff 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.floda .grad { background: linear-gradient(94deg, var(--f-meta) 0%, var(--f-meta-bright) 55%, #7fb3ff 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.floda .eyebrow { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--f-meta); background: var(--f-tint); border-radius: 999px; padding: 7px 14px; }
+.floda .eyebrow.dark { background: rgba(59, 139, 255, 0.18); color: #a6d0ff; }
+.floda .eyebrow .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--f-meta); box-shadow: 0 0 0 0 rgba(8, 102, 255, 0.5); animation: f-pulse 2s infinite; }
+@keyframes f-pulse { 0% { box-shadow: 0 0 0 0 rgba(8, 102, 255, 0.5); } 70% { box-shadow: 0 0 0 10px rgba(8, 102, 255, 0); } 100% { box-shadow: 0 0 0 0 rgba(8, 102, 255, 0); } }
+.floda .lede { font-size: 19px; line-height: 1.55; color: var(--f-ink-2); max-width: 62ch; }
+.floda .head { display: grid; gap: 16px; justify-items: start; margin-bottom: 44px; max-width: 760px; }
+.floda .head.center { justify-items: center; text-align: center; margin-inline: auto; }
 
-/* Meta's buttons: pills, the blue one and the grey one. */
-.floda .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 13px 22px; border-radius: 999px; font-weight: 700; font-size: 15px; border: 0; cursor: pointer; line-height: 1; transition: background 0.15s ease, transform 0.18s var(--f-ease), box-shadow 0.18s ease; }
+/* ----------------------------------------------------------------------------- motion */
+.floda .reveal { opacity: 0; transform: translateY(22px); transition: opacity 0.7s var(--f-ease), transform 0.8s var(--f-ease); will-change: opacity, transform; }
+.floda .reveal.in { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .floda .reveal { opacity: 1; transform: none; transition: none; }
+  .floda *, .floda *::before, .floda *::after { animation: none !important; transition: none !important; }
+}
+
+/* ------------------------------------------------------------------------------ buttons */
+.floda .btn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; padding: 12px 20px; border-radius: 999px; font-weight: 700; font-size: 15px; border: 0; cursor: pointer; line-height: 1; white-space: nowrap; transition: background 0.15s ease, transform 0.25s var(--f-ease), box-shadow 0.25s ease, border-color 0.15s ease; }
 .floda .btn:focus-visible { outline: 3px solid var(--f-tint-2); outline-offset: 2px; }
-.floda .btn-meta { background: var(--f-meta); color: #fff; box-shadow: 0 10px 24px -12px rgba(8, 102, 255, 0.7); }
-.floda .btn-meta:hover { background: var(--f-meta-deep); transform: translateY(-1px); }
+.floda .btn-lg { padding: 16px 26px; font-size: 16px; }
+.floda .btn-meta { background: var(--f-meta); color: #fff; box-shadow: 0 10px 24px -12px rgba(8, 102, 255, 0.8); }
+.floda .btn-meta:hover { background: var(--f-meta-deep); transform: translateY(-2px); box-shadow: 0 16px 30px -14px rgba(8, 102, 255, 0.9); }
+.floda .btn-meta span { transition: transform 0.25s var(--f-ease); }
+.floda .btn-meta:hover span { transform: translateX(3px); }
 .floda .btn-grey { background: var(--f-grey-2); color: var(--f-ink); }
 .floda .btn-grey:hover { background: #d8dadf; }
-.floda .btn-ghost { background: transparent; color: var(--f-ink); border: 1.5px solid var(--f-line-2); }
-.floda .btn-ghost:hover { border-color: var(--f-ink); }
-.floda .emo { display: inline-grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: var(--f-tint); font-size: 20px; }
+.floda .btn-ghost { background: var(--f-white); color: var(--f-ink); border: 1.5px solid var(--f-line-2); }
+.floda .btn-ghost:hover { border-color: var(--f-ink); transform: translateY(-2px); }
 
-/* Top bar */
-.floda .bar { position: sticky; top: 0; z-index: 10; background: rgba(255, 255, 255, 0.82); backdrop-filter: saturate(1.4) blur(12px); border-bottom: 1px solid var(--f-line); }
-.floda .bar .wrap { display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 64px; }
-/* The wordmark: Flöda typed in black, in a typewriter face. No chip, no colour. */
-.floda .mark { display: inline-flex; align-items: baseline; font-family: "American Typewriter", "Courier Prime", "Courier New", Courier, "Nimbus Mono PS", monospace; font-size: 24px; font-weight: 700; letter-spacing: 0.01em; color: var(--f-ink); text-decoration: none; }
-.floda .mark:hover { color: var(--f-ink); opacity: 0.8; }
-.floda .bar nav { display: none; gap: 26px; font-size: 14px; font-weight: 600; color: var(--f-ink-2); }
-.floda .bar nav a:hover { color: var(--f-meta); }
-@media (min-width: 800px) { .floda .bar nav { display: flex; } }
+/* ---------------------------------------------------------------------------------- bar */
+.floda .bar { position: sticky; top: 0; z-index: 20; background: transparent; border-bottom: 1px solid transparent; transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease; }
+.floda .bar.solid { background: rgba(255, 255, 255, 0.78); backdrop-filter: saturate(1.6) blur(14px); -webkit-backdrop-filter: saturate(1.6) blur(14px); border-bottom-color: var(--f-line); box-shadow: 0 8px 30px -22px rgba(5, 5, 5, 0.3); }
+.floda .bar .wrap { display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 68px; }
+.floda .mark { display: inline-flex; align-items: baseline; font-family: "American Typewriter", "Courier Prime", "Courier New", Courier, "Nimbus Mono PS", monospace; font-size: 24px; font-weight: 700; letter-spacing: 0.01em; color: var(--f-ink); }
+.floda .mark:hover { opacity: 0.75; }
+.floda .bar nav { display: none; gap: 28px; font-size: 14px; font-weight: 600; color: var(--f-ink-2); }
+.floda .bar nav a { position: relative; padding: 6px 0; }
+.floda .bar nav a::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; border-radius: 2px; background: var(--f-meta); transform: scaleX(0); transform-origin: left; transition: transform 0.25s var(--f-ease); }
+.floda .bar nav a:hover::after { transform: scaleX(1); }
+.floda .bar-ctas { display: flex; gap: 8px; }
 .floda .bar .btn { padding: 10px 16px; font-size: 14px; }
+@media (min-width: 860px) { .floda .bar nav { display: flex; } }
 
-/* Hero: centred, on a glow. */
-.floda .hero { position: relative; padding-block: 88px 40px; text-align: center; overflow: hidden; }
-@media (min-width: 900px) { .floda .hero { padding-block: 120px 56px; } }
-.floda .hero::before { content: ""; position: absolute; inset: auto 0 -40% 0; height: 110%; background: radial-gradient(60% 55% at 50% 100%, rgba(8, 102, 255, 0.22), rgba(8, 102, 255, 0) 70%); pointer-events: none; }
-.floda .hero .wrap { position: relative; }
-.floda .hero h1 { margin: 22px auto 0; max-width: 16ch; }
-.floda .hero .lede { margin: 22px auto 0; }
-.floda .hero .ctas { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 32px; }
-.floda .hero .note { margin-top: 18px; font-size: 14px; color: var(--f-soft); }
+/* --------------------------------------------------------------------------------- hero */
+.floda .hero { position: relative; padding-block: 72px 48px; text-align: center; margin-top: -68px; padding-top: 140px; }
+.floda .mesh { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
+.floda .mesh i { position: absolute; border-radius: 50%; filter: blur(70px); opacity: 0.55; will-change: transform; }
+.floda .mesh i:nth-child(1) { width: 60vw; height: 60vw; max-width: 760px; max-height: 760px; left: -12vw; top: -20vw; background: radial-gradient(circle, rgba(8, 102, 255, 0.38), rgba(8, 102, 255, 0) 65%); animation: f-drift 18s ease-in-out infinite alternate; }
+.floda .mesh i:nth-child(2) { width: 52vw; height: 52vw; max-width: 680px; max-height: 680px; right: -14vw; top: -6vw; background: radial-gradient(circle, rgba(127, 179, 255, 0.45), rgba(127, 179, 255, 0) 65%); animation: f-drift 22s ease-in-out infinite alternate-reverse; }
+.floda .mesh i:nth-child(3) { width: 70vw; height: 40vw; max-width: 900px; max-height: 520px; left: 15vw; bottom: 0; background: radial-gradient(ellipse, rgba(8, 102, 255, 0.16), rgba(8, 102, 255, 0) 70%); animation: f-drift 26s ease-in-out infinite alternate; }
+@keyframes f-drift { from { transform: translate3d(0, 0, 0) scale(1); } to { transform: translate3d(6vw, 4vw, 0) scale(1.12); } }
+.floda .hero .wrap { position: relative; z-index: 1; }
+.floda .hero h1 { margin: 22px auto 0; max-width: 24ch; }
+.floda .hero .lede { margin: 26px auto 0; }
+.floda .hero .ctas { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 34px; }
+.floda .hero .note { margin: 18px auto 0; font-size: 14px; color: var(--f-soft); max-width: 60ch; }
 
-/* The product window: a browser frame around the before-and-after. */
-.floda .window { position: relative; margin: 48px auto 0; max-width: 1040px; background: var(--f-white); border: 1px solid var(--f-line-2); border-radius: 18px; box-shadow: 0 40px 90px -40px rgba(8, 43, 97, 0.45), 0 0 0 1px rgba(8, 102, 255, 0.06); overflow: hidden; text-align: left; }
-.floda .chrome { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--f-line); background: var(--f-grey); }
-.floda .chrome i { width: 11px; height: 11px; border-radius: 50%; background: var(--f-grey-2); display: block; }
-.floda .chrome .url { margin-left: 10px; flex: 1; font-family: var(--f-mono); font-size: 12px; color: var(--f-soft); background: var(--f-white); border: 1px solid var(--f-line); border-radius: 8px; padding: 5px 10px; }
-.floda .pane { display: grid; gap: 0; }
-@media (min-width: 820px) { .floda .pane { grid-template-columns: 1fr 72px 1fr; } }
-.floda .pane > div { padding: 22px 22px 24px; }
-.floda .pane .mid { display: grid; place-items: center; border-inline: 1px solid var(--f-line); background: var(--f-grey); color: var(--f-meta); font-weight: 800; font-size: 22px; }
+/* ------------------------------------------------------------------------------- demo */
+.floda .demo-wrap { margin-top: 56px; perspective: 1600px; }
+.floda .tilt { transform: rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)); transition: transform 0.35s var(--f-ease); transform-style: preserve-3d; }
+.floda .window { position: relative; margin: 0 auto; max-width: 1040px; background: var(--f-white); border: 1px solid var(--f-line-2); border-radius: 20px; box-shadow: 0 50px 100px -40px rgba(8, 43, 97, 0.5), 0 0 0 1px rgba(8, 102, 255, 0.06), 0 1px 0 rgba(255, 255, 255, 0.8) inset; overflow: hidden; text-align: left; }
+.floda .chrome { display: flex; align-items: center; gap: 7px; padding: 12px 16px; border-bottom: 1px solid var(--f-line); background: var(--f-grey); }
+.floda .chrome i { width: 11px; height: 11px; border-radius: 50%; background: var(--f-line-2); }
+.floda .chrome .url { margin-left: 10px; font-family: var(--f-mono); font-size: 12px; color: var(--f-soft); background: var(--f-white); border-radius: 8px; padding: 5px 12px; border: 1px solid var(--f-line); flex: 1; max-width: 360px; }
+.floda .chrome .live { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--f-meta); }
+.floda .chrome .live b { width: 8px; height: 8px; border-radius: 50%; background: var(--f-meta); animation: f-pulse 1.6s infinite; }
+.floda .pane { display: grid; gap: 18px; padding: 22px; }
 .floda .pane .title { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--f-soft); margin-bottom: 12px; }
-.floda .form-line { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; font-family: var(--f-mono); font-size: 13px; padding: 8px 0; border-top: 1px dashed var(--f-line-2); color: var(--f-ink-2); }
+.floda .form-line { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; font-family: var(--f-mono); font-size: 13px; padding: 9px 0; border-top: 1px dashed var(--f-line-2); color: var(--f-ink-2); }
 .floda .form-line:first-of-type { border-top: 0; }
-.floda .pen { color: #c0392b; font-family: "Bradley Hand", "Segoe Print", "Comic Sans MS", cursive; font-size: 15px; font-weight: 700; transform: rotate(-3deg); display: inline-block; }
-.floda .listing { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--f-line); font-size: 14px; }
-.floda .listing:first-of-type { border-top: 0; }
-.floda .listing b { display: block; font-weight: 700; letter-spacing: -0.01em; }
-.floda .listing .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-.floda .tag { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: var(--f-tint); color: var(--f-meta-deep); }
+.floda .pen { font-family: "Bradley Hand", "Segoe Print", "Comic Sans MS", cursive; color: #1d4ed8; font-weight: 700; transform: rotate(-3deg); display: inline-block; }
+.floda .chat { display: grid; gap: 8px; margin-top: 16px; }
+.floda .bubble { display: inline-block; max-width: 92%; padding: 9px 13px; border-radius: 18px; font-size: 13px; line-height: 1.35; }
+.floda .bubble.you { background: var(--f-meta); color: #fff; justify-self: end; border-bottom-right-radius: 6px; }
+.floda .bubble.floda { background: var(--f-grey); color: var(--f-ink); justify-self: start; border-bottom-left-radius: 6px; }
+.floda .mid { display: grid; place-items: center; color: var(--f-meta); font-size: 26px; font-weight: 800; position: relative; }
+.floda .mid .beam { display: none; }
+.floda .listing { display: flex; justify-content: space-between; gap: 14px; padding: 12px 14px; border: 1px solid var(--f-line); border-radius: 14px; background: var(--f-white); margin-top: 8px; transition: box-shadow 0.3s ease; }
+.floda .listing b { display: block; font-size: 14px; }
+.floda .listing .soft { display: block; font-size: 12.5px; margin-top: 2px; }
+.floda .listing .price { font-weight: 800; font-size: 15px; white-space: nowrap; color: var(--f-meta); }
+.floda .tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+.floda .tag { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 999px; background: var(--f-tint); color: var(--f-meta); }
 .floda .tag.grey { background: var(--f-grey); color: var(--f-ink-2); }
-.floda .price { font-variant-numeric: tabular-nums; font-weight: 800; color: var(--f-meta); }
-
-/* Sections */
-.floda section.band { padding-block: 88px; }
-.floda section.band.grey { background: var(--f-grey); }
-.floda section.band.night { background: linear-gradient(180deg, var(--f-night) 0%, var(--f-night-2) 100%); color: #fff; }
-.floda section.band.night .soft { color: rgba(255, 255, 255, 0.7); }
-.floda section.band.night .eyebrow { background: rgba(255, 255, 255, 0.12); color: #fff; }
-.floda section.band.night .eyebrow::before { background: var(--f-meta-bright); }
-.floda .head { max-width: 64ch; margin-bottom: 40px; display: grid; gap: 14px; justify-items: start; }
-.floda .head.center { margin-inline: auto; justify-items: center; text-align: center; }
-
-/* Vercel's hairline grid, with Meta's chips in the cells. */
-.floda .grid { display: grid; border: 1px solid var(--f-line-2); border-radius: 18px; overflow: hidden; background: var(--f-white); }
-.floda .grid > div { padding: 28px; border-top: 1px solid var(--f-line-2); display: grid; gap: 12px; align-content: start; }
-.floda .grid > div:first-child { border-top: 0; }
-@media (min-width: 760px) {
-  .floda .grid.three { grid-template-columns: repeat(3, 1fr); }
-  .floda .grid.three > div { border-top: 0; border-left: 1px solid var(--f-line-2); }
-  .floda .grid.three > div:first-child { border-left: 0; }
-  .floda .grid.two { grid-template-columns: repeat(2, 1fr); }
-  .floda .grid.two > div { border-left: 1px solid var(--f-line-2); }
-  .floda .grid.two > div:nth-child(odd) { border-left: 0; }
-  .floda .grid.two > div:nth-child(-n + 2) { border-top: 0; }
+.floda .check { margin-top: 12px; font-size: 13px; font-weight: 600; color: #0f9b7e; display: flex; align-items: center; gap: 8px; }
+.floda .check b { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: #0f9b7e; color: #fff; font-size: 12px; }
+@media (min-width: 860px) {
+  .floda .pane { grid-template-columns: 1fr 56px 1.15fr; gap: 10px; padding: 26px; }
+  .floda .mid .beam { display: block; position: absolute; left: 10%; right: 10%; top: 50%; height: 2px; border-radius: 2px; background: linear-gradient(90deg, var(--f-tint-2), var(--f-meta)); transform-origin: left; }
+  .floda .mid .arrow { position: relative; background: var(--f-white); padding: 0 4px; }
 }
-.floda .grid .n { font-family: var(--f-mono); font-size: 12px; letter-spacing: 0.08em; color: var(--f-meta); font-weight: 700; }
-.floda .grid ul { margin: 4px 0 0; padding-left: 18px; color: var(--f-ink-2); font-size: 15px; display: grid; gap: 5px; }
+/* the demo plays: the order's lines arrive, the beam carries them across, the listings appear, the check lands; then again */
+.floda .demo.play .form-line { animation: f-line 9s var(--f-ease) infinite; animation-delay: calc(var(--i) * 0.25s); }
+.floda .demo.play .chat .bubble { animation: f-bubble 9s var(--f-ease) infinite; }
+.floda .demo.play .chat .bubble.floda { animation-delay: 0.9s; }
+.floda .demo.play .mid .beam { animation: f-beam 9s var(--f-ease) infinite; }
+.floda .demo.play .mid .arrow { animation: f-arrow 9s var(--f-ease) infinite; }
+.floda .demo.play .listing { animation: f-listing 9s var(--f-ease) infinite; animation-delay: calc(2.2s + var(--i) * 0.35s); }
+.floda .demo.play .check { animation: f-listing 9s var(--f-ease) infinite; animation-delay: 3.6s; }
+@keyframes f-line { 0% { opacity: 0; transform: translateX(-14px); } 6%, 90% { opacity: 1; transform: none; } 97%, 100% { opacity: 0; transform: translateX(-14px); } }
+@keyframes f-bubble { 0%, 8% { opacity: 0; transform: translateY(8px) scale(0.96); } 14%, 90% { opacity: 1; transform: none; } 97%, 100% { opacity: 0; } }
+@keyframes f-beam { 0%, 12% { transform: scaleX(0); } 24%, 90% { transform: scaleX(1); } 97%, 100% { transform: scaleX(0); } }
+@keyframes f-arrow { 0%, 14% { opacity: 0.3; transform: translateX(-6px); } 24%, 90% { opacity: 1; transform: none; } 100% { opacity: 0.3; } }
+@keyframes f-listing { 0% { opacity: 0; transform: translateY(14px) scale(0.98); box-shadow: 0 0 0 0 rgba(8, 102, 255, 0); } 6% { opacity: 1; transform: none; box-shadow: 0 12px 30px -16px rgba(8, 102, 255, 0.5); } 14%, 90% { opacity: 1; transform: none; box-shadow: none; } 97%, 100% { opacity: 0; transform: translateY(14px); } }
 
-.floda .proof { display: grid; gap: 28px; }
+/* ------------------------------------------------------------------------------ brands */
+.floda .brands { padding-block: 36px 8px; }
+.floda .brands-label { text-align: center; font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--f-soft); margin-bottom: 18px; }
+.floda .marquee { overflow: hidden; mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent); -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent); }
+.floda .track { display: flex; gap: 14px; width: max-content; animation: f-marquee 48s linear infinite; }
+.floda .track span { font-size: 15px; font-weight: 700; color: var(--f-ink-2); padding: 10px 18px; border: 1px solid var(--f-line); border-radius: 999px; background: var(--f-white); white-space: nowrap; }
+@keyframes f-marquee { to { transform: translateX(-50%); } }
+
+/* ------------------------------------------------------------------------------- stats */
+.floda .stats { padding-block: 56px 24px; }
+.floda .stats .wrap { display: grid; gap: 28px; }
+.floda .stat .num small { font-size: 0.42em; font-weight: 700; letter-spacing: -0.02em; margin-left: 6px; color: var(--f-ink-2); }
+.floda .stat .num { font-size: clamp(48px, 7vw, 84px); font-weight: 800; line-height: 1; letter-spacing: -0.05em; font-variant-numeric: tabular-nums; color: var(--f-ink); }
+.floda .stat p { margin-top: 10px; color: var(--f-ink-2); max-width: 34ch; }
+@media (min-width: 760px) { .floda .stats .wrap { grid-template-columns: repeat(3, 1fr); gap: 36px; } }
+
+/* ------------------------------------------------------------------------------- bands */
+.floda .band { padding-block: 96px; }
+.floda .band.grey { background: var(--f-grey); }
+.floda .band.night { background: var(--f-night); color: #fff; position: relative; overflow: hidden; }
+.floda .band.night .lede { color: rgba(255, 255, 255, 0.72); }
+.floda .band.night .glow { position: absolute; width: 900px; height: 900px; left: 50%; top: -500px; transform: translateX(-50%); background: radial-gradient(circle, rgba(8, 102, 255, 0.45), rgba(8, 102, 255, 0) 60%); pointer-events: none; }
+.floda .band.night .wrap { position: relative; }
+
+/* ------------------------------------------------------------------------------- steps */
+.floda .steps { list-style: none; padding: 0; display: grid; gap: 16px; counter-reset: step; }
+.floda .steps li { position: relative; display: grid; gap: 12px; align-content: start; padding: 28px; border-radius: var(--f-r); background: var(--f-white); border: 1px solid var(--f-line); transition: transform 0.35s var(--f-ease), box-shadow 0.35s ease, border-color 0.2s ease; }
+.floda .steps li:hover { transform: translateY(-4px); box-shadow: 0 30px 60px -36px rgba(8, 43, 97, 0.45); border-color: var(--f-tint-2); }
+.floda .steps .n { position: absolute; top: 22px; right: 22px; font-family: var(--f-mono); font-size: 12px; font-weight: 700; color: var(--f-meta); background: var(--f-tint); border-radius: 999px; padding: 4px 10px; }
+.floda .steps .ico { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 16px; background: var(--f-grey); font-size: 26px; }
+.floda .steps p { color: var(--f-ink-2); font-size: 15.5px; }
+@media (min-width: 860px) { .floda .steps { grid-template-columns: repeat(3, 1fr); gap: 20px; } }
+
+/* ------------------------------------------------------------------------------- bento */
+.floda .bento { display: grid; gap: 16px; }
+.floda .tile { display: grid; gap: 10px; align-content: start; padding: 24px; border-radius: var(--f-r); background: var(--f-white); border: 1px solid var(--f-line); transition: transform 0.35s var(--f-ease), box-shadow 0.35s ease; }
+.floda .tile:hover { transform: translateY(-4px); box-shadow: 0 30px 60px -36px rgba(8, 43, 97, 0.4); }
+.floda .tile p { color: var(--f-ink-2); font-size: 15px; }
+.floda .tile-ui { border-radius: 14px; background: var(--f-grey); padding: 14px; margin-bottom: 8px; min-height: 120px; display: grid; align-content: center; gap: 8px; overflow: hidden; }
+.floda .ui-row { display: grid; grid-template-columns: 1.4fr 0.9fr 1.4fr 0.6fr; gap: 10px; font-size: 12.5px; padding: 7px 10px; border-radius: 8px; background: var(--f-white); color: var(--f-ink-2); }
+.floda .ui-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.floda .ui-row span:last-child { text-align: right; font-weight: 700; color: var(--f-ink); }
+.floda .ui-row.head { background: transparent; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--f-soft); padding-block: 2px; }
+.floda .ui-row.hl { box-shadow: 0 0 0 2px var(--f-meta) inset; }
+.floda .chat-ui .bubble { font-size: 12.5px; }
+.floda .tidy-ui { grid-template-columns: 1fr auto 1fr; align-items: center; }
+.floda .tidy-ui .photo { position: relative; background: #fff; border-radius: 8px; padding: 12px; display: grid; gap: 6px; transform: rotate(-3deg); box-shadow: 0 10px 20px -14px rgba(0, 0, 0, 0.4); }
+.floda .tidy-ui .photo i, .floda .tidy-ui .table i { display: block; height: 7px; border-radius: 4px; background: var(--f-line-2); }
+.floda .tidy-ui .photo i:nth-child(2) { width: 70%; } .floda .tidy-ui .photo i:nth-child(3) { width: 85%; }
+.floda .tidy-ui .photo .pen { position: absolute; right: 10px; top: 6px; font-size: 14px; }
+.floda .tidy-ui .arrow { color: var(--f-meta); font-weight: 800; font-size: 20px; }
+.floda .tidy-ui .table { background: #fff; border-radius: 8px; padding: 12px; display: grid; gap: 6px; border: 1px solid var(--f-line); }
+.floda .tidy-ui .table i { background: var(--f-tint-2); }
+.floda .learn-ui { display: flex; flex-wrap: wrap; gap: 6px; align-content: center; }
+.floda .chip { font-size: 12px; font-weight: 600; padding: 5px 10px; border-radius: 999px; background: #fff; border: 1px solid var(--f-line); color: var(--f-ink-2); }
+.floda .chip.on { background: var(--f-meta); color: #fff; border-color: var(--f-meta); }
+.floda .app-ui { text-align: center; }
+.floda .app-ui .dock { display: flex; justify-content: center; gap: 12px; font-size: 30px; }
+.floda .app-ui .dock span { display: grid; place-items: center; width: 56px; height: 56px; border-radius: 16px; background: #fff; border: 1px solid var(--f-line); }
+.floda .app-ui .lbl { font-family: var(--f-mono); font-size: 12px; color: var(--f-soft); }
+@media (min-width: 860px) {
+  .floda .bento { grid-template-columns: repeat(6, 1fr); }
+  .floda .tile { grid-column: span 2; }
+  .floda .tile.big { grid-column: span 4; grid-template-columns: 1.3fr 1fr; grid-template-areas: "ui h3" "ui p"; column-gap: 24px; align-content: center; }
+  .floda .tile.big .tile-ui { grid-area: ui; margin: 0; min-height: 200px; }
+  .floda .tile.big h3 { grid-area: h3; align-self: end; font-size: 24px; }
+  .floda .tile.big p { grid-area: p; align-self: start; }
+}
+
+/* ------------------------------------------------------------------------------- proof */
+.floda .quote-card { margin-top: 8px; padding: 32px; border-radius: var(--f-r); background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); backdrop-filter: blur(6px); }
+.floda .quote { font-size: clamp(20px, 2.4vw, 28px); line-height: 1.35; letter-spacing: -0.015em; font-weight: 600; color: #fff; text-wrap: balance; }
+.floda .cite { margin-top: 14px; font-size: 14px; color: rgba(255, 255, 255, 0.6); }
+.floda .proof { display: grid; gap: 14px; margin-top: 28px; }
+.floda .proof > div { display: grid; gap: 6px; padding: 22px; border-radius: 16px; background: var(--f-night-2); border: 1px solid rgba(255, 255, 255, 0.08); }
+.floda .proof b { font-size: 16px; }
+.floda .proof span { font-size: 14.5px; color: rgba(255, 255, 255, 0.68); }
 @media (min-width: 760px) { .floda .proof { grid-template-columns: repeat(3, 1fr); } }
-.floda .proof .num { font-size: clamp(44px, 6vw, 72px); font-weight: 800; line-height: 1; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; background: linear-gradient(92deg, #ffffff, #a6d0ff); -webkit-background-clip: text; background-clip: text; color: transparent; }
-.floda .proof p { margin-top: 10px; }
-.floda .quote { margin-top: 48px; padding-top: 32px; border-top: 1px solid rgba(255, 255, 255, 0.14); font-size: 22px; line-height: 1.4; max-width: 56ch; font-weight: 500; letter-spacing: -0.01em; }
 
+/* ---------------------------------------------------------------------------------- fit */
 .floda .fit { display: grid; gap: 16px; }
-@media (min-width: 760px) { .floda .fit { grid-template-columns: repeat(3, 1fr); } }
-.floda .card { border-radius: 16px; padding: 24px; background: var(--f-white); border: 1px solid var(--f-line); display: grid; gap: 8px; align-content: start; }
+.floda .card { border-radius: var(--f-r); padding: 26px; background: var(--f-white); border: 1px solid var(--f-line); display: grid; gap: 8px; align-content: start; transition: transform 0.35s var(--f-ease), box-shadow 0.35s ease; }
+.floda .card:hover { transform: translateY(-4px); box-shadow: 0 30px 60px -36px rgba(8, 43, 97, 0.4); }
+.floda .card p { color: var(--f-ink-2); font-size: 15px; }
 .floda .card.now { border-color: var(--f-meta); box-shadow: 0 0 0 4px var(--f-tint); }
 .floda .card .label { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--f-soft); }
 .floda .card.now .label { color: var(--f-meta); }
+@media (min-width: 760px) { .floda .fit { grid-template-columns: repeat(3, 1fr); } }
 
-/* Register interest: Meta's inputs, grey and rounded. */
-.floda .signup { display: grid; gap: 28px; align-items: start; }
+/* ------------------------------------------------------------------------------ signup */
+.floda .signup { display: grid; gap: 36px; align-items: start; }
+.floda .signup h2 { margin-top: 14px; }
+.floda .signup .lede { margin-top: 16px; }
+.floda .ticks { list-style: none; padding: 0; margin-top: 22px; display: grid; gap: 10px; color: var(--f-ink-2); }
+.floda .ticks li { display: flex; gap: 10px; align-items: flex-start; }
+.floda .ticks li::before { content: "✓"; flex: none; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--f-tint); color: var(--f-meta); font-size: 12px; font-weight: 800; margin-top: 1px; }
+.floda .form-card { background: var(--f-white); border: 1px solid var(--f-line); border-radius: var(--f-r); padding: 28px; box-shadow: 0 40px 80px -48px rgba(8, 43, 97, 0.4); }
+.floda .form-card h3 { font-size: 22px; margin-bottom: 18px; }
+.floda form { display: grid; gap: 14px; }
+.floda form label { display: grid; gap: 6px; font-size: 13px; font-weight: 600; color: var(--f-ink-2); }
+.floda form input, .floda form select, .floda form textarea { width: 100%; font: inherit; font-size: 15px; padding: 12px 14px; border-radius: 12px; border: 1.5px solid var(--f-line-2); background: var(--f-white); color: var(--f-ink); transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+.floda form input:focus, .floda form select:focus, .floda form textarea:focus { outline: none; border-color: var(--f-meta); box-shadow: 0 0 0 4px var(--f-tint); }
+.floda form textarea { resize: vertical; }
+.floda form .err { color: #cf3126; font-size: 14px; }
+.floda form .btn { margin-top: 4px; justify-self: start; }
+.floda .thanks { display: grid; gap: 8px; padding: 8px 0; }
+.floda .thanks h3 { font-size: 22px; }
 @media (min-width: 900px) { .floda .signup { grid-template-columns: 1fr 1fr; gap: 56px; } }
-.floda form { display: grid; gap: 12px; background: var(--f-white); border: 1px solid var(--f-line); border-radius: 18px; padding: 24px; box-shadow: 0 24px 60px -36px rgba(8, 43, 97, 0.35); }
-.floda label { display: grid; gap: 6px; font-size: 13px; font-weight: 700; color: var(--f-ink-2); }
-.floda input, .floda select, .floda textarea { font: inherit; font-size: 16px; padding: 12px 14px; border-radius: 12px; border: 1.5px solid transparent; background: var(--f-grey); color: var(--f-ink); width: 100%; }
-.floda input:focus, .floda select:focus, .floda textarea:focus { outline: none; background: var(--f-white); border-color: var(--f-meta); box-shadow: 0 0 0 3px var(--f-tint-2); }
-.floda .thanks { background: var(--f-tint); border: 1px solid var(--f-tint-2); border-radius: 18px; padding: 24px; display: grid; gap: 8px; }
-.floda .err { color: #c0392b; font-size: 14px; }
 
-.floda footer { background: #fff; color: var(--f-soft); border-top: 1px solid var(--f-line); padding-block: 40px; font-size: 14px; }
+/* --------------------------------------------------------------------------------- cta */
+.floda .cta { padding-block: 100px; text-align: center; background: linear-gradient(180deg, var(--f-white), var(--f-tint)); }
+.floda .cta .reveal { display: grid; justify-items: center; gap: 18px; }
+.floda .cta .lede { text-align: center; }
+
+/* ------------------------------------------------------------------------------ footer */
+.floda footer { background: var(--f-white); color: var(--f-soft); border-top: 1px solid var(--f-line); padding-block: 40px; font-size: 14px; }
 .floda footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: space-between; align-items: center; }
-
-@media (prefers-reduced-motion: reduce) { .floda .btn { transition: none; } .floda .btn:hover { transform: none; } }

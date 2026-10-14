@@ -88,4 +88,9 @@ export const TAG_ALSO: Record<string, readonly string[]> = {
   // Both spellings are already live, so both are written rather than one of them guessed at.
   "Hiking Boots": ["hiking-boots"], // 26 spaced, 2 hyphenated in the exports
   "Ski Packages": ["ski-packages"], // 40 spaced, 1 hyphenated in the exports
+  // Asked for directly: the shop's older packs carry "backpacks" as well as their shelf, so every
+  // pack worn on the back does. Duffels are not, and the hydration shelf holds bare reservoirs.
+  "Daypacks": ["backpacks"],
+  "Hiking Packs": ["backpacks"],
+  "Travel Packs": ["backpacks"],
 };

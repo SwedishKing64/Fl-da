@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { parseCsv } from "../csv";
-import { DEFAULT_OPTIONS, QUICKBOOKS_COLUMNS, billsFileName, checkBill, daysOf, dueDateFrom, qbDate, quickBooksCsv, quickBooksRows, type Bill } from "./quickbooks";
+import ExcelJS from "exceljs";
+import { DEFAULT_OPTIONS, QUICKBOOKS_COLUMNS, billsFileName, checkBill, daysOf, dueDateFrom, quickBooksRow, quickBooksWorkbook, type Bill } from "./quickbooks";
 
 const burton: Bill = {
   source: "burton-INV-884512.pdf",
@@ -25,39 +25,48 @@ const burton: Bill = {
 };
 
 describe("a supplier's invoice as a QuickBooks bill", () => {
-  it("writes one row for the goods and one for the freight, with the GST shared between them", () => {
-    const rows = quickBooksRows(burton, DEFAULT_OPTIONS);
-    expect(rows.map((r) => r.cells)).toEqual([
-      ["INV-884512", "Burton Snowboards Australia Pty Ltd", "28/09/2026", "28/10/2026", "30 days", "", "Winter 27 snowboards, first delivery", "Purchases", "Winter 27 snowboards, first delivery", "2600.00", "GST", "260.00", "AUD"],
-      ["INV-884512", "Burton Snowboards Australia Pty Ltd", "28/09/2026", "28/10/2026", "30 days", "", "Winter 27 snowboards, first delivery", "Freight", "Freight", "60.00", "GST", "6.00", "AUD"],
-    ]);
+  it("writes the whole bill as one row of the shop's sheet, GST in the amount", () => {
+    expect(quickBooksRow(burton, DEFAULT_OPTIONS)).toEqual({
+      supplier: "Burton Snowboards Australia Pty Ltd",
+      billNo: "INV-884512",
+      billDate: "2026-09-28",
+      dueDate: "2026-10-28",
+      category: "Cost of sales:Stock Purchase",
+      description: "",
+      amount: 2926,
+      gst: 266,
+    });
   });
 
-  it("writes a row per line when asked, with the printed GST shared out by amount", () => {
-    const rows = quickBooksRows(burton, { ...DEFAULT_OPTIONS, detail: "lines" });
-    expect(rows.map((r) => [r.cells[8], r.cells[9], r.cells[11]])).toEqual([
-      ["Custom Camber 154", "1560.00", "156.00"],
-      ["Custom Camber 158", "1040.00", "104.00"],
-      ["Freight", "60.00", "6.00"],
-    ]);
+  it("keeps a plain invoice number as a number, and adds the bill up where no total is printed", () => {
+    const row = quickBooksRow({ ...burton, billNo: "276100", total: null, gst: null }, DEFAULT_OPTIONS);
+    expect(row.billNo).toBe(276100);
+    expect(row.gst).toBe(266);
+    expect(row.amount).toBe(2926);
+    expect(quickBooksRow({ ...burton, billNo: "007" }, DEFAULT_OPTIONS).billNo).toBe("007");
   });
 
-  it("puts the GST into the amount when the company enters bills inclusive", () => {
-    const rows = quickBooksRows(burton, { ...DEFAULT_OPTIONS, amounts: "inclusive" });
-    expect(rows[0].cells[9]).toBe("2860.00");
-    expect(rows[0].cells[11]).toBe("260.00");
+  it("takes the GST out of an invoice whose prices include it, and none from an overseas one", () => {
+    expect(quickBooksRow({ ...burton, gstTreatment: "INCLUSIVE", gst: null, total: 1100 }, DEFAULT_OPTIONS)).toMatchObject({ amount: 1100, gst: 100 });
+    expect(quickBooksRow({ ...burton, gstTreatment: "NONE", gst: null, total: 2660 }, DEFAULT_OPTIONS)).toMatchObject({ amount: 2660, gst: 0 });
   });
 
-  it("marks an overseas supplier's bill as GST free", () => {
-    const abroad: Bill = { ...burton, supplier: "Burton Corporation", currency: "USD", gstTreatment: "NONE", gst: 0, total: 2660 };
-    const rows = quickBooksRows(abroad, DEFAULT_OPTIONS);
-    expect(rows[0].cells.slice(9)).toEqual(["2600.00", "GST free", "0.00", "USD"]);
-  });
-
-  it("makes one file of several bills under QuickBooks' headings", () => {
-    const grid = parseCsv(quickBooksCsv([burton, { ...burton, billNo: "INV-884600", lines: [], subtotal: 100, freight: 0, gst: 10, total: 110 }], DEFAULT_OPTIONS));
-    expect(grid[0]).toEqual([...QUICKBOOKS_COLUMNS]);
-    expect(grid.slice(1).map((r) => r[0])).toEqual(["INV-884512", "INV-884512", "INV-884600"]);
+  it("makes the shop's sheet: its headings, one row a bill, dates as dates, money to two places", async () => {
+    const file = await quickBooksWorkbook([burton, { ...burton, supplier: "Outdoor Agencies", billNo: "276100", billDate: "2026-09-07", dueDate: "2026-10-30", total: 1100, gst: 100 }], { category: "" });
+    const book = new ExcelJS.Workbook();
+    await book.xlsx.load(file);
+    const sheet = book.getWorksheet("Sheet1")!;
+    expect(sheet.rowCount).toBe(3);
+    expect((sheet.getRow(1).values as unknown[]).slice(1)).toEqual([...QUICKBOOKS_COLUMNS]);
+    const row = sheet.getRow(3);
+    expect(row.getCell(1).value).toBe("Outdoor Agencies");
+    expect(row.getCell(2).value).toBe(276100);
+    expect(row.getCell(3).value).toEqual(new Date(Date.UTC(2026, 8, 7)));
+    expect(row.getCell(4).value).toEqual(new Date(Date.UTC(2026, 9, 30)));
+    expect(row.getCell(5).value).toBe("Cost of sales:Stock Purchase");
+    expect(row.getCell(7).value).toBe(1100);
+    expect(row.getCell(8).value).toBe(100);
+    expect(row.getCell(7).numFmt).toBe("0.00");
   });
 
   it("says what is wrong with a bill rather than leaving it out", () => {
@@ -72,11 +81,7 @@ describe("a supplier's invoice as a QuickBooks bill", () => {
     expect(checkBill({ ...burton, unsure: ["total: 2926, or 2920"] })).toEqual(["Check: total: 2926, or 2920"]);
   });
 
-  it("writes dates the way the company's QuickBooks reads them, and works a due date from the terms", () => {
-    expect(qbDate("2026-09-28", "dmy")).toBe("28/09/2026");
-    expect(qbDate("2026-09-28", "mdy")).toBe("09/28/2026");
-    expect(qbDate("2026-09-28", "ymd")).toBe("2026-09-28");
-    expect(qbDate("28 Sept 26", "dmy")).toBe("28 Sept 26");
+  it("works a due date from the terms", () => {
     expect(daysOf("Net 60")).toBe(60);
     expect(daysOf("14 days from invoice")).toBe(14);
     expect(daysOf("")).toBe(30);
@@ -85,7 +90,7 @@ describe("a supplier's invoice as a QuickBooks bill", () => {
   });
 
   it("names the file for the supplier when there is one", () => {
-    expect(billsFileName([burton], new Date("2026-10-12T00:00:00Z"))).toBe("quickbooks-bills-burton-2026-10-12.csv");
-    expect(billsFileName([burton, { ...burton, supplier: "Head Oceania" }], new Date("2026-10-12T00:00:00Z"))).toBe("quickbooks-bills-2026-10-12.csv");
+    expect(billsFileName([burton], new Date("2026-10-12T00:00:00Z"))).toBe("quickbooks-bills-burton-2026-10-12.xlsx");
+    expect(billsFileName([burton, { ...burton, supplier: "Head Oceania" }], new Date("2026-10-12T00:00:00Z"))).toBe("quickbooks-bills-2026-10-12.xlsx");
   });
 });

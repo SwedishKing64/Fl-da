@@ -17,7 +17,8 @@ describe("a product whose Type was changed after it was tagged", () => {
   });
 
   it("knows a Type's shelf, heading and menu tags", () => {
-    expect(shelfTags("Hiking Packs")).toEqual(["hiking packs", "packs-and-bags", "outdoor"]);
+    expect(shelfTags("Hiking Packs")).toEqual(["hiking packs", "backpacks", "packs-and-bags", "outdoor"]);
+    expect(shelfTags("Duffels")).not.toContain("backpacks");
     expect(shelfTags("Nonsense")).toEqual([]);
   });
 });

@@ -80,21 +80,49 @@ spells the menu's ampersand out ("Packs and Bags", "Climbing and Abseiling"). Pa
 the Outdoor menu by what they are: hiking packs from 40 litres, daypacks under, travel packs,
 hydration packs, duffels; a ski, board or boot bag is an accessory. When a learned convention
 changes a product's Type, the shelf tags move with it. Price bands, sizes and colours are
-Shopify's own tags and are never written.
+Shopify's own tags and are never written. Daypacks, hiking packs and travel packs also carry
+`backpacks` (the shop asked for it on 2026-10-13); duffels and the hydration shelf, which holds
+bare reservoirs, do not.
 
 **Invoices with handwriting.** On a photographed order, "YT 23/24/25/27" headings are seasons, a
 three-or-four-digit amount beside a line is the RRP, a percentage is a discount, struck lines are
 skipped, and every other remark is kept as a note on the line.
 
-**QuickBooks.** Bills go out in the standard QuickBooks Online bill-import layout (BillNo,
-Supplier, BillDate, DueDate, Terms, Location, Memo, Account, LineDescription, LineAmount,
-LineTaxCode, LineTaxAmount, Currency), one row per bill for the goods and one for freight, or one
-per invoice line. Account, tax codes, GST in or out of the amounts and the date order are set on
-the page and remembered in the browser. Defaults: Purchases, Freight, GST, GST free, amounts
-before GST, day/month/year. QuickBooks takes up to 100 bills per file; suppliers and accounts
-must exist there first.
+**QuickBooks.** The shop gave its own bill sheet (2026-10-13), and the file follows it exactly: an
+.xlsx, one row per bill, headings Supplier, Bill no., Bill date, Due date, Category, Description,
+"Amount " (with its trailing space), GST. The amount is the whole invoice with GST in it, freight
+included; GST is the figure printed on the invoice. Category defaults to "Cost of sales:Stock
+Purchase" and is remembered in the browser; Description is left empty. Dates are real dates, a
+plain-number bill number is written as a number. The reader (`bills/read-bill.ts`) finds the
+supplier, number, dates, total and GST with the API. QuickBooks takes up to 100 bills per file;
+suppliers and the category must exist there first.
+
+**Supplier names on bills.** The shop asked (2026-10-14) that each bill carry the supplier's name
+as its QuickBooks supplier list has it, not as the invoice prints it. The list is QuickBooks'
+"Supplier Contact List" export, loaded on the Bills page and kept in AppSetting
+`quickbooks.suppliers` — names and the "Full name" column only, never phones, emails or
+addresses, and never committed. `bills/suppliers.ts` matches ignoring Pty Ltd, Limited,
+Australia, punctuation and one-letter slips in long words ("Burton Snowboards Australia Pty Ltd"
+→ "Burton Australia Pty Ltd"); a one-word list name only matches an invoice name that starts with
+it; a tie it cannot break is offered as a choice. A supplier not on the list is flagged, since
+QuickBooks would create a new supplier for it.
+
+**A batch of invoices in one PDF.** The shop scans a day's invoices into one PDF (65MB at
+600dpi, several suppliers, some invoices several pages). A PDF of more than one page, or one over
+the upload limit, is drawn page by page in the browser (`pdf-pages.ts`, at the 1568px the API
+reads at, a few hundred KB each), each page read on its own (`readBillPage`), and the pages put
+back together by `bills/split.ts`: same invoice number, "Page 2 of 3", or a page with no number
+that is not a first page carries on the invoice before; a new number or a first page starts the
+next. Totals come from the last page that prints them. One row per invoice in the sheet.
 
 ## Decisions and history, newest first
+
+- 2026-10-13 Repository moved to `RubinAlp/Rubin`; the business has its own Vercel project, Neon
+  database and Blob store, with the old data copied in. Settings gained "Copy from the old site"
+  to bring the old Blob files across. Packs carry `backpacks`. The Burton RRP problem is fixed.
+  Bills for QuickBooks writes the shop's own one-row-per-bill sheet instead of the line layout,
+  and splits a scanned batch PDF of any size into one bill per invoice.
+- 2026-10-14 Bills take the supplier's name from the shop's QuickBooks supplier list.
 
 - 2026-10-12 Name matches confirmed before a delivery applies; order forms with a size column
   per line read the size. Packs filed on the Outdoor menu; Type spelling; retagging on Type change.
@@ -114,11 +142,9 @@ must exist there first.
 
 Open at handover:
 
-- The production site (`afterword-ashen.vercel.app`) had a dead `DATABASE_URL` and never took the
-  preview builds; the business should deploy a fresh Vercel project (see the README).
-- Why the RRP from one Burton invoice CSV did not land was never diagnosed; the file was never sent.
-- The "backpacks" tag some older packs carry is not written; the shop's own listings are
-  inconsistent about it.
+- Files and hosted pictures still live in the old personal Vercel project's Blob store until
+  "Copy from the old site" is run on Settings; then the old project, its Neon database and Blob
+  store are deleted and the personal API key revoked.
 - The first real invoice through Bills for QuickBooks, and the first Burton board page read for
   specs, were not run with a live API key in the development environment; check them.
 

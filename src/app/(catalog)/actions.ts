@@ -1103,34 +1103,100 @@ export async function transcribeDocumentAction(input: { files: Array<{ name: str
  * A supplier's invoice read as a bill for QuickBooks: who, when, how much, how much of it GST.
  * A PDF, a photo, or a spreadsheet; several photos are the pages of one invoice.
  */
-export async function readBillAction(input: { files: Array<{ name: string; type: string; base64: string }> }): Promise<ActionResult<import("@/lib/catalog/bills/quickbooks").Bill>> {
+type SentFile = { name: string; type: string; base64: string };
+
+/** A sent file as a page the bill reader takes, or what is wrong with it. */
+async function billPageOf(file: SentFile): Promise<import("@/lib/catalog/bills/read-bill").BillPage[] | string> {
+  const { isHeic, heicToJpeg } = await import("@/lib/catalog/extract/heic");
+  const { gridAsText } = await import("@/lib/catalog/bills/read-bill");
+  let buffer: Buffer = Buffer.from(file.base64, "base64");
+  if (buffer.byteLength > MAX_UPLOAD) {
+    return `${file.name} is ${readableSize(buffer.byteLength)}, and an upload has to stay under ${readableSize(MAX_UPLOAD)}. A photo is shrunk before it is sent, so this is a PDF too big to send — split it.`;
+  }
+  let type = file.type;
+  if (isHeic(buffer, file.name, file.type)) { buffer = await heicToJpeg(buffer); type = "image/jpeg"; }
+  const isPdf = /\.pdf$/i.test(file.name) || type === "application/pdf";
+  const isWorkbook = /\.xlsx?$/i.test(file.name) || /spreadsheet|excel/i.test(type);
+  const isCsv = /\.csv$/i.test(file.name) || type === "text/csv";
+  if (isPdf) return [{ kind: "pdf", data: buffer }];
+  if (isWorkbook) return (await (await import("@/lib/catalog/extract/tabular")).sheetGrids(buffer)).map((g) => ({ kind: "text" as const, text: gridAsText(g.name, g.grid) }));
+  if (isCsv) return [{ kind: "text", text: gridAsText(file.name, (await import("@/lib/catalog/csv")).parseCsv(buffer.toString("utf8"))) }];
+  if (/^image\/(jpeg|png|gif|webp)$/.test(type)) return [{ kind: "image", mediaType: type as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: buffer }];
+  if (/\.(jpe?g)$/i.test(file.name)) return [{ kind: "image", mediaType: "image/jpeg", data: buffer }];
+  if (/\.png$/i.test(file.name)) return [{ kind: "image", mediaType: "image/png", data: buffer }];
+  return `${file.name} is not a PDF, a photo or a spreadsheet.`;
+}
+
+export async function readBillAction(input: { files: SentFile[] }): Promise<ActionResult<import("@/lib/catalog/bills/quickbooks").Bill>> {
   return safely(async () => {
     const user = await requireUser();
-    const { isHeic, heicToJpeg } = await import("@/lib/catalog/extract/heic");
-    const { readBill, gridAsText } = await import("@/lib/catalog/bills/read-bill");
+    const { readBill } = await import("@/lib/catalog/bills/read-bill");
     const pages: import("@/lib/catalog/bills/read-bill").BillPage[] = [];
     for (const file of input.files) {
-      let buffer: Buffer = Buffer.from(file.base64, "base64");
-      if (buffer.byteLength > MAX_UPLOAD) {
-        return { ok: false, error: `${file.name} is ${readableSize(buffer.byteLength)}, and an upload has to stay under ${readableSize(MAX_UPLOAD)}. A photo is shrunk before it is sent, so this is a PDF too big to send — split it.` };
-      }
-      let type = file.type;
-      if (isHeic(buffer, file.name, file.type)) { buffer = await heicToJpeg(buffer); type = "image/jpeg"; }
-      const isPdf = /\.pdf$/i.test(file.name) || type === "application/pdf";
-      const isWorkbook = /\.xlsx?$/i.test(file.name) || /spreadsheet|excel/i.test(type);
-      const isCsv = /\.csv$/i.test(file.name) || type === "text/csv";
-      if (isPdf) pages.push({ kind: "pdf", data: buffer });
-      else if (isWorkbook) for (const g of await (await import("@/lib/catalog/extract/tabular")).sheetGrids(buffer)) pages.push({ kind: "text", text: gridAsText(g.name, g.grid) });
-      else if (isCsv) pages.push({ kind: "text", text: gridAsText(file.name, (await import("@/lib/catalog/csv")).parseCsv(buffer.toString("utf8"))) });
-      else if (/^image\/(jpeg|png|gif|webp)$/.test(type)) pages.push({ kind: "image", mediaType: type as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: buffer });
-      else if (/\.(jpe?g)$/i.test(file.name)) pages.push({ kind: "image", mediaType: "image/jpeg", data: buffer });
-      else if (/\.png$/i.test(file.name)) pages.push({ kind: "image", mediaType: "image/png", data: buffer });
-      else return { ok: false, error: `${file.name} is not a PDF, a photo or a spreadsheet.` };
+      const got = await billPageOf(file);
+      if (typeof got === "string") return { ok: false, error: got };
+      pages.push(...got);
     }
     if (pages.length === 0) return { ok: false, error: "No file was received." };
     const bill = await readBill(pages, input.files.map((f) => f.name).join(", "));
     await logAudit("bill.read", { userId: user.id, details: { source: bill.source, supplier: bill.supplier, billNo: bill.billNo, total: bill.total } }).catch(() => undefined);
     return { ok: true, data: bill };
+  });
+}
+
+/** The shop's supplier list — QuickBooks' supplier contact export — kept for naming bills. Only the names are stored. */
+export async function saveSupplierListAction(file: SentFile): Promise<ActionResult<import("@/lib/catalog/bills/suppliers").SupplierList>> {
+  return safely(async () => {
+    const user = await requireUser();
+    const buffer = Buffer.from(file.base64, "base64");
+    const { parseSupplierList } = await import("@/lib/catalog/bills/suppliers");
+    const grids = /\.csv$/i.test(file.name)
+      ? [{ grid: (await import("@/lib/catalog/csv")).parseCsv(buffer.toString("utf8")) }]
+      : await (await import("@/lib/catalog/extract/tabular")).sheetGrids(buffer);
+    const entries = grids.map((g) => parseSupplierList(g.grid)).find((e) => e.length > 0) ?? [];
+    if (entries.length === 0) return { ok: false, error: `${file.name} has no column headed "Supplier". Use the supplier contact list exported from QuickBooks.` };
+    const list = { entries, file: file.name, updatedAt: new Date().toISOString() };
+    await (await import("@/lib/catalog/bills/supplier-list")).saveSupplierList(list);
+    await logAudit("suppliers.list", { userId: user.id, details: { file: file.name, suppliers: entries.length } }).catch(() => undefined);
+    return { ok: true, data: list };
+  });
+}
+
+/** One page of a scanned batch, rendered in the browser, read on its own and marked with where it sits. */
+export async function readBillPageAction(input: { file: SentFile; source: string }): Promise<ActionResult<{ bill: import("@/lib/catalog/bills/quickbooks").Bill; mark: import("@/lib/catalog/bills/read-bill").PageMark }>> {
+  return safely(async () => {
+    await requireUser();
+    const { readBillPage } = await import("@/lib/catalog/bills/read-bill");
+    const got = await billPageOf(input.file);
+    if (typeof got === "string") return { ok: false, error: got };
+    if (got.length !== 1) return { ok: false, error: `${input.file.name} is not one page.` };
+    return { ok: true, data: await readBillPage(got[0], input.source) };
+  });
+}
+
+/**
+ * Copy the old Rubin's data and files into this one. Admin only; runs in steps the page drives.
+ * The old site's connection string and token arrive with every step and are kept nowhere.
+ */
+export async function copyFromOldSiteAction(input: { databaseUrl: string; blobToken: string; state: import("@/lib/catalog/migrate").CopyState | null }): Promise<ActionResult<{ state: import("@/lib/catalog/migrate").CopyState; lines: string[]; done: boolean }>> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const { START, blobFiles, checkSourceUrl, copyStep, prismaStore, sourceClient } = await import("@/lib/catalog/migrate");
+    const { findBlobToken } = await import("@/lib/catalog/blob-token");
+    const bad = checkSourceUrl(input.databaseUrl);
+    if (bad) return { ok: false, error: bad };
+    const mine = findBlobToken();
+    const oldToken = input.blobToken.trim();
+    if (oldToken && !mine) return { ok: false, error: "This site has no file store of its own yet (no BLOB_READ_WRITE_TOKEN), so the files cannot be copied in. Add a Blob store to the project and redeploy, or leave the token out." };
+    if (oldToken && mine && oldToken === mine.token) return { ok: false, error: "That is this site's own file store token, not the old site's." };
+    const source = sourceClient(input.databaseUrl);
+    try {
+      const out = await copyStep(input.state ?? START, prismaStore(source), oldToken && mine ? blobFiles(oldToken, mine.token) : null);
+      if (out.done) await logAudit("site.copied", { userId: user.id, details: { counts: out.state.counts, files: out.state.files.copied } }).catch(() => undefined);
+      return { ok: true, data: out };
+    } finally {
+      await source.$disconnect().catch(() => undefined);
+    }
   });
 }
 

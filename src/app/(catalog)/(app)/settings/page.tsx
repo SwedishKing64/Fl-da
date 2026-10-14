@@ -2,6 +2,7 @@ import { prisma, databaseLatency } from "@/lib/catalog/db";
 import { requireUser } from "@/lib/catalog/auth";
 import { Card, PageHeader, fmtDate } from "@/app/(catalog)/ui";
 import { UserForm, DeleteUserButton, Status } from "./SettingsForms";
+import { CopyFromOldSite } from "./CopyFromOldSite";
 import { usingBlob, blobTokenSource } from "@/lib/catalog/storage";
 import { blobEnvNamesPresent } from "@/lib/catalog/blob-token";
 
@@ -16,6 +17,9 @@ import { blobEnvNamesPresent } from "@/lib/catalog/blob-token";
  * that loses work silently — uploads that will not survive the next request, and a database far
  * enough away to be most of why a page feels slow.
  */
+/** A step of the copy from the old site is one long request; it takes the page's limit. */
+export const maxDuration = 300;
+
 export default async function SettingsPage() {
   const me = await requireUser("ADMIN");
   const [users, latency] = await Promise.all([
@@ -43,6 +47,9 @@ export default async function SettingsPage() {
           />
         </Card>
       </div>
+      <Card title="Copy from the old site" className="mt-6">
+        <CopyFromOldSite />
+      </Card>
     </>
   );
 }

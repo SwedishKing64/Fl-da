@@ -5,7 +5,7 @@
 // What is baked in: the vendor the app checks its licence with (FLODA_LICENCE_SERVER, default
 // https://floda.ai) and the version from package.json.
 import { execSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 const run = (cmd, env = {}) => {
@@ -32,6 +32,36 @@ if (!existsSync(path.join(standalone, "server.js"))) throw new Error("next build
 // Static assets and the public folder are not traced into standalone; the server expects them beside it.
 cpSync(".next/static", path.join(standalone, ".next/static"), { recursive: true });
 if (existsSync("public")) cpSync("public", path.join(standalone, "public"), { recursive: true });
+
+// Next links a few bundled packages (sharp, Prisma's client) into place with symlinks. Inside a
+// signed Mac bundle a symlink is a liability — codesign refuses one it cannot follow — so each is
+// replaced by a real copy of what it pointed at, and a link to nothing is dropped.
+const solid = solidify(standalone);
+console.log(`[desktop-build] symlinks made solid: ${solid.copied} copied, ${solid.dropped} dropped`);
+
+function solidify(dir) {
+  const out = { copied: 0, dropped: 0 };
+  for (const name of readdirSync(dir)) {
+    const p = path.join(dir, name);
+    const st = lstatSync(p);
+    if (st.isSymbolicLink()) {
+      const target = path.resolve(dir, readlinkSync(p));
+      unlinkSync(p);
+      if (existsSync(target)) {
+        if (statSync(target).isDirectory()) cpSync(target, p, { recursive: true, dereference: true });
+        else cpSync(target, p, { dereference: true });
+        out.copied++;
+      } else {
+        out.dropped++;
+      }
+    } else if (st.isDirectory()) {
+      const inner = solidify(p);
+      out.copied += inner.copied;
+      out.dropped += inner.dropped;
+    }
+  }
+  return out;
+}
 
 // 3. What the launcher reads.
 mkdirSync("desktop", { recursive: true });

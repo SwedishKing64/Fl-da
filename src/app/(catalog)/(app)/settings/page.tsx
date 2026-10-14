@@ -10,6 +10,9 @@ import { describeLearned } from "@/lib/catalog/learn";
 import { ShopForm } from "@/app/(catalog)/(setup)/setup/ShopStep";
 import { ApiKeyForm } from "@/app/(catalog)/(setup)/setup/AiStep";
 import { LearnPanel } from "@/app/(catalog)/(setup)/setup/LearnStep";
+import { LicenceForm } from "./LicenceForm";
+import { licenceServer } from "@/lib/catalog/licence";
+import { currentLicence } from "@/lib/catalog/licence-store";
 
 /**
  * The shop, the people who can sign in, what Flöda has learned, the key it reads with, and
@@ -51,6 +54,11 @@ export default async function SettingsPage() {
           <Card title="Reading documents">
             <ApiKeyForm source={apiKeySource()} tail={keyTail(storedKey)} />
           </Card>
+          {licenceServer() && (
+            <Card title="Licence">
+              <LicenceForm state={await currentLicence()} />
+            </Card>
+          )}
         </div>
       </div>
       <div className="grid gap-6 lg:grid-cols-2">

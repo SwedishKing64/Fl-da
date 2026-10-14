@@ -1754,3 +1754,132 @@ export async function finishSetupAction(): Promise<void> {
   revalidatePath("", "layout");
   redirect("/");
 }
+
+
+// ---------------------------------------------------------------------------
+// Clients of Flöda (the vendor's own deployment) and this copy's licence
+// ---------------------------------------------------------------------------
+
+async function requireVendorAdmin() {
+  const user = await requireUser("ADMIN");
+  const { vendorMode } = await import("@/lib/catalog/licence");
+  if (!vendorMode()) throw new Error("This is not the vendor's deployment.");
+  return user;
+}
+
+const clientSchema = z.object({
+  name: z.string().trim().min(1, "The client needs a name").max(120),
+  contact: z.string().trim().max(120).default(""),
+  email: z.string().trim().max(200).default(""),
+  plan: z.enum(["trial", "founding", "standard"]).default("founding"),
+  status: z.enum(["TRIAL", "ACTIVE", "PAUSED", "ENDED"]).default("TRIAL"),
+  expiresAt: z.string().trim().default(""),
+  notes: z.string().trim().max(2000).default(""),
+});
+
+function expiry(value: string): Date | null {
+  if (!value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+export async function createClientAction(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  return safely(async () => {
+    const user = await requireVendorAdmin();
+    const data = clientSchema.parse(Object.fromEntries(formData.entries()));
+    const { newLicenceKey } = await import("@/lib/catalog/licence");
+    const client = await prisma.client.create({ data: { ...data, expiresAt: expiry(data.expiresAt), licenceKey: newLicenceKey() } });
+    await logAudit("client.created", { userId: user.id, details: { client: client.id, name: client.name, plan: client.plan } });
+    revalidatePath("/clients");
+    return { ok: true, message: `${client.name} added. Their key is ${client.licenceKey}.` };
+  });
+}
+
+export async function updateClientAction(id: string, patch: { status?: string; plan?: string; expiresAt?: string; notes?: string; contact?: string; email?: string; name?: string }): Promise<ActionResult> {
+  return safely(async () => {
+    const user = await requireVendorAdmin();
+    const data = clientSchema.partial().parse(patch);
+    const { expiresAt, ...rest } = data;
+    await prisma.client.update({ where: { id }, data: { ...rest, ...(expiresAt === undefined ? {} : { expiresAt: expiry(expiresAt) }) } });
+    await logAudit("client.updated", { userId: user.id, details: { client: id, keys: Object.keys(data) } });
+    revalidatePath("/clients");
+    return { ok: true, message: "Saved" };
+  });
+}
+
+/** A new key for a client whose old one has leaked or been lost. Their copy must enter the new one. */
+export async function regenerateClientKeyAction(id: string): Promise<ActionResult<{ key: string }>> {
+  return safely(async () => {
+    const user = await requireVendorAdmin();
+    const { newLicenceKey } = await import("@/lib/catalog/licence");
+    const key = newLicenceKey();
+    await prisma.client.update({ where: { id }, data: { licenceKey: key } });
+    await logAudit("client.rekeyed", { userId: user.id, details: { client: id } });
+    revalidatePath("/clients");
+    return { ok: true, data: { key } };
+  });
+}
+
+export async function deleteClientAction(id: string): Promise<ActionResult> {
+  return safely(async () => {
+    const user = await requireVendorAdmin();
+    const client = await prisma.client.delete({ where: { id } });
+    await logAudit("client.deleted", { userId: user.id, details: { client: id, name: client.name } });
+    revalidatePath("/clients");
+    return { ok: true };
+  });
+}
+
+/** A lead from the landing page becomes a client on a 30-day trial, with a key to send them. */
+export async function clientFromLeadAction(at: string): Promise<ActionResult<{ key: string }>> {
+  return safely(async () => {
+    const user = await requireVendorAdmin();
+    const { newLicenceKey } = await import("@/lib/catalog/licence");
+    const row = await prisma.appSetting.findUnique({ where: { key: "floda.leads" } });
+    const leads = parseJson<Array<{ email: string; shop: string; sells: string; platform: string; note: string; at: string }>>(row?.value, []);
+    const lead = leads.find((l) => l.at === at);
+    if (!lead) return { ok: false, error: "That lead is no longer there." };
+    const key = newLicenceKey();
+    const client = await prisma.client.create({
+      data: { name: lead.shop, email: lead.email, plan: "trial", status: "TRIAL", expiresAt: new Date(Date.now() + 30 * 86_400_000), licenceKey: key, notes: [lead.sells && `Sells: ${lead.sells}`, lead.platform && `Platform: ${lead.platform}`, lead.note && `Note: ${lead.note}`].filter(Boolean).join("\n") },
+    });
+    const rest = leads.filter((l) => l.at !== at);
+    await prisma.appSetting.update({ where: { key: "floda.leads" }, data: { value: JSON.stringify(rest) } });
+    await logAudit("client.from_lead", { userId: user.id, details: { client: client.id, name: client.name } });
+    revalidatePath("/clients");
+    return { ok: true, data: { key } };
+  });
+}
+
+export async function dismissLeadAction(at: string): Promise<ActionResult> {
+  return safely(async () => {
+    await requireVendorAdmin();
+    const row = await prisma.appSetting.findUnique({ where: { key: "floda.leads" } });
+    const leads = parseJson<Array<{ at: string }>>(row?.value, []);
+    await prisma.appSetting.upsert({ where: { key: "floda.leads" }, create: { key: "floda.leads", value: "[]" }, update: { value: JSON.stringify(leads.filter((l) => l.at !== at)) } });
+    revalidatePath("/clients");
+    return { ok: true };
+  });
+}
+
+/** This copy's licence key, entered by the shop and tried against Flöda now. */
+export async function activateLicenceAction(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  return safely(async () => {
+    const user = await requireUser("ADMIN");
+    const { normaliseKey, licenceServer } = await import("@/lib/catalog/licence");
+    if (!licenceServer()) return { ok: false, error: "This copy is not set up to check a licence." };
+    const key = normaliseKey(String(formData.get("licence") ?? ""));
+    if (!key) return { ok: false, error: "That is not a Flöda licence key. It looks like FL-XXXX-XXXX-XXXX-XXXX." };
+    const { activate } = await import("@/lib/catalog/licence-store");
+    let licence;
+    try {
+      licence = await activate(key);
+    } catch (err) {
+      return { ok: false, error: `Flöda could not be reached to check the key: ${said(err)}` };
+    }
+    await logAudit("licence.entered", { userId: user.id, details: { status: licence.status, client: licence.client } });
+    revalidatePath("", "layout");
+    if (licence.why) return { ok: false, error: `Flöda says: ${licence.why} The key has been kept; contact hello@floda.ai.` };
+    return { ok: true, message: `Licensed to ${licence.client}${licence.expiresAt ? ` until ${new Date(licence.expiresAt).toLocaleDateString("en-AU")}` : ""}.` };
+  });
+}

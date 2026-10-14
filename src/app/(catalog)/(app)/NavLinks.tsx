@@ -13,6 +13,7 @@ const ICONS: Record<string, string> = {
   pricing: "🧮",
   history: "🕘",
   settings: "⚙️",
+  clients: "👥",
 };
 
 const LINKS = [
@@ -23,15 +24,16 @@ const LINKS = [
   { href: "/pricing", label: "Price calculator", icon: "pricing" },
   { href: "/history", label: "History", icon: "history" },
   { href: "/settings", label: "Settings", icon: "settings", admin: true },
+  { href: "/clients", label: "Clients", icon: "clients", admin: true, vendor: true },
 ];
 
 function Ico({ name }: { name: string }) {
   return <span className="emo" aria-hidden>{ICONS[name]}</span>;
 }
 
-export function NavLinks({ isAdmin, compact }: { isAdmin: boolean; compact?: boolean }) {
+export function NavLinks({ isAdmin, vendor, compact }: { isAdmin: boolean; vendor?: boolean; compact?: boolean }) {
   const pathname = usePathname();
-  const links = LINKS.filter((l) => !l.admin || isAdmin);
+  const links = LINKS.filter((l) => (!l.admin || isAdmin) && (!("vendor" in l) || !l.vendor || vendor));
   if (compact) {
     return (
       <select className="rounded-lg border border-[var(--line)] bg-white px-2 py-1 text-sm" value={links.find((l) => (l.exact ? pathname === l.href : pathname.startsWith(l.href)))?.href ?? "/"} onChange={(e) => (window.location.href = e.target.value)}>

@@ -7,6 +7,8 @@ import { logoutAction } from "@/app/(catalog)/actions";
 import { NavLinks } from "./NavLinks";
 import { CommandPalette, type PaletteItem } from "@/app/(catalog)/CommandPalette";
 import { Kbd } from "@/app/(catalog)/ui";
+import { vendorMode } from "@/lib/catalog/licence";
+import { currentLicence } from "@/lib/catalog/licence-store";
 import "../catalog.css";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +29,8 @@ export default async function CatalogLayout({ children }: { children: React.Reac
   const gate = await databaseGate();
   if (gate) return gate;
   const user = await requireUser();
+  const vendor = vendorMode();
+  const licence = await currentLicence();
 
   // The palette's contents come down with the page. There are never many batches, and matching
   // them in the browser means no request per keystroke and nothing to wait for.
@@ -37,6 +41,7 @@ export default async function CatalogLayout({ children }: { children: React.Reac
   });
   const items: PaletteItem[] = [
     ...PAGES,
+    ...(vendor ? [{ id: "p-clients", label: "Clients", hint: "who runs Flöda, and their keys", group: "Pages", href: "/clients" }] : []),
     ...recent.map((b) => ({
       id: b.id,
       label: b.name,
@@ -53,7 +58,7 @@ export default async function CatalogLayout({ children }: { children: React.Reac
           <div className="wordmark text-[22px] text-white">Flöda</div>
           <div className="mt-1 text-[12px] text-white/65">Paperwork in, listings out</div>
         </Link>
-        <NavLinks isAdmin={user.role === "ADMIN"} />
+        <NavLinks isAdmin={user.role === "ADMIN"} vendor={vendor} />
         <div className="mt-auto px-5 py-4 text-xs">
           <div className="mb-3 flex items-center gap-1.5 text-[11px] text-white/55">
             <Kbd>⌘</Kbd><Kbd>K</Kbd> <span>to go anywhere</span>
@@ -68,8 +73,18 @@ export default async function CatalogLayout({ children }: { children: React.Reac
       <main className="min-w-0 flex-1 px-4 py-6 md:px-8">
         <div className="mb-4 flex items-center justify-between md:hidden">
           <Link href="/" className="wordmark text-[18px] text-[var(--ink)]">Flöda</Link>
-          <NavLinks isAdmin={user.role === "ADMIN"} compact />
+          <NavLinks isAdmin={user.role === "ADMIN"} vendor={vendor} compact />
         </div>
+        {licence.kind === "lapsed" && (
+          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <strong>This copy&rsquo;s licence needs attention.</strong> {licence.why} Everything keeps working while it is sorted out; write to hello@floda.ai, or enter a new key in Settings.
+          </div>
+        )}
+        {licence.kind === "none" && user.role === "ADMIN" && (
+          <div className="mb-4 rounded-lg border border-[var(--meta-tint-2)] bg-[var(--meta-tint)] px-4 py-3 text-sm">
+            <strong>No licence key yet.</strong> Enter the one Flöda sent you in <Link href="/settings" className="font-semibold text-[var(--meta)]">Settings</Link>.
+          </div>
+        )}
         {isEphemeralDb() && (
           <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
             <strong>No database connected.</strong> This deployment is running on a temporary database that resets whenever the server restarts, so batches and accounts will disappear.

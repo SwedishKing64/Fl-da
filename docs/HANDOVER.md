@@ -1,6 +1,6 @@
 # Rubin — handover
 
-> This copy of the code is **Floda**, the product being made from Rubin. Alpsport's own Rubin
+> This copy of the code is **Flöda**, the product being made from Rubin. Alpsport's own Rubin
 > lives in the business's repository and is not changed from here. See `FLODA.md` for what
 > differs and the plan. Everything below describes the code as it was when the two split.
 

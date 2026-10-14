@@ -4,8 +4,8 @@ import { RegisterForm } from "./RegisterForm";
 import "./welcome.css";
 
 export const metadata: Metadata = {
-  title: "Floda",
-  description: "Supplier paperwork in, shop-ready listings out. Floda reads invoices, order forms, spec sheets and photographed paperwork into Shopify products, stock updates, price changes and QuickBooks bills.",
+  title: "Flöda",
+  description: "Supplier paperwork in, shop-ready listings out. Flöda reads invoices, order forms, spec sheets and photographed paperwork into Shopify products, stock updates, price changes and QuickBooks bills.",
 };
 
 /**
@@ -19,7 +19,7 @@ export default function WelcomePage() {
     <div className="floda">
       <header className="bar">
         <div className="wrap">
-          <Link href="/welcome" className="mark" aria-label="Floda"><span className="dot" aria-hidden />Floda</Link>
+          <Link href="/welcome" className="mark" aria-label="Flöda"><span className="dot" aria-hidden />Flöda</Link>
           <nav aria-label="Sections">
             <a href="#how">How it works</a>
             <a href="#jobs">What it does</a>
@@ -36,7 +36,7 @@ export default function WelcomePage() {
             <p className="eyebrow">For retailers on Shopify</p>
             <h1 style={{ marginTop: 14 }}>Supplier paperwork in. Shop-ready listings out.</h1>
             <p className="lede" style={{ marginTop: 20 }}>
-              Floda reads the invoices, order confirmations, spec sheets and photographed, scribbled-on order forms your suppliers send, and turns them into Shopify products, stock updates, price changes and QuickBooks bills. Checked on screen, every cell, before anything touches your store.
+              Flöda reads the invoices, order confirmations, spec sheets and photographed, scribbled-on order forms your suppliers send, and turns them into Shopify products, stock updates, price changes and QuickBooks bills. Checked on screen, every cell, before anything touches your store.
             </p>
             <div className="ctas">
               <a href="#register" className="btn btn-pine">Register interest</a>
@@ -77,10 +77,10 @@ export default function WelcomePage() {
             <div className="head">
               <p className="eyebrow">How it works</p>
               <h2>Three steps, and the third one is you checking.</h2>
-              <p className="lede">Nothing goes to your store on Floda&rsquo;s say-so. It does the reading and the matching; you look at the result and press import.</p>
+              <p className="lede">Nothing goes to your store on Flöda&rsquo;s say-so. It does the reading and the matching; you look at the result and press import.</p>
             </div>
             <div className="steps">
-              <div className="step"><span className="n">1</span><h3>Drop in what the supplier sent</h3><p className="soft">A spreadsheet, a PDF, or a photo off your phone, pen marks and all. Floda reads the print and the handwriting: a price in the margin is the RRP, a percentage is the discount, a year is the season.</p></div>
+              <div className="step"><span className="n">1</span><h3>Drop in what the supplier sent</h3><p className="soft">A spreadsheet, a PDF, or a photo off your phone, pen marks and all. Flöda reads the print and the handwriting: a price in the margin is the RRP, a percentage is the discount, a year is the season.</p></div>
               <div className="step"><span className="n">2</span><h3>It becomes your catalogue&rsquo;s shape</h3><p className="soft">Lines are matched to what you already sell by barcode, code or name. New products are named, categorised, tagged and priced the way your shop does it, learned from your own Shopify exports.</p></div>
               <div className="step"><span className="n">3</span><h3>Check it, then import it</h3><p className="soft">Every product in a grid, every changed cell listed. Download a Shopify CSV, or only the kinds of product you&rsquo;re working on today, and import it yourself.</p></div>
             </div>
@@ -111,7 +111,7 @@ export default function WelcomePage() {
             <div className="proof">
               <div><div className="num">967</div><p className="soft">products across ten Shopify exports, measured before any tagging rule was written.</p></div>
               <div><div className="num">1 season</div><p className="soft">of real supplier paperwork: order forms, spec exports, barcode lists, invoices, photographed and scribbled on.</p></div>
-              <div><div className="num">0</div><p className="soft">changes to your store without you seeing them first. Floda writes files; you import them.</p></div>
+              <div><div className="num">0</div><p className="soft">changes to your store without you seeing them first. Flöda writes files; you import them.</p></div>
             </div>
             <p className="quote" style={{ marginTop: 40 }}>&ldquo;A name is the loosest key, so it&rsquo;s the strictest match. Whole words only, never a substring, and a name that fits two products is refused with both named rather than guessed.&rdquo;</p>
             <p className="soft" style={{ marginTop: 8, fontSize: 14 }}>From the engineering notes. The product is built this carefully all the way down.</p>
@@ -123,7 +123,7 @@ export default function WelcomePage() {
             <div className="head">
               <p className="eyebrow">Who it&rsquo;s for</p>
               <h2>Retailers whose suppliers send paperwork, not feeds.</h2>
-              <p className="lede">Specialty retail runs on order forms and PDFs. If your season starts with a pile of them, Floda is for you.</p>
+              <p className="lede">Specialty retail runs on order forms and PDFs. If your season starts with a pile of them, Flöda is for you.</p>
             </div>
             <div className="fit">
               <div className="card now"><div className="label">Ready now</div><h3>Snow and outdoor</h3><p className="soft">Skis, boards, boots, bindings and packages, outerwear, packs and climbing gear. Binding mount charges, ski packages and season tagging built in.</p></div>
@@ -138,7 +138,7 @@ export default function WelcomePage() {
             <div>
               <p className="eyebrow">Pricing</p>
               <h2 style={{ marginTop: 12 }}>Founding-retailer pricing.</h2>
-              <p className="lede" style={{ marginTop: 16 }}>One flat monthly fee for the shop, however many staff and however many invoices, set with the first retailers to come on board and held for them. No per-seat charges, no setup fee, and you keep every file Floda makes.</p>
+              <p className="lede" style={{ marginTop: 16 }}>One flat monthly fee for the shop, however many staff and however many invoices, set with the first retailers to come on board and held for them. No per-seat charges, no setup fee, and you keep every file Flöda makes.</p>
               <p className="soft" style={{ marginTop: 16 }}>Register below and we&rsquo;ll walk you through it on one of your own supplier invoices, so you can see what it makes of your paperwork before you decide anything.</p>
             </div>
             <div id="register">
@@ -150,7 +150,7 @@ export default function WelcomePage() {
 
       <footer>
         <div className="wrap">
-          <span><strong>Floda</strong> · supplier paperwork in, shop-ready listings out</span>
+          <span><strong>Flöda</strong> · supplier paperwork in, shop-ready listings out</span>
           <span>hello@floda.ai · Sydney, Australia</span>
         </div>
       </footer>

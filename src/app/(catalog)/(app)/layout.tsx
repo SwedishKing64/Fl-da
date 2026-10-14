@@ -52,7 +52,7 @@ export default async function CatalogLayout({ children }: { children: React.Reac
         <Link href="/" className="block px-5 py-5">
           <div className="flex items-center gap-2.5">
             <span className="grid h-8 w-8 place-items-center rounded-[10px] bg-white text-[15px] font-extrabold text-[var(--meta)]" aria-hidden>F</span>
-            <div className="text-[19px] font-bold tracking-tight text-white">Floda</div>
+            <div className="text-[19px] font-bold tracking-tight text-white">Flöda</div>
           </div>
           <div className="mt-1 text-[12px] text-white/65">Paperwork in, listings out</div>
         </Link>
@@ -70,7 +70,7 @@ export default async function CatalogLayout({ children }: { children: React.Reac
       </aside>
       <main className="min-w-0 flex-1 px-4 py-6 md:px-8">
         <div className="mb-4 flex items-center justify-between md:hidden">
-          <Link href="/" className="text-[15px] font-bold text-[var(--meta)]">Floda</Link>
+          <Link href="/" className="text-[15px] font-bold text-[var(--meta)]">Flöda</Link>
           <NavLinks isAdmin={user.role === "ADMIN"} compact />
         </div>
         {isEphemeralDb() && (

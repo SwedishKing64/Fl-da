@@ -1,15 +1,15 @@
-# Floda — the product
+# Flöda — the product
 
-Floda is the product made from Rubin, the internal tool built for Alpsport, a Sydney ski and
+Flöda is the product made from Rubin, the internal tool built for Alpsport, a Sydney ski and
 snowboard retailer. Rubin stays with Alpsport in its own repository and keeps running their shop.
-Floda is a copy of the same code, with the same history, that is being turned into something any
+Flöda is a copy of the same code, with the same history, that is being turned into something any
 specialty retailer can use. Read `HANDOVER.md` for what Rubin does and the rules it carries; this
 file is about what has to change for Floda.
 
 ## The principle
 
 Nothing about a shop lives in code. Rubin already reads much of a shop's conventions from its own
-Shopify exports — product templates, remembered listings, tag spellings. Floda finishes that idea:
+Shopify exports — product templates, remembered listings, tag spellings. Flöda finishes that idea:
 every convention becomes data learned from the shop's exports or set in Settings, and the code
 holds only the supplier knowledge that is the same at every retailer.
 
@@ -33,7 +33,7 @@ holds only the supplier knowledge that is the same at every retailer.
    this has happened.
 2. **Conventions as data.** Taxonomy, spellings, marker, pricing policy and the snow rules pack
    as per-shop data, with Alpsport's current values migrated as the first instance. Four to six
-   weeks. Floda gets its own name and face in this step; the landing page at `/welcome` is the
+   weeks. Flöda gets its own name and face in this step; the landing page at `/welcome` is the
    start of that.
 3. **Multi-tenancy, onboarding, billing.** A Shop record, every table and file path scoped by
    it, logins belonging to a shop; sign-up, export upload, convention review, rules pack choice;
@@ -47,12 +47,12 @@ holds only the supplier knowledge that is the same at every retailer.
 - API cost per document read priced into the subscription.
 - Error reporting, an admin view across shops, and a way for a shop to send the file that failed.
 
-## Working on Floda
+## Working on Flöda
 
 Everything in `HANDOVER.md` under "Working on it" applies. In addition:
 
-- Alpsport's Rubin and Floda share history up to the split. A fix to a supplier reader or to the
-  document reading is worth carrying to both; a change to a convention is Floda's alone once
+- Alpsport's Rubin and Flöda share history up to the split. A fix to a supplier reader or to the
+  document reading is worth carrying to both; a change to a convention is Flöda's alone once
   conventions are data.
 - Leads from the landing page are kept in the `AppSetting` table under the key `floda.leads`
   until there is a proper place for them.

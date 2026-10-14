@@ -7,7 +7,7 @@ export default async function AuthLayout({ children }: { children: React.ReactNo
     <main className="min-h-screen bg-[var(--canvas)]">
       <header className="rubin-gradient relative overflow-hidden pb-24 pt-12 text-center">
         <div className="rise relative z-10 px-4">
-          <h1 className="text-3xl font-bold tracking-tight text-white">Floda</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-white">Flöda</h1>
           <p className="mt-1 text-xs font-medium tracking-wide text-white/75">Paperwork in, listings out</p>
         </div>
         {/* The range, cut out of the ruby in the colour of the ground below it. */}

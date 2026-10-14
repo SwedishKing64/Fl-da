@@ -1,12 +1,21 @@
 # The desktop installers, built where they must be built: the Windows one on Windows, the Mac
-# one on a Mac. Runs on a version tag (v1.2.3) and attaches the installers to that release, or by
-# hand from the Actions tab, which leaves them as downloadable artifacts.
+# one on a Mac. Runs on a version tag (v1.2.3), or by hand from the Actions tab with a version
+# to release as; either way the installers are attached to a release of that tag, which is made
+# if it does not exist yet.
 name: Desktop app
 
 on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release as, without the v (defaults to package.json's)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -42,10 +51,21 @@ jobs:
             dist-desktop/*.exe
             dist-desktop/*.dmg
           if-no-files-found: error
+      - name: Which version this is
+        id: version
+        shell: bash
+        run: |
+          v="${{ github.event.inputs.version }}"
+          if [ -z "$v" ]; then
+            if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then v="${GITHUB_REF#refs/tags/v}"; else v="$(node -p "require('./package.json').version")"; fi
+          fi
+          echo "tag=v${v}" >> "$GITHUB_OUTPUT"
       - name: Attach to the release
-        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Flöda ${{ steps.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
           files: |
             dist-desktop/*.exe
             dist-desktop/*.dmg

@@ -11,6 +11,8 @@ asar: false
 npmRebuild: false
 directories:
   output: dist-desktop
+# Ad-hoc signs the Mac app; see desktop/after-pack.cjs.
+afterPack: desktop/after-pack.cjs
 files:
   - desktop/**
   - package.json
@@ -41,8 +43,12 @@ mac:
       arch: [arm64, x64]
   category: public.app-category.business
   artifactName: "Floda-${version}-${arch}.${ext}"
-  # Unsigned until there is an Apple Developer account: the first open is right-click → Open.
+  # No Apple Developer identity yet: electron-builder's own signing is off and the app is ad-hoc
+  # signed in after-pack.cjs instead, so Gatekeeper says "unidentified developer" (right-click →
+  # Open) rather than "damaged". Notarisation needs an Apple Developer account.
   identity: null
+  hardenedRuntime: false
+  gatekeeperAssess: false
 linux:
   target:
     - AppImage

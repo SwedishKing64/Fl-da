@@ -45,7 +45,7 @@ export function RegisterForm() {
         <textarea id="lead-note" name="note" rows={3} placeholder="Which suppliers give you the most grief?" />
       </label>
       {result && !result.ok && <p className="err">{result.error}</p>}
-      <button className="btn btn-pine" type="submit" disabled={pending}>{pending ? "Sending…" : "Register interest"}</button>
+      <button className="btn btn-meta" type="submit" disabled={pending}>{pending ? "Sending…" : "Register interest"}</button>
       <p className="soft" style={{ fontSize: 13 }}>No spam, no list sold. One email from a person.</p>
     </form>
   );

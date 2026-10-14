@@ -20,7 +20,7 @@ import { siblingsOfPlaced } from "./siblings";
 import { writeOutColour } from "./colour";
 import { audienceByModel, brandIn, isBrand } from "./brands";
 import { askToJoin } from "./reference-ai";
-import { aiAvailable } from "./extract/ai";
+import { aiAvailable } from "./anthropic";
 import { repairCategoryRules, repairProductTags, repairTagRuleSpelling } from "./seed";
 import { applyTagRules, type TagRuleLike } from "./rules";
 import { applyTemplates, type ProductTemplateLike } from "./templates";

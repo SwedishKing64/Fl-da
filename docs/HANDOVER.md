@@ -1,8 +1,10 @@
 # Rubin — handover
 
-> This copy of the code is **Flöda**, the product being made from Rubin. Alpsport's own Rubin
-> lives in the business's repository and is not changed from here. See `FLODA.md` for what
-> differs and the plan. Everything below describes the code as it was when the two split.
+> This copy of the code is **Flöda**, the product made from Rubin. Alpsport's own Rubin lives in
+> the business's repository and is not changed from here. See `FLODA.md` for what Flöda is and
+> what differs. Everything below describes what the shop told us and decided while Rubin was
+> built; in Flöda those conventions are the snow-and-outdoor rules pack, and the shop's own are
+> learned from its export.
 
 Read this first. It is what a new Claude session (or a new developer) needs to know that is not in
 the code: what the shop is, what it asked for, the rules it told us, what was decided, and what is
@@ -128,9 +130,9 @@ Open at handover:
 
 ## Working on it
 
-- `npm run demo` starts the app on :3000 with a SQLite database and a demo login
-  (justin@alpsport.test / password123; a fresh database shows the setup form first). Start it in
-  the background; the first page load is slow.
+- `npm run demo` starts the app on :3000 with a SQLite database; a fresh database opens on the
+  setup walk-through. `npm run catalog:seed -- --admin … --snow` makes an account and switches
+  the snow pack on without it. Start it in the background; the first page load is slow.
 - `npx vitest run` is the gate before any commit. Some tests read real supplier files from the
   developer's uploads folder and fail with ENOENT when those files are absent; that is
   environmental, not a regression. Anything else failing is.
@@ -149,7 +151,8 @@ Open at handover:
 | Delivery to an export | `src/lib/catalog/delivery.ts`, `reconcile.ts`, `reference-match.ts`, `specs.ts` |
 | Kinds of product | `src/lib/catalog/kinds.ts`, `instructions.ts` (`types`, `typesSeen`), `narrow-export.ts` |
 | Pages and pictures | `src/lib/catalog/extract/page.ts`, `shopify-store.ts`, `pictures.ts`, `colour-match.ts` |
-| Categorising and tagging | `src/lib/catalog/grouping.ts`, `categorize.ts`, `accessories.ts`, `packs.ts`, `product-tags.ts`, `tagging.ts`, `taxonomy.ts`, `tag-spelling.ts` |
+| Categorising and tagging | `src/lib/catalog/grouping.ts`, `categorize.ts`, `accessories.ts`, `packs.ts`, `product-tags.ts`, `tagging.ts`, `taxonomy.ts` (the vocabulary in force), `tag-spelling.ts`, `learn.ts` (from the shop's export), `shop-profile.ts` |
+| Setup, clients, licences, desktop | `src/app/(catalog)/(setup)/setup/`, `(app)/clients/`, `src/lib/catalog/licence.ts`, `licence-store.ts`, `desktop/`, `scripts/desktop-build.mjs` |
 | Invoice reading | `src/lib/catalog/invoice.ts` (spreadsheets), `extract/ai.ts` (PDF and photo), `extract/transcribe.ts` (Tidy) |
 | Prices and stock page | `src/app/(catalog)/(app)/bulk/BulkPanel.tsx` |
 | Batch page | `src/app/(catalog)/(app)/batches/[id]/` (`BuildList`, `TypeList`, `LinksPanel`) |

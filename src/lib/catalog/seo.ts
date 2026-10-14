@@ -2,12 +2,12 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { englishVariant, retailer, shopName } from "./shop-profile";
-import { anthropicClient } from "./anthropic";
+import { anthropicClient, EXTRACTION_MODEL, aiAvailable } from "./anthropic";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { prisma, parseJson } from "./db";
 import { getSettings } from "./settings";
-import { aiAvailable, EXTRACTION_MODEL } from "./extract/ai";
+
 import { templateGuidance, type ProductTemplateLike } from "./templates";
 
 const SeoSchema = z.object({

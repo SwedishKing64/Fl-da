@@ -12,6 +12,9 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 
+/** The model every reader uses. Overridable per deployment. */
+export const EXTRACTION_MODEL = process.env.CATALOG_AI_MODEL || "claude-opus-5";
+
 let storedKey = "";
 const clients = new Map<string, Anthropic>();
 

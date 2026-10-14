@@ -16,24 +16,24 @@ tagged by your Rules, priced by your markup rules and given images → review ev
 spreadsheet-style grid grouped by brand → export one validated Shopify CSV per brand (or per
 product type) or push to the store → every batch is logged.
 
-**Rules** (`/rules`): tag, collection, product-type and metafield rules with a live tester, plus
-the category/option rules. **Pricing** (`/pricing`): an interactive price calculator, the
-markup/margin rules and GST/FX settings.
+**Pricing** (`/pricing`): an interactive price calculator, the markup/margin rules and tax/FX
+settings. **Settings**: the shop, what Flöda has learned from its export, the API key, staff.
 
 ## Run it
 
 ```sh
-cp .env.example .env.local            # set DATABASE_URL (SQLite default is fine) and ANTHROPIC_API_KEY
-npm install                           # also runs `prisma generate`
-npm run db:push                       # create the SQLite schema (or your Postgres schema)
-npm run catalog:seed -- --admin you@shop.com "Your Name" a-strong-password
-npm run dev                           # open http://localhost:3000
+npm install        # also runs `prisma generate`
+npm run demo       # SQLite database, dev server on http://localhost:3000
 ```
 
-Or simply `npm run demo`, which does all of that with defaults. Without `--admin`, the first
-visit shows a one-time setup screen to create the
-admin account. `catalog:seed` also loads the recommended pricing rules (40% margin skis,
-keystone accessories, …) and category rules; both are editable under **Pricing & categories**.
+The first visit walks through setup: the admin account, the shop (name, country, currency, tax,
+what it sells, which rules to start from), the shop's Shopify export (Flöda learns its kinds of
+product, menus, tag spellings and per-brand conventions from it), and the Anthropic API key that
+reads PDFs and photos. Spreadsheets work without a key. `ANTHROPIC_API_KEY` in the environment
+is used when set; otherwise the key pasted in setup is kept in the database.
+
+`npm run catalog:seed -- --admin you@shop.com "Your Name" a-strong-password` makes an account
+without the walk-through; `--snow` also switches on the snow-and-outdoor rules pack.
 
 Sample supplier files to try are in `samples/`:
 
@@ -47,20 +47,39 @@ Sample supplier files to try are in `samples/`:
 regression test in `src/lib/catalog/samples.test.ts` fails if they drift. Regenerate them
 with `npm run catalog:fixtures` after an intentional change.
 
+## The desktop app
+
+Flöda installs on a PC or a Mac as an app. It is the same server, started on the machine with a
+SQLite database and a files folder in the user's app-data directory, in an Electron window.
+
+```sh
+npm run desktop:build   # the server as a standalone folder, plus an empty template database
+npm run desktop:check   # runs it under plain Node against a throwaway folder and hits three pages
+npm run desktop:dev     # opens it in Electron (needs the Electron binary: `npx electron --version`)
+npm run desktop:dist    # the installer for this platform, in dist-desktop/
+```
+
+Pushing a tag like `v0.2.0` runs `.github/workflows/desktop.yml`, which builds the Windows
+installer on a Windows runner and the Mac disk image on a Mac runner and attaches both to the
+release. The app checks its licence against `FLODA_LICENCE_SERVER` (baked in at build time,
+default `https://floda.ai`); the shop enters the key it was sent in Settings.
+
+## The vendor's deployment
+
+The copy at floda.ai runs with `FLODA_VENDOR=1`. It has a Clients page (every shop, its plan,
+standing, key and last check-in; leads from the landing page become clients on a trial) and
+answers `/api/licence` for installed copies.
+
 ## Deploy to Vercel
 
 Vercel has no persistent disk, so the app needs a Postgres database and a Blob store there.
 Both are one click in the Vercel dashboard and their credentials are injected automatically.
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FSwedishKing64%2Fafterword%2Ftree%2Fclaude%2Fski-retailer-shopify-automation-wzossf&project-name=rubin&stores=%5B%7B%22type%22%3A%22integration%22%2C%22integrationSlug%22%3A%22neon%22%2C%22productSlug%22%3A%22neon%22%7D%2C%7B%22type%22%3A%22blob%22%7D%5D&env=ANTHROPIC_API_KEY&envDescription=Optional%3A%20enables%20PDF%2Fscan%2Fphoto%20invoice%20reading%20and%20AI%20product%20copy)
-
-Manual steps if you prefer:
-
-1. vercel.com → **Add New → Project** → import this repository (choose the branch you want to deploy).
+1. vercel.com → **Add New → Project** → import this repository.
 2. In the project: **Storage → Create Database → Neon (Postgres)** and **Storage → Create → Blob**. Connect both to the project; this sets `DATABASE_URL` and `BLOB_READ_WRITE_TOKEN`.
-3. Optionally add `ANTHROPIC_API_KEY` under **Settings → Environment Variables**.
+3. Optionally add `ANTHROPIC_API_KEY`, and `FLODA_VENDOR=1` on the vendor's own deployment, under **Settings → Environment Variables**.
 4. **Deploy** (or redeploy after adding storage). The build (`npm run vercel-build`) switches Prisma to Postgres, syncs the schema and builds the app.
-5. Open `https://<your-project>.vercel.app` and create the first admin account; default pricing and category rules load automatically.
+5. Open `https://<your-project>.vercel.app` and walk through setup.
 
 ## Pricing & profit engine
 

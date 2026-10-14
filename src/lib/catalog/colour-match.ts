@@ -13,11 +13,11 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { retailer } from "./shop-profile";
-import { anthropicClient } from "./anthropic";
+import { anthropicClient, EXTRACTION_MODEL, aiAvailable } from "./anthropic";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import sharp from "sharp";
-import { EXTRACTION_MODEL, aiAvailable } from "./extract/ai";
+
 
 /** The most pictures shown in one look. A page rarely has more that are the product's own. */
 export const MOST_PICTURES = 16;

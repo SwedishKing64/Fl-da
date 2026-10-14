@@ -16,11 +16,11 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
-import { anthropicClient } from "./anthropic";
+import { anthropicClient, EXTRACTION_MODEL, aiAvailable } from "./anthropic";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { prisma } from "./db";
-import { EXTRACTION_MODEL, aiAvailable } from "./extract/ai";
+
 import { retrying } from "./api-errors";
 import { logAudit } from "./audit";
 import { isValidType, productTypes } from "./taxonomy";

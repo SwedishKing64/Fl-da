@@ -44,3 +44,10 @@ next-env.d.ts
 /storage
 /prisma/*.db
 /prisma/*.db-journal
+
+# desktop build output
+/dist-desktop/
+/prisma/template.db
+/desktop/floda.json
+/prisma/*.db
+/storage*/

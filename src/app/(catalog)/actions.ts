@@ -22,7 +22,7 @@ import { readInvoiceGrids, type InvoiceRead } from "@/lib/catalog/invoice";
 import { describeApiError } from "@/lib/catalog/api-errors";
 import type { CanonicalLineItem } from "@/lib/catalog/types";
 import { MAX_UPLOAD, readableSize } from "@/lib/catalog/image-size";
-import { aiAvailable } from "@/lib/catalog/extract/ai";
+import { aiAvailable } from "@/lib/catalog/anthropic";
 import { initialsFrom } from "@/lib/catalog/tagging";
 import { answerFeedback, feedbackAvailable, withRule, type FeedbackTurn } from "@/lib/catalog/feedback";
 import { describeDirectives, instructionsAvailable, parseDirectives, readInstructions, NO_DIRECTIVES } from "@/lib/catalog/instructions";

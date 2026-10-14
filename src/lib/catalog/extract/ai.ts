@@ -5,13 +5,13 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { retailer, taxName } from "../shop-profile";
-import { anthropicClient } from "../anthropic";
+import { anthropicClient, EXTRACTION_MODEL } from "../anthropic";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import type { ExtractedTable } from "./types";
 import { retrying } from "../api-errors";
 
-export const EXTRACTION_MODEL = process.env.CATALOG_AI_MODEL || "claude-opus-5";
+export { EXTRACTION_MODEL } from "../anthropic";
 
 export type DocumentType = "INVOICE" | "SPEC_SHEET" | "PRICE_LIST" | "PRODUCT_PHOTO" | "OTHER";
 

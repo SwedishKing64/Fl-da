@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // The Electron main process is CommonJS by necessity and outside the TypeScript program.
+    "desktop/**",
   ]),
 ]);
 

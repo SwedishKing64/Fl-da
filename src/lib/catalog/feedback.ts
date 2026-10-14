@@ -13,10 +13,10 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
-import { anthropicClient } from "./anthropic";
+import { anthropicClient, EXTRACTION_MODEL, aiAvailable } from "./anthropic";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
-import { EXTRACTION_MODEL, aiAvailable } from "./extract/ai";
+
 import { retrying } from "./api-errors";
 
 const ReplySchema = z.object({

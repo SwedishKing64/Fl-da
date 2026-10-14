@@ -1,0 +1,51 @@
+# The desktop installers, built where they must be built: the Windows one on Windows, the Mac
+# one on a Mac. Runs on a version tag (v1.2.3) and attaches the installers to that release, or by
+# hand from the Actions tab, which leaves them as downloadable artifacts.
+name: Desktop app
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: --win
+          - os: macos-latest
+            target: --mac
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build the server for the desktop
+        run: npm run desktop:build
+        env:
+          FLODA_LICENCE_SERVER: ${{ vars.FLODA_LICENCE_SERVER || 'https://floda.ai' }}
+      - name: Make the installer
+        run: npx electron-builder ${{ matrix.target }} --publish never
+        env:
+          # No code signing yet. Windows shows a SmartScreen notice; macOS needs right-click → Open.
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: floda-${{ matrix.os }}
+          path: |
+            dist-desktop/*.exe
+            dist-desktop/*.dmg
+          if-no-files-found: error
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist-desktop/*.exe
+            dist-desktop/*.dmg

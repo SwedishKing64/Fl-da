@@ -13,7 +13,11 @@
     "catalog:seed": "tsx prisma/seed.ts",
     "catalog:fixtures": "tsx samples/generate-fixtures.ts",
     "demo": "tsx scripts/demo.ts",
-    "vercel-build": "node scripts/vercel-build.mjs"
+    "vercel-build": "node scripts/vercel-build.mjs",
+    "desktop:build": "node scripts/desktop-build.mjs",
+    "desktop:check": "node desktop/launch.cjs --check",
+    "desktop:dev": "electron .",
+    "desktop:dist": "electron-builder --publish never"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
@@ -38,11 +42,16 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "electron": "^38.3.0",
+    "electron-builder": "^26.0.12",
     "eslint": "^9",
     "eslint-config-next": "16.2.12",
     "tailwindcss": "^4",
     "tsx": "^4.23.13",
     "typescript": "^5",
     "vitest": "^4"
-  }
+  },
+  "description": "Supplier paperwork in, shop-ready listings out.",
+  "author": "Flöda",
+  "main": "desktop/main.cjs"
 }

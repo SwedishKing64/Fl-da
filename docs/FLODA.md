@@ -1,58 +1,94 @@
 # Flöda — the product
 
 Flöda is the product made from Rubin, the internal tool built for Alpsport, a Sydney ski and
-snowboard retailer. Rubin stays with Alpsport in its own repository and keeps running their shop.
-Flöda is a copy of the same code, with the same history, that is being turned into something any
-specialty retailer can use. Read `HANDOVER.md` for what Rubin does and the rules it carries; this
-file is about what has to change for Floda.
+snowboard retailer. Rubin stays with Alpsport in its own repository (`RubinAlp/Rubin`) and keeps
+running their shop; nothing here touches it. Flöda is a copy of the same code, with the same
+history, turned into something any specialty retailer can install and use. Read `HANDOVER.md`
+for what Rubin does and the rules it carries; this file is about what Flöda is.
 
 ## The principle
 
-Nothing about a shop lives in code. Rubin already reads much of a shop's conventions from its own
-Shopify exports — product templates, remembered listings, tag spellings. Flöda finishes that idea:
-every convention becomes data learned from the shop's exports or set in Settings, and the code
-holds only the supplier knowledge that is the same at every retailer.
+Nothing about a shop lives in code. A fresh Flöda is blank: it learns the shop from the shop's
+own Shopify export, and the rules Rubin was built with are a pack a shop switches on if it sells
+snow and outdoor gear. The code holds only what is the same at every retailer — how documents are
+read, how lines are matched to listings, how a change is checked before it goes to the store —
+and the supplier knowledge every shop that onboards improves for all.
 
-## What is Alpsport's today, and where it goes
+## What is in place (2026-10-14)
 
-| Alpsport's, in code today | Becomes |
-| --- | --- |
-| The menu tree in `src/lib/catalog/taxonomy.ts` (headings, shelves, sections) | Learned from the shop's exports at onboarding, confirmed on a review screen, stored per shop |
-| Tag spellings in `src/lib/catalog/tag-spelling.ts` | Generated from the shop's exports at onboarding (the generator exists) |
-| The `123abc-xx` builder marker and its initials | A per-shop setting: marker pattern and staff initials |
-| Snow-specific rules: binding classification (`mount.ts`), mount charges, ski packages, board, boot and accessory filing, pack shelves | A "snow and outdoor" rules pack a shop switches on, with per-shop overrides |
-| Price endings and the recommended-retail pricing policy | A per-shop pricing setting |
-| Shopify's own tags (price bands, sizes, colours) | Already generic |
-| Supplier readers: Burton, Volkl, Head, Osprey, Swany and the rest | Stay shared; every shop that onboards improves them for all |
-| Document reading, delivery matching, bulk changes | Already generic |
+**The shop's conventions are data.** `taxonomy.ts` is a replaceable vocabulary: the snow-and-
+outdoor menu is one rules pack; a blank vocabulary is the other; what was learned from the shop's
+export is added to either. `learn.ts` reads that export — the kinds of product, the menu tags that
+run across kinds, how each shelf tag is spelled — and `shop-profile.ts` keeps it with the shop's
+profile (name, country, currency, tax, what it sells, pack, marker tag) and puts it in force on
+every request. The marker tag ("123abc-zb" at Alpsport) is the shop's own or none. The prompts
+describe the retailer from its profile. The snow rules are seeded when that pack is chosen and
+taken out again when it is not. The tests run against Alpsport's conventions (`src/test-setup.ts`).
 
-## The plan, in order
+**Setup is a walk-through.** `/setup`: the admin account; the shop; its catalogue (the export is
+read in the browser, and the vocabulary, the templates per brand and kind, and the listings are
+kept); the API key that reads PDFs and photos (kept in the copy's own database when the host sets
+none, tried before it is kept); and a page saying how to work. Home carries a getting-started
+checklist until it is all done; Settings has the same cards, so any of it can be redone.
 
-1. **A second shop on the current code**, as its own deployment. Days of work. It shows which
-   conventions break first and whether a retailer will pay. Nothing below is worth doing before
-   this has happened.
-2. **Conventions as data.** Taxonomy, spellings, marker, pricing policy and the snow rules pack
-   as per-shop data, with Alpsport's current values migrated as the first instance. Four to six
-   weeks. Flöda gets its own name and face in this step; the landing page at `/welcome` is the
-   start of that.
-3. **Multi-tenancy, onboarding, billing.** A Shop record, every table and file path scoped by
-   it, logins belonging to a shop; sign-up, export upload, convention review, rules pack choice;
-   Stripe or Shopify app billing with document reads metered. Four to six weeks.
-4. **Shopify App Store listing**, if wanted. Weeks, mostly review and polish.
+**Clients and licences.** The vendor's own deployment runs with `FLODA_VENDOR=1`: it keeps the
+`Client` table, shows `/clients` (every shop, plan, standing, key, last check-in and version;
+leads from the landing page become clients on a 30-day trial), and answers `/api/licence`. Every
+other copy is built with `FLODA_LICENCE_SERVER` pointing at the vendor; the shop enters its key
+in Settings, the copy checks in about daily, keeps working for a month if it cannot reach the
+vendor, and shows a banner — never a lockout — when the vendor says the licence is paused, ended
+or unknown. `licence.ts` is the pure half, `licence-store.ts` the copy's side.
 
-## What must be true before an outside shop's invoices go in
+**The desktop app.** `desktop/main.cjs` (Electron) opens a window on the same Next.js server,
+started on this machine on a free port with a SQLite database and a files folder in the user's
+app-data directory (`desktop/launch.cjs`). `scripts/desktop-build.mjs` builds the server as a
+standalone folder with an empty template database; `electron-builder.yml` wraps it;
+`.github/workflows/desktop.yml` builds the Windows installer on a Windows runner and the Mac
+disk image on a Mac runner whenever a `v*` tag is pushed, and attaches them to the release.
 
-- Per-shop data isolation; wholesale costs are sensitive.
-- A short terms document and a privacy policy.
-- API cost per document read priced into the subscription.
-- Error reporting, an admin view across shops, and a way for a shop to send the file that failed.
+**Gone from Flöda:** Bills for QuickBooks, the copy-from-the-old-site migration, and every seed
+that belonged to one shop.
+
+## Where each copy runs
+
+| Copy | How | Database and files | Licence |
+| --- | --- | --- | --- |
+| The vendor (floda.ai) | Vercel, `FLODA_VENDOR=1` | Neon Postgres, Vercel Blob | issues them |
+| A shop's desktop app | the installer from a release | SQLite and a folder in app-data | checks `FLODA_LICENCE_SERVER` |
+| A shop's own hosted copy | Vercel from this repo | Neon, Blob | same, when the variable is set |
+| Development | `npm run demo` | `prisma/dev.db`, `./storage` | none (`FLODA_LICENCE_SERVER` unset) |
+
+## Known limits
+
+- The desktop app keeps uploaded product photos on the machine, so a Shopify CSV that refers to
+  them carries local paths Shopify cannot fetch. Pictures taken from brand pages are remote URLs
+  and work. A hosted copy with a Blob store does not have this problem.
+- Pricing is still modelled as one home currency with one sales tax; the column names say AUD and
+  GST. The profile's currency and tax name are used in prompts and labels, and the tax rate is
+  the one used in pricing, but a shop in two currencies is not supported.
+- The desktop installers are unsigned until there is a Windows code-signing certificate and an
+  Apple Developer account. Windows shows a SmartScreen notice; macOS needs right-click → Open the
+  first time.
+- One shop per install. The conventions are process-wide state, which is right for an installed
+  copy and for one hosted copy per shop, and wrong for several shops in one deployment.
+
+## What is next
+
+1. The first outside shop on the desktop app, with their own export and their own paperwork.
+   What breaks first decides the next step.
+2. Learned conventions shown and editable on Settings (which menu a kind sits under, a spelling),
+   rather than only re-taught from a newer export.
+3. Signing certificates for the installers; an auto-update channel (electron-updater) once a
+   release is worth updating to.
+4. Billing. The Clients page records the plan; nothing yet charges for it.
 
 ## Working on Flöda
 
 Everything in `HANDOVER.md` under "Working on it" applies. In addition:
 
 - Alpsport's Rubin and Flöda share history up to the split. A fix to a supplier reader or to the
-  document reading is worth carrying to both; a change to a convention is Flöda's alone once
-  conventions are data.
-- Leads from the landing page are kept in the `AppSetting` table under the key `floda.leads`
-  until there is a proper place for them.
+  document reading is worth carrying to both; a change to a convention is Flöda's alone.
+- `npm run desktop:build` then `npm run desktop:check` runs the built server under plain Node
+  against a throwaway data folder and hits three pages; it is what CI does before packaging.
+- Leads from the landing page are kept in `AppSetting` under `floda.leads` until they become
+  clients.

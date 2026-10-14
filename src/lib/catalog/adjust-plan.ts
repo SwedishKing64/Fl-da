@@ -10,10 +10,10 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { retailer } from "./shop-profile";
-import { anthropicClient } from "./anthropic";
+import { anthropicClient, EXTRACTION_MODEL, aiAvailable } from "./anthropic";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
-import { EXTRACTION_MODEL, aiAvailable } from "./extract/ai";
+
 import type { Operation, Plan } from "./adjust";
 import { describeApiError, isTransient, retrying } from "./api-errors";
 

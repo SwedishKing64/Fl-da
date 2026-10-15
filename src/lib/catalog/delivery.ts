@@ -28,7 +28,7 @@ import { DEFAULT_CATEGORY_RULES, detectCategory, metafieldColumns, type Category
 import { houseConventions } from "./taxonomy";
 import { buildRows, parseCsv, type CsvProduct } from "./csv";
 import { groupLineItems, type GroupedProduct } from "./grouping";
-import { audienceOfPrefix, withFit, withoutAudiencePrefix } from "./mapping";
+import { audienceOfPrefix, withFit, withoutAudiencePrefix, withoutGender } from "./mapping";
 import { expandShorthand } from "./shorthand";
 import { colourName } from "./colour";
 import { writeOutSize } from "./options";
@@ -906,10 +906,10 @@ function canonical(line: InvoiceLine, vendor: string, season: string): Canonical
   // The order's shorthand, read as an import batch reads it: "M HIGHSHOT SO" is a men's "Highshot
   // Step On", with the audience in the gender and not the name. See expandShorthand.
   const brandOf = (line.brand ?? "").trim() || vendor;
-  const gender = audienceByModel(brandOf, line.title) || (line.gender ?? "").trim() || audienceOfPrefix(line.title);
+  const gender = audienceByModel(brandOf, line.title) || (line.gender ?? "").trim() || audienceOfPrefix(line.title) || withoutGender(line.title).gender;
   // A fit that is not the default is part of the name — "Photon BOA Wide" — not an option. See withFit.
   return withFit({
-    title: expandShorthand(withoutAudiencePrefix(line.title.trim(), gender)),
+    title: withoutGender(expandShorthand(withoutAudiencePrefix(withoutGender(line.title).title, gender))).title,
     brand: (line.brand ?? "").trim() || vendor,
     modelCode: line.sku.trim(),
     sku: "",

@@ -360,6 +360,27 @@ const AUDIENCE_PREFIX: Array<[RegExp, RegExp]> = [
   [/^(women'?s?|ladies)$/i, /^(W|WB|WMS|WMNS|WOMENS|WOMEN'S|LADIES)\s+/i],
   [/^(kids?|youth|junior|jr)$/i, /^(K|KB|KD|KDS|KIDS|JR|YTH|YOUTH)\s+/i],
 ];
+/**
+ * A name with its gender taken off, and the gender it said. The shop asked (2026-10-15) that no
+ * product carry a gender in its title — "Men's Exos 58", "Eja Pro 55 - Women's" are "Exos 58" and
+ * "Eja Pro 55" — while the gender still tells the two apart in the tags and the handle. Kids',
+ * Youth and Junior are an age and a size range, not a gender, and stay.
+ */
+const GENDER_WORD = "(?:men'?s|mens|men|women'?s|womens|women|ladies'?|unisex|male|female|boys'?|girls'?)";
+const GENDER_FRONT = new RegExp(`^${GENDER_WORD}\\s*[:\\-–]?\\s+(?=\\S)`, "i");
+const GENDER_BACK = new RegExp(`\\s*(?:[-–,/]\\s*|\\(\\s*)?${GENDER_WORD}\\s*\\)?$`, "i");
+export function withoutGender(title: string): { title: string; gender: string } {
+  let t = title.trim();
+  let said = "";
+  const front = GENDER_FRONT.exec(t);
+  if (front) { said = front[0]; t = t.slice(front[0].length); }
+  const back = GENDER_BACK.exec(t);
+  if (back && t.slice(0, back.index).trim()) { said ||= back[0]; t = t.slice(0, back.index); }
+  const word = said.toLowerCase();
+  const gender = /women|ladies|female|girl/.test(word) ? "Womens" : /men|male|boy/.test(word) ? "Mens" : "";
+  return { title: t.trim() || title.trim(), gender };
+}
+
 /** Who a shouted name says it is for by its prefix — "M CARTEL X" is men's — or "" when it does not say. */
 export function audienceOfPrefix(title: string): string {
   const names = ["Mens", "Womens", "Kids"];
@@ -526,7 +547,11 @@ export function applyMapping(row: Record<string, string>, mapping: Mapping, opti
   item.imageUrls = Array.from(new Set(item.imageUrls));
   item.season = seasonFrom(item.season);
   item.colour = colourName(item.colour);
-  item.title = expandShorthand(withoutAudiencePrefix(item.title, item.gender));
+  // No gender in a title; what it said is kept as the line's gender, so men's and women's of one
+  // model are still two products.
+  const ungendered = withoutGender(item.title);
+  if (!item.gender.trim() && ungendered.gender) item.gender = ungendered.gender;
+  item.title = withoutGender(expandShorthand(withoutAudiencePrefix(ungendered.title, item.gender))).title;
   // "Regular" is the absence of a fit, and would otherwise become a Width option on every variant.
   if (DEFAULT_FIT.test(item.width.trim())) item.width = "";
   Object.assign(item, withFit(item));

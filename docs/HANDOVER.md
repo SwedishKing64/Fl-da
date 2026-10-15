@@ -33,6 +33,13 @@ and buttons. The owner asked for "extremely easy UI" and buttons "mimicking Meta
 
 ## How the shop works (rules it told us)
 
+**No gender in any title (asked 2026-10-15).** "Men's", "Women's", "Ladies", "Unisex" never go in a
+product's title, whether the supplier's name carries them or the shop's older listings do
+(`withoutGender` in `mapping.ts`, used by the import, the delivery builder and the grouping). The
+gender is kept on the line and goes into the tags; where men's and women's of one model share a
+name, the handle carries it ("womens-talon-22-2027") so Shopify keeps them as two products.
+Kids', Youth and Junior are an age, not a gender, and stay.
+
 **No reader written for one brand's layout (asked 2026-10-15).** A supplier's file is read by
 deducing what each column holds, not by where it sits or how one brand heads it:
 `src/lib/catalog/columns.ts` knows a barcode by its check digit, a size (XS-XXL, S/M, WXS/S, O/S,

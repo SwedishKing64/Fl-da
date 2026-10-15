@@ -7,7 +7,7 @@ import { chooseOptions, collectionsFor, extraOptions, optionValue, type OptionKe
 import { closestType, houseConventions, isValidType, packKnowledge, resolveType, snowTrade, typesAreKnown } from "./taxonomy";
 import { inSizeOrder } from "./size-order";
 import { correctedOptionName, correctedProductType } from "./corrections";
-import { withFit } from "./mapping";
+import { withFit, withoutGender } from "./mapping";
 import { classifyAccessory } from "./trades/snow/accessories";
 import { packShelf } from "./packs";
 import { integratedBinding } from "./trades/snow/packages";
@@ -29,6 +29,8 @@ export interface GroupedVariant {
 export interface GroupedProduct {
   key: string;
   handle: string;
+  /** Who it is for — mens, womens, kids — which the title no longer says. */
+  audience?: string;
   title: string;
   brand: string;
   category: string;
@@ -157,12 +159,12 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
     const filedAs = correctedProductType(snowboard ?? pack ?? accessory ?? group.rule?.productType ?? resolveType(first.productType) ?? "", brand);
     // Filed under one of the shop's own types where one is close, rather than asked about.
     const productType = filedAs && typesAreKnown() && !isValidType(filedAs) ? closestType(filedAs) ?? filedAs : filedAs;
-    // The audience goes on the front of a gendered product's name, as the shop writes it: every one
-    // of its 20 snowboard bindings and 14 of its 15 boots is "Men's …" or "Women's …", and so are
-    // its jackets, gloves and socks. Not a ski, board or pole, which the shop names by model alone
-    // and genders in the tags. Men's and women's of one model also stop sharing a title this way.
-    // Only where the shop writes its names this way; otherwise the gender goes in the tags alone.
-    const who = houseConventions().naming.audience === "front" ? audience(first.gender) : null;
+    // Who it is for. A shop that writes "Men's …" and "Women's …" on the front of a name (house
+    // naming.audience "front") gets that, on everything but hardgoods; every other shop's titles
+    // carry no gender at all — the gender goes in the tags, and the handle tells men's and women's
+    // of one model apart (the ski shop asked for this, 2026-10-15). Kids' is an age, not a gender.
+    const who = audience(first.gender);
+    const front = houseConventions().naming.audience === "front";
     // A ski boot is named by its model alone, like a ski: "Zero G Tour Pro 2027", not "Men's Zero
     // G Tour Pro Ski Boots 2027". The gender goes in the tags. (A snowboard boot keeps the shop's
     // "Men's … Snowboard Boots".)
@@ -173,9 +175,17 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
     const shopNamed = (opts.listings ?? []).some((l) => normTitle(l.title.replace(/\s+20\d{2}$/, "")) === normTitle(title));
     // The kind word comes off a ski boot's name as well, wherever the supplier put it.
     const bare = skiBoot ? title.replace(/\s*\b(ski|touring|alpine|race)?\s*boots?\b/gi, " ").replace(/\s{2,}/g, " ").trim() || title : title;
-    const titled = who && !hardgoods && !shopNamed && !/^(men'?s|women'?s|kids'?|youth|junior)\b/i.test(bare)
-      ? `${{ mens: "Men's", womens: "Women's", kids: "Kids'" }[who]} ${asShopWritesIt(bare)}`
-      : bare;
+    // No gender in a title, for any product (asked 2026-10-15): the gender is in the tags, and the
+    // handle tells men's and women's of one model apart (see the end of this function). Kids' is an
+    // age, not a gender, and still goes on the front where the shop writes it.
+    const ungendered = front ? bare : withoutGender(bare).title;
+    const titled = front
+      ? who && !hardgoods && !shopNamed && !/^(men'?s|women'?s|kids'?|youth|junior)\b/i.test(bare)
+        ? `${{ mens: "Men's", womens: "Women's", kids: "Kids'" }[who]} ${asShopWritesIt(bare)}`
+        : bare
+      : who === "kids" && !hardgoods && !shopNamed && !/^(kids'?|youth|junior)\b/i.test(ungendered)
+        ? `Kids' ${asShopWritesIt(ungendered)}`
+        : ungendered;
     // A ski the supplier sends already mounted — "HERO FIS GS FAC SPX15" — is a package, and is
     // named as one: "Hero FIS GS Fac 2026 inc SPX 15 Binding Package". See integratedBinding.
     const season = items.map((i) => i.season).find((s) => /^20\d{2}$/.test(s)) ?? "";
@@ -239,7 +249,8 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
     // Better than any rule: the shop's own name for this model's other listing — the other fit, or
     // last season's — with the fit and the year swapped. See nameLikeSibling.
     const likeSibling = mounted ? null : nameLikeSibling(asShopWritesIt(shown), season, opts.listings ?? [], brand);
-    const named = likeSibling ? likeSibling.replace(/\s+20\d\d$/, "") : kindSuffix ? `${asShopWritesIt(shown)} ${kindSuffix}` : shown;
+    const unnamed = likeSibling ? likeSibling.replace(/\s+20\d\d$/, "") : kindSuffix ? `${asShopWritesIt(shown)} ${kindSuffix}` : shown;
+    const named = front ? unnamed : withoutGender(unnamed).title;
     products.push({
       key,
       // Built from the name the product will actually carry, season and all. Shopify derives a
@@ -251,6 +262,7 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
       // ("custom-2027", "m7-mantra"), and a handle is how Shopify and the reconciler recognise a
       // listing the shop already has — "burton-custom-2027" was a duplicate of custom-2027.
       handle: buildHandle({ title: productTitle(named, seasonTagFrom(tags)) }),
+      audience: who,
       title: named,
       brand,
       category: group.rule?.category ?? (first.category || "other"),
@@ -266,7 +278,23 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
       variants,
     });
   }
-  return products;
+  return distinctHandles(products);
+}
+
+/**
+ * Two products with one handle are one product to Shopify: the import merges them. With the
+ * gender off the titles, the men's and women's of one model share a name, so where handles clash
+ * the one that says who it is for takes it into its handle — "mens-exos-58-2027" — out of sight of
+ * the shop's customers, who see only the title.
+ */
+function distinctHandles<P extends { handle: string; title: string; audience?: string }>(products: P[]): P[] {
+  const count = new Map<string, number>();
+  for (const p of products) count.set(p.handle, (count.get(p.handle) ?? 0) + 1);
+  const label: Record<string, string> = { mens: "Mens", womens: "Womens", kids: "Kids" };
+  return products.map((p) => {
+    if ((count.get(p.handle) ?? 0) < 2 || !p.audience || !label[p.audience]) return p;
+    return { ...p, handle: buildHandle({ title: `${label[p.audience]} ${p.handle}` }) };
+  });
 }
 
 /** What the free option is called on this product: the name its lines give most often, else "Option". */

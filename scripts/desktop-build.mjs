@@ -3,7 +3,11 @@
 // electron-builder.yml). Usage: `npm run desktop:build`, then `npm run desktop:dist`.
 //
 // What is baked in: the vendor the app checks its licence with (FLODA_LICENCE_SERVER, default
-// https://fl-da.vercel.app) and the version from package.json.
+// https://fl-da.vercel.app) and the version from package.json. With FLODA_OPEN=1 the build is an
+// open copy — no sign-in, no licence — and FLODA_ANTHROPIC_API_KEY, when set, goes in with it so
+// the copy reads documents without a key being pasted. The key sits in floda.json inside the
+// installed app, readable by whoever has the installer: give an open build a key of its own,
+// with a spending limit, never the vendor's.
 import { execSync } from "node:child_process";
 import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -15,6 +19,8 @@ const run = (cmd, env = {}) => {
 
 const pkg = JSON.parse(readFileSync("package.json", "utf8"));
 const licenceServer = (process.env.FLODA_LICENCE_SERVER ?? "https://fl-da.vercel.app").replace(/\/+$/, "");
+const open = process.env.FLODA_OPEN === "1";
+const anthropicApiKey = open ? (process.env.FLODA_ANTHROPIC_API_KEY ?? "").trim() : "";
 
 // 1. The schema stays on SQLite (the checked-in default). Make the empty template database.
 const template = path.resolve("prisma/template.db");
@@ -65,6 +71,9 @@ function solidify(dir) {
 
 // 3. What the launcher reads.
 mkdirSync("desktop", { recursive: true });
-writeFileSync("desktop/floda.json", JSON.stringify({ version: pkg.version, licenceServer, builtAt: new Date().toISOString() }, null, 2));
-console.log(`[desktop-build] done: standalone at ${standalone}, template at ${template}, licence server ${licenceServer}`);
+writeFileSync(
+  "desktop/floda.json",
+  JSON.stringify({ version: pkg.version, licenceServer, builtAt: new Date().toISOString(), ...(open ? { open: true } : {}), ...(anthropicApiKey ? { anthropicApiKey } : {}) }, null, 2),
+);
+console.log(`[desktop-build] done: standalone at ${standalone}, template at ${template}, licence server ${licenceServer}${open ? `, open copy${anthropicApiKey ? ` with a key ending …${anthropicApiKey.slice(-4)}` : " without a key"}` : ""}`);
 console.log("[desktop-build] check it under plain Node with: node desktop/launch.cjs --check");

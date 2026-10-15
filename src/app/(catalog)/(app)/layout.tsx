@@ -13,6 +13,7 @@ import { CommandPalette, type PaletteItem } from "@/app/(catalog)/CommandPalette
 import { Kbd } from "@/app/(catalog)/ui";
 import { Logo } from "@/app/Logo";
 import { vendorMode } from "@/lib/catalog/licence";
+import { openMode } from "@/lib/catalog/open";
 import { currentLicence, monthUse, getServerOverride, servers } from "@/lib/catalog/licence-store";
 import { describeMonthUse, overPlan, planOf } from "@/lib/catalog/plans";
 import "../catalog.css";
@@ -93,9 +94,11 @@ export default async function CatalogLayout({ children }: { children: React.Reac
               <div className="truncate text-[13px] font-semibold text-white">{user.name}</div>
               <div className="text-white/55">{user.role === "ADMIN" ? "Admin" : "Staff"}</div>
             </div>
-            <form action={logoutAction}>
-              <button className="rounded-[8px] px-2 py-1 text-[12px] font-medium text-white/75 transition hover:bg-white/10 hover:text-white">Sign out</button>
-            </form>
+            {!openMode() && (
+              <form action={logoutAction}>
+                <button className="rounded-[8px] px-2 py-1 text-[12px] font-medium text-white/75 transition hover:bg-white/10 hover:text-white">Sign out</button>
+              </form>
+            )}
           </div>
         </div>
       </aside>

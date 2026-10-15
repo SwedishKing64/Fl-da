@@ -8,13 +8,23 @@
 const { app, BrowserWindow, dialog, shell, Menu } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
-const { launch } = require("./launch.cjs");
+const { launch, readConfig } = require("./launch.cjs");
 const { keepCurrent } = require("./update.cjs");
+
+/** Where the build is: the app's resources folder once packaged, the repo while developing. */
+function root() {
+  return app.isPackaged ? process.resourcesPath : path.resolve(__dirname, "..");
+}
+
+// What the build baked in. An open build (no sign-in, no licence, its own reading key) is a
+// different app with its own data folder, so it can sit beside the ordinary one.
+const config = readConfig(root());
+const open = Boolean(config.open);
 
 // The name in the app menu, in "About" and "Quit", and of the data folder in app-data — on every
 // platform, whatever the bundle or the executable is called on disk (Floda, ASCII, so that the
 // Mac bundle signs and Electron finds its helpers).
-app.setName("Flöda");
+app.setName(open ? "Flöda Open" : "Flöda");
 
 let server = null;
 let win = null;
@@ -24,11 +34,6 @@ const log = (line) => {
   if (lines.length > 400) lines.shift();
   try { fs.appendFileSync(path.join(app.getPath("userData"), "floda.log"), `${new Date().toISOString()} ${line}\n`); } catch {}
 };
-
-/** Where the build is: the app's resources folder once packaged, the repo while developing. */
-function root() {
-  return app.isPackaged ? process.resourcesPath : path.resolve(__dirname, "..");
-}
 
 async function start() {
   const dataDir = app.getPath("userData");
@@ -66,7 +71,8 @@ function openWindow() {
   win.webContents.session.on("will-download", (_e, item) => {
     item.setSavePath(path.join(app.getPath("downloads"), item.getFilename()));
   });
-  void win.loadURL(`${server.url}/login`);
+  // An open copy signs its owner in at /open; the ordinary one starts at the login page.
+  void win.loadURL(`${server.url}${open ? "/open" : "/login"}`);
   win.on("closed", () => { win = null; });
 }
 
@@ -78,7 +84,7 @@ function menu() {
     { role: "editMenu" },
     { label: "View", submenu: [{ role: "reload" }, { role: "resetZoom" }, { role: "zoomIn" }, { role: "zoomOut" }, { type: "separator" }, { role: "togglefullscreen" }] },
     { role: "windowMenu" },
-    { label: "Help", submenu: [{ label: "Flöda website", click: () => shell.openExternal("https://fl-da.vercel.app") }, { label: "Show the log", click: () => shell.openPath(path.join(app.getPath("userData"), "floda.log")) }, { type: "separator" }, { label: `Flöda ${app.getVersion()}`, enabled: false }] },
+    { label: "Help", submenu: [{ label: "Flöda website", click: () => shell.openExternal("https://fl-da.vercel.app") }, { label: "Show the log", click: () => shell.openPath(path.join(app.getPath("userData"), "floda.log")) }, { type: "separator" }, { label: `Flöda ${app.getVersion()}${open ? " (open copy)" : ""}`, enabled: false }] },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
@@ -94,7 +100,9 @@ if (!app.requestSingleInstanceLock()) {
     try {
       await start();
       openWindow();
-      keepCurrent({ log, window: () => win });
+      // An open build is never updated over itself: the releases hold the ordinary app, and the
+      // key and the open door would be lost with the swap.
+      if (!open) keepCurrent({ log, window: () => win });
     } catch (err) {
       log(`[desktop] could not start: ${err.message}`);
       dialog.showErrorBox("Flöda could not start", `${err.message}\n\nThe last few lines of the log:\n${lines.slice(-12).join("\n")}`);

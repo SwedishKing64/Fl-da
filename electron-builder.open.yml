@@ -1,0 +1,17 @@
+# The open copy of the desktop app: no sign-in, no licence, and a reading key of its own when the
+# build was given one (see scripts/desktop-build.mjs, run with FLODA_OPEN=1). Everything else is
+# electron-builder.yml; this only gives the build a name and an id of its own so it installs
+# beside the ordinary app rather than over it. Make it with:
+#   FLODA_OPEN=1 npm run desktop:build && npx electron-builder --config electron-builder.open.yml
+extends: ./electron-builder.yml
+appId: ai.floda.open
+productName: Floda Open
+win:
+  artifactName: "Floda-Open-Setup-${version}.${ext}"
+nsis:
+  shortcutName: Flöda Open
+  uninstallDisplayName: Flöda Open
+mac:
+  artifactName: "Floda-Open-${version}-${arch}.${ext}"
+linux:
+  artifactName: "Floda-Open-${version}.${ext}"

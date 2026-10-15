@@ -89,6 +89,9 @@ async function launch(opts) {
     FLODA_DESKTOP: "1",
     ...(config.licenceServer ? { FLODA_LICENCE_SERVER: config.licenceServer } : {}),
     ...(config.version ? { FLODA_VERSION: config.version } : {}),
+    // An open build: no sign-in, no licence, and its own key for reading documents.
+    ...(config.open ? { FLODA_OPEN: "1" } : {}),
+    ...(config.anthropicApiKey ? { ANTHROPIC_API_KEY: config.anthropicApiKey } : {}),
     ...(opts.env ?? {}),
   };
   const log = opts.log ?? (() => {});
@@ -111,7 +114,10 @@ async function launch(opts) {
   };
 }
 
-/** What the build baked in: the licence server and the version. Absent in a checkout. */
+/**
+ * What the build baked in: the version, the licence server, whether the copy is open (no sign-in,
+ * no licence) and, on an open build, the Anthropic key. Absent in a checkout.
+ */
 function readConfig(root) {
   for (const candidate of [path.join(root, "floda.json"), path.join(root, "desktop", "floda.json")]) {
     try {
@@ -121,7 +127,7 @@ function readConfig(root) {
   return {};
 }
 
-module.exports = { launch, standaloneDir, freePort, ensureDatabase };
+module.exports = { launch, standaloneDir, freePort, ensureDatabase, readConfig };
 
 // `node desktop/launch.cjs --check [dataDir] [--root dir]`: start the build under plain Node, hit
 // a page, stop. The root is the checkout by default, or a packaged app's resources folder.
@@ -133,7 +139,7 @@ if (require.main === module && process.argv.includes("--check")) {
   launch({ root, dataDir, execPath: process.execPath, templateDb, env: { ELECTRON_RUN_AS_NODE: "" }, log: (l) => console.log("[server]", l) })
     .then(async (s) => {
       console.log(`[check] up at ${s.url}, database ${s.db}`);
-      for (const p of ["/login", "/setup", "/welcome"]) {
+      for (const p of ["/login", "/setup", "/welcome", "/open"]) {
         const res = await fetch(`${s.url}${p}`, { redirect: "manual" });
         console.log(`[check] GET ${p} -> ${res.status}${res.headers.get("location") ? ` -> ${res.headers.get("location")}` : ""}`);
       }

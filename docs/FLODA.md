@@ -120,6 +120,12 @@ The dots are explained above the grid, and the errors pill filters the grid to t
 errors. Product pages take several links pasted at once, placed by name or in order. On the shop's
 first two batches the review page names a Flöda engineer to write to. The home checklist is
 named the way the setup steps are. The "How you list" step shows what a title comes out as.
+**Backups.** A copy on a file (every desktop copy) is copied with SQLite's `VACUUM INTO` into
+a `backups` folder beside the database (`backup.ts`): once a night while the app is open (checked
+after each page, `nightlyIfDue`), from "Back up now" on Settings, and before a restore. The newest
+fourteen are kept; each can be downloaded from Settings (admins) and the desktop File menu opens
+the folder. Restore puts a copy in place after backing up what is there, and asks for a restart.
+A hosted copy on Postgres has none of this: its host keeps the backups.
 
 **Gone from Flöda:** Bills for QuickBooks, the copy-from-the-old-site migration, and every seed
 that belonged to one shop.

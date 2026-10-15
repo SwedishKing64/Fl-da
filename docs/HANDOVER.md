@@ -194,6 +194,14 @@ from its QuickBooks list, batch PDFs split into one bill per invoice) live in Ru
   Bills for QuickBooks writes the shop's own one-row-per-bill sheet instead of the line layout,
   and splits a scanned batch PDF of any size into one bill per invoice.
 - 2026-10-14 Bills take the supplier's name from the shop's QuickBooks supplier list.
+- 2026-10-15 Osprey's forward order form (a row per size, a QTY per delivery month, the name under
+  "Description", the UPC beside the product code) was read by the size-grid order reader, which
+  took the column beside the code — the UPC — as every product's name and counted only the first
+  month. That reader now takes a "Description"/name heading where there is one, never a UPC/EAN
+  column, keeps the UPC as the barcode, adds the month QTYs (or takes QTY TOTAL), keeps "S/M"
+  sizes, gender and the "… Wholesale Price" cost. A properly headed one-row-per-size form now goes
+  to the column mapping as the table it is, from the tab the order is written on, so the mapping
+  sees "Description"; Volkl's section-headed size grids are read as before.
 - 2026-10-15 The business's Blob store is private, and uploads failed ("Cannot use public access
   on a private store"). Storage now learns the store is private from the first refused save and
   keeps files privately under relative paths, served by `/api/catalog/files/…`: pictures to

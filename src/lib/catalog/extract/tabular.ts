@@ -177,6 +177,11 @@ export async function extractXlsx(buffer: Buffer, sheetName?: string): Promise<E
     if (order && order.shape === "grid" && order.lines.some((l) => l.quantity !== null)) {
       return orderToTable(order);
     }
+    // A flat order form is read as the table it is — but from the tab the order was written on.
+    // Osprey's workbook carries a "Price Changes" tab of the same 690-odd products, bigger by the
+    // cells it fills in, and left to size alone that tab was read instead of the order.
+    const orderedOn = order && order.lines.some((l) => l.quantity !== null) ? sheets.find((s) => s.name === order.sheet) : undefined;
+    if (orderedOn) return extractXlsx(buffer, orderedOn.name);
   }
 
   const scored = sheets.map(({ name, grid }) => {

@@ -39,6 +39,8 @@ export interface InvoiceRead {
    * the Marker tab with no quantity against it.
    */
   priceList?: PriceRow[];
+  /** For an order form read by its sections: whether it must be turned into rows — a size grid, or a form whose columns are not properly headed. */
+  sizeGrid?: boolean;
   /**
    * "grid" when the quantities were read off a size grid — a column per length, a number in the
    * box — which has no row-per-line table of its own; "flat" when each line is a row.
@@ -163,32 +165,6 @@ const TITLE = /descri|product|title|\bname\b|model|style/;
  *    their footers put the indent discount and the GST under the QTY heading.
  */
 const ITEM_HEADING = /^(item|article|style|product)\s*(no\.?|number|code)$/;
-/**
- * The other ways a code column is headed, on the outdoor and clothing forms: "Style #", "Style",
- * "SKU", "Item". These are also the headings of plain invoices, which the column matcher reads
- * better (it keeps every column), so a section found by one of these counts as an order form only
- * when it carries a size grid: two or more size headings across the top.
- */
-const LOOSE_ITEM_HEADING = /^(?:(?:item|article|style|product|model|material)\s*(?:#|no|nr|ref)|sku|style|item|article)$/;
-
-/**
- * A heading that is a size, on a form that lays its sizes across the top.
- *
- * The ski forms head them with lengths and mondopoint (148, 155, 26.5). Clothing, footwear and
- * packs head them with letters (XS S M L XL XXL, 2XL), shoe sizes with their system (US 9.5,
- * UK 8, EU 42), bare shoe and kids' sizes (8, 8.5, 10), pack and harness sizes (S/M, M/L), one
- * size (OS, O/S, One Size) and a sleeping bag's or a pair of pants' length (Regular, Long, Short).
- */
-export function isSizeHeading(raw: string): boolean {
-  const h = raw.trim().toLowerCase().replace(/\s+/g, " ");
-  if (!h) return false;
-  if (/^\d{1,3}(\.\d)?$/.test(h)) return true;
-  if (/^(us|uk|eu|eur|au|m|w|mens|womens|men's|women's)\s?\d{1,2}(\.5)?$/.test(h)) return true;
-  const letter = "(?:xxxs|xxs|xs|s|m|l|xl|xxl|xxxl|[2-6]xl|[2-6]x)";
-  if (new RegExp(`^${letter}(?:\\s?[/-]\\s?${letter})?$`).test(h)) return true;
-  if (/^(os|o\/s|one size|onesize|osfa|n\/s|reg|regular|long|short|petite|tall|x-long|xl long)$/.test(h)) return true;
-  return false;
-}
 
 /** A quantity somebody wrote in a box: a small whole number, not a price, a rate or a length. */
 function orderedQuantity(raw: string): number | null {
@@ -207,49 +183,58 @@ function looksLikeItemCode(value: string): boolean {
   return value.length >= 3 && value.length <= 40 && (value.match(/\s/g) ?? []).length <= 1 && /^[A-Za-z0-9]/.test(value);
 }
 
-interface Section { at: number; end: number; sku: number; title: number; rrp: number; cost: number; colour: number; qty: number; size: number; sizes: Array<[number, string]>; loose: boolean }
+interface Section { at: number; end: number; sku: number; title: number; titleHeaded: boolean; barcode: number; gender: number; rrp: number; cost: number; colour: number; qty: number; qtys: number[]; qtyTotal: number; size: number; sizes: Array<[number, string]> }
 
-/** Read an item-code heading by its own words, keeping the "#" that norm() would leave alone. */
-const headingWords = (c: string): string => norm(c).replace(/\s*#\s*/g, " #").trim();
+/** A barcode's heading: "UPC", "EAN", "Barcode", "GTIN". Never the product's name. */
+const BARCODE_HEADING = /^(upc|ean|barcode|bar code|gtin|ean13|upc code|ean code)( no)?$/;
 
 function sectionsOf(grid: string[][]): Section[] {
   const heads: number[] = [];
   grid.forEach((row, i) => {
-    if ((row ?? []).some((c) => ITEM_HEADING.test(norm(text(c))) || LOOSE_ITEM_HEADING.test(headingWords(text(c))))) heads.push(i);
+    if ((row ?? []).some((c) => ITEM_HEADING.test(norm(text(c))))) heads.push(i);
   });
   return heads.map((at, n) => {
     const headings = (grid[at] ?? []).map(text);
     const find = (re: RegExp) => headings.findIndex((c) => re.test(norm(c)));
     const qty = find(/^(total )?qty$|^quantity$/);
-    const strict = headings.findIndex((c) => ITEM_HEADING.test(norm(c)));
-    const sku = strict >= 0 ? strict : headings.findIndex((c) => LOOSE_ITEM_HEADING.test(headingWords(c)));
-    const loose = strict < 0;
-    // On a loose form the name has a heading of its own ("Style Name", "Description"); on the
-    // ski forms it is the column beside the code, which carries the range's name as its heading.
-    const named = loose ? find(/^(style name|product name|item name|description|product description|style description|model name|name|product)$/) : -1;
-    const colour = find(/^colou?r( name)?$/);
-    const indent = find(/^indent( price)?$/);
-    const cost = indent >= 0 ? indent : find(/^(w s|ws|wholesale|whsl|dealer|cost|unit cost|unit price|net price|nett|trade|trade price)( price)?$/);
-    const rrp = find(RRP);
-    // The lengths and sizes. On the ski forms they come past the quantity column, so that a price
-    // or an item number in the heading row cannot be mistaken for one. A clothing or footwear form
-    // often has no quantity column before them: there they are what comes past every column of
-    // the row's own (its code, name, colour and prices), and a total column after them is not one.
-    const after = qty >= 0 ? qty : Math.max(sku, named, colour, cost, rrp);
+    // The lengths and sizes: numeric headings, and only past the quantity column so that a price
+    // or an item number in the heading row cannot be mistaken for one.
     const sizes = headings
       .map((c, i) => [i, c] as [number, string])
-      .filter(([i, c]) => (qty >= 0 || loose) && i > after && (loose ? isSizeHeading(c) : /^\d{2,3}(\.\d)?$/.test(c.trim()) || isSizeHeading(c) && !/^\d+(\.\d)?$/.test(c.trim())));
-    // What the shop pays: the INDENT figure where a form has one (their Volkl form prices both W/S
-    // and INDENT, and the shop's own costs are the INDENT figure to the cent), else the wholesale.
+      .filter(([i, c]) => qty >= 0 && i > qty && /^\d{2,3}(\.\d)?$/.test(c.trim()));
+    const sku = headings.findIndex((c) => ITEM_HEADING.test(norm(c)));
+    // What the shop pays. Their Volkl form prices both W/S and INDENT, and the shop's own costs are
+    // the INDENT figure to the cent — the M7 Mantra at 749.55, the Griffon at 208.64 — so INDENT
+    // is taken where there is one. This used to be left out altogether, and every Volkl line came
+    // through with no cost.
+    const indent = find(/^indent( price)?$/);
+    let cost = indent >= 0 ? indent : find(/^(w s|ws|wholesale|whsl|dealer|cost)( price)?$/);
+    // Osprey's "Summer 26 Wholesale Price (ex GST)": a season in front, a GST note behind. Not a
+    // line total, a difference or anything else that only mentions the word.
+    if (cost < 0) cost = headings.findIndex((c) => /\b(wholesale|w s|dealer)\b.*\bprice\b|\bcost price\b/.test(norm(c)) && !/total|differ|change/.test(norm(c)));
     // A form with one line per size says the size in a column of its own, beside the quantity.
     const size = sizes.length === 0 ? find(/^(size|sizes|length|size desc(ription)?)$/) : -1;
-    return { at, end: n + 1 < heads.length ? heads[n + 1] : grid.length, sku, title: named >= 0 ? named : sku + 1, rrp, cost, colour, qty, size, sizes, loose };
+    // The product's NAME. Volkl's forms head it with a section name ("RACETIGER"), so the column
+    // beside the item code is taken — but Osprey's form has its "Description" heading, and the
+    // column beside its "Product Code" is the UPC: taking that made every product a barcode.
+    const barcode = find(BARCODE_HEADING);
+    let title = find(/^(description|product description|style description|item description|product name|style name|name|model)$/);
+    const titleHeaded = title >= 0;
+    if (title < 0) {
+      title = sku + 1;
+      while (title < headings.length && BARCODE_HEADING.test(norm(headings[title] ?? ""))) title++;
+    }
+    // A quantity column per delivery month — Osprey's Sep, Oct and Nov drops each have their own
+    // QTY — is one order. Their own total, where they give one, is the answer; otherwise they add up.
+    const qtys = headings.map((c, i) => [i, norm(c)] as [number, string]).filter(([, c]) => /^(total )?qty$|^quantity$|^units$/.test(c)).map(([i]) => i);
+    const qtyTotal = find(/^(qty|quantity|units) total$|^total (qty|quantity|units)$/);
+    return { at, end: n + 1 < heads.length ? heads[n + 1] : grid.length, sku, title, titleHeaded, barcode, gender: find(/^gender$/), rrp: find(RRP), cost, colour: find(/^colou?r$/), qty, qtys, qtyTotal, size, sizes };
   });
 }
 
 /** Read a sheet as an order form, or return null when nobody has written a quantity on it. */
 function readOrder(name: string, grid: string[][]): InvoiceRead | null {
-  const sections = sectionsOf(grid).filter((s) => s.sku >= 0 && (s.loose ? s.sizes.length >= 2 : s.qty >= 0 || s.sizes.length > 0));
+  const sections = sectionsOf(grid).filter((s) => s.sku >= 0 && (s.qty >= 0 || s.sizes.length > 0));
   if (sections.length === 0) return null;
 
   const lines: InvoiceLine[] = [];
@@ -272,10 +257,12 @@ function readOrder(name: string, grid: string[][]): InvoiceRead | null {
       const form = kind === "flat" ? ("flat" as const) : kind === "system" ? ("package" as const) : undefined;
       const positive = (at: number) => (at >= 0 && (readNumber(text(row[at])) ?? 0) > 0 ? readNumber(text(row[at])) : null);
       const colour = section.colour >= 0 ? text(row[section.colour]) : "";
+      const gender = section.gender >= 0 ? text(row[section.gender]) : "";
       const base = {
         sku,
-        barcode: "",
+        barcode: section.barcode >= 0 ? text(row[section.barcode]) : "",
         title: text(row[section.title]),
+        ...(gender ? { gender } : {}),
         ...(form ? { form } : {}),
         ...(colour ? { colour } : {}),
         ...(tabBrand ? { brand: tabBrand } : {}),
@@ -294,18 +281,27 @@ function readOrder(name: string, grid: string[][]): InvoiceRead | null {
       // A plain quantity column, for the tabs that have no size grid — one binding, five of them.
       // Skipped when the row already gave its lengths, where it is their sum.
       if (onThisRow === 0 && section.qty >= 0) {
-        const quantity = orderedQuantity(text(row[section.qty]));
+        const quantity = section.qtyTotal >= 0
+          ? orderedQuantity(text(row[section.qtyTotal]))
+          : orderedQuantity(String(section.qtys.reduce((n, at) => n + (orderedQuantity(text(row[at])) ?? 0), 0)));
         const size = section.size >= 0 ? text(row[section.size]) : "";
-        if (quantity !== null) lines.push({ ...base, quantity, ...(size && size.length <= 12 && !/[/,]/.test(size) ? { size } : {}) });
+        // One size, "S/M" or "WXS/S" included — not the list of lengths a model comes in, "168/173/178".
+        const oneSize = size.length <= 12 && !size.includes(",") && !/^\d+(\/\d+)+$/.test(size);
+        if (quantity !== null) lines.push({ ...base, quantity, ...(size && oneSize ? { size } : {}) });
       }
     }
   }
   if (lines.length === 0) return null;
+  const first = sections[0];
+  const heading = (at: number) => (at >= 0 ? text(grid[first.at]?.[at]) : "");
   return {
     lines,
     priceList,
     sheet: name,
-    columns: { barcode: "", sku: "Item No.", rrp: "RRP", quantity: sizeGrid ? "the length columns" : "QTY", title: 'the column beside "Item No."', size: sizeGrid ? "the column heading" : lines.some((l) => l.size) ? "Size" : "", colour: "" },
+    // Turned into rows of its own unless it is a plain list with its columns properly headed —
+    // Volkl's section-headed forms are not, Osprey's one-row-per-size form is.
+    sizeGrid: sizeGrid || sections.some((s) => !s.titleHeaded),
+    columns: { barcode: heading(first.barcode), sku: heading(first.sku) || "Item No.", rrp: heading(first.rrp) || "RRP", quantity: sizeGrid ? "the length columns" : "QTY", title: first.title === first.sku + 1 && !/descri|name|model/i.test(heading(first.title)) ? `the column beside "${heading(first.sku)}"` : heading(first.title), size: sizeGrid ? "the column heading" : lines.some((l) => l.size) ? "Size" : "", colour: "" },
     warnings: [],
   };
 }
@@ -313,7 +309,7 @@ function readOrder(name: string, grid: string[][]): InvoiceRead | null {
 /** Every priced row of a size-grid form's sections, ordered or not. */
 function readOrderPrices(grid: string[][]): PriceRow[] {
   const out: PriceRow[] = [];
-  for (const section of sectionsOf(grid).filter((s) => s.sku >= 0 && s.rrp >= 0 && (!s.loose || s.sizes.length >= 2))) {
+  for (const section of sectionsOf(grid).filter((s) => s.sku >= 0 && s.rrp >= 0)) {
     for (let r = section.at + 1; r < section.end; r++) {
       const row = grid[r] ?? [];
       const sku = text(row[section.sku]);
@@ -357,7 +353,13 @@ export function foldQuantityColumns(grid: string[][], headerAt: number): { grid:
    * later. Headed "Due", not "Units" or "Delivery", so nothing reads one as THE quantity or a date.
    */
   const label = (c: number, n: number): string => {
-    const over = text(above[c]);
+    // The nearest thing written above the column that is not a figure: Osprey's form has its
+    // dollar totals and "CUST PO #" between the headings and the delivery dates.
+    let over = "";
+    for (let r = headerAt - 1; r >= Math.max(0, headerAt - 6) && !over; r--) {
+      const v = text(grid[r]?.[c]);
+      if (v && readNumber(v) === null && !/^cust(omer)? po/i.test(v)) over = v;
+    }
     const date = /^(\d{4})-(\d{2})/.exec(over);
     if (date) return `${date[1]}-${date[2]}`;
     const inHeading = /^(?:units?|qty|quantity)\s+([A-Za-z]{3,9}(?:\s*\d{2,4})?)$/i.exec(text(heads[c]).trim());
@@ -569,7 +571,9 @@ export function readInvoiceGrids(grids: Array<{ name: string; grid: string[][] }
     return {
       lines,
       priceList: everyTab,
-      shape: "grid",
+      // A size grid has to be turned into rows; a form with a line per size already is a table,
+      // and read as one keeps every column under its own heading for the mapping.
+      shape: ordered.some((o) => o.sizeGrid) ? "grid" : "flat",
       sheet: ordered.map((o) => o.sheet).join(", "),
       columns: ordered[0].columns,
       warnings: [`Read as an order: ${lines.length} line${lines.length === 1 ? "" : "s"} from the quantities written on ${ordered.length === 1 ? `the "${ordered[0].sheet}" tab` : `${ordered.length} tabs`}. The rest of the form is the supplier's price list, not this delivery, so it was left alone.`],

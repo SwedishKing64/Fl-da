@@ -1,12 +1,9 @@
 import { cx } from "@/app/(catalog)/ui";
 
 /**
- * The Flöda mark: the umlaut, made into the brand. Two drops over the bowl of the "ö", on a tile
- * that runs from Meta blue to a brighter sky — the name's own letter, and a nod to what the app
- * does: paperwork poured in, listings flowing out.
- *
- * Inline SVG so it is crisp at any size, needs no file, and takes its colours from the page where
- * the wordmark is drawn in ink.
+ * The Flöda mark: the letter, and nothing else. A heavy geometric F in white on the blue tile,
+ * its two bars stepped like lines on a form, so it reads as "F" at 16px in a tab and as a tile on
+ * a desktop. Inline SVG so it is crisp at any size and needs no file.
  */
 export function Mark({ size = 28, className }: { size?: number; className?: string }) {
   return (
@@ -18,15 +15,15 @@ export function Mark({ size = 28, className }: { size?: number; className?: stri
           <stop offset="1" stopColor="#38a9ff" />
         </linearGradient>
         <linearGradient id="floda-sheen" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#ffffff" stopOpacity="0.22" />
+          <stop offset="0" stopColor="#ffffff" stopOpacity="0.2" />
           <stop offset="1" stopColor="#ffffff" stopOpacity="0" />
         </linearGradient>
       </defs>
       <rect x="2" y="2" width="60" height="60" rx="17" fill="url(#floda-tile)" />
       <rect x="2" y="2" width="60" height="30" rx="17" fill="url(#floda-sheen)" />
-      <circle cx="23" cy="20" r="5.2" fill="#fff" />
-      <circle cx="41" cy="20" r="5.2" fill="#fff" />
-      <path d="M15 33.5c0 11 7.6 18.5 17 18.5s17-7.5 17-18.5" fill="none" stroke="#fff" strokeWidth="7" strokeLinecap="round" />
+      <rect x="18" y="14" width="10" height="36" rx="2.5" fill="#fff" />
+      <rect x="18" y="14" width="29" height="10" rx="2.5" fill="#fff" />
+      <rect x="18" y="29" width="22" height="9" rx="2.5" fill="#fff" />
     </svg>
   );
 }

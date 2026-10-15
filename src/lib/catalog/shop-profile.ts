@@ -7,6 +7,7 @@
  *   shop             the profile — name, country, currency, tax, what it sells, rules pack, marker
  *   shop.vocabulary  what was learned from its Shopify export (see learn.ts)
  *   ai.key           the API key pasted into Settings, for an install whose host sets none
+ *   shop.house       how it writes a listing — names, SKUs and barcodes, weights (see house.ts)
  *
  * `ensureConventions()` loads the three and puts them in force for the process: the vocabulary in
  * `taxonomy.ts`, the key in `anthropic.ts`, the retailer's description for the prompts here. It is
@@ -18,12 +19,14 @@ import { prisma, parseJson } from "./db";
 import { setStoredApiKey } from "./anthropic";
 import { activateConventions, type LearnedVocabulary } from "./taxonomy";
 import { COUNTRIES, DEFAULT_PROFILE, type ShopProfile } from "./shop";
+import { cleanHouse, DEFAULT_HOUSE, type HouseConventions } from "./house";
 
 export { COUNTRIES, DEFAULT_PROFILE, type ShopProfile } from "./shop";
 
 const PROFILE_KEY = "shop";
 const VOCABULARY_KEY = "shop.vocabulary";
 const API_KEY_KEY = "ai.key";
+const HOUSE_KEY = "shop.house";
 
 export async function getShopProfile(): Promise<ShopProfile> {
   const row = await prisma.appSetting.findUnique({ where: { key: PROFILE_KEY } });
@@ -50,6 +53,17 @@ export async function saveLearnedVocabulary(learned: LearnedVocabulary | null): 
   await refreshConventions();
 }
 
+export async function getHouseConventions(): Promise<HouseConventions> {
+  const row = await prisma.appSetting.findUnique({ where: { key: HOUSE_KEY } });
+  return row ? cleanHouse(parseJson<Partial<HouseConventions>>(row.value, {})) : DEFAULT_HOUSE;
+}
+
+export async function saveHouseConventions(house: HouseConventions): Promise<void> {
+  const value = JSON.stringify(cleanHouse(house));
+  await prisma.appSetting.upsert({ where: { key: HOUSE_KEY }, create: { key: HOUSE_KEY, value }, update: { value } });
+  await refreshConventions();
+}
+
 export async function getStoredApiKey(): Promise<string> {
   const row = await prisma.appSetting.findUnique({ where: { key: API_KEY_KEY } });
   return parseJson<string>(row?.value, "");
@@ -73,9 +87,9 @@ let loading: Promise<void> | null = null;
 const TRUST_MS = 30_000;
 
 async function load(): Promise<void> {
-  const [profile, learned, key] = await Promise.all([getShopProfile(), getLearnedVocabulary(), getStoredApiKey()]);
+  const [profile, learned, key, house] = await Promise.all([getShopProfile(), getLearnedVocabulary(), getStoredApiKey(), getHouseConventions()]);
   activeProfile = profile;
-  activateConventions({ pack: profile.pack, learned, marker: profile.marker });
+  activateConventions({ pack: profile.pack, learned, marker: profile.marker, house });
   setStoredApiKey(key);
   loadedAt = Date.now();
 }

@@ -2,6 +2,7 @@
 // returns flags per product / variant. Errors block export; warnings can be overridden.
 
 import { isPublicHttpsUrl } from "./csv";
+import { houseConventions } from "./taxonomy";
 import { isValidHandle } from "./handle";
 import type { ReviewProduct, ReviewSummary, ReviewVariant } from "./review-types";
 import type { RowFlag } from "./types";
@@ -75,7 +76,8 @@ export function validateReview(products: ReviewProduct[], ctx: ValidationContext
       if (!(v.retailPrice > 0)) vf.push({ code: "MISSING_PRICE", severity: "warning", message: "No recommended retail — the price column will be empty, to fill in Shopify or here" });
       if (!(v.costPrice > 0)) vf.push({ code: "MISSING_COST", severity: "warning", message: "No cost price - profit cannot be calculated" });
       const sku = v.sku.trim().toLowerCase();
-      if (!sku) vf.push({ code: "MISSING_SKU", severity: "warning", message: "No SKU" });
+      if (!sku && houseConventions().identifiers.sku !== "none") vf.push({ code: "MISSING_SKU", severity: "warning", message: "No SKU" });
+      if (!v.barcode.trim() && houseConventions().identifiers.barcode === "required") vf.push({ code: "MISSING_BARCODE", severity: "warning", message: "No barcode, and the shop puts one on every variant" });
       else {
         if ((skuCounts.get(sku) ?? 0) > 1) vf.push({ code: "DUPLICATE_SKU_BATCH", severity: "error", message: "SKU appears more than once in this batch" });
         const liveHandle = ctx.shopifySkus?.get(sku);

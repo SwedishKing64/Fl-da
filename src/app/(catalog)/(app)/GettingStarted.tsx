@@ -5,10 +5,11 @@ import type { ShopProfile } from "@/lib/catalog/shop";
  * The checklist a new shop works down. It sits at the top of Home until everything on it is done,
  * then goes away; the parts of setup that were skipped keep it there, so nothing is forgotten.
  */
-export function GettingStarted({ profile, learned, aiReady, staff, imports }: { profile: ShopProfile; learned: boolean; aiReady: boolean; staff: number; imports: number }) {
+export function GettingStarted({ profile, learned, houseDone, aiReady, staff, imports }: { profile: ShopProfile; learned: boolean; houseDone: boolean; aiReady: boolean; staff: number; imports: number }) {
   const items: Array<{ done: boolean; title: string; text: string; href: string; go: string }> = [
     { done: Boolean(profile.name), title: "Say who the shop is", text: "Name, country, what you sell, and the rules to start from.", href: "/setup?step=shop", go: "Set up the shop" },
     { done: learned, title: "Teach Flöda your catalogue", text: "Your Shopify export shows it how you file, tag and name products. Without it, Flöda has only the supplier's paperwork to go on.", href: "/setup?step=learn", go: "Upload the export" },
+    { done: houseDone, title: "Say how you write a listing", text: "The brand in the title or not, SKUs and barcodes, weights, and the tags certain products always get.", href: "/setup?step=house", go: "Set the conventions" },
     { done: aiReady, title: "Add the key that reads documents", text: "PDFs, photos and brand pages need it. Spreadsheets do not.", href: "/setup?step=ai", go: "Add the key" },
     { done: staff > 1, title: "Add your staff", text: "Each person signs in as themselves; the marker tag says who built what.", href: "/settings", go: "Add accounts" },
     { done: imports > 0, title: "Run your first invoice through", text: "Start an import, drop in a supplier's invoice, and see what it makes of it.", href: "/batches/new", go: "Start an import" },

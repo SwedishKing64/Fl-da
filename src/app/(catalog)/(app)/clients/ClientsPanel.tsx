@@ -1,7 +1,8 @@
 "use client";
 
 import { useActionState, useState, useTransition } from "react";
-import { clientFromLeadAction, createClientAction, deleteClientAction, dismissLeadAction, regenerateClientKeyAction, updateClientAction } from "@/app/(catalog)/actions";
+import { clientFromLeadAction, createClientAction, deleteClientAction, dismissFeedbackAction, dismissLeadAction, regenerateClientKeyAction, updateClientAction } from "@/app/(catalog)/actions";
+import type { FeedbackRow } from "@/lib/catalog/feedback-box";
 import { Alert, Badge, Button, Empty, Field, INPUT, fmtDate } from "@/app/(catalog)/ui";
 import { ActionForm } from "@/app/(catalog)/ActionForm";
 
@@ -118,7 +119,30 @@ function Leads({ leads }: { leads: LeadRow[] }) {
   );
 }
 
-export function ClientsPanel({ clients, leads }: { clients: ClientRow[]; leads: LeadRow[] }) {
+function Feedback({ rows }: { rows: FeedbackRow[] }) {
+  const [pending, start] = useTransition();
+  return (
+    <div>
+      {rows.length === 0 && <Empty>Nothing yet. What people write on the Feedback button in any copy of Flöda lands here.</Empty>}
+      <ul className="divide-y divide-[var(--line-soft)]">
+        {rows.map((f) => (
+          <li key={f.at} className="flex flex-wrap items-start justify-between gap-3 py-3">
+            <div className="min-w-0 text-sm">
+              <div className="whitespace-pre-wrap">{f.message}</div>
+              <div className="mt-1 text-xs text-[var(--ink-soft)]">{[f.shop || "(unnamed shop)", f.user, f.email, f.page, f.version && `v${f.version}`, fmtDate(f.at)].filter(Boolean).join(" · ")}</div>
+            </div>
+            <div className="flex gap-1">
+              {f.email && <a className="btn-secondary inline-flex items-center rounded-[10px] px-3 py-1.5 text-[13px] font-semibold" href={`mailto:${f.email}?subject=${encodeURIComponent("Your note to Flöda")}`}>Reply</a>}
+              <Button size="sm" variant="ghost" disabled={pending} onClick={() => start(async () => { await dismissFeedbackAction(f.at); })}>Done</Button>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+export function ClientsPanel({ clients, leads, feedback }: { clients: ClientRow[]; leads: LeadRow[]; feedback: FeedbackRow[] }) {
   return (
     <div className="space-y-8">
       <section>
@@ -137,6 +161,10 @@ export function ClientsPanel({ clients, leads }: { clients: ClientRow[]; leads: 
       <section>
         <h3 className="mb-2 text-[15px] font-semibold">Registered interest ({leads.length})</h3>
         <Leads leads={leads} />
+      </section>
+      <section>
+        <h3 className="mb-2 text-[15px] font-semibold">Feedback ({feedback.length})</h3>
+        <Feedback rows={feedback} />
       </section>
     </div>
   );

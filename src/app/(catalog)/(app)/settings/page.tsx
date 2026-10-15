@@ -5,11 +5,14 @@ import { UserForm, DeleteUserButton, Status } from "./SettingsForms";
 import { usingBlob, blobTokenSource } from "@/lib/catalog/storage";
 import { blobEnvNamesPresent } from "@/lib/catalog/blob-token";
 import { apiKeySource, keyTail } from "@/lib/catalog/anthropic";
-import { getLearnedVocabulary, getShopProfile, getStoredApiKey } from "@/lib/catalog/shop-profile";
+import { getHouseConventions, getLearnedVocabulary, getShopProfile, getStoredApiKey } from "@/lib/catalog/shop-profile";
+import { productTypes } from "@/lib/catalog/taxonomy";
+import { houseTagRules } from "@/app/(catalog)/actions";
 import { describeLearned } from "@/lib/catalog/learn";
 import { ShopForm } from "@/app/(catalog)/(setup)/setup/ShopStep";
 import { ApiKeyForm } from "@/app/(catalog)/(setup)/setup/AiStep";
 import { LearnPanel } from "@/app/(catalog)/(setup)/setup/LearnStep";
+import { HouseForm } from "@/app/(catalog)/(setup)/setup/HouseStep";
 import { LicenceForm } from "./LicenceForm";
 import { licenceServer } from "@/lib/catalog/licence";
 import { currentLicence } from "@/lib/catalog/licence-store";
@@ -28,12 +31,14 @@ export const maxDuration = 300;
 
 export default async function SettingsPage() {
   const me = await requireUser("ADMIN");
-  const [users, latency, profile, learned, storedKey] = await Promise.all([
+  const [users, latency, profile, learned, storedKey, house, tagRules] = await Promise.all([
     prisma.user.findMany({ orderBy: { createdAt: "asc" } }),
     databaseLatency(),
     getShopProfile(),
     getLearnedVocabulary(),
     getStoredApiKey(),
+    getHouseConventions(),
+    houseTagRules(),
   ]);
   return (
     <>
@@ -61,6 +66,10 @@ export default async function SettingsPage() {
           )}
         </div>
       </div>
+      <Card title="How you list" className="mb-6">
+        <p className="mb-5 text-[14px] text-[var(--ink-soft)]">The choices a person makes on every listing, which an export cannot show: the brand in the title or not, what the SKU is, what you write for weight, and the tags certain products always get.</p>
+        <HouseForm house={house} tagRules={tagRules} kinds={productTypes()} />
+      </Card>
       <div className="grid gap-6 lg:grid-cols-2">
         <Card title="Staff accounts">
           <table className="mb-4 w-full text-sm">

@@ -25,11 +25,25 @@ every request. The marker tag ("123abc-zb" at Alpsport) is the shop's own or non
 describe the retailer from its profile. The snow rules are seeded when that pack is chosen and
 taken out again when it is not. The tests run against Alpsport's conventions (`src/test-setup.ts`).
 
-**Setup is a walk-through.** `/setup`: the admin account; the shop; its catalogue (the export is
-read in the browser, and the vocabulary, the templates per brand and kind, and the listings are
-kept); the API key that reads PDFs and photos (kept in the copy's own database when the host sets
-none, tried before it is kept); and a page saying how to work. Home carries a getting-started
-checklist until it is all done; Settings has the same cards, so any of it can be redone.
+**Setup is a walk-through.** `/setup`: the admin account; the shop; its catalogue (one or several
+exports, read in the browser, and the vocabulary, the templates per brand and kind, and the
+listings are kept); how the shop writes a listing (below); the API key that reads PDFs and photos
+(kept in the copy's own database when the host sets none, tried before it is kept); and a page
+saying how to work. Home carries a getting-started checklist until it is all done; Settings has
+the same cards, so any of it can be redone.
+
+**How the shop writes a listing is data too** (`house.ts`, kept under `shop.house`, in force with
+the rest of the conventions): whether the brand leads the title, whether the year goes after the
+name, whether a supplier's capitals are cased back; what goes in the SKU column and whether a
+barcode is kept, required or never written; weight as nothing, a band per kind, or one figure;
+tag rules the export cannot show ("when the brand says Burton, add snowboard"), kept as
+`TagRule` rows named `house: …`; and anything else in the shop's words, which goes to the reader
+with the house rules. `titles.ts`, the build in `pipeline.ts`, `validate.ts` and `seo.ts` read it.
+
+**Feedback.** A Feedback button on every page of the app. On the vendor's deployment the note
+lands on the Clients page; an installed copy sends it to `FLODA_LICENCE_SERVER/api/feedback`
+with the shop, page and version on it, and keeps it in its own database if the vendor cannot be
+reached.
 
 **Clients and licences.** The vendor's own deployment runs with `FLODA_VENDOR=1`: it keeps the
 `Client` table, shows `/clients` (every shop, plan, standing, key, last check-in and version;

@@ -36,7 +36,7 @@ export function Paywall({ state, isAdmin, name }: { state: Exclude<LicenceState,
             <>
               {state.kind === "none" && (
                 <div className="mt-5">
-                  <Link href="/setup?step=plan" className="btn-primary inline-flex items-center gap-2">Choose a plan and start the trial →</Link>
+                  <Link href="/setup?step=plan" className="btn btn-primary inline-flex items-center gap-2">Choose a plan and start the trial →</Link>
                 </div>
               )}
               {lapsed && (
@@ -51,15 +51,15 @@ export function Paywall({ state, isAdmin, name }: { state: Exclude<LicenceState,
                     ))}
                   </div>
                   <div className="mt-4 flex flex-wrap items-center gap-3">
-                    <a href={`mailto:hello@floda.ai?subject=${encodeURIComponent(`Flöda plan for ${lapsed.licence.client}`)}&body=${encodeURIComponent(`Hi Flöda,\n\nWe'd like to go on the ${was?.name ?? "Shop"} plan. Our licence key is ${lapsed.licence.key}.\n\nThanks`)}`} className="btn-primary inline-flex items-center gap-2">Subscribe: write to Flöda →</a>
-                    <a href="https://floda.ai/#pricing" target="_blank" rel="noreferrer" className="btn-secondary inline-flex items-center gap-2">See the plans</a>
+                    <a href={`mailto:hello@floda.ai?subject=${encodeURIComponent(`Flöda plan for ${lapsed.licence.client}`)}&body=${encodeURIComponent(`Hi Flöda,\n\nWe'd like to go on the ${was?.name ?? "Shop"} plan. Our licence key is ${lapsed.licence.key}.\n\nThanks`)}`} className="btn btn-primary inline-flex items-center gap-2">Subscribe: write to Flöda →</a>
+                    <a href="https://floda.ai/#pricing" target="_blank" rel="noreferrer" className="btn btn-secondary inline-flex items-center gap-2">See the plans</a>
                   </div>
                   <p className="mt-2 text-[12.5px] text-[var(--ink-soft)]">A person answers within one working day and turns the key back on; nothing is charged until you have said which plan. If you have a new key already, enter it below.</p>
                 </>
               )}
               <div className="mt-6 border-t border-[var(--line-soft)] pt-5">
                 <h2 className="mb-3 text-[15px] font-bold">Enter a key</h2>
-                <LicenceForm state={state} use={{ invoices: 0, products: 0 }} />
+                <LicenceForm state={state} use={{ invoices: 0, products: 0 }} gated />
               </div>
             </>
           ) : (

@@ -3,7 +3,7 @@
 // electron-builder.yml). Usage: `npm run desktop:build`, then `npm run desktop:dist`.
 //
 // What is baked in: the vendor the app checks its licence with (FLODA_LICENCE_SERVER, default
-// https://floda.ai) and the version from package.json.
+// https://fl-da.vercel.app) and the version from package.json.
 import { execSync } from "node:child_process";
 import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -14,7 +14,7 @@ const run = (cmd, env = {}) => {
 };
 
 const pkg = JSON.parse(readFileSync("package.json", "utf8"));
-const licenceServer = (process.env.FLODA_LICENCE_SERVER ?? "https://floda.ai").replace(/\/+$/, "");
+const licenceServer = (process.env.FLODA_LICENCE_SERVER ?? "https://fl-da.vercel.app").replace(/\/+$/, "");
 
 // 1. The schema stays on SQLite (the checked-in default). Make the empty template database.
 const template = path.resolve("prisma/template.db");

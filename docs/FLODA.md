@@ -68,8 +68,8 @@ the trial is three days from ending or the month is past the plan, with a banner
 so neither is a surprise on the way to the paywall. A copy asks for its licence at the first
 address that can be reached (`reachVendor` in `licence.ts`): the one a person set under Settings
 → Licence ("Can't reach Flöda? Its address", kept in `AppSetting`), then the one the build baked
-in (`FLODA_LICENCE_SERVER`, floda.ai), then the deployment's own address (`LICENCE_FALLBACKS`,
-fl-da.vercel.app). An address that cannot be reached is passed over, and when none can be the
+in (`FLODA_LICENCE_SERVER`, fl-da.vercel.app, the deployment's own address), then the fallbacks
+(`LICENCE_FALLBACKS`: fl-da.vercel.app, then floda.ai for the day that name exists). An address that cannot be reached is passed over, and when none can be the
 error says why for each (no DNS record, nothing answering, certificate refused, no answer in 15
 seconds) rather than "fetch failed". The trial step shows the address form when the trial could
 not be started for that reason.
@@ -147,7 +147,7 @@ that belonged to one shop.
 
 | Copy | How | Database and files | Licence |
 | --- | --- | --- | --- |
-| The vendor (floda.ai) | Vercel, `FLODA_VENDOR=1` | Neon Postgres, Vercel Blob | issues them |
+| The vendor (fl-da.vercel.app; floda.ai once that name exists) | Vercel, `FLODA_VENDOR=1` | Neon Postgres, Vercel Blob | issues them |
 | A shop's desktop app | the installer from a release | SQLite and a folder in app-data | checks `FLODA_LICENCE_SERVER` |
 | A shop's own hosted copy | Vercel from this repo | Neon, Blob | same, when the variable is set |
 | Development | `npm run demo` | `prisma/dev.db`, `./storage` | none (`FLODA_LICENCE_SERVER` unset) |

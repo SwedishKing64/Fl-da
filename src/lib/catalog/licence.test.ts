@@ -70,6 +70,8 @@ describe("reaching the vendor", () => {
     expect(licenceServers()).toEqual(["https://floda.ai", "https://fl-da.vercel.app"]);
     expect(licenceServers("https://fl-da.vercel.app")).toEqual(["https://fl-da.vercel.app", "https://floda.ai"]);
     expect(licenceServers("http://localhost:3101/")).toEqual(["http://localhost:3101", "https://floda.ai", "https://fl-da.vercel.app"]);
+    process.env.FLODA_LICENCE_SERVER = "https://fl-da.vercel.app";
+    expect(licenceServers()).toEqual(["https://fl-da.vercel.app", "https://floda.ai"]);
     process.env.FLODA_LICENCE_SERVER = "";
     expect(licenceServers("https://x.test")).toEqual([]);
   });

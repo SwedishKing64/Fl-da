@@ -3,7 +3,7 @@
  *
  * Flöda is installed per shop, so there are two sides to this and both live in this module:
  *
- *  - The vendor's own deployment (the one at floda.ai) runs with FLODA_VENDOR=1. It keeps the
+ *  - The vendor's own deployment (at fl-da.vercel.app, floda.ai once that name exists) runs with FLODA_VENDOR=1. It keeps the
  *    `Client` table, shows the Clients page, and answers `/api/licence`.
  *  - Every other copy — a shop's installed app, or a shop's own hosted copy — is built with
  *    FLODA_LICENCE_SERVER pointing at the vendor. It keeps the key the shop entered in `AppSetting`
@@ -90,12 +90,12 @@ export function licenceServer(): string {
   return (process.env.FLODA_LICENCE_SERVER ?? "").trim().replace(/\/+$/, "");
 }
 
-/** Where to turn when the built-in address cannot be reached: the deployment's own address. */
-export const LICENCE_FALLBACKS = ["https://fl-da.vercel.app"];
+/** Where to turn when the built-in address cannot be reached: the deployment's own address, then the name it will have. */
+export const LICENCE_FALLBACKS = ["https://fl-da.vercel.app", "https://floda.ai"];
 
 /**
  * Every address this copy may ask, in order: the one a person typed in (Settings → Licence), the
- * one the build baked in, then the fallbacks. A copy built with floda.ai before that name existed
+ * one the build baked in, then the fallbacks. A copy built with an address that does not answer
  * still finds its vendor. Empty when the copy checks no licence at all.
  */
 export function licenceServers(override?: string | null): string[] {

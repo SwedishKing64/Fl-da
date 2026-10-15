@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Site } from "../Shell";
 import { Reveal } from "../welcome/Motion";
 import "../welcome/welcome.css";
+import { SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/catalog/support";
 
 export const metadata: Metadata = { title: "Flöda privacy", description: "Where a shop's data lives, what leaves the machine, and what Flöda keeps." };
 
@@ -20,7 +21,7 @@ export default function PrivacyPage() {
           <Reveal delay={2}><h2 id="ai">Reading by AI</h2><p>Documents are read by Claude, through Anthropic&rsquo;s API. Under Anthropic&rsquo;s commercial terms, API traffic is not used to train their models. Only the document being read is sent, shrunk where it is a photograph; your catalogue, prices and customer data are not. Flöda keeps a count of tokens used per shop and nothing of the document itself.</p></Reveal>
           <Reveal delay={3}><h2>What we keep about you as a customer</h2><p>Your shop&rsquo;s name, your contact name and email, which plan you are on, your licence key, when your copy last checked in and which version it was, the month&rsquo;s invoice and product counts your copy reported, and what reading through Flöda cost that month. Leads from the website are kept until they become a customer or are dismissed.</p></Reveal>
           <Reveal delay={4}><h2>Ending</h2><p>When you stop, your copy keeps working to the end of the period you paid for, and your data stays on your machine; nothing of it was with us to delete. We remove your customer record and licence key on request. A hosted copy&rsquo;s database and files are deleted thirty days after the plan ends, sooner if you ask.</p></Reveal>
-          <Reveal delay={5}><h2>Questions</h2><p>Write to <a href="mailto:hello@floda.ai">hello@floda.ai</a>. Flöda is made in Sydney, Australia.</p></Reveal>
+          <Reveal delay={5}><h2>Questions</h2><p>Write to <a href={SUPPORT_MAILTO}>{SUPPORT_EMAIL}</a>. Flöda is made in Sydney, Australia.</p></Reveal>
         </div>
       </section>
     </Site>

@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC = ["/login", "/setup", "/welcome", "/about", "/faq", "/privacy", "/download", "/open"];
+const PUBLIC = ["/login", "/setup", "/welcome", "/about", "/faq", "/privacy", "/download", "/terms", "/billing", "/open"];
 
 /**
  * A signed-out visitor to the front door sees the landing page; anywhere else, the login page.

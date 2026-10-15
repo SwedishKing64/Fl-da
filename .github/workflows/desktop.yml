@@ -53,6 +53,7 @@ jobs:
         env:
           FLODA_LICENCE_SERVER: ${{ vars.FLODA_LICENCE_SERVER || 'https://fl-da.vercel.app' }}
           FLODA_OPEN: ${{ env.OPEN }}
+          NEXT_PUBLIC_FLODA_SUPPORT_EMAIL: ${{ vars.FLODA_SUPPORT_EMAIL || '' }}
           # Only an open build takes the key; the ordinary app reads through its licence.
           FLODA_ANTHROPIC_API_KEY: ${{ env.OPEN == '1' && (secrets.FLODA_ANTHROPIC_API_KEY || secrets.ANTHROPIC_API_KEY) || '' }}
       - name: Make the installer

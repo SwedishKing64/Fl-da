@@ -3,6 +3,8 @@ import { prisma } from "@/lib/catalog/db";
 import { newLicenceKey, normaliseKey, vendorMode, verdictFor, type CheckAnswer, type TrialAnswer, type TrialRequest } from "@/lib/catalog/licence";
 import { planOf, TRIAL_DAYS } from "@/lib/catalog/plans";
 import { monthKey } from "@/lib/catalog/ai-usage";
+import { createCheckout, createPortal, stripeConfigured } from "@/lib/catalog/stripe";
+import { SUPPORT_EMAIL } from "@/lib/catalog/support";
 
 export const runtime = "nodejs";
 
@@ -17,6 +19,8 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/licence/[ac
   if (!vendorMode()) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const { action } = await ctx.params;
   if (action === "trial") return trial(req);
+  if (action === "checkout") return checkout(req);
+  if (action === "portal") return portal(req);
   if (action !== "activate" && action !== "check") return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const body = (await req.json().catch(() => null)) as Partial<{ key: string; install: string; shop: string; version: string; platform: string; monthBatches: number; monthProducts: number }> | null;
@@ -55,10 +59,56 @@ async function trial(req: NextRequest) {
   if (!shop || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return NextResponse.json({ ok: false, status: "UNKNOWN", why: "The shop's name and a working email address are needed." } satisfies TrialAnswer);
   const plan = planOf(String(body?.plan ?? ""));
   const had = await prisma.client.findFirst({ where: { email }, select: { id: true } });
-  if (had) return NextResponse.json({ ok: false, status: "UNKNOWN", why: "That email address already has a Flöda account. Enter the key it was sent, or write to hello@floda.ai." } satisfies TrialAnswer);
+  if (had) return NextResponse.json({ ok: false, status: "UNKNOWN", why: `That email address already has a Flöda account. Enter the key it was sent, or write to ${SUPPORT_EMAIL}.` } satisfies TrialAnswer);
   const expiresAt = new Date(Date.now() + TRIAL_DAYS * 86_400_000);
   const client = await prisma.client.create({
     data: { name: shop, email, plan: plan.id, status: "TRIAL", expiresAt, licenceKey: newLicenceKey(), aiCapCents: plan.readingCapCents, lastSeenAt: new Date(), lastVersion: String(body?.version ?? "").slice(0, 40), lastInstall: String(body?.install ?? "").slice(0, 80), checkIns: 1, notes: `Started a trial from the app (${String(body?.platform ?? "").slice(0, 40)}).` },
   });
   return NextResponse.json({ ok: true, key: client.licenceKey, client: client.name, plan: client.plan, status: "TRIAL", expiresAt: expiresAt.toISOString() } satisfies TrialAnswer);
 }
+
+/** Where the copy came in from, for Stripe to send the person back to. */
+function originOf(req: NextRequest): string {
+  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? "";
+  const proto = req.headers.get("x-forwarded-proto") ?? "https";
+  return host ? `${proto}://${host}` : "https://fl-da.vercel.app";
+}
+
+/**
+ * A copy asking to pay: a Stripe checkout page for its client on the plan it chose. The copy
+ * opens the link in the browser; Stripe tells this deployment when it is paid (the webhook) and
+ * the copy sees its new standing the next time it checks its key.
+ */
+async function checkout(req: NextRequest) {
+  const body = (await req.json().catch(() => null)) as Partial<{ key: string; plan: string }> | null;
+  const key = normaliseKey(String(body?.key ?? ""));
+  const client = key ? await prisma.client.findUnique({ where: { licenceKey: key } }) : null;
+  if (!client) return NextResponse.json({ ok: false, why: "That is not a Flöda licence key." } satisfies BillingAnswer);
+  if (!stripeConfigured()) return NextResponse.json({ ok: false, why: `Paying online is not set up on this Flöda yet. Write to ${SUPPORT_EMAIL} and a person will sort the plan out.` } satisfies BillingAnswer);
+  const plan = planOf(String(body?.plan ?? client.plan));
+  try {
+    const url = await createCheckout(client, plan.id, originOf(req));
+    return NextResponse.json({ ok: true, url } satisfies BillingAnswer);
+  } catch (err) {
+    console.error("[billing] checkout failed:", err instanceof Error ? err.message : err);
+    return NextResponse.json({ ok: false, why: `The payment page could not be made: ${err instanceof Error ? err.message : "no answer from Stripe"}. Write to ${SUPPORT_EMAIL}.` } satisfies BillingAnswer);
+  }
+}
+
+/** Stripe's customer portal for a client that has paid: card, plan, invoices, cancelling. */
+async function portal(req: NextRequest) {
+  const body = (await req.json().catch(() => null)) as Partial<{ key: string }> | null;
+  const key = normaliseKey(String(body?.key ?? ""));
+  const client = key ? await prisma.client.findUnique({ where: { licenceKey: key } }) : null;
+  if (!client) return NextResponse.json({ ok: false, why: "That is not a Flöda licence key." } satisfies BillingAnswer);
+  if (!client.stripeCustomerId || !stripeConfigured()) return NextResponse.json({ ok: false, why: `This copy has not paid online yet, so there is no billing page for it. Write to ${SUPPORT_EMAIL} to change anything.` } satisfies BillingAnswer);
+  try {
+    const url = await createPortal(client.stripeCustomerId, originOf(req));
+    return NextResponse.json({ ok: true, url } satisfies BillingAnswer);
+  } catch (err) {
+    console.error("[billing] portal failed:", err instanceof Error ? err.message : err);
+    return NextResponse.json({ ok: false, why: `The billing page could not be opened: ${err instanceof Error ? err.message : "no answer from Stripe"}.` } satisfies BillingAnswer);
+  }
+}
+
+type BillingAnswer = { ok: true; url: string } | { ok: false; why: string };

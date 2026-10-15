@@ -34,7 +34,7 @@ export default async function ClientsPage() {
   const leads = parseJson<LeadRow[]>(leadsRow?.value, []).slice().reverse();
   const feedback = parseJson<FeedbackRow[]>(feedbackRow?.value, []).slice().reverse();
   const rows: ClientRow[] = clients.map((c) => ({
-    id: c.id, name: c.name, contact: c.contact, email: c.email, plan: c.plan, status: c.status, licenceKey: c.licenceKey, notes: c.notes,
+    id: c.id, name: c.name, contact: c.contact, email: c.email, plan: c.plan, status: c.status, licenceKey: c.licenceKey, notes: c.notes, billing: c.billing,
     expiresAt: c.expiresAt?.toISOString() ?? null, lastSeenAt: c.lastSeenAt?.toISOString() ?? null, lastVersion: c.lastVersion, lastInstall: c.lastInstall, checkIns: c.checkIns, createdAt: c.createdAt.toISOString(),
     reading: describeAllowance(allowanceOf(c)), readingExhausted: allowanceOf(c).exhausted, aiCap: (c.aiCapCents / 100).toFixed(c.aiCapCents % 100 === 0 ? 0 : 2),
     month: monthLine(c),

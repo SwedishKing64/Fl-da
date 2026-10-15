@@ -536,6 +536,10 @@ model Client {
   useMonth     String    @default("")
   monthBatches Int       @default(0)
   monthProducts Int      @default(0)
+  /// Billing through Stripe: the customer and subscription, and what Stripe last said in a word.
+  stripeCustomerId     String @default("")
+  stripeSubscriptionId String @default("")
+  billing              String @default("")
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 }

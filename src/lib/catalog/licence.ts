@@ -243,6 +243,21 @@ export async function askForTrial(server: string, body: TrialRequest): Promise<T
   return data;
 }
 
+/** What the vendor answers when a copy asks to pay, or for its billing page: a link, or why not. */
+export type BillingAnswer = { ok: true; url: string } | { ok: false; why: string };
+
+export async function askForBilling(server: string, what: "checkout" | "portal", body: { key: string; plan?: string }): Promise<BillingAnswer> {
+  const res = await fetch(`${server}/api/licence/${what}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(20_000),
+  });
+  const data = (await res.json().catch(() => null)) as BillingAnswer | null;
+  if (!data || typeof data !== "object" || !("ok" in data)) throw new Error(`Flöda answered ${res.status} without a link`);
+  return data;
+}
+
 /** The licence as kept after an answer. */
 export function licenceFromAnswer(key: string, answer: CheckAnswer, previous: Licence | null, now = new Date()): Licence {
   if (answer.ok) return { key, client: answer.client, plan: answer.plan, status: answer.status, expiresAt: answer.expiresAt, checkedAt: now.toISOString() };

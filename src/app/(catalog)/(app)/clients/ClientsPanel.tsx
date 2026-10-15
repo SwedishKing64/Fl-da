@@ -9,6 +9,8 @@ import { ActionForm } from "@/app/(catalog)/ActionForm";
 
 export interface ClientRow {
   id: string; name: string; contact: string; email: string; plan: string; status: string; licenceKey: string; notes: string;
+  /** What Stripe last said about the subscription, in a word; empty when the client has not paid online. */
+  billing: string;
   /** This month's reading through Flöda, in a line, and the allowance in dollars for the form. */
   reading: string; readingExhausted: boolean; aiCap: string;
   /** What the copy last said its month held, against the plan. */
@@ -38,7 +40,7 @@ function Row({ c }: { c: ClientRow }) {
           <div className="font-semibold">{c.name || <span className="text-[var(--ink-soft)]">(unnamed)</span>}</div>
           <div className="text-xs text-[var(--ink-soft)]">{[c.contact, c.email].filter(Boolean).join(" · ")}</div>
         </td>
-        <td className="py-2 pr-3"><Badge tone={TONE[c.status] ?? "neutral"}>{STATUS_WORD[c.status] ?? c.status}</Badge><div className="mt-1 text-xs text-[var(--ink-soft)]">{planOf(c.plan).name}{c.expiresAt ? ` · until ${fmtDate(c.expiresAt)}` : ""}</div>{c.month.text && <div className={`mt-1 text-xs ${c.month.over ? "font-semibold text-[#b42318]" : "text-[var(--ink-soft)]"}`}>{c.month.text}{c.month.over ? " · past the plan" : ""}</div>}</td>
+        <td className="py-2 pr-3"><Badge tone={TONE[c.status] ?? "neutral"}>{STATUS_WORD[c.status] ?? c.status}</Badge><div className="mt-1 text-xs text-[var(--ink-soft)]">{planOf(c.plan).name}{c.expiresAt ? ` · until ${fmtDate(c.expiresAt)}` : ""}{c.billing ? ` · Stripe: ${c.billing}` : ""}</div>{c.month.text && <div className={`mt-1 text-xs ${c.month.over ? "font-semibold text-[#b42318]" : "text-[var(--ink-soft)]"}`}>{c.month.text}{c.month.over ? " · past the plan" : ""}</div>}</td>
         <td className="py-2 pr-3 font-mono text-xs"><button type="button" onClick={copy} title="Copy" className="rounded px-1 hover:bg-[var(--meta-tint)]">{c.licenceKey}</button></td>
         <td className="py-2 pr-3 text-xs text-[var(--ink-soft)]">{seen}{c.checkIns > 0 && <div>{c.checkIns} check-in{c.checkIns === 1 ? "" : "s"}</div>}</td>
         <td className={`py-2 pr-3 text-xs ${c.readingExhausted ? "text-[var(--danger-ink,#b42318)]" : "text-[var(--ink-soft)]"}`}>{c.reading}</td>

@@ -12,6 +12,7 @@ import { lookupEnabled } from "@/lib/catalog/enrich";
 import { guarded } from "@/app/(catalog)/page-failed";
 import { SupplierNote } from "./SupplierNote";
 import { supplierRecordFor } from "@/lib/catalog/supplier-score";
+import { getShopProfile } from "@/lib/catalog/shop-profile";
 
 /**
  * Server Actions on a page take the page's maxDuration, so this is what the web lookup runs under.
@@ -46,6 +47,11 @@ async function renderReviewPage(props: PageProps<"/batches/[id]/review">) {
   // match is not a listing, and each product is asked for its page.
   // How this supplier's paperwork has read before, or that nobody has checked it before.
   const record = batch.supplierId ? await supplierRecordFor(batch.supplierId, batch.id) : null;
+  // On the shop's first two batches a person is named, not a feedback box: the moment a new
+  // customer is stuck is the moment the engineer who set them up should be one click away.
+  const finished = await prisma.importBatch.count({ where: { status: { in: ["EXPORTED", "PUSHED"] } } });
+  const profile = await getShopProfile();
+  const askHref = `mailto:hello@floda.ai?subject=${encodeURIComponent(`${profile.name || "A shop"} · batch "${batch.name}"`)}&body=${encodeURIComponent(`Hello,\n\nI'm looking at the batch "${batch.name}"${batch.supplierId ? ` from ${record?.name ?? "a supplier"}` : ""} and\n\n(say what looks wrong, or what you are unsure about)\n\n`)}`;
   const inShop = parseDirectives(batch.directives).allNew
     ? new Set<string>()
     : new Set((await prisma.shopListing.findMany({ where: { handle: { in: review.products.map((p) => p.handle) } }, select: { handle: true } })).map((l) => l.handle));
@@ -61,6 +67,13 @@ async function renderReviewPage(props: PageProps<"/batches/[id]/review">) {
         <Alert tone="warning">No products yet — upload a supplier file first.</Alert>
       ) : (
         <>
+          {finished < 2 && (
+            <div className="mb-4 flex flex-wrap items-center gap-3 rounded-[12px] border border-[var(--line)] bg-white px-4 py-2.5 text-[13.5px]">
+              <span className="font-semibold">Your first batches.</span>
+              <span className="text-[var(--ink-2)]">A Flöda engineer set you up and is on the end of this: anything that reads wrong, write and it is looked at the same working day.</span>
+              <a href={askHref} className="ml-auto font-semibold text-[var(--meta)] underline">Ask a Flöda engineer about this batch →</a>
+            </div>
+          )}
           {record && <SupplierNote record={record} />}
           <LinksPanel
             batchId={id}

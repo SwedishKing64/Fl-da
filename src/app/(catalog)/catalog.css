@@ -35,6 +35,27 @@
 .review-grid .flag { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; }
 .review-grid .flag.error { background: var(--detractor); }
 .review-grid .flag.warning { background: var(--passive); }
+/* The first columns stay put while the rest scroll: the box, the arrow, the dots, the picture and
+ * the SKU, and in a product row the title, so a row is never read without knowing whose it is.
+ * The offsets are measured off the header cells (see ReviewGrid) and set as custom properties. */
+.review-grid th.pin, .review-grid td.pin { position: sticky; z-index: 1; }
+.review-grid th.pin { z-index: 4; background: #f7f8fa; }
+.review-grid td.pin { background: #fff; }
+.review-grid tr.product-row td.pin { background: #f3f5f8; }
+.review-grid tr.selected td.pin { background: var(--meta-tint); }
+.review-grid tr.variant-row:hover td.pin { background: #f5f9ff; }
+.review-grid .pin-0 { left: var(--pin-0, 0px); }
+.review-grid .pin-1 { left: var(--pin-1, 28px); }
+.review-grid .pin-2 { left: var(--pin-2, 52px); }
+.review-grid .pin-3 { left: var(--pin-3, 112px); }
+.review-grid .pin-4 { left: var(--pin-4, 152px); }
+.review-grid th.pin-end, .review-grid td.pin-end { box-shadow: inset -1px 0 0 var(--line); }
+.review-grid .pin-title { position: sticky; left: var(--pin-4, 152px); z-index: 1; margin-left: -8px; padding: 0 10px 0 8px; background: #f3f5f8; box-shadow: 6px 0 6px -4px rgba(0, 0, 0, 0.12); }
+/* The same dots, explained above the grid. */
+.flag-legend .flag { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+.flag-legend .flag.error { background: var(--detractor); }
+.flag-legend .flag.warning { background: var(--passive); }
+.review-grid tr.selected .pin-title { background: var(--meta-tint); }
 .summary-bar { position: sticky; bottom: 0; z-index: 3; display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 14px 18px; border: 1px solid var(--line); border-radius: 12px; background: #fff; padding: 14px 18px; margin-top: 12px; box-shadow: var(--shadow); }
 .summary-bar .k { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-soft); }
 .summary-bar .v { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }

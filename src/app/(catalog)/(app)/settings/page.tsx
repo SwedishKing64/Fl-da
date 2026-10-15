@@ -54,7 +54,7 @@ export default async function SettingsPage() {
             {learned ? (
               <ul className="mb-4 list-disc pl-5 text-[14px]">{describeLearned(learned).map((l) => <li key={l}>{l}</li>)}</ul>
             ) : (
-              <p className="mb-4 text-[14px] text-[var(--ink-soft)]">Nothing yet. Flöda learns how you file, tag and name products from your Shopify export.</p>
+              <p className="mb-4 text-[14px] text-[var(--ink-soft)]">Nothing yet. Flöda learns how you file, tag and name products from your Shopify export, and this card then reads like: &ldquo;14 kinds of product, filed under Snow and Outdoor&rdquo;, &ldquo;shelf tags spelt with hyphens (ski-accessories)&rdquo;, &ldquo;titles lead with the model, not the brand&rdquo;.</p>
             )}
             <LearnPanel learned={learned} />
           </Card>
@@ -74,6 +74,7 @@ export default async function SettingsPage() {
       </Card>
       <div className="grid gap-6 lg:grid-cols-2">
         <Card title="Staff accounts">
+          <p className="mb-3 text-[13.5px] text-[var(--ink-soft)]">Everyone signs in on this same copy: the batches, suppliers and what Flöda has learned live here, so staff use Flöda on this machine (or a hosted copy you run), not each on an install of their own.</p>
           <table className="mb-4 w-full text-sm">
             <thead className="text-left text-xs text-[var(--ink-soft)]"><tr><th className="py-1">Name</th><th>Email</th><th>Role</th><th>Added</th><th /></tr></thead>
             <tbody>{users.map((u) => <tr key={u.id} className="border-t border-[var(--line-soft)]"><td className="py-1.5">{u.name}</td><td>{u.email}</td><td>{u.role}</td><td className="text-xs text-[var(--ink-soft)]">{fmtDate(u.createdAt)}</td><td className="text-right">{u.id !== me.id && <DeleteUserButton id={u.id} />}</td></tr>)}</tbody>

@@ -86,6 +86,43 @@ export function LinksPanel({ batchId, products, locked }: { batchId: string; pro
   }
 
   const read = linked.filter((p) => stand[p.id] === "read").length;
+  const [bulk, setBulk] = useState("");
+  const [bulkSaid, setBulkSaid] = useState<string | null>(null);
+
+  /**
+   * Several links at once, one per line. Each goes to the product whose handle it names, when the
+   * link's path carries the handle's first words; the rest go, in order, to the products that
+   * have no link yet. The matching is said, so a wrong guess is seen before it is read.
+   */
+  async function placeBulk() {
+    const links = bulk.split(/\s+/).map((l) => l.trim()).filter((l) => /^https?:\/\//i.test(l));
+    if (links.length === 0) { setBulkSaid("No links found — paste one per line, each starting with http."); return; }
+    const taken = new Set<string>();
+    const placed: Array<{ id: string; url: string; how: string }> = [];
+    const words = (handle: string) => handle.split("-").filter((w) => w.length > 2 && !/^\d+$/.test(w)).slice(0, 2);
+    for (const url of links) {
+      const path = decodeURIComponent(url.toLowerCase());
+      const byName = own.find((p) => !taken.has(p.id) && words(p.handle).length > 0 && words(p.handle).every((w) => path.includes(w)));
+      if (byName) { taken.add(byName.id); placed.push({ id: byName.id, url, how: "by name" }); continue; }
+      const next = own.find((p) => !taken.has(p.id) && !(urls[p.id] ?? "").trim());
+      if (next) { taken.add(next.id); placed.push({ id: next.id, url, how: "in order" }); }
+    }
+    const saidLines: string[] = [];
+    for (const { id, url, how } of placed) {
+      const r = await setProductLinkAction(id, url);
+      const title = own.find((p) => p.id === id)?.title ?? id;
+      if (r.ok) {
+        saved.current[id] = r.data!.url;
+        setUrls((u) => ({ ...u, [id]: r.data!.url }));
+        setStand((s) => ({ ...s, [id]: "saved" }));
+        setSaid((s) => ({ ...s, [id]: { tone: how === "by name" ? "ok" : "warn", text: `Placed ${how} from the pasted list — not read yet.` } }));
+        saidLines.push(`${title}: ${how}`);
+      } else saidLines.push(`${title}: ${r.error}`);
+    }
+    const left = links.length - placed.length;
+    setBulkSaid(`${placed.length} link${placed.length === 1 ? "" : "s"} placed${left > 0 ? `, ${left} left over (more links than products without one)` : ""}. ${saidLines.join(" · ")}`);
+    setBulk("");
+  }
 
   return (
     <Card
@@ -104,6 +141,14 @@ export function LinksPanel({ batchId, products, locked }: { batchId: string; pro
           : <>Paste each new product&rsquo;s own page under its name and its description, details and pictures are taken from it. A product with no link is left exactly as it is. Flöda looks at the page&rsquo;s pictures and keeps the ones in the colours you ordered, leaving the other colours&rsquo; out; where you ordered several colours, each colour&rsquo;s variants get its own picture. Opening the page with your colour selected before copying the link helps when a brand only shows one colour at a time.</>}
         {read > 0 && <> {read} read so far.</>}
       </p>
+      {open && own.length > 1 && !locked && (
+        <details className="mb-3 rounded-lg border border-[var(--line-soft)] p-3">
+          <summary className="cursor-pointer text-sm font-medium">Paste several links at once</summary>
+          <p className="mt-1 text-xs text-[var(--ink-soft)]">One per line. A link whose address names the product goes to that product; the rest go, in order, to the products without a link. What went where is said under each product.</p>
+          <textarea rows={4} value={bulk} onChange={(e) => setBulk(e.target.value)} className="mt-2 w-full rounded-lg border border-[var(--line)] bg-white px-3 py-1.5 font-mono text-xs" placeholder={"https://brand.com/products/merino-crew-sweater\nhttps://brand.com/products/trail-runner-2"} />
+          <div className="mt-2 flex items-center gap-3"><Button size="sm" onClick={() => void placeBulk()} disabled={!bulk.trim()}>Place the links</Button>{bulkSaid && <span className="text-xs text-[var(--ink-soft)]">{bulkSaid}</span>}</div>
+        </details>
+      )}
       {open && (
         <ul className="max-h-[28rem] space-y-3 overflow-auto pr-1">
           {own.map((p) => {

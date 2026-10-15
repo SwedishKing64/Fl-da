@@ -89,7 +89,8 @@ person back to (`/billing/paid`, `/billing/cancelled`, `/billing/portal-done`) s
 "Check the key". Stripe is reached with plain fetch, no SDK. On the vendor: `STRIPE_SECRET_KEY`,
 `STRIPE_WEBHOOK_SECRET` (the endpoint is `https://<vendor>/api/billing/webhook`, events
 `checkout.session.completed` and `customer.subscription.*`) and a price id per plan in
-`STRIPE_PRICE_STARTER`, `STRIPE_PRICE_SHOP`, `STRIPE_PRICE_UNLIMITED`; with any of them missing
+`STRIPE_PRICE_STARTER`, `STRIPE_PRICE_SHOP`, `STRIPE_PRICE_UNLIMITED` (recurring every two
+weeks); with any of them missing
 the buttons say paying online is not set up and name the support address instead. **The support
 address** is one constant (`support.ts`, `NEXT_PUBLIC_FLODA_SUPPORT_EMAIL`, hello@floda.ai until
 it is set; the desktop workflow passes `vars.FLODA_SUPPORT_EMAIL`), used by every page, notice
@@ -272,20 +273,25 @@ Everything in `HANDOVER.md` under "Working on it" applies. In addition:
   happened, the plans, a Subscribe button that writes to hello@floda.ai with the key, and a field
   for a new key. Nothing is charged by the app; a person turns the key back on. Staff see who to
   ask. The vendor's own deployment and development (no `FLODA_LICENCE_SERVER`) have no gate.
-- Plans (`src/lib/catalog/plans.ts`) are sized by the month's paperwork: Starter $49 (2 invoices,
-  about 100 products, one person, $20 of reading), Shop $149 (10 invoices, about 500 products,
-  everyone, $60 of reading; the founding price, held), Unlimited $299 (no counts, $150 of
-  reading). The ids used before there were tiers (`founding`, `standard`, `trial`) all mean the
-  Shop plan. A copy reports its month's invoices and products at check-in; the Clients page shows
-  them against the plan, the copy's Settings and a banner say when a month has gone past it, and
-  nothing stops: the reading allowance (set from the plan, editable per client) is the only hard
-  limit. The landing page sells a 14-day trial on any plan, and promises that a forward-deployed
+- Plans (`src/lib/catalog/plans.ts`) are billed and sized by the fortnight (`PERIOD`): Starter
+  $49 (no invoice count, one person, $20 of reading, described as "about 40 invoices of 5
+  products" from `READING_CENTS_PER_PRODUCT`, a deliberately high 10c a product), Shop $149 (10
+  invoices, about 500 products, everyone, $60 of reading; the founding price, held), Unlimited
+  $299 (no counts, $150 of reading). The ids used before there were tiers (`founding`,
+  `standard`, `trial`) all mean the Shop plan. The fortnight is counted from a fixed Monday
+  (`periodKey` / `periodStart` in `ai-usage.ts`, kept in the `Client` columns still named
+  `aiMonth` and `useMonth`), so the copy and the vendor agree on where one ends. A copy reports
+  its fortnight's invoices and products at check-in (the `monthBatches` wire names are kept); the
+  Clients page shows them against the plan, the copy's Settings and a banner say when a fortnight
+  has gone past it, and nothing stops: the reading allowance (set from the plan, editable per
+  client) is the only hard limit. The Stripe prices behind the plans are recurring every two
+  weeks. The landing page sells a 14-day trial on any plan, and promises that a forward-deployed
   engineer sets every shop up on a call, on its own invoices. The sums on it come from the shop
   it was built in: a 50-product order is about 12 hours and $350 of staff time by hand, 2 hours
   and $60 through Flöda, checking included. The pricing section now carries a savings calculator
-  (`Calculator.tsx`): hourly wage, products a month, hours per 100 products by hand and the
+  (`Calculator.tsx`): hourly wage, products a fortnight, hours per 100 products by hand and the
   shop's own checking time are sliders; Flöda's own time is about 15 minutes per 100
-  products with a 5-minute floor and economies of scale (`15 × (n/100)^0.75`, never under 5); the plan is suggested from the volume and the monthly saving is net of its price.
+  products with a 5-minute floor and economies of scale (`15 × (n/100)^0.75`, never under 5); the plan is suggested from the volume and the fortnight's saving is net of its price.
 - Reading through Flöda (`src/app/api/ai/[...path]/route.ts`, `src/lib/catalog/ai-usage.ts`): a
   copy on a plan with no key of its own has its SDK pointed at the vendor's `/api/ai` with the
   licence key as bearer token (`anthropic.ts` `setRelay`, put in force by `shop-profile.ts` from

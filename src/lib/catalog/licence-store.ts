@@ -4,6 +4,7 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { periodStart } from "./ai-usage";
 import { prisma, parseJson } from "./db";
 import { CHECK_EVERY_MS, LICENCE_KEY_SETTING, askForBilling, askForTrial, askVendor, isServerUrl, licenceFromAnswer, licenceServer, licenceServers, licenceState, reachVendor, type CheckIn, type Licence, type LicenceState } from "./licence";
 import { refreshConventions, shopProfile } from "./shop-profile";
@@ -50,9 +51,9 @@ export async function installId(): Promise<string> {
   return id;
 }
 
-/** Invoices and products built since the first of the month. */
+/** Invoices and products built since the fortnight began. */
 export async function monthUse(now = new Date()): Promise<MonthUse> {
-  const from = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const from = periodStart(now);
   const [invoices, products] = await Promise.all([
     prisma.importBatch.count({ where: { createdAt: { gte: from } } }),
     prisma.product.count({ where: { batch: { createdAt: { gte: from } } } }),

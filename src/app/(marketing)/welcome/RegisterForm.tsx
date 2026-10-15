@@ -44,7 +44,7 @@ export function RegisterForm({ plan = "shop" }: { plan?: PlanId }) {
       <label>
         Plan
         <select id="lead-plan" name="plan" defaultValue={plan}>
-          {PLANS.map((p) => <option key={p.id} value={p.id}>{p.name} · ${p.price} a month{p.founding ? ", founding price" : ""}</option>)}
+          {PLANS.map((p) => <option key={p.id} value={p.id}>{p.name} · ${p.price} a fortnight{p.founding ? ", founding price" : ""}</option>)}
         </select>
       </label>
       <label>

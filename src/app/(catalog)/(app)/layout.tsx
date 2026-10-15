@@ -15,7 +15,7 @@ import { Logo } from "@/app/Logo";
 import { vendorMode } from "@/lib/catalog/licence";
 import { openMode } from "@/lib/catalog/open";
 import { currentLicence, monthUse, getServerOverride, servers } from "@/lib/catalog/licence-store";
-import { describeMonthUse, overPlan, planOf } from "@/lib/catalog/plans";
+import { describePeriodUse, overPlan, planOf } from "@/lib/catalog/plans";
 import "../catalog.css";
 import { SUPPORT_EMAIL } from "@/lib/catalog/support";
 
@@ -44,8 +44,8 @@ export default async function CatalogLayout({ children }: { children: React.Reac
   const licence = await currentLicence();
   // A copy that may not run shows the paywall instead of the app, data untouched behind it.
   if (licence.kind === "none" || licence.kind === "lapsed") return <Paywall state={licence} isAdmin={user.role === "ADMIN"} name={user.name.trim().split(/\s+/)[0] || user.name} servers={await servers()} override={await getServerOverride()} />;
-  // The plan, and how far through it the month is, sits in the sidebar for everyone: a trial that
-  // ends on Thursday or a month past its plan should never be a surprise on the way to the paywall.
+  // The plan, and how far through it the fortnight is, sits in the sidebar for everyone: a trial that
+  // ends on Thursday or a fortnight past its plan should never be a surprise on the way to the paywall.
   const standing = licence.kind === "ok" ? await monthUse().then((use) => ({ plan: planOf(licence.licence.plan), use, trial: licence.licence.status === "TRIAL", daysLeft: licence.daysLeft, over: overPlan(planOf(licence.licence.plan), use) })).catch(() => null) : null;
   const pastPlan = standing && standing.over && user.role === "ADMIN" ? standing : null;
   const endingSoon = standing && standing.trial && standing.daysLeft !== null && standing.daysLeft <= 3;
@@ -84,7 +84,7 @@ export default async function CatalogLayout({ children }: { children: React.Reac
                 <span className="text-[12.5px] font-semibold text-white">{standing.plan.name} plan{standing.trial ? " · trial" : ""}</span>
                 {standing.daysLeft !== null && <span className={`text-[11px] ${endingSoon ? "font-semibold text-[#ffd591]" : "text-white/60"}`}>{standing.daysLeft} day{standing.daysLeft === 1 ? "" : "s"} left</span>}
               </div>
-              <div className={`mt-0.5 text-[11px] ${standing.over ? "font-semibold text-[#ffd591]" : "text-white/55"}`}>{describeMonthUse(standing.plan, standing.use)}{standing.over ? " — past the plan" : ""}</div>
+              <div className={`mt-0.5 text-[11px] ${standing.over ? "font-semibold text-[#ffd591]" : "text-white/55"}`}>{describePeriodUse(standing.plan, standing.use)}{standing.over ? " — past the plan" : ""}</div>
             </Link>
           )}
           <div className="mb-3 flex items-center gap-1.5 px-1 text-[11px] text-white/55">
@@ -116,7 +116,7 @@ export default async function CatalogLayout({ children }: { children: React.Reac
         )}
         {pastPlan && (
           <div className="mb-4 rounded-[12px] border border-[#f5c87a] bg-[#fff7e6] px-4 py-3 text-[13.5px] text-[#7a4b00]">
-            <strong>This month has gone past the {pastPlan.plan.name} plan</strong> ({describeMonthUse(pastPlan.plan, pastPlan.use)}). Nothing stops. Write to {SUPPORT_EMAIL} to move up a plan.
+            <strong>This fortnight has gone past the {pastPlan.plan.name} plan</strong> ({describePeriodUse(pastPlan.plan, pastPlan.use)}). Nothing stops. Write to {SUPPORT_EMAIL} to move up a plan.
           </div>
         )}
         {isEphemeralDb() && (

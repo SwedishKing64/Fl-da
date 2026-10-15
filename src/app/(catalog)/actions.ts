@@ -1862,8 +1862,8 @@ const clientSchema = z.object({
   status: z.enum(["TRIAL", "ACTIVE", "PAUSED", "ENDED"]).default("TRIAL"),
   expiresAt: z.string().trim().default(""),
   notes: z.string().trim().max(2000).default(""),
-  /** Dollars a month their reading through Flöda may cost; empty for the plan's own allowance, 0 for no limit. */
-  aiCap: z.string().trim().regex(/^(\d{0,5}(\.\d{1,2})?)?$/, "The reading allowance is dollars a month, like 60, or empty for the plan's own").default(""),
+  /** Dollars a fortnight their reading through Flöda may cost; empty for the plan's own allowance, 0 for no limit. */
+  aiCap: z.string().trim().regex(/^(\d{0,5}(\.\d{1,2})?)?$/, "The reading allowance is dollars a fortnight, like 60, or empty for the plan's own").default(""),
 });
 
 /** The allowance in cents: what was typed, or the plan's own when nothing was. */

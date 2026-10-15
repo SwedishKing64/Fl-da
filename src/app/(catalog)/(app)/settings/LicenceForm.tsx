@@ -7,11 +7,11 @@ import { ActionForm } from "@/app/(catalog)/ActionForm";
 import { LicenceServerForm } from "./LicenceServerForm";
 import { BillingButtons } from "./BillingButtons";
 import type { LicenceState } from "@/lib/catalog/licence";
-import { describeMonthUse, describePlanSize, overPlan, planOf, type MonthUse } from "@/lib/catalog/plans";
+import { describePeriodUse, describePlanSize, overPlan, planOf, type PeriodUse } from "@/lib/catalog/plans";
 import { SUPPORT_EMAIL } from "@/lib/catalog/support";
 
 /** The key Flöda sent the shop, and what Flöda last said about it. */
-export function LicenceForm({ state, use, gated = false, servers = [], override = "" }: { state: LicenceState; use: MonthUse; gated?: boolean; servers?: string[]; override?: string }) {
+export function LicenceForm({ state, use, gated = false, servers = [], override = "" }: { state: LicenceState; use: PeriodUse; gated?: boolean; servers?: string[]; override?: string }) {
   const [result, action, pending] = useActionState(activateLicenceAction, null);
   const plan = state.kind === "ok" ? planOf(state.licence.plan) : null;
   return (
@@ -19,8 +19,8 @@ export function LicenceForm({ state, use, gated = false, servers = [], override 
     <ActionForm action={action} state={result} className="space-y-3">
       {state.kind === "ok" && plan && (
         <Alert tone="success">
-          Licensed to <strong>{state.licence.client}</strong> on the <strong>{plan.name}</strong> plan{state.licence.status === "TRIAL" ? " (trial)" : ""}{state.daysLeft !== null ? `, ${state.daysLeft} day${state.daysLeft === 1 ? "" : "s"} left` : ""}. {describePlanSize(plan)}; {describeMonthUse(plan, use)}.
-          {overPlan(plan, use) ? ` This month has gone past the plan. Nothing stops; write to ${SUPPORT_EMAIL} to move up.` : ""}
+          Licensed to <strong>{state.licence.client}</strong> on the <strong>{plan.name}</strong> plan{state.licence.status === "TRIAL" ? " (trial)" : ""}{state.daysLeft !== null ? `, ${state.daysLeft} day${state.daysLeft === 1 ? "" : "s"} left` : ""}. {describePlanSize(plan)}; {describePeriodUse(plan, use)}.
+          {overPlan(plan, use) ? ` This fortnight has gone past the plan. Nothing stops; write to ${SUPPORT_EMAIL} to move up.` : ""}
           {state.stale ? " Flöda has not been reached lately; it will be asked again." : ""}
         </Alert>
       )}

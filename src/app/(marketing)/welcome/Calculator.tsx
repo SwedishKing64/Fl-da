@@ -5,7 +5,7 @@ import { PLANS, planOf, type PlanId } from "@/lib/catalog/plans";
 
 /**
  * What Flöda saves a shop, in its own numbers. Three things the shop knows (what an hour costs,
- * how many products a month, how long a hundred take by hand) and one thing Flöda knows (it reads,
+ * how many products a fortnight, how long a hundred take by hand) and one thing Flöda knows (it reads,
  * matches and prices a hundred products in about fifteen minutes), with the checking time left
  * adjustable because it is the shop's. The plan is suggested from the volume.
  */
@@ -56,7 +56,7 @@ export function Calculator() {
           <input type="range" min={20} max={80} step={1} value={wage} onChange={(e) => setWage(Number(e.target.value))} aria-label="Hourly wage" />
         </label>
         <label>
-          <span className="l">Products/variants you list a month</span>
+          <span className="l">Products/variants you list a fortnight</span>
           <span className="v">{products}</span>
           <input type="range" min={25} max={2000} step={25} value={products} onChange={(e) => setProducts(Number(e.target.value))} aria-label="Products/variants a month" />
         </label>
@@ -82,7 +82,7 @@ export function Calculator() {
         <div className="rows">
           <div><span>By hand</span><b>{hours(byHandHours)} · {money(byHandCost)}</b></div>
           <div><span>Through Flöda</span><b>{hours(flodaHours)} · {money(flodaStaffCost)}</b></div>
-          <div><span>Suggested plan</span><b>{plan.name} · ${plan.price} a month</b></div>
+          <div><span>Suggested plan</span><b>{plan.name} · ${plan.price} a fortnight</b></div>
           <div><span>Pays for itself</span><b>{times >= 1 ? `${times >= 10 ? Math.round(times) : Math.round(times * 10) / 10} times over` : "not at this volume"}</b></div>
         </div>
         <p className="fine">Flöda reads, matches, prices and illustrates about 100 products/variants in {FLODA_MIN_PER_100} minutes, never under {FLODA_FLOOR_MIN} for an order of any size, and less per product/variant on a big order, because the reading and the brand pages run side by side. The checking is yours and the slider is how long you give it. The plan is suggested from the products/variants a month: {PLANS.map((p) => `${p.name} up to ${p.products ?? "any number"}`).join(", ")}.</p>

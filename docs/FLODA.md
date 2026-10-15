@@ -62,7 +62,10 @@ leads from the landing page become clients on a 14-day trial), and answers `/api
 other copy is built with `FLODA_LICENCE_SERVER` pointing at the vendor; the shop enters its key
 in Settings, the copy checks in about daily, keeps working for a month if it cannot reach the
 vendor, and shows a banner — never a lockout — when the vendor says the licence is paused, ended
-or unknown. `licence.ts` is the pure half, `licence-store.ts` the copy's side.
+or unknown. `licence.ts` is the pure half, `licence-store.ts` the copy's side. The plan, the days
+left on a trial and the month's use against the plan sit in the sidebar for everyone, amber when
+the trial is three days from ending or the month is past the plan, with a banner for the former,
+so neither is a surprise on the way to the paywall.
 
 **The desktop app.** `desktop/main.cjs` (Electron) opens a window on the same Next.js server,
 started on this machine on a free port with a SQLite database and a files folder in the user's
@@ -92,6 +95,15 @@ a carton price read as a unit price). The margin band — warn under the floor, 
 ceiling, 20% and 80% to start — is on the Pricing page. Errors cannot be dismissed; warnings can.
 A barcode of an odd length is a warning. The sample invoices carry barcodes with real check digits.
 
+**A product that could be one of several.** A batch is checked against what the shop already
+sells (`reconcileBatch` in `shopify.ts`): the store's own catalogue when one is connected, read
+again when the copy of it is a day old, otherwise the listings learned from the shop's export
+(handles and barcodes). Each built product is placed by barcode, SKU and handle
+(`match-candidates.ts`). One match is taken and the handle becomes the shop's, since that is what
+the CSV updates by; none is a new product; more than one is never guessed at: the product is
+`AMBIGUOUS`, which is an error that stops the export, and the drawer on the review grid lists
+what it could be so a person says which, or that it is new. That decision is kept across checks.
+The check runs again right before a CSV is made, and from the "Check against the shop" button.
 **A supplier's layout changes.** A remembered mapping is keyed by the file's headings, and a
 file whose headings differ in any way (a column added, dropped, renamed or reordered) used to be
 read from scratch without a word, losing what the shop had chosen. Now `mappingState` finds the

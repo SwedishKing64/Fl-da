@@ -13,7 +13,7 @@ import { logAudit } from "@/lib/catalog/audit";
 import { getSettings, saveSettings } from "@/lib/catalog/settings";
 import { checkImageUrl, recordLibraryImages } from "@/lib/catalog/images";
 import { backupNow, restoreBackup } from "@/lib/catalog/backup";
-import { pushBatch, reconcileBatch, rollbackBatch, syncCatalog, ShopifyError } from "@/lib/catalog/shopify";
+import { catalogueKnown, decideMatch, pushBatch, reconcileBatch, refreshCatalogueIfStale, rollbackBatch, ShopifyError, type ReconcileCounts } from "@/lib/catalog/shopify";
 import { enrichBatchSeo } from "@/lib/catalog/seo";
 import { slugify } from "@/lib/catalog/handle";
 import { CURRENCIES, emptyLineItem, type AppSettings } from "@/lib/catalog/types";
@@ -563,6 +563,12 @@ export async function verifyImagesAction(batchId: string): Promise<ActionResult<
 export async function exportBatchAction(batchId: string): Promise<ExportResult> {
   const user = await requireUser();
   try {
+    // Checked against what the shop sells right before the file is made, not only whenever
+    // somebody pressed the button: a product that fits two listings is refused by name below.
+    if (await catalogueKnown()) {
+      await refreshCatalogueIfStale(user.id).catch(() => undefined);
+      await reconcileBatch(batchId);
+    }
     const result = await exportBatch(batchId, user.id);
     revalidatePath(`/batches/${batchId}`);
     return result;
@@ -574,11 +580,10 @@ export async function exportBatchAction(batchId: string): Promise<ExportResult> 
   }
 }
 
-export async function reconcileAction(batchId: string): Promise<ActionResult<{ new: number; variantAdd: number; update: number }>> {
+export async function reconcileAction(batchId: string): Promise<ActionResult<ReconcileCounts>> {
   const user = await requireUser();
   try {
-    const cached = await prisma.shopifyCatalogItem.count();
-    if (cached === 0) await syncCatalog(user.id);
+    await refreshCatalogueIfStale(user.id);
     const data = await reconcileBatch(batchId);
     await logAudit("batch.reconciled", { batchId, userId: user.id, details: data });
     return { ok: true, data };
@@ -606,6 +611,17 @@ export async function restoreBackupAction(name: string): Promise<ActionResult> {
     await logAudit("backup.restored", { userId: user.id, details: { name, safety: safety.name } });
     revalidatePath("", "layout");
     return { ok: true, message: `Restored from ${name}. What was there is kept as ${safety.name}. Restart Flöda now so every page reads the restored data.` };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+export async function decideMatchAction(productId: string, choice: "new" | string): Promise<ActionResult> {
+  const user = await requireUser();
+  try {
+    await decideMatch(productId, choice);
+    await logAudit("product.match_decided", { userId: user.id, details: { productId, choice } });
+    return { ok: true };
   } catch (err) {
     return fail(err);
   }

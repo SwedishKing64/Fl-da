@@ -38,7 +38,7 @@ export default async function ExportPage(props: PageProps<"/batches/[id]/export"
             productCount={review.products.length}
             shopifyConfigured={Boolean(settings.shopify.storeDomain && settings.shopify.accessToken)}
             reconciled={reconciled}
-            counts={{ new: review.products.filter((p) => p.reconcileStatus === "NEW").length, variantAdd: review.products.filter((p) => p.reconcileStatus === "VARIANT_ADD").length, update: review.products.filter((p) => p.reconcileStatus === "UPDATE").length }}
+            counts={{ new: review.products.filter((p) => p.reconcileStatus === "NEW").length, variantAdd: review.products.filter((p) => p.reconcileStatus === "VARIANT_ADD").length, update: review.products.filter((p) => p.reconcileStatus === "UPDATE").length, ambiguous: review.products.filter((p) => p.reconcileStatus === "AMBIGUOUS").length }}
             isAdmin={user.role === "ADMIN"}
             files={batch.exports.map((f) => ({ id: f.id, filename: f.filename, rowCount: f.rowCount, sizeBytes: f.sizeBytes, partIndex: f.partIndex, partCount: f.partCount, createdAt: f.createdAt.toISOString() }))}
           />

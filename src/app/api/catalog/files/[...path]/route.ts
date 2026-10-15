@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { promises as fs } from "node:fs";
-import { resolveStoragePath } from "@/lib/catalog/storage";
+import { readPrivateBlob, resolveStoragePath } from "@/lib/catalog/storage";
 
 export const runtime = "nodejs";
 
@@ -10,8 +10,9 @@ const TYPES: Record<string, string> = {
 };
 
 /**
- * Serves stored files. Images are public (Shopify must be able to fetch them from the CSV
- * URLs); everything else (invoices, exports) requires a signed-in user.
+ * Serves stored files, from a private Blob store or the disk. Images are public (Shopify must be
+ * able to fetch them from the CSV URLs); everything else (invoices, exports) requires a signed-in
+ * user.
  */
 export async function GET(req: NextRequest, ctx: RouteContext<"/api/catalog/files/[...path]">) {
   const { path } = await ctx.params;
@@ -27,7 +28,8 @@ export async function GET(req: NextRequest, ctx: RouteContext<"/api/catalog/file
     return NextResponse.json({ error: "Bad path" }, { status: 400 });
   }
   try {
-    const data = await fs.readFile(abs);
+    // A private Blob store first (the business's), then the disk.
+    const data = (await readPrivateBlob(rel)) ?? (await fs.readFile(abs));
     const ext = rel.split(".").pop()?.toLowerCase() ?? "";
     return new NextResponse(new Uint8Array(data), {
       headers: { "Content-Type": TYPES[ext] ?? "application/octet-stream", "Cache-Control": rel.startsWith("images/") ? "public, max-age=31536000, immutable" : "private, no-store" },

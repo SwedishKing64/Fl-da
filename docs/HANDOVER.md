@@ -194,6 +194,15 @@ from its QuickBooks list, batch PDFs split into one bill per invoice) live in Ru
   Bills for QuickBooks writes the shop's own one-row-per-bill sheet instead of the line layout,
   and splits a scanned batch PDF of any size into one bill per invoice.
 - 2026-10-14 Bills take the supplier's name from the shop's QuickBooks supplier list.
+- 2026-10-15 The business's Blob store is private, and uploads failed ("Cannot use public access
+  on a private store"). Storage now learns the store is private from the first refused save and
+  keeps files privately under relative paths, served by `/api/catalog/files/…`: pictures to
+  anyone (Shopify fetches them at the site's own address), invoices and exports only when signed
+  in. "Copy from the old site" rewrites old public addresses the same way.
+- 2026-10-14 The supplier list learns from bills downloaded. A page whose reading came back cut
+  off ("Unterminated string in JSON") is fixed: thinking shares `max_tokens` with the answer, so
+  the bill reader now allows 64,000 and asks once more with less thinking if an answer still
+  will not parse.
 
 - 2026-10-12 Name matches confirmed before a delivery applies; order forms with a size column
   per line read the size. Packs filed on the Outdoor menu; Type spelling; retagging on Type change.

@@ -41,10 +41,10 @@ export function AiStep({ source, tail }: { source: KeySource; tail: string }) {
       <p className="mb-4 text-[14px] text-[var(--ink-soft)]">
         Spreadsheets and CSVs are read on their own. PDFs, photographs of paperwork, handwriting and the brand pages that supply descriptions and pictures are read by Claude{included ? ", and that reading is included in your plan." : ", which needs an API key. Usage is billed by Anthropic to the key\u2019s account; a season\u2019s paperwork costs a few dollars."}
       </p>
-      <ApiKeyForm source={source} tail={tail} next="/setup?step=done" />
+      <ApiKeyForm source={source} tail={tail} next="/setup?step=suppliers" />
       <div className="mt-5 flex items-center justify-between border-t border-[var(--line-soft)] pt-4 text-[13px] text-[var(--ink-soft)]">
         <span>{included ? "" : "You can add it later in Settings."}</span>
-        <Button size="sm" variant={included ? "primary" : "ghost"} disabled={pending} onClick={() => start(async () => { if (!included) await skipSetupStepAction("ai"); router.push("/setup?step=done"); })}>{included ? "Continue →" : "Skip for now"}</Button>
+        <Button size="sm" variant={included ? "primary" : "ghost"} disabled={pending} onClick={() => start(async () => { if (!included) await skipSetupStepAction("ai"); router.push("/setup?step=suppliers"); })}>{included ? "Continue →" : "Skip for now"}</Button>
       </div>
     </Card>
   );

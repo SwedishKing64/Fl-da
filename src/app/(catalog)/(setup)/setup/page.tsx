@@ -10,6 +10,12 @@ import { LearnStep } from "./LearnStep";
 import { AiStep } from "./AiStep";
 import { HouseStep } from "./HouseStep";
 import { DoneStep } from "./DoneStep";
+import { SuppliersStep } from "./SuppliersStep";
+import { TrialStep } from "./TrialStep";
+import { licenceServer } from "@/lib/catalog/licence";
+import { currentLicence } from "@/lib/catalog/licence-store";
+import { prisma } from "@/lib/catalog/db";
+import { CANONICAL_FIELDS } from "@/lib/catalog/types";
 import { Stepper, type SetupStep } from "./Stepper";
 
 export const dynamic = "force-dynamic";
@@ -31,9 +37,12 @@ export default async function SetupPage({ searchParams }: { searchParams: Promis
   await ensureConventions();
 
   const { step: asked } = await searchParams;
-  const [profile, learned, storedKey, house, tagRules] = await Promise.all([getShopProfile(), getLearnedVocabulary(), getStoredApiKey(), getHouseConventions(), houseTagRules()]);
-  const wanted = (["shop", "learn", "house", "ai", "done"] as const).find((s) => s === asked);
-  const step: SetupStep = wanted ?? (!profile.name ? "shop" : !learned && !profile.skipped.learn ? "learn" : !house.savedAt && !profile.skipped.house ? "house" : apiKeySource() === "none" && !profile.skipped.ai ? "ai" : "done");
+  const [profile, learned, storedKey, house, tagRules, templates, batches] = await Promise.all([getShopProfile(), getLearnedVocabulary(), getStoredApiKey(), getHouseConventions(), houseTagRules(), prisma.mappingTemplate.count(), prisma.importBatch.count()]);
+  // A copy that checks a licence picks its plan before anything else; the vendor and development do not.
+  const needsPlan = Boolean(licenceServer()) && (await currentLicence()).kind === "none";
+  const wanted = (["plan", "shop", "learn", "house", "ai", "suppliers", "done"] as const).find((s) => s === asked && (s !== "plan" || licenceServer()));
+  const suppliersDone = templates > 0 || batches > 0 || Boolean(profile.skipped.suppliers);
+  const step: SetupStep = wanted ?? (needsPlan ? "plan" : !profile.name ? "shop" : !learned && !profile.skipped.learn ? "learn" : !house.savedAt && !profile.skipped.house ? "house" : apiKeySource() === "none" && !profile.skipped.ai ? "ai" : !suppliersDone ? "suppliers" : "done");
 
   return (
     <>
@@ -43,6 +52,7 @@ export default async function SetupPage({ searchParams }: { searchParams: Promis
       {step === "learn" && <LearnStep learned={learned} />}
       {step === "house" && <HouseStep house={house} tagRules={tagRules} kinds={productTypes()} />}
       {step === "ai" && <AiStep source={apiKeySource()} tail={keyTail(storedKey)} />}
+      {step === "suppliers" && <SuppliersStep fields={CANONICAL_FIELDS.map((f) => ({ key: f.key, label: f.label, required: Boolean(f.required) }))} templates={templates} next="/setup?step=done" />}
       {step === "done" && <DoneStep shopName={profile.name} learned={Boolean(learned)} aiReady={apiKeySource() !== "none"} skipped={profile.skipped} />}
     </>
   );

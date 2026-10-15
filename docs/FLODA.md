@@ -141,6 +141,13 @@ Everything in `HANDOVER.md` under "Working on it" applies. In addition:
   without its `next` package fails there, not on a customer's machine (as v0.1.3 did).
 - Leads from the landing page are kept in `AppSetting` under `floda.leads` until they become
   clients.
+- Setup has a "Your suppliers" step (`SuppliersStep.tsx`): one example of each supplier's
+  paperwork is read on the spot into a batch of its own (`createExampleBatchAction`), every
+  column is shown against what it was taken for (`exampleStateAction` over `mappingState`), the
+  person corrects anything in the wrong place, and "remember it" saves the layout as that
+  supplier's `MappingTemplate` and builds the products so they can be looked over. A PDF or photo
+  read by AI has no columns; its lines go to the review grid, where corrections count on the
+  supplier's record. The step can be skipped and comes back on the Home checklist.
 - Plans (`src/lib/catalog/plans.ts`) are sized by the month's paperwork: Starter $49 (2 invoices,
   about 100 products, one person, $20 of reading), Shop $149 (10 invoices, about 500 products,
   everyone, $60 of reading; the founding price, held), Unlimited $299 (no counts, $150 of

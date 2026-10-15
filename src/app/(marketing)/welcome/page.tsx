@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { RegisterForm } from "./RegisterForm";
 import Image from "next/image";
 import Link from "next/link";
-import { CountUp, Reveal, Tilt } from "./Motion";
+import { Reveal, Tilt } from "./Motion";
+import { Calculator } from "./Calculator";
 import { Faq } from "../Story";
 import { Site } from "../Shell";
 import { Story } from "../Story";
@@ -208,26 +209,10 @@ export default function WelcomePage() {
           <div className="wrap">
             <Reveal className="head">
               <span className="eyebrow">Pricing</span>
-              <h2>Priced by the month&rsquo;s paperwork. It pays for itself on the first order.</h2>
-              <p className="lede">A 50-product order takes a person about 12 hours to list by hand. Through Flöda it takes 2, checking included. The sums below are what that costs a shop.</p>
+              <h2>Priced by the month&rsquo;s paperwork. Work out what it saves you.</h2>
+              <p className="lede">Listing 100 products by hand is a day of someone&rsquo;s time. Flöda reads, matches and prices them in about 15 minutes, faster per product the bigger the order, and you check the grid. Put your own numbers in.</p>
             </Reveal>
-            <div className="sums" aria-label="What a 50-product order costs to list">
-              <Reveal className="sum" delay={0}>
-                <span className="sum-label">By hand</span>
-                <div className="sum-row"><span className="num"><CountUp to={12} /><small>hours</small></span><span className="bar" aria-hidden><i style={{ "--w": "100%" } as never} /></span></div>
-                <div className="sum-row"><span className="num"><CountUp to={350} prefix="$" /><small>in staff time</small></span><span className="bar" aria-hidden><i style={{ "--w": "100%" } as never} /></span></div>
-                <p>Typing names, sizes, colours and prices. Finding pictures. Writing a description. Checking it, because it was typed.</p>
-              </Reveal>
-              <Reveal className="sum with" delay={1}>
-                <span className="sum-label">Through Flöda</span>
-                <div className="sum-row"><span className="num"><CountUp to={2} /><small>hours, checking included</small></span><span className="bar" aria-hidden><i style={{ "--w": "16.7%" } as never} /></span></div>
-                <div className="sum-row"><span className="num"><CountUp to={60} prefix="$" /><small>in staff time</small></span><span className="bar" aria-hidden><i style={{ "--w": "17.1%" } as never} /></span></div>
-                <p>Reading, matching, pricing, pictures and descriptions done. Your two hours are spent checking the grid and pressing import.</p>
-              </Reveal>
-              <Reveal className="sum-line" delay={2}>
-                <b>About $290 of staff time kept on every order.</b> The Shop plan is $149 a month, so the first order of the month pays for it and every order after that is yours. A busy season at two orders a month keeps about $430.
-              </Reveal>
-            </div>
+            <Reveal delay={1}><Calculator /></Reveal>
             <div className="plans" aria-label="Plans">
               {PLANS.map((p, i) => (
                 <Reveal key={p.id} className={`tier${p.founding ? " featured" : ""}`} delay={i}>

@@ -52,9 +52,11 @@ mac:
   identity: null
   hardenedRuntime: false
   gatekeeperAssess: false
+  # CFBundleName is left as electron-builder sets it (Floda): Electron finds its helper apps by
+  # that name, so it has to match "Floda Helper.app" or the app stops as it starts ("Unable to
+  # find helper app"). The name people see is localised to Flöda in desktop/after-pack.cjs.
   extendInfo:
     CFBundleDisplayName: Flöda
-    CFBundleName: Flöda
 linux:
   target:
     - AppImage

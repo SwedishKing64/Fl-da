@@ -69,11 +69,16 @@ that belonged to one shop.
 - The desktop installers are unsigned until there is a Windows code-signing certificate and an
   Apple Developer account. Windows shows a SmartScreen notice. The Mac app is ad-hoc signed under
   the hardened runtime with Electron's entitlements (`desktop/after-pack.cjs`,
-  `entitlements.mac.plist`), so macOS says "unidentified developer" and right-click → Open gets
-  past it. Without a signature Apple silicon reports the app as "damaged", and without the JIT
+  `entitlements.mac.plist`), so macOS says it "could not verify" the app and System Settings →
+  Privacy & Security → Open Anyway gets past it (right-click → Open no longer does on macOS 15+).
+  Without a signature Apple silicon reports the app as "damaged", and without the JIT
   entitlement macOS 26 stops Electron as it starts (a trap in V8 before any of Flöda's code
-  runs). The bundle is `Floda.app` on disk and "Flöda" everywhere a person sees it. If a copy
-  from an earlier build says damaged: `xattr -dr com.apple.quarantine /Applications/Flöda.app`.
+  runs). The bundle is `Floda.app` on disk and "Flöda" everywhere a person sees it: the plist's
+  CFBundleName must stay `Floda`, because Electron finds its helper apps by that name and stops
+  at launch ("Unable to find helper app", a trap 110 ms in) when `Floda Helper.app` is not what
+  it looks for; the shown name comes from `InfoPlist.strings`, written in after-pack, and
+  `app.setName("Flöda")` in `main.cjs`. If a copy from an earlier build says damaged:
+  `xattr -dr com.apple.quarantine /Applications/Floda.app`.
 - One shop per install. The conventions are process-wide state, which is right for an installed
   copy and for one hosted copy per shop, and wrong for several shops in one deployment.
 

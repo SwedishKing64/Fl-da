@@ -592,6 +592,32 @@ export async function reconcileAction(batchId: string): Promise<ActionResult<Rec
   }
 }
 
+export async function makeDemoLinkAction(): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  try {
+    const { makeDemoToken } = await import("@/lib/catalog/demo");
+    await makeDemoToken();
+    await logAudit("demo.link_made", { userId: user.id });
+    revalidatePath("/settings");
+    return { ok: true };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+export async function revokeDemoLinkAction(): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  try {
+    const { revokeDemoToken } = await import("@/lib/catalog/demo");
+    await revokeDemoToken();
+    await logAudit("demo.link_revoked", { userId: user.id });
+    revalidatePath("/settings");
+    return { ok: true };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
 export async function backupNowAction(): Promise<ActionResult> {
   const user = await requireUser("ADMIN");
   try {

@@ -62,7 +62,10 @@ leads from the landing page become clients on a 14-day trial), and answers `/api
 other copy is built with `FLODA_LICENCE_SERVER` pointing at the vendor; the shop enters its key
 in Settings, the copy checks in about daily, keeps working for a month if it cannot reach the
 vendor, and shows a banner — never a lockout — when the vendor says the licence is paused, ended
-or unknown. `licence.ts` is the pure half, `licence-store.ts` the copy's side.
+or unknown. `licence.ts` is the pure half, `licence-store.ts` the copy's side. The plan, the days
+left on a trial and the month's use against the plan sit in the sidebar for everyone, amber when
+the trial is three days from ending or the month is past the plan, with a banner for the former,
+so neither is a surprise on the way to the paywall.
 
 **The desktop app.** `desktop/main.cjs` (Electron) opens a window on the same Next.js server,
 started on this machine on a free port with a SQLite database and a files folder in the user's

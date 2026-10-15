@@ -37,7 +37,11 @@ export default async function CatalogLayout({ children }: { children: React.Reac
   const licence = await currentLicence();
   // A copy that may not run shows the paywall instead of the app, data untouched behind it.
   if (licence.kind === "none" || licence.kind === "lapsed") return <Paywall state={licence} isAdmin={user.role === "ADMIN"} name={user.name.trim().split(/\s+/)[0] || user.name} />;
-  const pastPlan = licence.kind === "ok" && user.role === "ADMIN" ? await monthUse().then((use) => (overPlan(planOf(licence.licence.plan), use) ? { plan: planOf(licence.licence.plan), use } : null)).catch(() => null) : null;
+  // The plan, and how far through it the month is, sits in the sidebar for everyone: a trial that
+  // ends on Thursday or a month past its plan should never be a surprise on the way to the paywall.
+  const standing = licence.kind === "ok" ? await monthUse().then((use) => ({ plan: planOf(licence.licence.plan), use, trial: licence.licence.status === "TRIAL", daysLeft: licence.daysLeft, over: overPlan(planOf(licence.licence.plan), use) })).catch(() => null) : null;
+  const pastPlan = standing && standing.over && user.role === "ADMIN" ? standing : null;
+  const endingSoon = standing && standing.trial && standing.daysLeft !== null && standing.daysLeft <= 3;
 
   // The palette's contents come down with the page. There are never many batches, and matching
   // them in the browser means no request per keystroke and nothing to wait for.
@@ -67,6 +71,15 @@ export default async function CatalogLayout({ children }: { children: React.Reac
         </Link>
         <NavLinks isAdmin={user.role === "ADMIN"} vendor={vendor} />
         <div className="mt-auto px-4 pb-4 text-xs">
+          {standing && (
+            <Link href="/settings" className={`mb-3 block rounded-[12px] px-3 py-2.5 ring-1 ring-inset transition hover:bg-white/10 ${endingSoon || standing.over ? "bg-[#fff7e6]/15 ring-[#f5c87a]/60" : "bg-white/[0.05] ring-white/10"}`} title="Your plan, on Settings">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-[12.5px] font-semibold text-white">{standing.plan.name} plan{standing.trial ? " · trial" : ""}</span>
+                {standing.daysLeft !== null && <span className={`text-[11px] ${endingSoon ? "font-semibold text-[#ffd591]" : "text-white/60"}`}>{standing.daysLeft} day{standing.daysLeft === 1 ? "" : "s"} left</span>}
+              </div>
+              <div className={`mt-0.5 text-[11px] ${standing.over ? "font-semibold text-[#ffd591]" : "text-white/55"}`}>{describeMonthUse(standing.plan, standing.use)}{standing.over ? " — past the plan" : ""}</div>
+            </Link>
+          )}
           <div className="mb-3 flex items-center gap-1.5 px-1 text-[11px] text-white/55">
             <Kbd>⌘</Kbd><Kbd>K</Kbd> <span>to go anywhere</span>
           </div>
@@ -87,6 +100,11 @@ export default async function CatalogLayout({ children }: { children: React.Reac
           <Link href="/"><Logo size={18} /></Link>
           <NavLinks isAdmin={user.role === "ADMIN"} vendor={vendor} compact />
         </div>
+        {endingSoon && standing && (
+          <div className="mb-4 rounded-[12px] border border-[#f5c87a] bg-[#fff7e6] px-4 py-3 text-[13.5px] text-[#7a4b00]">
+            <strong>Your free trial ends in {standing.daysLeft} day{standing.daysLeft === 1 ? "" : "s"}.</strong> Nothing is lost when it does: your batches, suppliers and what Flöda has learned stay on this machine, and a key from hello@floda.ai opens it again. <Link href="/settings" className="font-semibold underline">Your plan</Link>
+          </div>
+        )}
         {pastPlan && (
           <div className="mb-4 rounded-[12px] border border-[#f5c87a] bg-[#fff7e6] px-4 py-3 text-[13.5px] text-[#7a4b00]">
             <strong>This month has gone past the {pastPlan.plan.name} plan</strong> ({describeMonthUse(pastPlan.plan, pastPlan.use)}). Nothing stops. Write to hello@floda.ai to move up a plan.

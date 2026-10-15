@@ -90,6 +90,81 @@ export function licenceServer(): string {
   return (process.env.FLODA_LICENCE_SERVER ?? "").trim().replace(/\/+$/, "");
 }
 
+/** Where to turn when the built-in address cannot be reached: the deployment's own address. */
+export const LICENCE_FALLBACKS = ["https://fl-da.vercel.app"];
+
+/**
+ * Every address this copy may ask, in order: the one a person typed in (Settings → Licence), the
+ * one the build baked in, then the fallbacks. A copy built with floda.ai before that name existed
+ * still finds its vendor. Empty when the copy checks no licence at all.
+ */
+export function licenceServers(override?: string | null): string[] {
+  const built = licenceServer();
+  if (!built) return [];
+  const list = [override ?? "", built, ...LICENCE_FALLBACKS].map((u) => u.trim().replace(/\/+$/, "")).filter(Boolean);
+  return Array.from(new Set(list));
+}
+
+/** Whether a URL is one this copy could ask: https, a hostname, nothing else. */
+export function isServerUrl(input: string): boolean {
+  try {
+    const u = new URL(input.trim());
+    return (u.protocol === "https:" || u.hostname === "localhost" || u.hostname === "127.0.0.1") && !u.search && !u.hash && (u.pathname === "/" || u.pathname === "");
+  } catch {
+    return false;
+  }
+}
+
+/** Whether an error is the network, not the vendor's answer: the next address is worth trying. */
+export function isReachFailure(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  if (err.name === "AbortError" || err.name === "TimeoutError") return true;
+  return /fetch failed|ENOTFOUND|ECONNREFUSED|ECONNRESET|EAI_AGAIN|certificate|network/i.test(`${err.message} ${describeCause(err)}`);
+}
+
+function describeCause(err: Error): string {
+  const cause = (err as { cause?: unknown }).cause;
+  if (!cause || typeof cause !== "object") return "";
+  const c = cause as { code?: string; message?: string };
+  return `${c.code ?? ""} ${c.message ?? ""}`.trim();
+}
+
+/** Why an address could not be reached, in words a shop can act on, naming the address. */
+export function describeReachFailure(server: string, err: unknown): string {
+  const host = (() => { try { return new URL(server).host; } catch { return server; } })();
+  if (!(err instanceof Error)) return `${host}: ${String(err)}`;
+  const detail = describeCause(err);
+  if (/ENOTFOUND|EAI_AGAIN/.test(detail)) return `${host}: the address does not exist — no DNS record answers for it`;
+  if (/ECONNREFUSED/.test(detail)) return `${host}: nothing is answering there`;
+  if (/certificate|CERT_|SELF_SIGNED/i.test(detail + err.message)) return `${host}: its certificate was refused`;
+  if (err.name === "AbortError" || err.name === "TimeoutError" || /ETIMEDOUT/.test(detail)) return `${host}: it did not answer within 15 seconds`;
+  return `${host}: ${detail || err.message}`;
+}
+
+let preferred: string | null = null;
+
+/**
+ * Ask the vendor at the first address that can be reached. An address that answered last time
+ * is tried first; one that cannot be reached is passed over for the next; when none can be, the
+ * error says why for each, so "fetch failed" is never all a person is told.
+ */
+export async function reachVendor<T>(servers: string[], call: (server: string) => Promise<T>): Promise<T> {
+  if (servers.length === 0) throw new Error("This copy is not set up to check a licence.");
+  const order = preferred && servers.includes(preferred) ? [preferred, ...servers.filter((s) => s !== preferred)] : servers;
+  const reasons: string[] = [];
+  for (const server of order) {
+    try {
+      const out = await call(server);
+      preferred = server;
+      return out;
+    } catch (err) {
+      if (!isReachFailure(err)) throw err;
+      reasons.push(describeReachFailure(server, err));
+    }
+  }
+  throw new Error(`${reasons.join("; ")}. Check the internet connection, or set Flöda's address under Settings → Licence.`);
+}
+
 export type LicenceState =
   | { kind: "unlicensed" } // no server configured: nothing to check
   | { kind: "none" } // a server is configured and no key has been entered

@@ -13,7 +13,7 @@ import { DoneStep } from "./DoneStep";
 import { SuppliersStep } from "./SuppliersStep";
 import { TrialStep } from "./TrialStep";
 import { licenceServer } from "@/lib/catalog/licence";
-import { currentLicence } from "@/lib/catalog/licence-store";
+import { currentLicence, getServerOverride, servers } from "@/lib/catalog/licence-store";
 import { prisma } from "@/lib/catalog/db";
 import { CANONICAL_FIELDS } from "@/lib/catalog/types";
 import { Stepper, type SetupStep } from "./Stepper";
@@ -47,7 +47,7 @@ export default async function SetupPage({ searchParams }: { searchParams: Promis
   return (
     <>
       <Stepper current={step} hidePlan={!licenceServer()} />
-      {step === "plan" && <TrialStep email={user.email} next="/setup?step=shop" />}
+      {step === "plan" && <TrialStep email={user.email} next="/setup?step=shop" servers={await servers()} override={await getServerOverride()} />}
       {step === "shop" && <ShopStep profile={profile} />}
       {step === "learn" && <LearnStep learned={learned} />}
       {step === "house" && <HouseStep house={house} tagRules={tagRules} kinds={productTypes()} />}

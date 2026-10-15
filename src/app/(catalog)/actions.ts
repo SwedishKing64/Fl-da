@@ -2045,6 +2045,24 @@ export async function dismissFeedbackAction(at: string): Promise<ActionResult> {
 }
 
 /** Start this copy's 14-day trial from inside the app. The vendor makes the key; it is kept here at once. */
+/** Where this copy asks for its licence, when the built-in address cannot be reached. */
+export async function setLicenceServerAction(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  return safely(async () => {
+    const user = await requireUser("ADMIN");
+    const { saveServerOverride, servers } = await import("@/lib/catalog/licence-store");
+    const url = String(formData.get("server") ?? "");
+    try {
+      await saveServerOverride(url);
+    } catch (err) {
+      return { ok: false, error: said(err) };
+    }
+    await logAudit("licence.server", { userId: user.id, details: { server: url.trim() } });
+    revalidatePath("", "layout");
+    const list = await servers();
+    return { ok: true, message: url.trim() ? `Flöda is asked at ${list[0]} from now on.` : `Back to the built-in address${list[0] ? ` (${list[0]})` : ""}.` };
+  });
+}
+
 export async function startTrialAction(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
   return safely(async () => {
     const user = await requireUser("ADMIN");

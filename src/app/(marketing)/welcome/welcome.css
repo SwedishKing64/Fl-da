@@ -419,3 +419,33 @@
 .floda .screens-frame .shot img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; object-position: top left; opacity: 0; transition: opacity 0.35s ease; }
 .floda .screens-frame .shot img.on { opacity: 1; }
 @media (min-width: 860px) { .floda .screens { grid-template-columns: 300px 1fr; gap: 28px; align-items: start; } .floda .screens-list { position: sticky; top: 100px; } }
+
+/* ----------------------------------------------------------------------- hero shot, facts */
+.floda .hero-shot .shot { position: relative; aspect-ratio: 16 / 9.4; overflow: hidden; background: var(--f-grey); }
+.floda .hero-shot .shot img { position: absolute; inset: 0; width: 100%; height: auto; display: block; }
+.floda .facts { padding-block: 40px 8px; }
+.floda .facts .wrap { display: grid; gap: 14px; }
+.floda .fact { display: grid; gap: 4px; padding: 18px 20px; border-radius: 16px; background: var(--f-white); border: 1px solid var(--f-line); }
+.floda .fact b { font-size: 15px; }
+.floda .fact span { font-size: 13.5px; line-height: 1.45; color: var(--f-ink-2); }
+@media (min-width: 760px) { .floda .facts .wrap { grid-template-columns: repeat(4, 1fr); } }
+
+/* ---------------------------------------------------------------------- tiles with shots */
+.floda .tile-shot { position: relative; aspect-ratio: 16 / 10; overflow: hidden; border-radius: 14px; border: 1px solid var(--f-line); background: var(--f-grey); margin-bottom: 8px; }
+.floda .tile-shot img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top left; }
+.floda .tile.big .tile-shot { aspect-ratio: auto; height: 100%; min-height: 240px; margin: 0; }
+@media (min-width: 860px) { .floda .tile.big .tile-shot { grid-area: ui; } }
+
+/* ------------------------------------------------------------------------- who, data, qa */
+@media (min-width: 760px) { .floda .fit.four { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 1000px) { .floda .fit.four { grid-template-columns: repeat(4, 1fr); } }
+.floda .data { display: grid; gap: 16px; }
+.floda .dcard { display: grid; gap: 10px; align-content: start; padding: 26px; border-radius: var(--f-r); background: var(--f-white); border: 1px solid var(--f-line); }
+.floda .dcard .ico { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; background: var(--f-tint); font-size: 20px; }
+.floda .dcard h3 { font-size: 19px; }
+.floda .dcard p { font-size: 15px; color: var(--f-ink-2); }
+.floda .dcard a { color: var(--f-meta); font-weight: 600; }
+@media (min-width: 760px) { .floda .data { grid-template-columns: repeat(3, 1fr); } }
+.floda .qa .head { max-width: 820px; }
+.floda .qa .lede a { color: var(--f-meta); font-weight: 600; }
+.floda .qa .faq { max-width: 820px; }

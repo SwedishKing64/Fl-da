@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { RegisterForm } from "./RegisterForm";
-import { CountUp, Demo, Reveal, Tilt } from "./Motion";
+import Image from "next/image";
+import Link from "next/link";
+import { CountUp, Reveal, Tilt } from "./Motion";
+import { Faq } from "../Story";
 import { Site } from "../Shell";
 import { Story } from "../Story";
 import { Screens } from "../Screens";
@@ -11,9 +14,6 @@ export const metadata: Metadata = {
   title: "Flöda",
   description: "Supplier paperwork in, shop-ready listings out. Flöda reads invoices, order forms, spec sheets and photographed paperwork into Shopify products, stock updates and price changes, and learns how your shop does it from your own catalogue.",
 };
-
-/** The suppliers whose paperwork Flöda already reads; every shop that onboards adds to the list. */
-const BRANDS = ["Burton", "Völkl", "Marker", "Dalbello", "Atomic", "Salomon", "Head", "Rossignol", "Osprey", "Spyder", "Helly Hansen", "Oakley", "Smith", "Nemo", "Black Diamond", "Jones", "Union", "Nitro", "Petzl", "Sea to Summit"];
 
 /**
  * The front door. Everything on it is true of the product as it stands today; nothing is
@@ -35,63 +35,26 @@ export default function WelcomePage() {
               <a href="#register" className="btn btn-meta btn-lg">Start free trial<span aria-hidden>→</span></a>
               <a href="#how" className="btn btn-ghost btn-lg">See how it works</a>
             </Reveal>
-            <Reveal delay={4} as="p" className="note">A desktop app for Windows and Mac, or hosted. Built inside a working ski and snowboard shop over a full buying season.</Reveal>
+            <Reveal delay={4} as="p" className="note">14 days free on any plan. An app for Windows and Mac, or hosted. Set up with you by a Flöda engineer.</Reveal>
 
             <Reveal delay={3} className="demo-wrap">
               <Tilt>
-                <Demo>
-                  <div className="window" aria-label="A supplier order form becoming shop listings">
-                    <div className="chrome"><i /><i /><i /><span className="url">floda.ai/batches/burton-w27</span><span className="live"><b /> reading</span></div>
-                    <div className="pane">
-                      <div className="side in-box">
-                        <div className="title">What the rep sent, photographed</div>
-                        <div className="form-line" style={{ "--i": 0 } as never}><span>10688 CUSTOM CAMBER 154</span><span>3</span><span className="pen">999</span></div>
-                        <div className="form-line" style={{ "--i": 1 } as never}><span>10688 CUSTOM CAMBER 158</span><span>2</span><span className="pen">YT 27</span></div>
-                        <div className="form-line" style={{ "--i": 2 } as never}><span>13170 FREESTYLE REFLEX M</span><span>4</span><span className="pen">-20%</span></div>
-                        <div className="form-line" style={{ "--i": 3 } as never}><span>10406 GORE GLOVE L</span><span>6</span><span className="pen">w/ liner</span></div>
-                        <div className="chat"><span className="bubble you">All 2026 jackets 30% off and into clearance</span><span className="bubble floda">Done. 212 cells changed, every one listed below.</span></div>
-                      </div>
-                      <div className="mid" aria-hidden><span className="beam" /><span className="arrow">→</span></div>
-                      <div className="side out-box">
-                        <div className="title">What goes into Shopify</div>
-                        <div className="listing" style={{ "--i": 0 } as never}>
-                          <div><b>Men&rsquo;s Custom Camber Snowboard 2027</b><span className="soft">154, 158 · colour-matched pictures · tech specs from the page</span><div className="tags"><span className="tag">snowboards</span><span className="tag">freestyle and all-mountain boards</span><span className="tag grey">2027</span></div></div>
-                          <div className="price">$999.00</div>
-                        </div>
-                        <div className="listing" style={{ "--i": 1 } as never}>
-                          <div><b>Men&rsquo;s Freestyle Re:Flex Bindings 2027</b><span className="soft">stock added to the listing you already have</span><div className="tags"><span className="tag">snowboard-bindings</span><span className="tag grey">20% off</span></div></div>
-                          <div className="price">+4</div>
-                        </div>
-                        <div className="listing" style={{ "--i": 2 } as never}>
-                          <div><b>Gore Glove 2027</b><span className="soft">a size you didn&rsquo;t stock before, added as a variant</span><div className="tags"><span className="tag">ski-gloves</span><span className="tag">outdoor</span></div></div>
-                          <div className="price">+6</div>
-                        </div>
-                        <div className="check"><b>✓</b> 3 products · 9 variants · ready to import</div>
-                      </div>
-                    </div>
-                  </div>
-                </Demo>
+                <div className="window hero-shot" aria-label="The review grid, with a supplier's order read into it">
+                  <div className="chrome"><i /><i /><i /><span className="url">Flöda · Northwind order 1182 · Review</span><span className="live"><b /> 7 products · 12 variants</span></div>
+                  <div className="shot"><Image src="/shots/review-grid.jpg" alt="The review grid: every product and variant from a supplier's order with SKU, barcode, options, stock, cost and price, and the order's totals" width={1800} height={1433} sizes="(min-width: 1100px) 1040px, 100vw" priority /></div>
+                </div>
               </Tilt>
             </Reveal>
           </div>
         </section>
 
-        {/* ------------------------------------------------------------- brands */}
-        <section className="brands" aria-label="Suppliers whose paperwork Flöda reads">
-          <div className="wrap"><p className="brands-label">Reads the paperwork of</p></div>
-          <div className="marquee" aria-hidden>
-            <div className="track">
-              {[...BRANDS, ...BRANDS].map((b, i) => <span key={`${b}-${i}`}>{b}</span>)}
-            </div>
-          </div>
-        </section>
-
-        {/* -------------------------------------------------------------- stats */}
-        <section className="stats">
+        {/* -------------------------------------------------------------- facts */}
+        <section className="facts" aria-label="In short">
           <div className="wrap">
-            <Reveal className="stat"><div className="num"><CountUp to={967} /></div><p>products across ten Shopify exports, measured before a single tagging rule was written.</p></Reveal>
-            <Reveal delay={1} className="stat"><div className="num"><CountUp to={1} /><small>season</small></div><p>of real supplier paperwork: order forms, spec exports, barcode lists, invoices, photographed and scribbled on.</p></Reveal>
-            <Reveal delay={2} className="stat"><div className="num"><CountUp to={0} /></div><p>changes to your store without you seeing them first. Flöda writes files; you import them.</p></Reveal>
+            <Reveal className="fact" delay={0}><b>Spreadsheets, PDFs, photos</b><span>Whatever the supplier sends, pen marks included.</span></Reveal>
+            <Reveal className="fact" delay={1}><b>Learns your catalogue</b><span>Your own Shopify export teaches it how you file, tag and name things.</span></Reveal>
+            <Reveal className="fact" delay={2}><b>You press import</b><span>Flöda writes the file. Nothing touches your store on its own.</span></Reveal>
+            <Reveal className="fact" delay={3}><b>Set up with you</b><span>A Flöda engineer on a call, on your own invoices, supplier by supplier.</span></Reveal>
           </div>
         </section>
 
@@ -111,8 +74,8 @@ export default function WelcomePage() {
               ]}
               panels={[
                 <div key="in" className="sp sp-in"><div className="sheet"><span className="pen">×3</span><i /><i /><i /><i /><span className="pen two">YT 27</span></div><div className="cap">What the rep sent, photographed</div></div>,
-                <div key="shape" className="sp sp-shape"><div className="rowz"><div className="r h"><span>Product</span><span>Type</span><span>Tags</span><span>Price</span></div><div className="r"><span>Custom Camber 154</span><span>Snowboards</span><span>freestyle · 2027</span><span>$999</span></div><div className="r"><span>Freestyle Re:Flex M</span><span>Bindings</span><span>snowboard-bindings</span><span>$299</span></div><div className="r"><span>Gore Glove L</span><span>Gloves</span><span>ski-gloves · outdoor</span><span>$89.95</span></div></div><div className="cap">Named, filed, tagged and priced your way</div></div>,
-                <div key="check" className="sp sp-check"><div className="grid"><div className="cell ok">✓ 3 products</div><div className="cell ok">✓ 9 variants</div><div className="cell warn">! 1 to check</div><div className="cell dl">↓ Shopify CSV</div></div><div className="cap">You check, you press import</div></div>,
+                <div key="shape" className="sp sp-shape"><div className="rowz"><div className="r h"><span>Product</span><span>Type</span><span>Tags</span><span>Price</span></div><div className="r"><span>Merino Crew Sweater</span><span>Knitwear</span><span>merino · winter</span><span>$139</span></div><div className="r"><span>Trail Runner 2</span><span>Footwear</span><span>trail-running</span><span>$179</span></div><div className="r"><span>Daypack 22L</span><span>Bags</span><span>daypacks · travel</span><span>$129</span></div></div><div className="cap">Named, filed, tagged and priced your way</div></div>,
+                <div key="check" className="sp sp-check"><div className="grid"><div className="cell ok">✓ 7 products</div><div className="cell ok">✓ 12 variants</div><div className="cell warn">! 1 to check</div><div className="cell dl">↓ Shopify CSV</div></div><div className="cap">You check, you press import</div></div>,
               ]}
             />
           </div>
@@ -123,46 +86,31 @@ export default function WelcomePage() {
           <div className="wrap">
             <Reveal className="head">
               <span className="eyebrow">What it does</span>
-              <h2>The jobs a buying season is made of, done in an afternoon.</h2>
+              <h2>The jobs a delivery is made of, done in an afternoon.</h2>
             </Reveal>
             <div className="bento">
               <Reveal className="tile big" delay={0}>
-                <div className="tile-ui">
-                  <div className="ui-row head"><span>Product</span><span>Type</span><span>Tags</span><span>Price</span></div>
-                  <div className="ui-row"><span>Mantra M7 177</span><span>Skis</span><span>freeride and powder skis</span><span>$1,299</span></div>
-                  <div className="ui-row"><span>Griffon 13 ID</span><span>Ski Bindings</span><span>alpine-bindings</span><span>$399</span></div>
-                  <div className="ui-row hl"><span>Mantra M7 inc Griffon</span><span>Ski Packages</span><span>ski packages</span><span>$1,639</span></div>
-                  <div className="ui-row"><span>Kore 99 184</span><span>Skis</span><span>frontside and all-mountain skis</span><span>$1,199</span></div>
-                </div>
+                <div className="tile-shot"><Image src="/shots/review-grid.jpg" alt="The review grid" width={1800} height={1433} sizes="(min-width: 860px) 560px, 100vw" /></div>
                 <h3>New products</h3>
                 <p>Invoices and order confirmations into ready-to-import listings: read, joined to the spec sheet and barcode list, named, categorised, tagged, priced, with descriptions, specs and colour-matched pictures from the brand&rsquo;s own page.</p>
               </Reveal>
               <Reveal className="tile" delay={1}>
-                <div className="tile-ui chat-ui">
-                  <span className="bubble you">Put the Spyder jackets 30% off and into clearance</span>
-                  <span className="bubble floda">46 products, 184 cells. Compare-at kept, clearance tag added.</span>
-                </div>
+                <div className="tile-shot"><Image src="/shots/bulk.jpg" alt="Prices and stock" width={1800} height={1138} sizes="(min-width: 860px) 360px, 100vw" /></div>
                 <h3>Prices and stock</h3>
-                <p>Changes to what you already sell, said in plain words. A sale, a clearance, a delivery to add to stock, a mount charge. Every cell that moves, shown first.</p>
+                <p>Changes to what you already sell, said in plain words. A sale, a clearance, a delivery to add to stock. Every cell that moves, shown first.</p>
               </Reveal>
               <Reveal className="tile" delay={2}>
-                <div className="tile-ui tidy-ui">
-                  <div className="photo"><i /><i /><i /><span className="pen">×3</span></div>
-                  <div className="arrow">→</div>
-                  <div className="table"><i /><i /><i /></div>
-                </div>
+                <div className="tile-shot"><Image src="/shots/tidy.jpg" alt="Tidy a document" width={1800} height={1138} sizes="(min-width: 860px) 360px, 100vw" /></div>
                 <h3>Tidy a document</h3>
                 <p>A photo of scribbled-on paperwork becomes a table you can check, doubtful readings marked, saved as a CSV the other jobs take.</p>
               </Reveal>
               <Reveal className="tile" delay={3}>
-                <div className="tile-ui learn-ui">
-                  <span className="chip">Road Bikes · 12</span><span className="chip">Helmets · 9</span><span className="chip">bikes</span><span className="chip">mountain-bikes</span><span className="chip on">learned from your export</span>
-                </div>
+                <div className="tile-shot"><Image src="/shots/learn.jpg" alt="Teach Flöda your catalogue" width={1800} height={1138} sizes="(min-width: 860px) 360px, 100vw" /></div>
                 <h3>Learns your shop</h3>
                 <p>Starts blank. Your Shopify export teaches it your kinds of product, your menus, how you spell every tag and what each brand&rsquo;s listings look like.</p>
               </Reveal>
               <Reveal className="tile" delay={4}>
-                <div className="tile-ui app-ui"><div className="dock"><span className="win">▣</span><span className="mac"></span></div><span className="lbl">Floda-Setup.exe · Floda.dmg</span></div>
+                <div className="tile-ui app-ui"><div className="dock"><span className="win">▣</span><span className="mac">⌘</span></div><span className="lbl">Floda-Setup.exe · Floda.dmg</span></div>
                 <h3>Runs on your PC</h3>
                 <p>An app for Windows and Mac, with its database on your machine. Or hosted, if you&rsquo;d rather. Your supplier costs never sit on someone else&rsquo;s server unless you choose it.</p>
               </Reveal>
@@ -176,7 +124,7 @@ export default function WelcomePage() {
             <Reveal className="head">
               <span className="eyebrow">The product</span>
               <h2>What it looks like, with a real order in it.</h2>
-              <p className="lede">These are screens from a copy of Flöda with a Burton order read into it, not drawings. Pick one.</p>
+              <p className="lede">These are screens from a copy of Flöda with a supplier&rsquo;s order read into it, not drawings. Pick one.</p>
             </Reveal>
             <Reveal delay={1}><Screens /></Reveal>
           </div>
@@ -188,16 +136,16 @@ export default function WelcomePage() {
           <div className="wrap">
             <Reveal className="head">
               <span className="eyebrow dark">Built in a real shop</span>
-              <h2>Every rule was settled against real files, not guessed.</h2>
-              <p className="lede">The shop it was built in sells skis, snowboards, boots, bindings, outerwear, packs and climbing gear. Its buying season went through Flöda line by line, and every convention the catalogue had was measured before it was written down.</p>
+              <h2>Every rule was settled against real paperwork, not guessed.</h2>
+              <p className="lede">Flöda was built inside a working specialty retailer, and that shop&rsquo;s whole buying season went through it line by line: twenty-odd suppliers, every layout they send, every convention the catalogue had. What that taught it is what makes the first invoice from any supplier read well, whatever the shop sells.</p>
             </Reveal>
             <Reveal delay={1} className="quote-card">
               <p className="quote">&ldquo;A name is the loosest key, so it&rsquo;s the strictest match. Whole words only, never a substring, and a name that fits two products is refused with both named rather than guessed.&rdquo;</p>
               <p className="cite">From the engineering notes. The product is built this carefully all the way down.</p>
             </Reveal>
             <div className="proof">
-              <Reveal delay={1}><b>Binding mount charges</b><span>Drill-mount and system bindings told apart by model, so the mount price lands on the right ones.</span></Reveal>
-              <Reveal delay={2}><b>Name matches confirmed</b><span>An invoice without barcodes is matched by name and you say whether it&rsquo;s the same product or next year&rsquo;s model.</span></Reveal>
+              <Reveal delay={1}><b>Sizes and colours become variants</b><span>Not part of the name. Every variant gets its value, its barcode and its stock, the way Shopify wants it.</span></Reveal>
+              <Reveal delay={2}><b>Name matches confirmed</b><span>An invoice without barcodes is matched by name and you say whether it&rsquo;s the same product or this year&rsquo;s model.</span></Reveal>
               <Reveal delay={3}><b>Pictures in the colour ordered</b><span>Pulled from the brand&rsquo;s page, matched to the colourway on the order, resized and centred.</span></Reveal>
             </div>
           </div>
@@ -209,13 +157,49 @@ export default function WelcomePage() {
             <Reveal className="head">
               <span className="eyebrow">Who it&rsquo;s for</span>
               <h2>Retailers whose suppliers send paperwork, not feeds.</h2>
-              <p className="lede">Specialty retail runs on order forms and PDFs. If your season starts with a pile of them, Flöda is for you.</p>
+              <p className="lede">Specialty retail runs on order forms and PDFs. If a delivery starts with a pile of them, Flöda is for you. It starts blank and learns your catalogue, so it does not care what you sell.</p>
             </Reveal>
-            <div className="fit">
-              <Reveal className="card now" delay={0}><span className="label">Ready now</span><h3>Snow and outdoor</h3><p>Skis, boards, boots, bindings and packages, outerwear, packs and climbing gear. Binding mount charges, ski packages and season tagging built in.</p></Reveal>
-              <Reveal className="card" delay={1}><span className="label">Starts blank, learns yours</span><h3>Bikes</h3><p>The same supplier paperwork problem, with sizes, colours and model years that change every season.</p></Reveal>
-              <Reveal className="card" delay={2}><span className="label">Starts blank, learns yours</span><h3>Fishing, camping, anything specialist</h3><p>Tell us which supplier gives you the most grief and we&rsquo;ll start there.</p></Reveal>
+            <div className="fit four">
+              <Reveal className="card" delay={0}><span className="label">Sizes, colours, seasons</span><h3>Outdoor and sports</h3><p>Apparel, footwear, packs, hardware. Model years that change every season and sizes that run in two scales.</p></Reveal>
+              <Reveal className="card" delay={1}><span className="label">Colourways and size runs</span><h3>Fashion and footwear</h3><p>A style in six colours and eight sizes is one product with forty-eight variants, not forty-eight lines typed by hand.</p></Reveal>
+              <Reveal className="card" delay={2}><span className="label">Long catalogues</span><h3>Home and lifestyle</h3><p>Kitchen, gifts, toys, stationery: many suppliers, small orders, and a tag taxonomy nobody wants to retype.</p></Reveal>
+              <Reveal className="card" delay={3}><span className="label">Starts blank, learns yours</span><h3>Bikes, fishing, anything specialist</h3><p>Tell us which supplier gives you the most grief and that is where set-up starts.</p></Reveal>
             </div>
+          </div>
+        </section>
+
+        {/* -------------------------------------------------------------- data */}
+        <section id="data" className="band grey">
+          <div className="wrap">
+            <Reveal className="head">
+              <span className="eyebrow">Your data</span>
+              <h2>Your costs stay on your machine.</h2>
+              <p className="lede">A desktop copy keeps its database and every file you upload on your own computer. The only things that leave it are the ones we list, and we list them all.</p>
+            </Reveal>
+            <div className="data">
+              <Reveal className="dcard" delay={0}><span className="ico" aria-hidden>🖥</span><h3>On your machine</h3><p>Your suppliers, prices, imports and staff accounts live in Flöda&rsquo;s data folder on your PC or Mac. Uninstall it and the folder is still yours.</p></Reveal>
+              <Reveal className="dcard" delay={1}><span className="ico" aria-hidden>🛡</span><h3>Nothing to your store on its own</h3><p>Flöda writes a Shopify file. You look at the grid, download the file and import it. There is no connection that can change a listing without you.</p></Reveal>
+              <Reveal className="dcard" delay={2}><span className="ico" aria-hidden>🤖</span><h3>Reading by AI, included</h3><p>Documents are read by Claude through Anthropic&rsquo;s API, which does not train on them. Only the document goes, never your catalogue. <Link href="/privacy">Exactly what leaves your machine.</Link></p></Reveal>
+            </div>
+          </div>
+        </section>
+
+        {/* --------------------------------------------------------- questions */}
+        <section id="questions" className="band">
+          <div className="wrap qa">
+            <Reveal className="head">
+              <span className="eyebrow">Questions</span>
+              <h2>The ones retailers ask first.</h2>
+              <p className="lede">The rest are on the <Link href="/faq">questions page</Link>, and a person answers the ones that are not.</p>
+            </Reveal>
+            <Reveal delay={1}>
+              <Faq items={[
+                { q: "Do I need an Anthropic account or an API key?", a: <p>No. Reading by AI is included in every plan. A shop that would rather have the reading billed to its own Anthropic account can paste a key of its own in Settings.</p> },
+                { q: "What happens on the first invoice from a new supplier?", a: <p>Flöda says it is a new layout and asks you to check the five things a new layout gets wrong. What you fix is remembered for that supplier. In setup you can do this for every supplier at once, from one example each.</p> },
+                { q: "Does it work for shops that are not outdoor or sports?", a: <p>Yes. Flöda starts blank and learns your kinds of product, your menus, your tags and your naming from your own Shopify export. It does not care what you sell.</p> },
+                { q: "How does the free trial work?", a: <p>Every plan starts with 14 days free and no card. You pick a plan when you set up, use everything, and a person from Flöda gets in touch before the trial ends. Nothing is charged until you have said which plan you want.</p> },
+              ]} />
+            </Reveal>
           </div>
         </section>
 

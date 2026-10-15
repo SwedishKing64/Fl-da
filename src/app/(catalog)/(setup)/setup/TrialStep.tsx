@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { activateLicenceAction, startTrialAction } from "@/app/(catalog)/actions";
 import { Alert, Button, Card, Field, INPUT } from "@/app/(catalog)/ui";
 import { ActionForm } from "@/app/(catalog)/ActionForm";
+import { LicenceServerForm } from "@/app/(catalog)/(app)/settings/LicenceServerForm";
 import { describePlanSize, PLANS, TRIAL_DAYS, type PlanId } from "@/lib/catalog/plans";
 
 /**
@@ -12,7 +13,7 @@ import { describePlanSize, PLANS, TRIAL_DAYS, type PlanId } from "@/lib/catalog/
  * vendor makes the key for a trial and this copy keeps it at once, so nothing is emailed and
  * nothing is typed. Only shown on a copy that checks a licence.
  */
-export function TrialStep({ email, next }: { email: string; next: string }) {
+export function TrialStep({ email, next, servers, override }: { email: string; next: string; servers: string[]; override: string }) {
   const router = useRouter();
   const [mode, setMode] = useState<"trial" | "key">("trial");
   const [plan, setPlan] = useState<PlanId>("shop");
@@ -49,6 +50,7 @@ export function TrialStep({ email, next }: { email: string; next: string }) {
           </div>
           {trial && (trial.ok ? <Alert tone="success">{trial.message}</Alert> : <Alert tone="danger">{trial.error}</Alert>)}
           <Button type="submit" variant="primary" icon="🚀" disabled={starting}>{starting ? "Starting…" : `Start the ${TRIAL_DAYS}-day trial`}</Button>
+          {trial && !trial.ok && /could not be reached/.test(trial.error) && <LicenceServerForm servers={servers} override={override} />}
           <p className="text-[12.5px] text-[var(--ink-soft)]">After the trial, {PLANS.find((p) => p.id === plan)!.name} is ${PLANS.find((p) => p.id === plan)!.price} a month. Nothing is charged without you saying so; a person from Flöda gets in touch before it ends.</p>
         </ActionForm>
       )}

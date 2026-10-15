@@ -13,7 +13,7 @@ import { CommandPalette, type PaletteItem } from "@/app/(catalog)/CommandPalette
 import { Kbd } from "@/app/(catalog)/ui";
 import { Logo } from "@/app/Logo";
 import { vendorMode } from "@/lib/catalog/licence";
-import { currentLicence, monthUse } from "@/lib/catalog/licence-store";
+import { currentLicence, monthUse, getServerOverride, servers } from "@/lib/catalog/licence-store";
 import { describeMonthUse, overPlan, planOf } from "@/lib/catalog/plans";
 import "../catalog.css";
 
@@ -40,7 +40,7 @@ export default async function CatalogLayout({ children }: { children: React.Reac
   after(() => nightlyIfDue());
   const licence = await currentLicence();
   // A copy that may not run shows the paywall instead of the app, data untouched behind it.
-  if (licence.kind === "none" || licence.kind === "lapsed") return <Paywall state={licence} isAdmin={user.role === "ADMIN"} name={user.name.trim().split(/\s+/)[0] || user.name} />;
+  if (licence.kind === "none" || licence.kind === "lapsed") return <Paywall state={licence} isAdmin={user.role === "ADMIN"} name={user.name.trim().split(/\s+/)[0] || user.name} servers={await servers()} override={await getServerOverride()} />;
   // The plan, and how far through it the month is, sits in the sidebar for everyone: a trial that
   // ends on Thursday or a month past its plan should never be a surprise on the way to the paywall.
   const standing = licence.kind === "ok" ? await monthUse().then((use) => ({ plan: planOf(licence.licence.plan), use, trial: licence.licence.status === "TRIAL", daysLeft: licence.daysLeft, over: overPlan(planOf(licence.licence.plan), use) })).catch(() => null) : null;

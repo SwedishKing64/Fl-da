@@ -4,14 +4,16 @@ import { useActionState } from "react";
 import { activateLicenceAction } from "@/app/(catalog)/actions";
 import { Alert, Button, Field, INPUT } from "@/app/(catalog)/ui";
 import { ActionForm } from "@/app/(catalog)/ActionForm";
+import { LicenceServerForm } from "./LicenceServerForm";
 import type { LicenceState } from "@/lib/catalog/licence";
 import { describeMonthUse, describePlanSize, overPlan, planOf, type MonthUse } from "@/lib/catalog/plans";
 
 /** The key Flöda sent the shop, and what Flöda last said about it. */
-export function LicenceForm({ state, use, gated = false }: { state: LicenceState; use: MonthUse; gated?: boolean }) {
+export function LicenceForm({ state, use, gated = false, servers = [], override = "" }: { state: LicenceState; use: MonthUse; gated?: boolean; servers?: string[]; override?: string }) {
   const [result, action, pending] = useActionState(activateLicenceAction, null);
   const plan = state.kind === "ok" ? planOf(state.licence.plan) : null;
   return (
+    <>
     <ActionForm action={action} state={result} className="space-y-3">
       {state.kind === "ok" && plan && (
         <Alert tone="success">
@@ -28,5 +30,7 @@ export function LicenceForm({ state, use, gated = false }: { state: LicenceState
       {result && (result.ok ? <Alert tone="success">{result.message}</Alert> : <Alert tone="danger">{result.error}</Alert>)}
       <Button type="submit" variant="primary" icon="🪪" disabled={pending}>{pending ? "Asking Flöda…" : "Check the key"}</Button>
     </ActionForm>
+    {servers.length > 0 && <div className="mt-3"><LicenceServerForm servers={servers} override={override} /></div>}
+    </>
   );
 }

@@ -5,11 +5,30 @@
 
 import { randomUUID } from "node:crypto";
 import { prisma, parseJson } from "./db";
-import { CHECK_EVERY_MS, LICENCE_KEY_SETTING, askForTrial, askVendor, licenceFromAnswer, licenceServer, licenceState, type CheckIn, type Licence, type LicenceState } from "./licence";
+import { CHECK_EVERY_MS, LICENCE_KEY_SETTING, askForTrial, askVendor, isServerUrl, licenceFromAnswer, licenceServer, licenceServers, licenceState, reachVendor, type CheckIn, type Licence, type LicenceState } from "./licence";
 import { refreshConventions, shopProfile } from "./shop-profile";
 import type { MonthUse } from "./plans";
 
 const INSTALL_KEY = "install.id";
+const SERVER_KEY = "licence.server";
+
+/** The address a person set for Flöda on this copy, when the built-in one could not be reached. */
+export async function getServerOverride(): Promise<string> {
+  const row = await prisma.appSetting.findUnique({ where: { key: SERVER_KEY } });
+  return parseJson<string>(row?.value, "");
+}
+
+export async function saveServerOverride(url: string): Promise<void> {
+  const clean = url.trim().replace(/\/+$/, "");
+  if (clean && !isServerUrl(clean)) throw new Error("That is not an address Flöda can be asked at. It looks like https://floda.ai");
+  if (!clean) await prisma.appSetting.deleteMany({ where: { key: SERVER_KEY } });
+  else await prisma.appSetting.upsert({ where: { key: SERVER_KEY }, create: { key: SERVER_KEY, value: JSON.stringify(clean) }, update: { value: JSON.stringify(clean) } });
+}
+
+/** Every address this copy may ask, the person's own first. */
+export async function servers(): Promise<string[]> {
+  return licenceServers(await getServerOverride());
+}
 
 export async function getLicence(): Promise<Licence | null> {
   const row = await prisma.appSetting.findUnique({ where: { key: LICENCE_KEY_SETTING } });
@@ -56,10 +75,10 @@ async function checkIn(key: string): Promise<CheckIn> {
 
 /** Enter a key: the vendor is asked now, and the answer kept whatever it is. */
 export async function activate(key: string): Promise<Licence> {
-  const server = licenceServer();
-  if (!server) throw new Error("This copy is not set up to check a licence.");
+  if (!licenceServer()) throw new Error("This copy is not set up to check a licence.");
   const previous = await getLicence();
-  const answer = await askVendor(server, "activate", await checkIn(key));
+  const body = await checkIn(key);
+  const answer = await reachVendor(await servers(), (server) => askVendor(server, "activate", body));
   const licence = licenceFromAnswer(key, answer, previous);
   await saveLicence(licence);
   await refreshConventions();
@@ -68,10 +87,10 @@ export async function activate(key: string): Promise<Licence> {
 
 /** Start this copy's trial: the vendor makes the client and the key, and the key is kept as entered. */
 export async function beginTrial(input: { shop: string; email: string; plan: string }): Promise<{ licence: Licence } | { refused: string }> {
-  const server = licenceServer();
-  if (!server) throw new Error("This copy is not set up to check a licence.");
+  if (!licenceServer()) throw new Error("This copy is not set up to check a licence.");
   const base = await checkIn("");
-  const answer = await askForTrial(server, { shop: input.shop, email: input.email, plan: input.plan, install: base.install, version: base.version, platform: base.platform });
+  const body = { shop: input.shop, email: input.email, plan: input.plan, install: base.install, version: base.version, platform: base.platform };
+  const answer = await reachVendor(await servers(), (server) => askForTrial(server, body));
   if (!answer.ok) return { refused: answer.why };
   const licence = licenceFromAnswer(answer.key, { ok: true, client: answer.client, plan: answer.plan, status: answer.status, expiresAt: answer.expiresAt }, null);
   await saveLicence(licence);
@@ -92,7 +111,8 @@ export async function currentLicence(): Promise<LicenceState> {
   if (licence && due) {
     lastAsked = Date.now();
     try {
-      const answer = await askVendor(licenceServer(), "check", await checkIn(licence.key));
+      const body = await checkIn(licence.key);
+      const answer = await reachVendor(await servers(), (server) => askVendor(server, "check", body));
       licence = licenceFromAnswer(licence.key, answer, licence);
       await saveLicence(licence);
       await refreshConventions();

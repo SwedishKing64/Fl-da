@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { CHECK_EVERY_MS, GRACE_MS, licenceFromAnswer, licenceState, newLicenceKey, normaliseKey, verdictFor, type Licence } from "./licence";
+import { CHECK_EVERY_MS, GRACE_MS, describeReachFailure, isServerUrl, licenceFromAnswer, licenceServers, licenceState, newLicenceKey, normaliseKey, reachVendor, verdictFor, type Licence } from "./licence";
 
 const day = 86_400_000;
 
@@ -61,5 +61,43 @@ describe("how an installed copy stands", () => {
     expect(licenceState(paused, now)).toMatchObject({ kind: "lapsed", why: "This licence is paused." });
     const back = licenceFromAnswer(good.key, { ok: true, client: "Northside Bikes", plan: "founding", status: "ACTIVE", expiresAt: null }, paused, now);
     expect(licenceState(back, now)).toMatchObject({ kind: "ok" });
+  });
+});
+
+describe("reaching the vendor", () => {
+  it("lists the addresses to try: the person's, the built-in one, then the fallbacks, once each", () => {
+    process.env.FLODA_LICENCE_SERVER = "https://floda.ai/";
+    expect(licenceServers()).toEqual(["https://floda.ai", "https://fl-da.vercel.app"]);
+    expect(licenceServers("https://fl-da.vercel.app")).toEqual(["https://fl-da.vercel.app", "https://floda.ai"]);
+    expect(licenceServers("http://localhost:3101/")).toEqual(["http://localhost:3101", "https://floda.ai", "https://fl-da.vercel.app"]);
+    process.env.FLODA_LICENCE_SERVER = "";
+    expect(licenceServers("https://x.test")).toEqual([]);
+  });
+  it("knows an address it could ask from one it could not", () => {
+    expect(isServerUrl("https://floda.ai")).toBe(true);
+    expect(isServerUrl("http://localhost:3101")).toBe(true);
+    expect(isServerUrl("http://floda.ai")).toBe(false);
+    expect(isServerUrl("https://floda.ai/api/licence")).toBe(false);
+    expect(isServerUrl("floda")).toBe(false);
+  });
+  it("says why an address could not be reached", () => {
+    const notFound = Object.assign(new TypeError("fetch failed"), { cause: { code: "ENOTFOUND" } });
+    expect(describeReachFailure("https://floda.ai", notFound)).toBe("floda.ai: the address does not exist — no DNS record answers for it");
+    const refused = Object.assign(new TypeError("fetch failed"), { cause: { code: "ECONNREFUSED" } });
+    expect(describeReachFailure("http://localhost:3101", refused)).toBe("localhost:3101: nothing is answering there");
+    const slow = Object.assign(new Error("The operation was aborted"), { name: "TimeoutError" });
+    expect(describeReachFailure("https://floda.ai", slow)).toContain("did not answer within 15 seconds");
+  });
+  it("passes over an address that cannot be reached, remembers the one that answered, and says why when none can", async () => {
+    const notFound = Object.assign(new TypeError("fetch failed"), { cause: { code: "ENOTFOUND" } });
+    const asked: string[] = [];
+    const call = async (server: string) => { asked.push(server); if (server === "https://floda.ai") throw notFound; return `from ${server}`; };
+    await expect(reachVendor(["https://floda.ai", "https://fl-da.vercel.app"], call)).resolves.toBe("from https://fl-da.vercel.app");
+    asked.length = 0;
+    await reachVendor(["https://floda.ai", "https://fl-da.vercel.app"], call);
+    expect(asked[0]).toBe("https://fl-da.vercel.app");
+    await expect(reachVendor(["https://floda.ai"], async () => { throw notFound; })).rejects.toThrow(/floda.ai: the address does not exist.*Settings → Licence/);
+    // The vendor's own refusal is not a reach failure and is not passed over.
+    await expect(reachVendor(["https://floda.ai", "https://fl-da.vercel.app"], async () => { throw new Error("Flöda answered 403 without a verdict"); })).rejects.toThrow("403");
   });
 });

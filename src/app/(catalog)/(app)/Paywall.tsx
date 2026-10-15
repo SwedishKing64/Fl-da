@@ -10,7 +10,7 @@ import { describePlanSize, PLANS, planOf, TRIAL_DAYS } from "@/lib/catalog/plans
  * was paused or ended, Flöda could not be reached for a month, or no key was ever entered. The
  * shop's data is untouched behind it; a key, or a plan, opens it again. Staff see who to ask.
  */
-export function Paywall({ state, isAdmin, name }: { state: Exclude<LicenceState, { kind: "unlicensed" | "ok" }>; isAdmin: boolean; name: string }) {
+export function Paywall({ state, isAdmin, name, servers = [], override = "" }: { state: Exclude<LicenceState, { kind: "unlicensed" | "ok" }>; isAdmin: boolean; name: string; servers?: string[]; override?: string }) {
   const lapsed = state.kind === "lapsed" ? state : null;
   const trialOver = lapsed?.licence.status === "TRIAL";
   const was = lapsed ? planOf(lapsed.licence.plan) : null;
@@ -59,7 +59,7 @@ export function Paywall({ state, isAdmin, name }: { state: Exclude<LicenceState,
               )}
               <div className="mt-6 border-t border-[var(--line-soft)] pt-5">
                 <h2 className="mb-3 text-[15px] font-bold">Enter a key</h2>
-                <LicenceForm state={state} use={{ invoices: 0, products: 0 }} gated />
+                <LicenceForm state={state} use={{ invoices: 0, products: 0 }} gated servers={servers} override={override} />
               </div>
             </>
           ) : (

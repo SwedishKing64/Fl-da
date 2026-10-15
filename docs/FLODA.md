@@ -65,7 +65,14 @@ vendor, and shows a banner — never a lockout — when the vendor says the lice
 or unknown. `licence.ts` is the pure half, `licence-store.ts` the copy's side. The plan, the days
 left on a trial and the month's use against the plan sit in the sidebar for everyone, amber when
 the trial is three days from ending or the month is past the plan, with a banner for the former,
-so neither is a surprise on the way to the paywall.
+so neither is a surprise on the way to the paywall. A copy asks for its licence at the first
+address that can be reached (`reachVendor` in `licence.ts`): the one a person set under Settings
+→ Licence ("Can't reach Flöda? Its address", kept in `AppSetting`), then the one the build baked
+in (`FLODA_LICENCE_SERVER`, floda.ai), then the deployment's own address (`LICENCE_FALLBACKS`,
+fl-da.vercel.app). An address that cannot be reached is passed over, and when none can be the
+error says why for each (no DNS record, nothing answering, certificate refused, no answer in 15
+seconds) rather than "fetch failed". The trial step shows the address form when the trial could
+not be started for that reason.
 
 **The desktop app.** `desktop/main.cjs` (Electron) opens a window on the same Next.js server,
 started on this machine on a free port with a SQLite database and a files folder in the user's

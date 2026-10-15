@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { CHECK_EVERY_MS, GRACE_MS, describeReachFailure, isServerUrl, licenceFromAnswer, licenceServers, licenceState, newLicenceKey, normaliseKey, reachVendor, verdictFor, type Licence } from "./licence";
+import { CHECK_EVERY_MS, GRACE_MS, describeReachFailure, isServerUrl, licenceFromAnswer, licenceServer, licenceServers, licenceState, newLicenceKey, normaliseKey, reachVendor, verdictFor, type Licence } from "./licence";
 
 const day = 86_400_000;
 
@@ -42,6 +42,18 @@ describe("how an installed copy stands", () => {
   it("has nothing to check when no vendor is configured", () => {
     delete process.env.FLODA_LICENCE_SERVER;
     expect(licenceState(good, now)).toEqual({ kind: "unlicensed" });
+  });
+
+  it("checks nothing on an open copy, whatever vendor the build named", () => {
+    process.env.FLODA_LICENCE_SERVER = "https://floda.example";
+    process.env.FLODA_OPEN = "1";
+    try {
+      expect(licenceServer()).toBe("");
+      expect(licenceServers("https://typed.example")).toEqual([]);
+      expect(licenceState(null, now)).toEqual({ kind: "unlicensed" });
+    } finally {
+      delete process.env.FLODA_OPEN;
+    }
   });
 
   it("runs on a fresh answer, and still runs on a stale one inside the grace month", () => {

@@ -81,6 +81,18 @@ standalone folder with an empty template database; `electron-builder.yml` wraps 
 `.github/workflows/desktop.yml` builds the Windows installer on a Windows runner and the Mac
 disk image on a Mac runner whenever a `v*` tag is pushed, and attaches them to the release.
 
+**The open copy.** A desktop build made with `FLODA_OPEN=1` (`electron-builder.open.yml`, the
+"open" box on the Desktop app workflow) has no sign-in and no licence: `/open` signs whoever opens
+the window in as the copy's owner, an admin called "Shop owner" made the first time
+(`src/lib/catalog/open.ts`), the proxy sends anyone without a session there, and `licenceServer()`
+is empty so there is no trial, paywall or plan step. The build can carry an Anthropic key of its
+own (`FLODA_ANTHROPIC_API_KEY` at build time, the repository secret of the same name on the
+workflow), written to `floda.json` and handed to the server as `ANTHROPIC_API_KEY`; it is
+readable by whoever has the installer, so it should be a key made for that build, with a spending
+limit. The open copy installs beside the ordinary app under its own name and data folder, goes to
+a pre-release of its own (`v1.2.3-open`, no `latest.yml`) and never updates itself. Only a desktop
+copy should run open: the server listens on the machine alone.
+
 **Keeping a copy current.** `desktop/update.cjs` (electron-updater) asks this repository's
 releases for a newer version twenty seconds after the app starts and every four hours after
 that, reading the `latest.yml` / `latest-mac.yml` electron-builder writes beside the installers

@@ -71,7 +71,8 @@ module.exports = async function afterPack(context) {
   checkPackagedServer(mac ? path.join(app, "Contents", "Resources") : path.join(context.appOutDir, "resources"));
   if (!mac) return;
   const entitlements = path.join(__dirname, "entitlements.mac.plist");
-  showAs(app, SHOWN_NAME);
+  const config = JSON.parse(fs.readFileSync(path.join(app, "Contents", "Resources", "floda.json"), "utf8"));
+  showAs(app, config.open ? `${SHOWN_NAME} Open` : SHOWN_NAME);
   // A link to nothing anywhere in the bundle fails the seal; say which and drop it first.
   for (const link of danglingLinks(app)) {
     console.warn(`[after-pack] dropping a symlink to nothing: ${path.relative(app, link)}`);

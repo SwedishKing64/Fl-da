@@ -13,6 +13,7 @@ import { DoneStep } from "./DoneStep";
 import { SuppliersStep } from "./SuppliersStep";
 import { TrialStep } from "./TrialStep";
 import { licenceServer } from "@/lib/catalog/licence";
+import { openMode } from "@/lib/catalog/open";
 import { currentLicence, getServerOverride, servers } from "@/lib/catalog/licence-store";
 import { prisma } from "@/lib/catalog/db";
 import { CANONICAL_FIELDS } from "@/lib/catalog/types";
@@ -28,6 +29,8 @@ export const maxDuration = 300;
  * the page takes `?step=` and shows that step to a signed-in admin.
  */
 export default async function SetupPage({ searchParams }: { searchParams: Promise<{ step?: string }> }) {
+  // An open copy has no account step: its owner is signed in by /open, made there the first time.
+  if (openMode() && !(await getCurrentUser())) redirect("/open?next=/setup");
   if (!(await usersExist())) {
     return <><Stepper current="account" /><AccountStep /></>;
   }

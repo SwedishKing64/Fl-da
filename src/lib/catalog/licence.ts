@@ -85,8 +85,12 @@ export function vendorMode(): boolean {
   return process.env.FLODA_VENDOR === "1";
 }
 
-/** Where this copy checks its licence, or empty when it is not licensed (development, the vendor itself). */
+/**
+ * Where this copy checks its licence, or empty when it is not licensed: development, the vendor
+ * itself, and an open copy (FLODA_OPEN=1, a desktop build with no sign-in and no licence).
+ */
 export function licenceServer(): string {
+  if (process.env.FLODA_OPEN === "1") return "";
   return (process.env.FLODA_LICENCE_SERVER ?? "").trim().replace(/\/+$/, "");
 }
 

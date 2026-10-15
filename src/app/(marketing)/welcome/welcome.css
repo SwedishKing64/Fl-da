@@ -236,10 +236,39 @@
 .floda .card.now .label { color: var(--f-meta); }
 @media (min-width: 760px) { .floda .fit { grid-template-columns: repeat(3, 1fr); } }
 
+/* -------------------------------------------------------------------------------- sums */
+.floda .sums { display: grid; gap: 16px; margin-bottom: 56px; }
+.floda .sum { display: grid; gap: 14px; padding: 26px; border-radius: var(--f-r); background: var(--f-white); border: 1px solid var(--f-line); }
+.floda .sum.with { border-color: var(--f-tint-2); box-shadow: 0 30px 60px -40px rgba(8, 102, 255, 0.45); }
+.floda .sum-label { font-size: 13px; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; color: var(--f-soft); }
+.floda .sum.with .sum-label { color: var(--f-meta); }
+.floda .sum-row { display: grid; gap: 8px; }
+.floda .sum .num { font-size: clamp(34px, 4.4vw, 48px); font-weight: 800; line-height: 1; letter-spacing: -0.045em; font-variant-numeric: tabular-nums; color: var(--f-ink); }
+.floda .sum .num small { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; margin-left: 8px; color: var(--f-ink-2); }
+.floda .sum .bar { display: block; height: 10px; border-radius: 999px; background: var(--f-grey); overflow: hidden; }
+.floda .sum .bar i { display: block; height: 100%; width: var(--w); border-radius: inherit; background: var(--f-ink-2); opacity: 0.55; transform: scaleX(0); transform-origin: left; transition: transform 1.2s var(--f-ease) 0.25s; }
+.floda .sum.with .bar i { background: linear-gradient(90deg, var(--f-meta), var(--f-meta-bright)); opacity: 1; }
+.floda .sum.in .bar i { transform: none; }
+.floda .sum p { font-size: 14.5px; color: var(--f-ink-2); }
+.floda .sum-line { font-size: 17px; line-height: 1.5; color: var(--f-ink-2); padding: 4px 6px; max-width: 70ch; }
+.floda .sum-line b { color: var(--f-ink); }
+@media (min-width: 760px) { .floda .sums { grid-template-columns: 1fr 1fr; } .floda .sum-line { grid-column: 1 / -1; } }
+@media (prefers-reduced-motion: reduce) { .floda .sum .bar i { transform: none; } }
+
+/* -------------------------------------------------------------------------------- plan */
+.floda .plan { display: grid; gap: 14px; justify-items: start; padding: 32px; border-radius: var(--f-r); background: var(--f-night); color: #fff; position: relative; overflow: hidden; }
+.floda .plan::after { content: ""; position: absolute; inset: auto -30% -50% auto; width: 70%; aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle, rgba(59, 139, 255, 0.45), transparent 65%); pointer-events: none; }
+.floda .plan-tag { font-size: 13px; font-weight: 700; color: #a6d0ff; background: rgba(59, 139, 255, 0.18); border-radius: 999px; padding: 7px 14px; }
+.floda .plan-price { display: flex; align-items: baseline; gap: 6px; line-height: 1; }
+.floda .plan-price .cur { font-size: 28px; font-weight: 700; color: rgba(255, 255, 255, 0.7); }
+.floda .plan-price .amt { font-size: clamp(64px, 8vw, 88px); font-weight: 800; letter-spacing: -0.05em; font-variant-numeric: tabular-nums; }
+.floda .plan-price .per { font-size: 17px; font-weight: 600; color: rgba(255, 255, 255, 0.7); margin-left: 6px; }
+.floda .plan-hold { font-size: 15px; color: rgba(255, 255, 255, 0.72); max-width: 40ch; }
+.floda .plan .ticks { margin-top: 8px; color: rgba(255, 255, 255, 0.85); }
+.floda .plan .ticks li::before { background: rgba(59, 139, 255, 0.25); color: #a6d0ff; }
+
 /* ------------------------------------------------------------------------------ signup */
 .floda .signup { display: grid; gap: 36px; align-items: start; }
-.floda .signup h2 { margin-top: 14px; }
-.floda .signup .lede { margin-top: 16px; }
 .floda .ticks { list-style: none; padding: 0; margin-top: 22px; display: grid; gap: 10px; color: var(--f-ink-2); }
 .floda .ticks li { display: flex; gap: 10px; align-items: flex-start; }
 .floda .ticks li::before { content: "✓"; flex: none; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--f-tint); color: var(--f-meta); font-size: 12px; font-weight: 800; margin-top: 1px; }

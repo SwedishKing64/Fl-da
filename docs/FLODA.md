@@ -131,6 +131,11 @@ Everything in `HANDOVER.md` under "Working on it" applies. In addition:
   without its `next` package fails there, not on a customer's machine (as v0.1.3 did).
 - Leads from the landing page are kept in `AppSetting` under `floda.leads` until they become
   clients.
+- The landing page sells a 30-day trial at $149 a month, the founding-retailer price, held for
+  those shops for as long as they stay. The sums on it come from the shop it was built in: a
+  50-product order is about 12 hours and $350 of staff time by hand, 2 hours and $60 through
+  Flöda, checking included. "AI reading included" is a promise the key relay keeps; until it is
+  built, a trial shop is walked through its own key on the onboarding call.
 - Reading through Flöda (`src/app/api/ai/[...path]/route.ts`, `src/lib/catalog/ai-usage.ts`): a
   copy on a plan with no key of its own has its SDK pointed at the vendor's `/api/ai` with the
   licence key as bearer token (`anthropic.ts` `setRelay`, put in force by `shop-profile.ts` from

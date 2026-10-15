@@ -8,8 +8,8 @@ export function RegisterForm() {
   if (result?.ok) {
     return (
       <div className="thanks" role="status">
-        <h3>Thanks. You&rsquo;re on the list.</h3>
-        <p className="soft">We&rsquo;ll be in touch to set up a walk-through with one of your own supplier invoices. Nothing to install in the meantime.</p>
+        <h3>Thanks. Your trial is on its way.</h3>
+        <p className="soft">Within one working day you&rsquo;ll hear from a person with your key, the download and a time to walk through one of your own supplier invoices. Nothing to install in the meantime.</p>
       </div>
     );
   }
@@ -45,8 +45,8 @@ export function RegisterForm() {
         <textarea id="lead-note" name="note" rows={3} placeholder="Which suppliers give you the most grief?" />
       </label>
       {result && !result.ok && <p className="err">{result.error}</p>}
-      <button className="btn btn-meta" type="submit" disabled={pending}>{pending ? "Sending…" : "Register interest"}</button>
-      <p className="soft" style={{ fontSize: 13 }}>No spam, no list sold. One email from a person.</p>
+      <button className="btn btn-meta" type="submit" disabled={pending}>{pending ? "Sending…" : "Start the trial"}</button>
+      <p className="soft" style={{ fontSize: 13 }}>No card, no spam, no list sold. One email from a person.</p>
     </form>
   );
 }

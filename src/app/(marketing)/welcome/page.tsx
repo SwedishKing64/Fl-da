@@ -31,7 +31,7 @@ export default function WelcomePage() {
           </nav>
           <div className="bar-ctas">
             <Link href="/login" className="btn btn-grey">Sign in</Link>
-            <a href="#register" className="btn btn-meta">Get access</a>
+            <a href="#register" className="btn btn-meta">Start free trial</a>
           </div>
         </div>
       </Bar>
@@ -47,7 +47,7 @@ export default function WelcomePage() {
               Flöda reads the invoices, order confirmations, spec sheets and scribbled-on order forms your suppliers send, and turns them into Shopify products, stock updates and price changes, the way your shop already does it. Every cell checked on screen before anything touches your store.
             </Reveal>
             <Reveal delay={3} className="ctas">
-              <a href="#register" className="btn btn-meta btn-lg">Register interest<span aria-hidden>→</span></a>
+              <a href="#register" className="btn btn-meta btn-lg">Start free trial<span aria-hidden>→</span></a>
               <a href="#how" className="btn btn-ghost btn-lg">See how it works</a>
             </Reveal>
             <Reveal delay={4} as="p" className="note">A desktop app for Windows and Mac, or hosted. Built inside a working ski and snowboard shop over a full buying season.</Reveal>
@@ -217,24 +217,49 @@ export default function WelcomePage() {
 
         {/* ---------------------------------------------------------- pricing */}
         <section id="pricing" className="band grey">
-          <div className="wrap signup">
-            <Reveal>
+          <div className="wrap">
+            <Reveal className="head">
               <span className="eyebrow">Pricing</span>
-              <h2>Founding-retailer pricing.</h2>
-              <p className="lede">One flat monthly fee for the shop, however many staff and however many invoices, set with the first retailers to come on board and held for them.</p>
-              <ul className="ticks">
-                <li>No per-seat charges, no setup fee</li>
-                <li>You keep every file Flöda makes</li>
-                <li>Windows and Mac app, or hosted</li>
-                <li>A walk-through on one of your own invoices before you decide anything</li>
-              </ul>
+              <h2>One flat fee. It pays for itself on the first order of the month.</h2>
+              <p className="lede">A 50-product order takes a person about 12 hours to list by hand. Through Flöda it takes 2, checking included. The sums below are what that costs a shop.</p>
             </Reveal>
-            <Reveal delay={1} className="form-card" style={undefined}>
-              <div id="register">
-                <h3>Register interest</h3>
-                <RegisterForm />
-              </div>
-            </Reveal>
+            <div className="sums" aria-label="What a 50-product order costs to list">
+              <Reveal className="sum" delay={0}>
+                <span className="sum-label">By hand</span>
+                <div className="sum-row"><span className="num"><CountUp to={12} /><small>hours</small></span><span className="bar" aria-hidden><i style={{ "--w": "100%" } as never} /></span></div>
+                <div className="sum-row"><span className="num"><CountUp to={350} prefix="$" /><small>in staff time</small></span><span className="bar" aria-hidden><i style={{ "--w": "100%" } as never} /></span></div>
+                <p>Typing names, sizes, colours and prices. Finding pictures. Writing a description. Checking it, because it was typed.</p>
+              </Reveal>
+              <Reveal className="sum with" delay={1}>
+                <span className="sum-label">Through Flöda</span>
+                <div className="sum-row"><span className="num"><CountUp to={2} /><small>hours, checking included</small></span><span className="bar" aria-hidden><i style={{ "--w": "16.7%" } as never} /></span></div>
+                <div className="sum-row"><span className="num"><CountUp to={60} prefix="$" /><small>in staff time</small></span><span className="bar" aria-hidden><i style={{ "--w": "17.1%" } as never} /></span></div>
+                <p>Reading, matching, pricing, pictures and descriptions done. Your two hours are spent checking the grid and pressing import.</p>
+              </Reveal>
+              <Reveal className="sum-line" delay={2}>
+                <b>About $290 of staff time kept on every order.</b> Flöda is $149 a month, so the first order of the month pays for it and every order after that is yours. A busy season at two orders a month keeps about $430.
+              </Reveal>
+            </div>
+            <div className="signup">
+              <Reveal className="plan" delay={1}>
+                <span className="plan-tag">Founding retailer</span>
+                <div className="plan-price"><span className="cur" aria-hidden>$</span><span className="amt">149</span><span className="per">a month</span></div>
+                <p className="plan-hold">Set with the first retailers to come on board and held at this price for as long as you stay.</p>
+                <ul className="ticks">
+                  <li>30 days free, no card to start</li>
+                  <li>Every member of staff, every invoice, every supplier</li>
+                  <li>AI reading included, nothing else to buy</li>
+                  <li>Windows and Mac app, or hosted</li>
+                  <li>A walk-through on one of your own invoices before you decide anything</li>
+                </ul>
+              </Reveal>
+              <Reveal delay={2} className="form-card">
+                <div id="register">
+                  <h3>Start your 30-day trial</h3>
+                  <RegisterForm />
+                </div>
+              </Reveal>
+            </div>
           </div>
         </section>
 
@@ -243,8 +268,8 @@ export default function WelcomePage() {
           <div className="wrap">
             <Reveal>
               <h2>Your next season&rsquo;s paperwork, read for you.</h2>
-              <p className="lede">Register and we&rsquo;ll show you what Flöda makes of one of your own supplier invoices.</p>
-              <a href="#register" className="btn btn-meta btn-lg">Get access<span aria-hidden>→</span></a>
+              <p className="lede">Thirty days free, then $149 a month, held for founding retailers. Start and we&rsquo;ll show you what Flöda makes of one of your own supplier invoices.</p>
+              <a href="#register" className="btn btn-meta btn-lg">Start free trial<span aria-hidden>→</span></a>
             </Reveal>
           </div>
         </section>

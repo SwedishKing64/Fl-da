@@ -208,6 +208,7 @@ export interface AppSettings {
   gstRate: number; // 0.10
   pricesIncludeGst: boolean; // retail prices written to CSV are GST-inclusive (AU default)
   minMarginPct: number; // warn when margin below this (e.g. 20)
+  maxMarginPct: number; // refuse a margin above this (e.g. 80): a cost in the wrong column, not a price
   defaultRoundTo: string; // "0.99"
   fxRates: FxRates;
   shopify: {
@@ -225,6 +226,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   gstRate: 0.1,
   pricesIncludeGst: true,
   minMarginPct: 20,
+  maxMarginPct: 80,
   defaultRoundTo: "0.99",
   fxRates: { AUD: 1, USD: 1.52, EUR: 1.65, NZD: 0.92, GBP: 1.93, JPY: 0.0102, CAD: 1.1 },
   shopify: { storeDomain: "", accessToken: "", apiVersion: "2025-07" },
@@ -261,7 +263,11 @@ export interface RowFlag {
     | "NEGATIVE_PROFIT"
     | "MISSING_VENDOR"
     | "MISSING_TYPE"
-    | "UPDATE_EXISTING";
+    | "UPDATE_EXISTING"
+    | "INVALID_BARCODE"
+    | "ODD_BARCODE"
+    | "SWAPPED_CODES"
+    | "HIGH_MARGIN";
   severity: FlagSeverity;
   message: string;
 }
@@ -278,7 +284,15 @@ export const WARNING_CODES: RowFlag["code"][] = [
   "MISSING_BARCODE",
   "UPDATE_EXISTING",
   "DUPLICATE_SKU_SHOPIFY",
+  "ODD_BARCODE",
 ];
+
+/**
+ * The errors nothing can repair on the way out. The other errors have one right answer the
+ * export applies itself (see repair.ts); these are a number or a code that is wrong in a way
+ * only a person can settle, and a file with one in it would put that wrong number on the shop.
+ */
+export const HARD_CODES: RowFlag["code"][] = ["INVALID_BARCODE", "SWAPPED_CODES", "NEGATIVE_PROFIT", "HIGH_MARGIN"];
 
 /**
  * A column holding one of the supplier's own feature bullets: "Bullet 3", "Feature 1", "Tech Spec 2".

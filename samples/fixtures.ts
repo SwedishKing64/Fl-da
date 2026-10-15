@@ -11,19 +11,19 @@ export const FIXTURE_SETTINGS = { gstRate: 0.1, pricesIncludeGst: true, minMargi
 
 /** 1. Atomic pre-book: AUD, ex-GST, tidy CSV with image URLs and RRP. */
 const ATOMIC_CSV = `Style No,Item Description,Colour,Length (cm),EAN,Qty,WHS Price,RRP,Image URL,Category,Season
-AA0029,Bent 90 Skis,Blue/Black,166,887445290001,2,450.00,999.00,https://images.example-cdn.com/atomic/bent-90-blue.jpg,Skis,2026
-AA0029,Bent 90 Skis,Blue/Black,172,887445290002,3,450.00,999.00,https://images.example-cdn.com/atomic/bent-90-blue.jpg,Skis,2026
-AA0029,Bent 90 Skis,Blue/Black,178,887445290003,2,450.00,999.00,https://images.example-cdn.com/atomic/bent-90-blue.jpg,Skis,2026
-AE5031,Hawx Ultra 100 Ski Boots,Black/Orange,,887445310010,1,320.00,749.00,https://images.example-cdn.com/atomic/hawx-ultra-100.jpg,Boots,2026
-AE5031,Hawx Ultra 100 Ski Boots,Black/Orange,,887445310011,2,320.00,749.00,https://images.example-cdn.com/atomic/hawx-ultra-100.jpg,Boots,2026
-AE5031,Hawx Ultra 100 Ski Boots,Black/Orange,,887445310012,1,320.00,749.00,https://images.example-cdn.com/atomic/hawx-ultra-100.jpg,Boots,2026
-AX9000,Alps Beanie,Charcoal,,887445900001,12,9.50,29.95,,Accessories,2026
+AA0029,Bent 90 Skis,Blue/Black,166,874452900016,2,450.00,999.00,https://images.example-cdn.com/atomic/bent-90-blue.jpg,Skis,2026
+AA0029,Bent 90 Skis,Blue/Black,172,874452900023,3,450.00,999.00,https://images.example-cdn.com/atomic/bent-90-blue.jpg,Skis,2026
+AA0029,Bent 90 Skis,Blue/Black,178,874452900030,2,450.00,999.00,https://images.example-cdn.com/atomic/bent-90-blue.jpg,Skis,2026
+AE5031,Hawx Ultra 100 Ski Boots,Black/Orange,,874453100101,1,320.00,749.00,https://images.example-cdn.com/atomic/hawx-ultra-100.jpg,Boots,2026
+AE5031,Hawx Ultra 100 Ski Boots,Black/Orange,,874453100118,2,320.00,749.00,https://images.example-cdn.com/atomic/hawx-ultra-100.jpg,Boots,2026
+AE5031,Hawx Ultra 100 Ski Boots,Black/Orange,,874453100125,1,320.00,749.00,https://images.example-cdn.com/atomic/hawx-ultra-100.jpg,Boots,2026
+AX9000,Alps Beanie,Charcoal,,874459000016,12,9.50,29.95,,Accessories,2026
 `;
 // Boot sizes live in a separate "Size" column in the real file; simulate with a second header set.
 const ATOMIC_CSV_WITH_SIZE = ATOMIC_CSV.split("\n").map((line, i) => {
   if (i === 0) return line + ",Size";
   if (!line) return line;
-  const sizes: Record<string, string> = { "887445310010": "26.5", "887445310011": "27.5", "887445310012": "28.5" };
+  const sizes: Record<string, string> = { "874453100101": "26.5", "874453100118": "27.5", "874453100125": "28.5" };
   const ean = line.split(",")[4];
   return line + "," + (sizes[ean] ?? "");
 }).join("\n");

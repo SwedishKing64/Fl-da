@@ -5,7 +5,7 @@ import { productTitle, seasonTagFrom, seoTitle, titledForShop } from "./titles";
 import { isOfType, isSkipped, parseDirectives, typeKey } from "./instructions";
 import { prisma, parseJson } from "./db";
 import { extractFile, type UploadKind } from "./extract";
-import { applyMapping, headerHash, looksLikeReference, mappingProblems, repairTemplate, seasonFrom, suggestMapping, suggestOptions, type Mapping, type MappingOptions, type SavedOptions } from "./mapping";
+import { applyMapping, headerHash, looksLikeReference, mappingProblems, repairTemplate, seasonFrom, suggestMapping, suggestOptions, type Mapping, type MappingOptions, type SavedOptions, nearestTemplate, trimToHeaders, type LayoutDrift } from "./mapping";
 import { groupLineItems } from "./grouping";
 import { houseTags, retagForType } from "./product-tags";
 import { DEFAULT_CATEGORY_RULES, type CategoryRuleLike } from "./categorize";
@@ -34,7 +34,7 @@ import { generateCsvParts, validateCsvFile, validateProducts } from "./csv";
 import { toCsvProducts } from "./pipeline-pure";
 import { repairForExport, type Repair } from "./repair";
 export { toCsvProducts };
-import { SKI_METAFIELDS, metafieldColumn, type AppSettings, type CanonicalLineItem, type GstTreatment } from "./types";
+import { SKI_METAFIELDS, metafieldColumn, type AppSettings, type CanonicalLineItem, type GstTreatment, CANONICAL_FIELDS } from "./types";
 import type { ReviewProduct, ReviewSummary, ReviewVariant } from "./review-types";
 import { hardErrors, summarise, validateReview, warningList } from "./validate";
 import { filePath, publicFileUrl, readFile, saveFile, usingBlob } from "./storage";
@@ -304,6 +304,8 @@ export interface HeaderGroup {
   templateName: string | null;
   isCanonical: boolean; // AI-extracted rows already use canonical field keys
   confident: boolean; // safe to apply without showing the mapping screen
+  /** Set when the supplier has a remembered layout and this file's columns differ from it. */
+  drift: LayoutDrift | null;
 }
 
 export async function mappingState(batchId: string): Promise<HeaderGroup[]> {
@@ -319,11 +321,15 @@ export async function mappingState(batchId: string): Promise<HeaderGroup[]> {
     let group = groups.get(hash);
     if (!group) {
       const isCanonical = headers.every((h) => (AI_HEADERS as readonly string[]).includes(h));
-      const template = templates.find((t) => t.headerHash === hash) ?? null;
+      const exact = templates.find((t) => t.headerHash === hash) ?? null;
+      // No layout matches exactly: the nearest remembered one is carried over where its columns
+      // still exist, and the difference is reported rather than the file being read from scratch.
+      const near = !exact && !isCanonical ? nearestTemplate(headers, templates) : null;
+      const template = exact ?? near?.template ?? null;
       const saved = template ? parseJson<SavedOptions>(template.options, {}) : null;
       const fresh = suggestMapping(headers, rows);
       const suggestion = template
-        ? repairTemplate(parseJson<Mapping>(template.mappings, {}), fresh, rows, saved?.suggestedAtSave)
+        ? repairTemplate(trimToHeaders(parseJson<Mapping>(template.mappings, {}), headers) ?? {}, fresh, rows, trimToHeaders(saved?.suggestedAtSave, headers))
         : isCanonical ? Object.fromEntries(headers.map((h) => [h, h])) as Mapping : fresh;
       group = {
         hash,
@@ -342,10 +348,11 @@ export async function mappingState(batchId: string): Promise<HeaderGroup[]> {
               ...(saved.suggestedAtSave ? (saved.costIsLineTotal ? { costIsLineTotal: true } : {}) : suggestOptions(suggestion)),
             }
           : { ...(isCanonical ? {} : suggestOptions(fresh)), ...(batch.supplier?.defaultBrand ? { fixed: { brand: batch.supplier.defaultBrand } } : {}) },
-        templateId: template?.id ?? null,
+        templateId: exact?.id ?? null,
         templateName: template?.name ?? null,
         isCanonical,
         confident: false,
+        drift: near?.drift ?? null,
       };
       groups.set(hash, group);
     }
@@ -356,7 +363,7 @@ export async function mappingState(batchId: string): Promise<HeaderGroup[]> {
   }
   for (const g of groups.values()) {
     // Enough to build products from: the name. Everything else is a column the grid can fill in.
-    g.confident = Boolean(g.templateId) || g.isCanonical || mappingProblems(g.suggestion).length === 0;
+    g.confident = !g.drift && (Boolean(g.templateId) || g.isCanonical || mappingProblems(g.suggestion).length === 0);
   }
   return Array.from(groups.values());
 }
@@ -369,13 +376,31 @@ export async function mappingState(batchId: string): Promise<HeaderGroup[]> {
  * the operator is looking anyway. So every layout the suggestion can build from is built, and only
  * a layout with no recognisable product name is left for the mapping screen to sort out.
  */
-export async function autoApplyMappings(batchId: string, userId: string | null): Promise<{ applied: boolean; products: number; variants: number; unmapped: string[] }> {
+export async function autoApplyMappings(batchId: string, userId: string | null): Promise<{ applied: boolean; products: number; variants: number; unmapped: string[]; drifted: string[] }> {
   const groups = await mappingState(batchId);
-  const usable = groups.filter((g) => mappingProblems(g.suggestion).length === 0);
-  const unmapped = groups.filter((g) => !usable.includes(g)).flatMap((g) => g.filenames);
-  if (usable.length === 0) return { applied: false, products: 0, variants: 0, unmapped };
+  // A file laid out differently from the supplier's remembered layout is not built unasked: the
+  // columns that moved are the ones a remembered mapping gets wrong, so a person confirms them
+  // once, on the mapping screen, and the new layout is remembered beside the old.
+  const usable = groups.filter((g) => !g.drift && mappingProblems(g.suggestion).length === 0);
+  const drifted = groups.filter((g) => g.drift).map((g) => describeDrift(g));
+  const unmapped = groups.filter((g) => !usable.includes(g) && !g.drift).flatMap((g) => g.filenames);
+  if (usable.length === 0) return { applied: false, products: 0, variants: 0, unmapped, drifted };
   const result = await applyMappings(batchId, usable.map((g) => ({ hash: g.hash, mapping: g.suggestion, options: g.options, saveTemplate: null })), userId);
-  return { applied: result.problems.length === 0, products: result.products, variants: result.variants, unmapped };
+  return { applied: result.problems.length === 0 && drifted.length === 0, products: result.products, variants: result.variants, unmapped, drifted };
+}
+
+/** One sentence on how a file differs from the layout remembered for its supplier. */
+export function describeDrift(g: Pick<HeaderGroup, "filenames" | "drift">): string {
+  const d = g.drift;
+  if (!d) return "";
+  const parts: string[] = [];
+  if (d.added.length) parts.push(`new column${d.added.length === 1 ? "" : "s"} ${d.added.map((h) => `"${h}"`).join(", ")}`);
+  if (d.missing.length) parts.push(`${d.missing.map((m) => `"${m.header}" (was the ${fieldLabel(m.field)})`).join(", ")} gone`);
+  return `${g.filenames.join(", ")} is laid out differently from "${d.templateName}": ${parts.join("; ") || "the columns are in a different order"}. Open Column mapping, confirm where things are now, and this layout is remembered too.`;
+}
+
+function fieldLabel(key: string): string {
+  return CANONICAL_FIELDS.find((f) => f.key === key)?.label.toLowerCase() ?? key;
 }
 
 export interface ApplyMappingInput {

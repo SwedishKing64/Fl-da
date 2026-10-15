@@ -65,6 +65,7 @@ export function UploadPanel({ batchId, aiEnabled, reading, productCount, pending
     try {
       const r = await buildProductsAction(batchId);
       if (!r.ok) setBuildError(r.error);
+      else if (r.data?.drifted?.length) setBuildError(r.data.drifted.join(" "));
       else if (r.data?.tookMs !== undefined) setBuiltIn(`Built in ${(r.data.tookMs / 1000).toFixed(1)}s${r.data.phases?.length ? ` (${r.data.phases.join(", ")})` : ""}.`);
     } catch (err) {
       setBuildError(err instanceof Error ? err.message : String(err));

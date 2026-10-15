@@ -249,7 +249,9 @@ export async function auditReading(batchId: string, userId: string | null, ask: 
   const fixes = audit.columnFixes.filter((c) => FIELD_KEYS.includes(c.field) || c.field === "none");
   if (fixes.length > 0 && (await untouchedSinceBuilt(batchId))) {
     const files = await prisma.sourceFile.findMany({ where: { batchId }, select: { id: true, filename: true } });
-    const groups = await mappingState(batchId);
+    // A file whose layout drifted from the supplier's remembered one waits for a person, so the
+    // audit's column fixes never build it on the side.
+    const groups = (await mappingState(batchId)).filter((g) => !g.drift);
     const inputs = groups.map((g) => ({ hash: g.hash, mapping: { ...g.suggestion }, options: g.options, saveTemplate: null }));
     for (const fix of fixes) {
       const file = files.find((f) => f.filename === fix.file.trim()) ?? files.find((f) => f.filename.toLowerCase().includes(fix.file.trim().toLowerCase()));

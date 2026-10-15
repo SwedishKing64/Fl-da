@@ -25,16 +25,20 @@ export const MOST_PICTURES = 16;
 const THUMB = 384;
 const LOOK_MS = 45_000;
 
-const Verdict = z.object({
-  pictures: z.array(z.object({
+const Picture = z.object({
     number: z.number().describe("The picture's number as given."),
     colour: z.string().describe("The colour of the product in the picture, as a shop would name it: \"black\", \"red\", \"bear hug brown\". Empty when the product is not in the picture or its colour cannot be told."),
     ordered: z.enum(["yes", "no", "unsure"]).describe("Whether the product in the picture is in the colour ordered. \"no\" only when it is plainly a different colour; \"unsure\" when the product is not clearly visible, the picture is a detail that shows no colour, or the colour cannot be told."),
-  })),
+    which: z.string().describe("When several colours were ordered and this picture shows one of them: that colour, written exactly as it was given in the list. Empty otherwise."),
+});
+const Verdict = z.object({
+  pictures: z.array(Picture),
   note: z.string().describe("One short sentence: which colours the pictures show."),
 });
+/** What is asked for has every field; what comes back is taken even when one is missing. */
+const Lenient = z.object({ pictures: z.array(Picture.partial({ which: true })), note: z.string().optional() });
 
-const SYSTEM = () => `You are shown the pictures from one product's web page, for ${retailer()} who ordered the product in one colour and needs the pictures of that colour only. Look at each picture and say what colour the product in it is, and whether that is the colour ordered. A brand's colour names are what they are: "True Black" is black, "Bear Hug Brown" is brown, "Stout White" is off-white. A lifestyle shot counts by the colour of this product in it. Be plain about a different colour and say "unsure" rather than guess when you cannot see.`;
+const SYSTEM = () => `You are shown the pictures from one product's web page, for ${retailer()} who ordered the product in one or more colours and needs the pictures of those colours only, each picture matched to the colour it shows. Look at each picture and say what colour the product in it is, whether that is one of the colours ordered, and, where several were ordered, which one, written exactly as given. A brand's colour names are what they are: "True Black" is black, "Bear Hug Brown" is brown, "Stout White" is off-white. A lifestyle shot counts by the colour of this product in it. Be plain about a different colour and say "unsure" rather than guess when you cannot see.`;
 
 export interface ColourLook {
   /** The indexes, in the order given, of the pictures to keep. */
@@ -43,6 +47,8 @@ export interface ColourLook {
   otherColours: string[];
   /** The colour the kept pictures show, where the model named one. */
   shown: string;
+  /** For a kept picture: the ordered colour it shows, exactly as given, where the model could say. */
+  which: Record<number, string>;
   /** False when nothing was looked at: no model, nothing ordered, or the look failed. */
   looked: boolean;
 }
@@ -70,7 +76,7 @@ export async function thumbnail(bytes: Buffer): Promise<Buffer | null> {
   }
 }
 
-const keepAll = (n: number): ColourLook => ({ keep: Array.from({ length: n }, (_, i) => i), otherColours: [], shown: "", looked: false });
+const keepAll = (n: number): ColourLook => ({ keep: Array.from({ length: n }, (_, i) => i), otherColours: [], shown: "", which: {}, looked: false });
 
 /**
  * Look at the pictures and keep the ones in the colour ordered. Everything is kept when there is
@@ -104,22 +110,34 @@ export async function pickColour(pictures: Buffer[], colours: string[], title: s
     return keepAll(pictures.length);
   }
   if (!text) return keepAll(pictures.length);
-  const parsed = Verdict.safeParse(JSON.parse(text));
+  const parsed = Lenient.safeParse(JSON.parse(text));
   if (!parsed.success) return keepAll(pictures.length);
 
   const byNumber = new Map(parsed.data.pictures.map((p) => [Math.round(p.number), p]));
   const keep: number[] = [];
   const others = new Set<string>();
   const kept = new Set<string>();
+  const which: Record<number, string> = {};
+  // The ordered colour a picture shows, in the order's own spelling: the model's word matched
+  // against the list, so "black" answers "True Black" and a variant can be found by it.
+  const asOrdered = (word: string): string | undefined => {
+    const w = word.trim().toLowerCase();
+    if (!w) return undefined;
+    return ordered.find((c) => c.toLowerCase() === w) ?? ordered.find((c) => c.toLowerCase().includes(w) || w.includes(c.toLowerCase()));
+  };
   for (let i = 0; i < pictures.length; i++) {
     const v = i < shown.length ? byNumber.get(i + 1) : undefined;
     // Beyond what was looked at, or not answered for: kept, as a doubt is.
     if (!v || v.ordered !== "no") {
       keep.push(i);
       if (v?.ordered === "yes" && v.colour.trim()) kept.add(v.colour.trim());
+      if (v?.ordered === "yes") {
+        const named = asOrdered(v.which ?? "") ?? (ordered.length === 1 ? ordered[0] : asOrdered(v.colour));
+        if (named) which[i] = named;
+      }
     } else if (v.colour.trim()) {
       others.add(v.colour.trim());
     }
   }
-  return { keep, otherColours: [...others], shown: [...kept][0] ?? "", looked: true };
+  return { keep, otherColours: [...others], shown: [...kept][0] ?? "", which, looked: true };
 }

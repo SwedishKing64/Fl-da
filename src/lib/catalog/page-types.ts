@@ -19,6 +19,8 @@ export interface PageDetails {
   via: "ai" | "basic";
   /** The colour the pictures show, where the model could tell by looking at them. */
   pictureColour?: string;
+  /** Beside each picture in `images`: the ordered colour it shows, in the order's spelling, or "" when not known. */
+  imageColours?: string[];
   /** For the person: what was done about the pictures' colour, when something was. */
   pictureNote?: string;
   /** One line for the person: what was and was not found. */

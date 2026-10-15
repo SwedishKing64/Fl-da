@@ -44,6 +44,14 @@ as "No API key is set, so the build cannot be checked" though a key was set. Eve
 streams with 32,000 (the bill reader 64,000), and the build check says when an answer came back
 unreadable rather than blaming the key.
 
+**Which Claude model (chosen 2026-10-15, for cost).** `EXTRACTION_MODEL` is Claude Opus 5.5
+($4/$20 per million tokens in/out, cheaper than the Opus 5 it replaced) for everything that reads:
+invoices, scans, handwriting, product pages, bills, the Prices and stock chat, the build check.
+`LIGHT_MODEL` is Claude Haiku 5.5 (about $0.10/$0.50) for colour checks on pictures, SEO lines and
+reading the batch chat. Both can be overridden in Vercel with `CATALOG_AI_MODEL` /
+`CATALOG_LIGHT_MODEL`. Neither accepts thinking switched off or a forced tool; set `effort`
+explicitly (both default to `medium`). Fast mode (invoice reading) runs at twice the price.
+
 **No gender in any title (asked 2026-10-15).** "Men's", "Women's", "Ladies", "Unisex" never go in a
 product's title, whether the supplier's name carries them or the shop's older listings do
 (`withoutGender` in `mapping.ts`, used by the import, the delivery builder and the grouping). The

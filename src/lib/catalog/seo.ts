@@ -4,7 +4,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { houseGuidance } from "./house";
 import { houseConventions } from "./taxonomy";
 import { englishVariant, retailer, shopName } from "./shop-profile";
-import { anthropicClient, WORKING_MODEL, aiAvailable } from "./anthropic";
+import { anthropicClient, LIGHT_MODEL, aiAvailable } from "./anthropic";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { prisma, parseJson } from "./db";
@@ -55,7 +55,7 @@ export async function generateSeo(input: SeoInput): Promise<{ result: z.infer<ty
   const settings = await getSettings();
   try {
     const response = await getClient().messages.parse({
-      model: WORKING_MODEL,
+      model: LIGHT_MODEL,
       max_tokens: 16_000,
       system: [
         `You write product copy for the Shopify store of ${retailer()}. Tone: ${settings.seoTone}. ${englishVariant()}. Use only facts given; never invent specs. seoTitle max 60 characters, seoDescription 120-155 characters.`,

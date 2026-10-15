@@ -11,7 +11,7 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
-import { anthropicClient, cachedSystem, WORKING_MODEL, aiAvailable } from "./anthropic";
+import { anthropicClient, cachedSystem, LIGHT_MODEL, aiAvailable } from "./anthropic";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 
@@ -99,7 +99,7 @@ export async function readInstructions(thread: Array<{ role: "USER" | "ASSISTANT
   ];
 
   const response = await retrying(() => getClient().messages.stream({
-    model: WORKING_MODEL,
+    model: LIGHT_MODEL,
     max_tokens: 32_000,
     system: cachedSystem(SYSTEM),
     thinking: { type: "adaptive" },

@@ -1,6 +1,7 @@
 "use server";
 
 import { z } from "zod";
+import { PLAN_IDS } from "@/lib/catalog/plans";
 import { prisma } from "@/lib/catalog/db";
 import { logAudit } from "@/lib/catalog/audit";
 
@@ -18,6 +19,7 @@ const Lead = z.object({
   shop: z.string().trim().min(1).max(120),
   sells: z.string().trim().max(120),
   platform: z.string().trim().max(60),
+  plan: z.enum(PLAN_IDS).catch("shop"),
   note: z.string().trim().max(1000),
 });
 
@@ -29,6 +31,7 @@ export async function registerInterestAction(_prev: RegisterResult | null, form:
     shop: form.get("shop") ?? "",
     sells: form.get("sells") ?? "",
     platform: form.get("platform") ?? "",
+    plan: form.get("plan") ?? "shop",
     note: form.get("note") ?? "",
   });
   if (!parsed.success) {

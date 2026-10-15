@@ -18,7 +18,7 @@
 import { randomBytes } from "node:crypto";
 
 export const LICENCE_KEY_SETTING = "licence";
-export const PLANS = ["trial", "founding", "standard"] as const;
+export { PLAN_IDS as PLANS } from "./plans";
 export const STATUSES = ["TRIAL", "ACTIVE", "PAUSED", "ENDED"] as const;
 export type ClientStatus = (typeof STATUSES)[number];
 
@@ -117,6 +117,9 @@ export interface CheckIn {
   shop: string;
   version: string;
   platform: string;
+  /** Invoices and products built this calendar month, so the vendor can see the plan fits. */
+  monthBatches?: number;
+  monthProducts?: number;
 }
 
 /** The vendor's answer. */

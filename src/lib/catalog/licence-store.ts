@@ -7,6 +7,7 @@ import { randomUUID } from "node:crypto";
 import { prisma, parseJson } from "./db";
 import { CHECK_EVERY_MS, LICENCE_KEY_SETTING, askVendor, licenceFromAnswer, licenceServer, licenceState, type CheckIn, type Licence, type LicenceState } from "./licence";
 import { refreshConventions, shopProfile } from "./shop-profile";
+import type { MonthUse } from "./plans";
 
 const INSTALL_KEY = "install.id";
 
@@ -30,13 +31,26 @@ export async function installId(): Promise<string> {
   return id;
 }
 
+/** Invoices and products built since the first of the month. */
+export async function monthUse(now = new Date()): Promise<MonthUse> {
+  const from = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const [invoices, products] = await Promise.all([
+    prisma.importBatch.count({ where: { createdAt: { gte: from } } }),
+    prisma.product.count({ where: { batch: { createdAt: { gte: from } } } }),
+  ]);
+  return { invoices, products };
+}
+
 async function checkIn(key: string): Promise<CheckIn> {
+  const use = await monthUse().catch(() => ({ invoices: 0, products: 0 }));
   return {
     key,
     install: await installId(),
     shop: shopProfile().name,
     version: process.env.FLODA_VERSION ?? process.env.npm_package_version ?? "",
     platform: `${process.platform}${process.env.FLODA_DESKTOP ? " desktop" : ""}`,
+    monthBatches: use.invoices,
+    monthProducts: use.products,
   };
 }
 

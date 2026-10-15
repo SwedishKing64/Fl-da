@@ -2,6 +2,7 @@
 
 import { useActionState, useState, useTransition } from "react";
 import { clientFromLeadAction, createClientAction, deleteClientAction, dismissFeedbackAction, dismissLeadAction, regenerateClientKeyAction, updateClientAction } from "@/app/(catalog)/actions";
+import { PLANS, planOf } from "@/lib/catalog/plans";
 import type { FeedbackRow } from "@/lib/catalog/feedback-box";
 import { Alert, Badge, Button, Empty, Field, INPUT, fmtDate } from "@/app/(catalog)/ui";
 import { ActionForm } from "@/app/(catalog)/ActionForm";
@@ -10,9 +11,11 @@ export interface ClientRow {
   id: string; name: string; contact: string; email: string; plan: string; status: string; licenceKey: string; notes: string;
   /** This month's reading through Flöda, in a line, and the allowance in dollars for the form. */
   reading: string; readingExhausted: boolean; aiCap: string;
+  /** What the copy last said its month held, against the plan. */
+  month: { text: string; over: boolean };
   expiresAt: string | null; lastSeenAt: string | null; lastVersion: string; lastInstall: string; checkIns: number; createdAt: string;
 }
-export interface LeadRow { email: string; shop: string; sells: string; platform: string; note: string; at: string }
+export interface LeadRow { email: string; shop: string; sells: string; platform: string; plan?: string; note: string; at: string }
 
 const TONE: Record<string, "success" | "info" | "warning" | "danger" | "neutral"> = { ACTIVE: "success", TRIAL: "info", PAUSED: "warning", ENDED: "neutral" };
 const STATUS_WORD: Record<string, string> = { ACTIVE: "active", TRIAL: "on trial", PAUSED: "paused", ENDED: "ended" };
@@ -35,7 +38,7 @@ function Row({ c }: { c: ClientRow }) {
           <div className="font-semibold">{c.name || <span className="text-[var(--ink-soft)]">(unnamed)</span>}</div>
           <div className="text-xs text-[var(--ink-soft)]">{[c.contact, c.email].filter(Boolean).join(" · ")}</div>
         </td>
-        <td className="py-2 pr-3"><Badge tone={TONE[c.status] ?? "neutral"}>{STATUS_WORD[c.status] ?? c.status}</Badge><div className="mt-1 text-xs text-[var(--ink-soft)]">{c.plan}{c.expiresAt ? ` · until ${fmtDate(c.expiresAt)}` : ""}</div></td>
+        <td className="py-2 pr-3"><Badge tone={TONE[c.status] ?? "neutral"}>{STATUS_WORD[c.status] ?? c.status}</Badge><div className="mt-1 text-xs text-[var(--ink-soft)]">{planOf(c.plan).name}{c.expiresAt ? ` · until ${fmtDate(c.expiresAt)}` : ""}</div>{c.month.text && <div className={`mt-1 text-xs ${c.month.over ? "font-semibold text-[#b42318]" : "text-[var(--ink-soft)]"}`}>{c.month.text}{c.month.over ? " · past the plan" : ""}</div>}</td>
         <td className="py-2 pr-3 font-mono text-xs"><button type="button" onClick={copy} title="Copy" className="rounded px-1 hover:bg-[var(--meta-tint)]">{c.licenceKey}</button></td>
         <td className="py-2 pr-3 text-xs text-[var(--ink-soft)]">{seen}{c.checkIns > 0 && <div>{c.checkIns} check-in{c.checkIns === 1 ? "" : "s"}</div>}</td>
         <td className={`py-2 pr-3 text-xs ${c.readingExhausted ? "text-[var(--danger-ink,#b42318)]" : "text-[var(--ink-soft)]"}`}>{c.reading}</td>
@@ -62,10 +65,10 @@ function Row({ c }: { c: ClientRow }) {
                 <Field label="Shop"><input name="name" defaultValue={c.name} className={INPUT} /></Field>
                 <Field label="Contact"><input name="contact" defaultValue={c.contact} className={INPUT} /></Field>
                 <Field label="Email"><input name="email" defaultValue={c.email} className={INPUT} /></Field>
-                <Field label="Plan"><select name="plan" defaultValue={c.plan} className={INPUT}><option value="trial">trial</option><option value="founding">founding</option><option value="standard">standard</option></select></Field>
+                <Field label="Plan"><select name="plan" defaultValue={planOf(c.plan).id} className={INPUT}>{PLANS.map((p) => <option key={p.id} value={p.id}>{p.name} · ${p.price} a month</option>)}</select></Field>
                 <Field label="Standing"><select name="status" defaultValue={c.status} className={INPUT}><option value="TRIAL">on trial</option><option value="ACTIVE">active</option><option value="PAUSED">paused</option><option value="ENDED">ended</option></select></Field>
                 <Field label="Until" hint="Empty for no end date."><input name="expiresAt" type="date" defaultValue={dateInput(c.expiresAt)} className={INPUT} /></Field>
-                <Field label="Reading allowance a month ($)" hint="What their reading through Flöda may cost before it is turned away until next month. 0 for no limit."><input name="aiCap" inputMode="decimal" defaultValue={c.aiCap} className={INPUT} /></Field>
+                <Field label="Reading allowance a month ($)" hint="What their reading through Flöda may cost before it is turned away until next month. Empty takes the plan's own; 0 is no limit."><input name="aiCap" inputMode="decimal" defaultValue={c.aiCap} className={INPUT} /></Field>
                 <Field label="Notes" className="sm:col-span-2"><textarea name="notes" defaultValue={c.notes} rows={2} className={INPUT} /></Field>
                 <div className="flex flex-wrap gap-2 sm:col-span-3">
                   <Button type="submit" variant="primary" size="sm" disabled={pending}>Save</Button>
@@ -89,7 +92,7 @@ function NewClient() {
       <Field label="Shop"><input name="name" required className={INPUT} /></Field>
       <Field label="Contact"><input name="contact" className={INPUT} /></Field>
       <Field label="Email"><input name="email" type="email" className={INPUT} /></Field>
-      <Field label="Plan"><select name="plan" defaultValue="founding" className={INPUT}><option value="trial">trial</option><option value="founding">founding</option><option value="standard">standard</option></select></Field>
+      <Field label="Plan" hint="Sets the reading allowance to the plan's own."><select name="plan" defaultValue="shop" className={INPUT}>{PLANS.map((p) => <option key={p.id} value={p.id}>{p.name} · ${p.price} a month</option>)}</select></Field>
       <Field label="Standing"><select name="status" defaultValue="ACTIVE" className={INPUT}><option value="TRIAL">on trial</option><option value="ACTIVE">active</option><option value="PAUSED">paused</option></select></Field>
       <Field label="Until" hint="Empty for no end date."><input name="expiresAt" type="date" className={INPUT} /></Field>
       {state && <div className="sm:col-span-3">{state.ok ? <Alert tone="success">{state.message}</Alert> : <Alert tone="danger">{state.error}</Alert>}</div>}
@@ -110,7 +113,7 @@ function Leads({ leads }: { leads: LeadRow[] }) {
           <li key={l.at} className="flex flex-wrap items-start justify-between gap-3 py-2.5">
             <div className="min-w-0 text-sm">
               <div className="font-semibold">{l.shop} <span className="font-normal text-[var(--ink-soft)]">· {l.email}</span></div>
-              <div className="text-xs text-[var(--ink-soft)]">{[l.sells, l.platform, fmtDate(l.at)].filter(Boolean).join(" · ")}{l.note ? ` — ${l.note}` : ""}</div>
+              <div className="text-xs text-[var(--ink-soft)]">{[l.plan && `${planOf(l.plan).name} plan`, l.sells, l.platform, fmtDate(l.at)].filter(Boolean).join(" · ")}{l.note ? ` — ${l.note}` : ""}</div>
             </div>
             <div className="flex gap-1">
               <Button size="sm" variant="primary" disabled={pending} onClick={() => start(async () => { const r = await clientFromLeadAction(l.at); setNote(r.ok ? `${l.shop} is a client on a 30-day trial. Send them their key: ${r.data!.key}` : r.error); })}>Make a client</Button>

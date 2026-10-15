@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Logo } from "@/app/Logo";
 import { RegisterForm } from "./RegisterForm";
 import { Bar, CountUp, Demo, Reveal, Tilt } from "./Motion";
+import { describePlanSize, PLANS } from "@/lib/catalog/plans";
 import "./welcome.css";
 
 export const metadata: Metadata = {
@@ -220,7 +221,7 @@ export default function WelcomePage() {
           <div className="wrap">
             <Reveal className="head">
               <span className="eyebrow">Pricing</span>
-              <h2>One flat fee. It pays for itself on the first order of the month.</h2>
+              <h2>Priced by the month&rsquo;s paperwork. It pays for itself on the first order.</h2>
               <p className="lede">A 50-product order takes a person about 12 hours to list by hand. Through Flöda it takes 2, checking included. The sums below are what that costs a shop.</p>
             </Reveal>
             <div className="sums" aria-label="What a 50-product order costs to list">
@@ -237,20 +238,37 @@ export default function WelcomePage() {
                 <p>Reading, matching, pricing, pictures and descriptions done. Your two hours are spent checking the grid and pressing import.</p>
               </Reveal>
               <Reveal className="sum-line" delay={2}>
-                <b>About $290 of staff time kept on every order.</b> Flöda is $149 a month, so the first order of the month pays for it and every order after that is yours. A busy season at two orders a month keeps about $430.
+                <b>About $290 of staff time kept on every order.</b> The Shop plan is $149 a month, so the first order of the month pays for it and every order after that is yours. A busy season at two orders a month keeps about $430.
               </Reveal>
             </div>
+            <div className="plans" aria-label="Plans">
+              {PLANS.map((p, i) => (
+                <Reveal key={p.id} className={`tier${p.founding ? " featured" : ""}`} delay={i}>
+                  {p.founding && <span className="tier-tag">Founding price, held for you</span>}
+                  <h3>{p.name}</h3>
+                  <p className="tier-blurb">{p.blurb}</p>
+                  <div className="tier-price"><span className="cur" aria-hidden>$</span><span className="amt">{p.price}</span><span className="per">a month</span></div>
+                  <ul className="ticks">
+                    <li>{describePlanSize(p)}</li>
+                    <li>{p.people}</li>
+                    <li>AI reading included, nothing else to buy</li>
+                    <li>Set up for you by a Flöda engineer</li>
+                    {p.id === "unlimited" && <li>An engineer on call through your season</li>}
+                  </ul>
+                  <a href="#register" className={`btn ${p.founding ? "btn-meta" : "btn-grey"}`}>Start free trial</a>
+                </Reveal>
+              ))}
+            </div>
             <div className="signup">
-              <Reveal className="plan" delay={1}>
-                <span className="plan-tag">Founding retailer</span>
-                <div className="plan-price"><span className="cur" aria-hidden>$</span><span className="amt">149</span><span className="per">a month</span></div>
-                <p className="plan-hold">Set with the first retailers to come on board and held at this price for as long as you stay.</p>
+              <Reveal className="fde" delay={1}>
+                <span className="eyebrow">Set up for you</span>
+                <h3>A Flöda engineer sets it up with you. Not a help centre.</h3>
+                <p>Every plan starts the same way: a forward-deployed engineer gets on a call with you, loads your Shopify catalogue so Flöda learns how you file and name things, and reads your first invoices with you, supplier by supplier, fixing anything in the wrong column until it reads the way you would. What you settle together is remembered for every invoice after.</p>
                 <ul className="ticks">
                   <li>30 days free, no card to start</li>
-                  <li>Every member of staff, every invoice, every supplier</li>
-                  <li>AI reading included, nothing else to buy</li>
                   <li>Windows and Mac app, or hosted</li>
-                  <li>A walk-through on one of your own invoices before you decide anything</li>
+                  <li>Your data stays on your machine</li>
+                  <li>Change plan any month; nothing stops when a busy month runs past it</li>
                 </ul>
               </Reveal>
               <Reveal delay={2} className="form-card">
@@ -268,7 +286,7 @@ export default function WelcomePage() {
           <div className="wrap">
             <Reveal>
               <h2>Your next season&rsquo;s paperwork, read for you.</h2>
-              <p className="lede">Thirty days free, then $149 a month, held for founding retailers. Start and we&rsquo;ll show you what Flöda makes of one of your own supplier invoices.</p>
+              <p className="lede">Thirty days free, then from $49 a month. A Flöda engineer sets it up with you on one of your own supplier invoices.</p>
               <a href="#register" className="btn btn-meta btn-lg">Start free trial<span aria-hidden>→</span></a>
             </Reveal>
           </div>

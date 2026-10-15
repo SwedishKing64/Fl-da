@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/catalog/db";
 import { normaliseKey, vendorMode, verdictFor, type CheckAnswer } from "@/lib/catalog/licence";
+import { monthKey } from "@/lib/catalog/ai-usage";
 
 export const runtime = "nodejs";
 
@@ -16,7 +17,7 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/licence/[ac
   const { action } = await ctx.params;
   if (action !== "activate" && action !== "check") return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const body = (await req.json().catch(() => null)) as Partial<{ key: string; install: string; shop: string; version: string; platform: string }> | null;
+  const body = (await req.json().catch(() => null)) as Partial<{ key: string; install: string; shop: string; version: string; platform: string; monthBatches: number; monthProducts: number }> | null;
   const key = normaliseKey(String(body?.key ?? ""));
   if (!key) return NextResponse.json({ ok: false, status: "UNKNOWN", why: "That is not a Flöda licence key." } satisfies CheckAnswer);
 
@@ -30,6 +31,7 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/licence/[ac
         lastVersion: String(body?.version ?? "").slice(0, 40),
         lastInstall: String(body?.install ?? "").slice(0, 80),
         checkIns: { increment: 1 },
+        ...(typeof body?.monthBatches === "number" ? { useMonth: monthKey(), monthBatches: Math.max(0, Math.round(body.monthBatches)), monthProducts: Math.max(0, Math.round(Number(body.monthProducts) || 0)) } : {}),
         // A copy that names its shop fills in a client made from a lead before the shop was known.
         ...(client.name.trim() ? {} : { name: String(body?.shop ?? "").slice(0, 120) }),
       },

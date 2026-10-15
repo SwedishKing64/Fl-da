@@ -5,6 +5,7 @@ import { after } from "next/server";
 import type { ExportResult } from "@/lib/catalog/pipeline";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { PLAN_IDS, planOf, TRIAL_DAYS } from "@/lib/catalog/plans";
 import { prisma, parseJson, createTables, databaseStatus } from "@/lib/catalog/db";
 import { createSession, destroySession, hashPassword, requireUser, usersExist, verifyPassword } from "@/lib/catalog/auth";
 import { allocateBatchFreight, applyMappings, autoApplyMappings, applyRulesToBatch, attachUnassignedPhotos, extractStoredFile, loadReview, repriceBatch, repriceVariant, verifyBatchImages, exportBatch, exportFileText, type ApplyMappingInput, type ReviewData } from "@/lib/catalog/pipeline";
@@ -1771,16 +1772,17 @@ const clientSchema = z.object({
   name: z.string().trim().min(1, "The client needs a name").max(120),
   contact: z.string().trim().max(120).default(""),
   email: z.string().trim().max(200).default(""),
-  plan: z.enum(["trial", "founding", "standard"]).default("founding"),
+  plan: z.enum(PLAN_IDS).default("shop"),
   status: z.enum(["TRIAL", "ACTIVE", "PAUSED", "ENDED"]).default("TRIAL"),
   expiresAt: z.string().trim().default(""),
   notes: z.string().trim().max(2000).default(""),
-  /** Dollars a month their reading through Flöda may cost; 0 for no limit. */
-  aiCap: z.string().trim().regex(/^\d{0,5}(\.\d{1,2})?$/, "The reading allowance is dollars a month, like 60").default("60"),
+  /** Dollars a month their reading through Flöda may cost; empty for the plan's own allowance, 0 for no limit. */
+  aiCap: z.string().trim().regex(/^(\d{0,5}(\.\d{1,2})?)?$/, "The reading allowance is dollars a month, like 60, or empty for the plan's own").default(""),
 });
 
-function capCents(dollars: string): number {
-  return Math.round(Number(dollars || "0") * 100);
+/** The allowance in cents: what was typed, or the plan's own when nothing was. */
+function capCents(dollars: string, plan: string): number {
+  return dollars === "" ? planOf(plan).readingCapCents : Math.round(Number(dollars) * 100);
 }
 
 function expiry(value: string): Date | null {
@@ -1794,7 +1796,7 @@ export async function createClientAction(_prev: ActionResult | null, formData: F
     const user = await requireVendorAdmin();
     const { aiCap, ...data } = clientSchema.parse(Object.fromEntries(formData.entries()));
     const { newLicenceKey } = await import("@/lib/catalog/licence");
-    const client = await prisma.client.create({ data: { ...data, expiresAt: expiry(data.expiresAt), aiCapCents: capCents(aiCap), licenceKey: newLicenceKey() } });
+    const client = await prisma.client.create({ data: { ...data, expiresAt: expiry(data.expiresAt), aiCapCents: capCents(aiCap, data.plan), licenceKey: newLicenceKey() } });
     await logAudit("client.created", { userId: user.id, details: { client: client.id, name: client.name, plan: client.plan } });
     revalidatePath("/clients");
     return { ok: true, message: `${client.name} added. Their key is ${client.licenceKey}.` };
@@ -1806,7 +1808,11 @@ export async function updateClientAction(id: string, patch: { status?: string; p
     const user = await requireVendorAdmin();
     const data = clientSchema.partial().parse(patch);
     const { expiresAt, aiCap, ...rest } = data;
-    await prisma.client.update({ where: { id }, data: { ...rest, ...(expiresAt === undefined ? {} : { expiresAt: expiry(expiresAt) }), ...(aiCap === undefined ? {} : { aiCapCents: capCents(aiCap) }) } });
+    // An empty allowance follows the plan; a plan change with no allowance typed takes the new plan's.
+    const current = aiCap !== undefined || rest.plan !== undefined ? await prisma.client.findUnique({ where: { id }, select: { plan: true } }) : null;
+    const plan = rest.plan ?? current?.plan ?? "shop";
+    const cap = aiCap !== undefined ? capCents(aiCap, plan) : rest.plan !== undefined ? planOf(plan).readingCapCents : undefined;
+    await prisma.client.update({ where: { id }, data: { ...rest, ...(expiresAt === undefined ? {} : { expiresAt: expiry(expiresAt) }), ...(cap === undefined ? {} : { aiCapCents: cap }) } });
     await logAudit("client.updated", { userId: user.id, details: { client: id, keys: Object.keys(data) } });
     revalidatePath("/clients");
     return { ok: true, message: "Saved" };
@@ -1836,18 +1842,19 @@ export async function deleteClientAction(id: string): Promise<ActionResult> {
   });
 }
 
-/** A lead from the landing page becomes a client on a 30-day trial, with a key to send them. */
+/** A lead from the landing page becomes a client on a 14-day trial, with a key to send them. */
 export async function clientFromLeadAction(at: string): Promise<ActionResult<{ key: string }>> {
   return safely(async () => {
     const user = await requireVendorAdmin();
     const { newLicenceKey } = await import("@/lib/catalog/licence");
     const row = await prisma.appSetting.findUnique({ where: { key: "floda.leads" } });
-    const leads = parseJson<Array<{ email: string; shop: string; sells: string; platform: string; note: string; at: string }>>(row?.value, []);
+    const leads = parseJson<Array<{ email: string; shop: string; sells: string; platform: string; plan?: string; note: string; at: string }>>(row?.value, []);
     const lead = leads.find((l) => l.at === at);
     if (!lead) return { ok: false, error: "That lead is no longer there." };
     const key = newLicenceKey();
+    const plan = planOf(lead.plan);
     const client = await prisma.client.create({
-      data: { name: lead.shop, email: lead.email, plan: "trial", status: "TRIAL", expiresAt: new Date(Date.now() + 30 * 86_400_000), licenceKey: key, notes: [lead.sells && `Sells: ${lead.sells}`, lead.platform && `Platform: ${lead.platform}`, lead.note && `Note: ${lead.note}`].filter(Boolean).join("\n") },
+      data: { name: lead.shop, email: lead.email, plan: plan.id, status: "TRIAL", expiresAt: new Date(Date.now() + TRIAL_DAYS * 86_400_000), licenceKey: key, aiCapCents: plan.readingCapCents, notes: [lead.sells && `Sells: ${lead.sells}`, lead.platform && `Platform: ${lead.platform}`, lead.note && `Note: ${lead.note}`].filter(Boolean).join("\n") },
     });
     const rest = leads.filter((l) => l.at !== at);
     await prisma.appSetting.update({ where: { key: "floda.leads" }, data: { value: JSON.stringify(rest) } });

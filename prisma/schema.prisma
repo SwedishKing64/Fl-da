@@ -528,6 +528,10 @@ model Client {
   aiOutput     Int       @default(0)
   aiCalls      Int       @default(0)
   aiCapCents   Int       @default(6000)
+  /// What the copy said its month held when it last checked in: the month, invoices built, products built.
+  useMonth     String    @default("")
+  monthBatches Int       @default(0)
+  monthProducts Int      @default(0)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 }

@@ -2,14 +2,15 @@
 
 import { useActionState } from "react";
 import { registerInterestAction, type RegisterResult } from "./actions";
+import { PLANS, type PlanId } from "@/lib/catalog/plans";
 
-export function RegisterForm() {
+export function RegisterForm({ plan = "shop" }: { plan?: PlanId }) {
   const [result, act, pending] = useActionState<RegisterResult | null, FormData>(registerInterestAction, null);
   if (result?.ok) {
     return (
       <div className="thanks" role="status">
         <h3>Thanks. Your trial is on its way.</h3>
-        <p className="soft">Within one working day you&rsquo;ll hear from a person with your key, the download and a time to walk through one of your own supplier invoices. Nothing to install in the meantime.</p>
+        <p className="soft">Within one working day you&rsquo;ll hear from a Flöda engineer with your key, the download and a time to set it up with you on a call, on one of your own supplier invoices. Nothing to install in the meantime.</p>
       </div>
     );
   }
@@ -38,6 +39,12 @@ export function RegisterForm() {
         <select id="lead-platform" name="platform" defaultValue="shopify">
           <option value="shopify">Shopify</option>
           <option value="other">Another platform</option>
+        </select>
+      </label>
+      <label>
+        Plan
+        <select id="lead-plan" name="plan" defaultValue={plan}>
+          {PLANS.map((p) => <option key={p.id} value={p.id}>{p.name} · ${p.price} a month{p.founding ? ", founding price" : ""}</option>)}
         </select>
       </label>
       <label>

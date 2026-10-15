@@ -10,7 +10,8 @@ import { CommandPalette, type PaletteItem } from "@/app/(catalog)/CommandPalette
 import { Kbd } from "@/app/(catalog)/ui";
 import { Logo } from "@/app/Logo";
 import { vendorMode } from "@/lib/catalog/licence";
-import { currentLicence } from "@/lib/catalog/licence-store";
+import { currentLicence, monthUse } from "@/lib/catalog/licence-store";
+import { describeMonthUse, overPlan, planOf } from "@/lib/catalog/plans";
 import "../catalog.css";
 
 export const dynamic = "force-dynamic";
@@ -33,6 +34,7 @@ export default async function CatalogLayout({ children }: { children: React.Reac
   const user = await requireUser();
   const vendor = vendorMode();
   const licence = await currentLicence();
+  const pastPlan = licence.kind === "ok" && user.role === "ADMIN" ? await monthUse().then((use) => (overPlan(planOf(licence.licence.plan), use) ? { plan: planOf(licence.licence.plan), use } : null)).catch(() => null) : null;
 
   // The palette's contents come down with the page. There are never many batches, and matching
   // them in the browser means no request per keystroke and nothing to wait for.
@@ -85,6 +87,11 @@ export default async function CatalogLayout({ children }: { children: React.Reac
         {licence.kind === "lapsed" && (
           <div className="mb-4 rounded-[12px] border border-[#f1dcb0] bg-[var(--passive-tint)] px-4 py-3 text-sm text-[#7a4e06] shadow-[inset_4px_0_0_var(--passive)]">
             <strong>This copy&rsquo;s licence needs attention.</strong> {licence.why} Everything keeps working while it is sorted out; write to hello@floda.ai, or enter a new key in Settings.
+          </div>
+        )}
+        {pastPlan && (
+          <div className="mb-4 rounded-[12px] border border-[#f5c87a] bg-[#fff7e6] px-4 py-3 text-[13.5px] text-[#7a4b00]">
+            <strong>This month has gone past the {pastPlan.plan.name} plan</strong> ({describeMonthUse(pastPlan.plan, pastPlan.use)}). Nothing stops. Write to hello@floda.ai to move up a plan.
           </div>
         )}
         {licence.kind === "none" && user.role === "ADMIN" && (

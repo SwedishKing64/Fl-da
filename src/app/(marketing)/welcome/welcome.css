@@ -255,17 +255,31 @@
 @media (min-width: 760px) { .floda .sums { grid-template-columns: 1fr 1fr; } .floda .sum-line { grid-column: 1 / -1; } }
 @media (prefers-reduced-motion: reduce) { .floda .sum .bar i { transform: none; } }
 
-/* -------------------------------------------------------------------------------- plan */
-.floda .plan { display: grid; gap: 14px; justify-items: start; padding: 32px; border-radius: var(--f-r); background: var(--f-night); color: #fff; position: relative; overflow: hidden; }
-.floda .plan::after { content: ""; position: absolute; inset: auto -30% -50% auto; width: 70%; aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle, rgba(59, 139, 255, 0.45), transparent 65%); pointer-events: none; }
-.floda .plan-tag { font-size: 13px; font-weight: 700; color: #a6d0ff; background: rgba(59, 139, 255, 0.18); border-radius: 999px; padding: 7px 14px; }
-.floda .plan-price { display: flex; align-items: baseline; gap: 6px; line-height: 1; }
-.floda .plan-price .cur { font-size: 28px; font-weight: 700; color: rgba(255, 255, 255, 0.7); }
-.floda .plan-price .amt { font-size: clamp(64px, 8vw, 88px); font-weight: 800; letter-spacing: -0.05em; font-variant-numeric: tabular-nums; }
-.floda .plan-price .per { font-size: 17px; font-weight: 600; color: rgba(255, 255, 255, 0.7); margin-left: 6px; }
-.floda .plan-hold { font-size: 15px; color: rgba(255, 255, 255, 0.72); max-width: 40ch; }
-.floda .plan .ticks { margin-top: 8px; color: rgba(255, 255, 255, 0.85); }
-.floda .plan .ticks li::before { background: rgba(59, 139, 255, 0.25); color: #a6d0ff; }
+/* ------------------------------------------------------------------------------- plans */
+.floda .plans { display: grid; gap: 16px; margin-bottom: 56px; }
+.floda .tier { position: relative; display: grid; gap: 12px; align-content: start; padding: 28px; border-radius: var(--f-r); background: var(--f-white); border: 1px solid var(--f-line); }
+.floda .tier h3 { font-size: 22px; }
+.floda .tier-blurb { font-size: 14.5px; color: var(--f-ink-2); min-height: 2.9em; }
+.floda .tier-price { display: flex; align-items: baseline; gap: 4px; line-height: 1; margin-top: 4px; }
+.floda .tier-price .cur { font-size: 22px; font-weight: 700; color: var(--f-soft); }
+.floda .tier-price .amt { font-size: 56px; font-weight: 800; letter-spacing: -0.05em; font-variant-numeric: tabular-nums; }
+.floda .tier-price .per { font-size: 15px; font-weight: 600; color: var(--f-soft); margin-left: 6px; }
+.floda .tier .ticks { margin-top: 10px; font-size: 14.5px; }
+.floda .tier .btn { justify-self: start; margin-top: 10px; }
+.floda .tier.featured { background: var(--f-night); color: #fff; border-color: var(--f-night); overflow: hidden; }
+.floda .tier.featured::after { content: ""; position: absolute; inset: auto -30% -50% auto; width: 70%; aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle, rgba(59, 139, 255, 0.45), transparent 65%); pointer-events: none; }
+.floda .tier.featured .tier-blurb, .floda .tier.featured .tier-price .cur, .floda .tier.featured .tier-price .per { color: rgba(255, 255, 255, 0.72); }
+.floda .tier.featured .ticks { color: rgba(255, 255, 255, 0.85); }
+.floda .tier.featured .ticks li::before { background: rgba(59, 139, 255, 0.25); color: #a6d0ff; }
+.floda .tier-tag { justify-self: start; font-size: 12.5px; font-weight: 700; color: #a6d0ff; background: rgba(59, 139, 255, 0.18); border-radius: 999px; padding: 6px 12px; }
+.floda .tier > * { position: relative; }
+@media (min-width: 760px) { .floda .plans { grid-template-columns: repeat(3, 1fr); } }
+
+/* --------------------------------------------------------------------------------- fde */
+.floda .fde { display: grid; gap: 14px; justify-items: start; align-content: start; }
+.floda .fde h3 { font-size: 26px; line-height: 1.15; letter-spacing: -0.02em; text-wrap: balance; }
+.floda .fde p { font-size: 15.5px; line-height: 1.55; color: var(--f-ink-2); max-width: 52ch; }
+.floda .fde .ticks { margin-top: 4px; }
 
 /* ------------------------------------------------------------------------------ signup */
 .floda .signup { display: grid; gap: 36px; align-items: start; }

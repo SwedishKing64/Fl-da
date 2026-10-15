@@ -58,7 +58,7 @@ reached.
 
 **Clients and licences.** The vendor's own deployment runs with `FLODA_VENDOR=1`: it keeps the
 `Client` table, shows `/clients` (every shop, plan, standing, key, last check-in and version;
-leads from the landing page become clients on a 30-day trial), and answers `/api/licence`. Every
+leads from the landing page become clients on a 14-day trial), and answers `/api/licence`. Every
 other copy is built with `FLODA_LICENCE_SERVER` pointing at the vendor; the shop enters its key
 in Settings, the copy checks in about daily, keeps working for a month if it cannot reach the
 vendor, and shows a banner — never a lockout — when the vendor says the licence is paused, ended
@@ -141,11 +141,17 @@ Everything in `HANDOVER.md` under "Working on it" applies. In addition:
   without its `next` package fails there, not on a customer's machine (as v0.1.3 did).
 - Leads from the landing page are kept in `AppSetting` under `floda.leads` until they become
   clients.
-- The landing page sells a 30-day trial at $149 a month, the founding-retailer price, held for
-  those shops for as long as they stay. The sums on it come from the shop it was built in: a
-  50-product order is about 12 hours and $350 of staff time by hand, 2 hours and $60 through
-  Flöda, checking included. "AI reading included" is a promise the key relay keeps; until it is
-  built, a trial shop is walked through its own key on the onboarding call.
+- Plans (`src/lib/catalog/plans.ts`) are sized by the month's paperwork: Starter $49 (2 invoices,
+  about 100 products, one person, $20 of reading), Shop $149 (10 invoices, about 500 products,
+  everyone, $60 of reading; the founding price, held), Unlimited $299 (no counts, $150 of
+  reading). The ids used before there were tiers (`founding`, `standard`, `trial`) all mean the
+  Shop plan. A copy reports its month's invoices and products at check-in; the Clients page shows
+  them against the plan, the copy's Settings and a banner say when a month has gone past it, and
+  nothing stops: the reading allowance (set from the plan, editable per client) is the only hard
+  limit. The landing page sells a 14-day trial on any plan, and promises that a forward-deployed
+  engineer sets every shop up on a call, on its own invoices. The sums on it come from the shop
+  it was built in: a 50-product order is about 12 hours and $350 of staff time by hand, 2 hours
+  and $60 through Flöda, checking included.
 - Reading through Flöda (`src/app/api/ai/[...path]/route.ts`, `src/lib/catalog/ai-usage.ts`): a
   copy on a plan with no key of its own has its SDK pointed at the vendor's `/api/ai` with the
   licence key as bearer token (`anthropic.ts` `setRelay`, put in force by `shop-profile.ts` from

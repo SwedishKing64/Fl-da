@@ -44,7 +44,18 @@ export function MappingEditor({ batchId, groups, fields, supplierName, hasProduc
         const targets = Object.values(st.mapping).filter(Boolean);
         const missing = fields.filter((f) => f.required && !targets.includes(f.key as Mapping[string]));
         return (
-          <Card key={g.hash} title={<span>{g.filenames.join(", ")} <span className="font-normal text-[var(--ink-soft)]">· {g.rowCount} rows</span></span>} actions={g.templateId ? <Badge tone="success">Saved template: {g.templateName}</Badge> : g.isCanonical ? <Badge tone="info">AI-extracted (already in product fields)</Badge> : <Badge>New layout</Badge>}>
+          <Card key={g.hash} title={<span>{g.filenames.join(", ")} <span className="font-normal text-[var(--ink-soft)]">· {g.rowCount} rows</span></span>} actions={g.templateId ? <Badge tone="success">Saved template: {g.templateName}</Badge> : g.drift ? <Badge tone="warning">Layout changed</Badge> : g.isCanonical ? <Badge tone="info">AI-extracted (already in product fields)</Badge> : <Badge>New layout</Badge>}>
+            {g.drift && (
+              <Alert tone="warning" className="mb-3">
+                <div className="font-semibold">This file is laid out differently from &ldquo;{g.drift.templateName}&rdquo;, the layout remembered for {supplierName ?? "this supplier"}.</div>
+                <ul className="mt-1 list-disc pl-5 text-xs">
+                  {g.drift.added.length > 0 && <li>New column{g.drift.added.length === 1 ? "" : "s"}: {g.drift.added.map((h) => `"${h}"`).join(", ")}</li>}
+                  {g.drift.missing.length > 0 && <li>Gone: {g.drift.missing.map((m) => `"${m.header}" (was the ${fields.find((f) => f.key === m.field)?.label.toLowerCase() ?? m.field})`).join(", ")}</li>}
+                  {g.drift.added.length === 0 && g.drift.missing.length === 0 && <li>The same columns, in a different order.</li>}
+                </ul>
+                <p className="mt-1 text-xs">What was remembered is carried over where its columns still exist. Check the columns above that moved, and when it is applied this layout is remembered beside the old one.</p>
+              </Alert>
+            )}
             {g.isCanonical ? (
               <p className="text-sm text-[var(--ink-soft)]">These rows were extracted by AI straight into product fields, so no column mapping is needed. You can still set fixed values below.</p>
             ) : (

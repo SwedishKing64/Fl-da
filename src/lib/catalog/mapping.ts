@@ -26,6 +26,11 @@ export interface MappingOptions {
 /** What a saved template stores beside its mapping: the options, and the suggestion it was saved against. */
 export type SavedOptions = MappingOptions & { suggestedAtSave?: Mapping };
 
+/** The spelling a heading is compared by: case, punctuation and spacing set aside. */
+export function normaliseHeader(h: string): string {
+  return norm(h);
+}
+
 function norm(h: string): string {
   // "#" is "number". Kept as a symbol, "Model #" read as the bare word "model" and was taken as
   // the product's NAME — on Burton's description list that put 10688 in the title and the real
@@ -354,6 +359,73 @@ export function withFit(item: CanonicalLineItem): CanonicalLineItem {
   // cased as one later: "RULER BOA WIDE", not "RULER BOA Wide".
   const spelt = /[a-z]/.test(title) ? fit : fit.toUpperCase();
   return { ...item, title: already ? title : `${title} ${spelt}`.trim(), width: "" };
+}
+
+/** How a file's columns differ from a layout remembered for the supplier. */
+export interface LayoutDrift {
+  templateName: string;
+  /** Headings the file has that the remembered layout did not. */
+  added: string[];
+  /** Headings the remembered layout mapped to a field that the file no longer has. */
+  missing: Array<{ header: string; field: string }>;
+  /** How many headings the two have in common. */
+  shared: number;
+}
+
+/**
+ * The remembered layout nearest to a file whose headings match none exactly: the one sharing the
+ * most headings, as long as it shares at least two. A supplier that adds a column, drops one or
+ * renames one gets a different hash, and until now that silently threw the remembered mapping
+ * away and read the file from scratch. Now the nearest layout is carried over where its columns
+ * still exist, and the difference is said, so the person confirms the columns that moved and
+ * nothing else.
+ */
+export function nearestTemplate<T extends { name: string; mappings: string }>(headers: string[], templates: T[]): { template: T; drift: LayoutDrift } | null {
+  const mine = new Set(headers.map(norm));
+  let best: { template: T; drift: LayoutDrift } | null = null;
+  for (const t of templates) {
+    const saved = parseMappingJson(t.mappings);
+    const theirs = Object.keys(saved);
+    const shared = theirs.filter((h) => mine.has(norm(h))).length;
+    if (shared < 2) continue;
+    if (best && shared <= best.drift.shared) continue;
+    const theirNorms = new Set(theirs.map(norm));
+    best = {
+      template: t,
+      drift: {
+        templateName: t.name,
+        added: headers.filter((h) => !theirNorms.has(norm(h))),
+        missing: theirs.filter((h) => !mine.has(norm(h)) && saved[h]).map((h) => ({ header: h, field: saved[h] as string })),
+        shared,
+      },
+    };
+  }
+  return best;
+}
+
+function parseMappingJson(json: string): Mapping {
+  try {
+    const v = JSON.parse(json);
+    return v && typeof v === "object" ? (v as Mapping) : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * A remembered mapping cut down to the headings a file actually has, re-spelt the way the file
+ * spells them. A saved choice for a column that is gone must not be carried over: applied, it
+ * would take that field away from whichever column the fresh reading found it in.
+ */
+export function trimToHeaders(saved: Mapping | undefined, headers: string[]): Mapping | undefined {
+  if (!saved) return undefined;
+  const byNorm = new Map(headers.map((h) => [norm(h), h]));
+  const out: Mapping = {};
+  for (const [header, key] of Object.entries(saved)) {
+    const actual = byNorm.get(norm(header));
+    if (actual !== undefined) out[actual] = key;
+  }
+  return out;
 }
 
 export function headerHash(headers: string[]): string {

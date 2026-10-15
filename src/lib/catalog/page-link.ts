@@ -16,7 +16,8 @@
  */
 
 import { prisma } from "./db";
-import { houseBody, isPlaceholderBody } from "./body";
+import { isPlaceholderBody } from "./body";
+import { shopBody } from "./description-style";
 import { cleanProductUrl, fitlessOf, flatHandleOf, type PageDetails } from "./page-types";
 import { readProductPage, PageError } from "./extract/page";
 import { picturesForColour } from "./picture-colour";
@@ -118,7 +119,7 @@ export async function readProductLink(productId: string, deps: { read?: typeof r
 async function applyDetails(productId: string, d: PageDetails): Promise<{ description: boolean; details: number; images: number; notes: string[] }> {
   const p = await prisma.product.findUniqueOrThrow({ where: { id: productId }, select: { id: true, title: true, bodyHtml: true, lookupStatus: true, images: { select: { id: true, url: true, source: true, position: true } } } });
   const notes: string[] = [];
-  const body = houseBody(d.description, d.features);
+  const body = await shopBody(d.description, d.features);
   // A body the invoice wrote, or an earlier lookup or page read wrote, may be replaced; one a person
   // or a description list supplied is theirs, and the page's words are not laid over the top of it.
   const machine = isPlaceholderBody(p.bodyHtml) || MACHINE_FILLED.includes(p.lookupStatus);

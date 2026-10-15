@@ -25,6 +25,7 @@
  */
 
 import { DEFAULT_CATEGORY_RULES, detectCategory, metafieldColumns, type CategoryRuleLike } from "./categorize";
+import { houseConventions } from "./taxonomy";
 import { buildRows, parseCsv, type CsvProduct } from "./csv";
 import { groupLineItems, type GroupedProduct } from "./grouping";
 import { audienceOfPrefix, withFit, withoutAudiencePrefix } from "./mapping";
@@ -715,7 +716,7 @@ function appendFresh(
   for (const g of build) {
     const page = pageOf(g);
     if (!page) continue;
-    const body = houseBody(page.description, page.features);
+    const body = houseBody(page.description, page.features, houseConventions().descriptions.specsHeading);
     if (body) g.description = body;
     if (page.images.length > 0) g.imageUrls = [...new Set([...g.imageUrls, ...page.images])];
   }

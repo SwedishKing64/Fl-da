@@ -10,7 +10,6 @@ import { groupLineItems } from "./grouping";
 import { houseTags, retagForType } from "./product-tags";
 import { DEFAULT_CATEGORY_RULES, type CategoryRuleLike } from "./categorize";
 import { enrichFromSpecs, normKey } from "./specs";
-import { houseBody } from "./body";
 import { keepOrderedLines, resolveAgainstReference } from "./reference-match";
 import { isFlatSki, isPackageBinding, packageProducts, specFromName, type ChosenBindings } from "./packages";
 import { readInvoiceGrids, type PriceRow } from "./invoice";
@@ -24,6 +23,7 @@ import { aiAvailable } from "./anthropic";
 import { repairCategoryRules, repairProductTags, repairTagRuleSpelling } from "./seed";
 import { applyTagRules, type TagRuleLike } from "./rules";
 import { conventionGrams, conventionIdentifiers } from "./house";
+import { shopBody } from "./description-style";
 import { houseConventions } from "./taxonomy";
 import { applyTemplates, type ProductTemplateLike } from "./templates";
 import { allocateFreight, exGstCostAud, priceVariant } from "./pricing";
@@ -880,7 +880,7 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
         seoTitle: seoTitle(g.brand, title),
         // A body the spec sheet already laid out in the house format is used as it is. Wrapping it
         // again — in a <p>, escaped — turned its <h2> and <li> into text a customer would read.
-        bodyHtml: /^\s*</.test(g.description) ? g.description : houseBody(g.description, []),
+        bodyHtml: /^\s*</.test(g.description) ? g.description : await shopBody(g.description, []),
         vendor: g.brand,
         productType: g.productType,
         category: g.category,

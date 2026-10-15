@@ -7,6 +7,7 @@
  */
 
 import { houseBody, isPlaceholderBody } from "./body";
+import { houseConventions } from "./taxonomy";
 import { disciplinesFromTerrain, isDisciplineTag } from "./shop-memory";
 import { FEATURE_COLUMN, type CanonicalLineItem } from "./types";
 
@@ -183,7 +184,7 @@ export function enrichFromSpecs<T extends { title: string; brand: string; descri
     const unwritten = isPlaceholderBody(target.description) && !written.has(target);
     const numbersOnly = written.has(target) && !prosed.has(target);
     if ((prose || lines.length > 0) && (unwritten || (prose && numbersOnly))) {
-      target.description = houseBody(spec.description, lines);
+      target.description = houseBody(spec.description, lines, houseConventions().descriptions.specsHeading);
       written.add(target);
       if (prose) prosed.add(target);
     }

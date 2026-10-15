@@ -146,6 +146,22 @@ export function HouseForm({ house: initial, tagRules: initialRules, kinds, next 
         <Button size="sm" variant="ghost" onClick={() => setRules([...rules, { field: "any", pattern: "", addTags: "" }])}>+ Add a rule</Button>
       </section>
 
+      <section className="space-y-4">
+        <h3 className="text-[15px] font-bold">Descriptions</h3>
+        <p className="text-[13.5px] text-[var(--ink-soft)]">A brand page or a spec sheet gives the manufacturer&rsquo;s words and a list of details. Say how a description should be laid out and written here, and every description Flöda takes from a page or writes itself comes out that way. It never adds a fact that was not given.</p>
+        <Field label="How a description should read" hint="What comes first, how long, what to leave out, what never to say.">
+          <textarea className={cx(INPUT, "min-h-[96px]")} value={house.descriptions.format} onChange={(e) => set("descriptions", { format: e.target.value })} placeholder={"Two short paragraphs: who it is for, then what makes it different. Then the details as a list. Plain English, no exclamation marks, never mention the price."} />
+        </Field>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Heading over the details list" hint="Leave empty for a list with no heading.">
+            <input className={INPUT} value={house.descriptions.specsHeading} onChange={(e) => set("descriptions", { specsHeading: e.target.value })} placeholder="Tech Specs" />
+          </Field>
+        </div>
+        <Field label="A description of yours, as the shape to match" hint="Paste one real description from your shop. Optional, and the strongest signal of all.">
+          <textarea className={cx(INPUT, "min-h-[120px] font-mono text-[12.5px]")} value={house.descriptions.example} onChange={(e) => set("descriptions", { example: e.target.value })} />
+        </Field>
+      </section>
+
       <section className="space-y-2">
         <h3 className="text-[15px] font-bold">Anything else</h3>
         <Field label="In your own words" hint="Standing instructions the reader follows on every product: “Lead descriptions with who it suits”, “Never mention the RRP”, “Call the flex number ‘stiffness’”.">

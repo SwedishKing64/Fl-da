@@ -15,7 +15,7 @@ import { templateGuidance, type ProductTemplateLike } from "./templates";
 const SeoSchema = z.object({
   seoTitle: z.string().describe("Max 60 characters"),
   seoDescription: z.string().describe("120-155 characters, plain text"),
-  bodyHtml: z.string().describe("2-3 short paragraphs of product copy as simple HTML (<p>, <ul>, <li>) using only facts from the input"),
+  bodyHtml: z.string().describe("Product copy as simple HTML (<p>, <h2>, <ul>, <li>), using only facts from the input. In the shop's own format where the guidance gives one; otherwise 2-3 short paragraphs."),
 });
 
 const getClient = (): Anthropic => anthropicClient(6);

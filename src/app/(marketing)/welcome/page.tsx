@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Logo } from "@/app/Logo";
 import { RegisterForm } from "./RegisterForm";
 import { Bar, CountUp, Demo, Reveal, Tilt } from "./Motion";
 import "./welcome.css";
@@ -21,7 +22,7 @@ export default function WelcomePage() {
     <div className="floda">
       <Bar>
         <div className="wrap">
-          <Link href="/welcome" className="mark">Flöda</Link>
+          <Link href="/welcome" className="mark"><Logo size={24} /></Link>
           <nav aria-label="Sections">
             <a href="#product">Product</a>
             <a href="#how">How it works</a>
@@ -251,7 +252,7 @@ export default function WelcomePage() {
 
       <footer>
         <div className="wrap">
-          <span className="mark">Flöda</span>
+          <span className="mark"><Logo size={20} /></span>
           <span>Supplier paperwork in, shop-ready listings out · hello@floda.ai · Sydney</span>
         </div>
       </footer>

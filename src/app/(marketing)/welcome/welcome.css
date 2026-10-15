@@ -4,7 +4,7 @@
  * Meta's design language on a launch page: one blue (#0866ff) spent on what you press and what
  * matters, white and Meta grey for the ground, pill buttons, soft rounded cards, the system face
  * set heavy and tight for headlines. Everything moves on scroll (Motion.tsx) and nothing moves
- * for a viewer who has asked it not to. The wordmark is Flöda typed in black.
+ * for a viewer who has asked it not to. The wordmark is the mark in Logo.tsx.
  */
 .floda {
   --f-meta: #0866ff;
@@ -75,7 +75,7 @@
 .floda .bar { position: sticky; top: 0; z-index: 20; background: transparent; border-bottom: 1px solid transparent; transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease; }
 .floda .bar.solid { background: rgba(255, 255, 255, 0.78); backdrop-filter: saturate(1.6) blur(14px); -webkit-backdrop-filter: saturate(1.6) blur(14px); border-bottom-color: var(--f-line); box-shadow: 0 8px 30px -22px rgba(5, 5, 5, 0.3); }
 .floda .bar .wrap { display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 68px; }
-.floda .mark { display: inline-flex; align-items: baseline; font-family: "American Typewriter", "Courier Prime", "Courier New", Courier, "Nimbus Mono PS", monospace; font-size: 24px; font-weight: 700; letter-spacing: 0.01em; color: var(--f-ink); }
+.floda .mark { display: inline-flex; align-items: center; color: var(--f-ink); }
 .floda .mark:hover { opacity: 0.75; }
 .floda .bar nav { display: none; gap: 28px; font-size: 14px; font-weight: 600; color: var(--f-ink-2); }
 .floda .bar nav a { position: relative; padding: 6px 0; }

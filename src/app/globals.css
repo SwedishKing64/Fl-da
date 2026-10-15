@@ -1,33 +1,37 @@
 @import "tailwindcss";
 
-/* Rubin, in Meta blue.
-   One blue, spent on the things you press and the place you are. The workspace is a quiet light
-   grey with white cards on it, the way a feed is, because it is where numbers are read. The chrome
-   around it is the blue itself, deep at the top and brighter at the foot. Everything else is grey
-   or black: a warning keeps its own hue on purpose, so a warning never looks like the brand.
-   Controls are big, round-cornered and plainly labelled: this is run by shop staff between
-   customers, on whatever screen is nearest. */
+/* Flöda, in Meta blue.
+   One blue, spent on the things you press and the place you are, and a brighter sky it runs into
+   where there is room for colour: the rail, the headers, the mark. The workspace is a cool
+   off-white with white cards on it — where numbers are read — and the cards stand off it with a
+   little real depth rather than a hairline. Ink is a deep navy, not black, so the blue and the
+   page belong to each other. A warning keeps its own hue on purpose, so a warning never looks
+   like the brand. Controls are big, round-cornered and plainly labelled: this is run by shop
+   staff between customers, on whatever screen is nearest. */
 :root {
   --paper: #ffffff;
-  --canvas: #f0f2f5;
-  --ink: #050505;
-  --ink-2: #3b3f45;
-  --ink-soft: #65676b;
-  --line: #d9dde3;
-  --line-soft: #e9ebef;
+  --canvas: #f3f5fa;
+  --canvas-2: #e9edf5;
+  --ink: #0b1220;
+  --ink-2: #3a4458;
+  --ink-soft: #6b7590;
+  --line: #dde3ee;
+  --line-soft: #eaeef5;
 
   /* Meta blue, and the shades it takes on a button under the cursor, as a tint behind a selected
-     thing, and as a deep bezel. */
+     thing, as a deep bezel, and as the sky it brightens into. */
   --meta: #0866ff;
   --meta-deep: #0a4fc2;
   --meta-bright: #3b8bff;
-  --meta-tint: #e7f0ff;
-  --meta-tint-2: #d4e4ff;
+  --meta-tint: #e8f0ff;
+  --meta-tint-2: #d3e2ff;
   --meta-ink: #0b3d91;
-  --sky: #a6d0ff;
-  --night: #0b2b61;
-  --night-2: #0d3a85;
-  --night-3: #0f4fb0;
+  --sky: #38a9ff;
+  --cyan: #00d1ff;
+  --violet: #6d5dff;
+  --night: #061636;
+  --night-2: #082a6a;
+  --night-3: #0c3f9e;
 
   /* The older names the components were written against, all pointing at the blue. */
   --rubin: var(--meta);
@@ -36,26 +40,25 @@
   --rubin-tint: var(--meta-tint);
   --gold: var(--sky);
   --gold-deep: var(--meta-bright);
-  --violet: var(--meta);
   --violet-soft: var(--meta-tint);
 
-  --promoter: #0f9b7e;
+  --promoter: #0f9b6e;
   --passive: #c8891a;
-  --detractor: #cf3126;
-  --promoter-tint: #e9f7f3;
-  --passive-tint: #fbf2e0;
-  --detractor-tint: #fceceb;
+  --detractor: #d7372c;
+  --danger: var(--detractor);
+  --promoter-tint: #e6f7f0;
+  --passive-tint: #fcf3e1;
+  --detractor-tint: #fdecea;
 
-  --shadow-sm: 0 1px 2px rgba(5, 5, 5, 0.06), 0 1px 3px rgba(5, 5, 5, 0.04);
-  --shadow: 0 18px 44px -24px rgba(8, 102, 255, 0.35);
-  --shadow-lift: 0 12px 28px -14px rgba(8, 102, 255, 0.24);
-  --ring: 0 0 0 3px rgba(8, 102, 255, 0.18);
+  --shadow-sm: 0 1px 2px rgba(11, 18, 32, 0.05), 0 10px 28px -22px rgba(11, 18, 32, 0.3);
+  --shadow: 0 24px 56px -28px rgba(8, 102, 255, 0.38), 0 10px 30px -22px rgba(11, 18, 32, 0.25);
+  --shadow-lift: 0 18px 40px -20px rgba(8, 102, 255, 0.35), 0 6px 16px -10px rgba(11, 18, 32, 0.14);
+  --ring: 0 0 0 4px rgba(8, 102, 255, 0.16);
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
-  --r: 12px;
-  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --r: 14px;
+  --sans: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --display: var(--font-manrope), var(--sans);
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  /* The wordmark's face: Flöda typed on a typewriter. */
-  --typewriter: "American Typewriter", "Courier Prime", "Courier New", Courier, "Nimbus Mono PS", monospace;
 }
 
 @theme inline {
@@ -64,12 +67,6 @@
 
 html {
   color-scheme: light;
-}
-/* The Flöda wordmark: typewriter face, black on light, white on dark, never a chip. */
-.wordmark {
-  font-family: var(--typewriter);
-  font-weight: 700;
-  letter-spacing: 0.01em;
 }
 * {
   box-sizing: border-box;
@@ -98,9 +95,36 @@ h3 {
   letter-spacing: -0.02em;
   text-wrap: balance;
 }
+h1 {
+  font-family: var(--display);
+}
 p {
   margin: 0;
 }
+
+/* ---------------------------------------------------------------------------
+   The wordmark. Flöda, heavy and tight in the display face, its umlaut drawn as the two
+   dots of the mark (see Logo.tsx): the "o" is set bare and the dots sit over it.
+   --------------------------------------------------------------------------- */
+.wordmark {
+  display: inline-flex;
+  align-items: baseline;
+  font-family: var(--display);
+  font-weight: 800;
+  letter-spacing: -0.045em;
+  line-height: 1;
+}
+.wordmark-o { position: relative; display: inline-block; }
+.wordmark-dots {
+  position: absolute;
+  left: 50%;
+  top: -0.13em;
+  display: flex;
+  gap: 0.1em;
+  transform: translateX(-50%);
+}
+.wordmark-dots i { display: block; width: 0.17em; height: 0.17em; border-radius: 50%; }
+
 .wrap {
   max-width: 1120px;
   margin: 0 auto;
@@ -111,7 +135,7 @@ p {
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--violet);
+  color: var(--meta);
 }
 
 /* top bar */
@@ -141,7 +165,7 @@ p {
   width: 11px;
   height: 11px;
   border-radius: 3px;
-  background: var(--violet);
+  background: var(--meta);
   display: inline-block;
 }
 .bar-nav {
@@ -155,7 +179,10 @@ p {
   color: var(--ink);
 }
 
-/* buttons */
+/* ---------------------------------------------------------------------------
+   Buttons. The primary one is the blue with a little light on top and a coloured shadow under
+   it — a thing you can press, not a filled rectangle. The rest are white with a real edge.
+   --------------------------------------------------------------------------- */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -164,7 +191,7 @@ p {
   font-size: 14px;
   font-weight: 600;
   padding: 10px 16px;
-  border-radius: 11px;
+  border-radius: 12px;
   border: 1px solid var(--line);
   background: var(--paper);
   color: var(--ink);
@@ -175,8 +202,8 @@ p {
   box-shadow: var(--shadow-sm);
 }
 .btn.primary {
-  background: var(--violet);
-  border-color: var(--violet);
+  background: var(--meta);
+  border-color: var(--meta);
   color: #fff;
 }
 .btn.primary:hover {
@@ -187,6 +214,62 @@ p {
   font-size: 13px;
   border-radius: 9px;
 }
+.btn-primary {
+  color: #fff;
+  background: linear-gradient(180deg, #2f84ff 0%, var(--meta) 55%, #0459e3 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 1px 2px rgba(8, 102, 255, 0.35), 0 10px 20px -10px rgba(8, 102, 255, 0.75);
+}
+.btn-primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, #3b8bff 0%, #1a72ff 55%, #0a5ff0 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 2px 4px rgba(8, 102, 255, 0.3), 0 14px 26px -10px rgba(8, 102, 255, 0.8);
+  transform: translateY(-1px);
+}
+.btn-primary:disabled {
+  background: #aab6cc;
+  box-shadow: none;
+}
+.btn-secondary {
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid var(--line);
+  box-shadow: 0 1px 2px rgba(11, 18, 32, 0.05), inset 0 1px 0 #fff;
+}
+.btn-secondary:hover:not(:disabled) {
+  border-color: var(--meta-bright);
+  color: var(--meta-ink);
+  background: var(--meta-tint);
+  box-shadow: 0 2px 6px -2px rgba(8, 102, 255, 0.25);
+}
+.btn-danger {
+  color: #b42318;
+  background: #fff;
+  border: 1px solid #f3c3bd;
+  box-shadow: 0 1px 2px rgba(11, 18, 32, 0.05);
+}
+.btn-danger:hover:not(:disabled) { background: var(--detractor-tint); border-color: #e7a79f; }
+.btn-ghost { color: var(--ink-2); background: transparent; }
+.btn-ghost:hover:not(:disabled) { background: var(--canvas-2); color: var(--ink); }
+.btn-secondary:disabled, .btn-danger:disabled, .btn-ghost:disabled { color: #a3adc2; box-shadow: none; }
+
+/* Inputs. A real edge, a soft well, a ring of the blue when you are in one. */
+.input {
+  width: 100%;
+  border-radius: 12px;
+  border: 1.5px solid var(--line);
+  background: #fff;
+  padding: 10px 14px;
+  font-size: 15px;
+  color: var(--ink);
+  outline: none;
+  box-shadow: inset 0 1px 2px rgba(11, 18, 32, 0.04);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.input::placeholder { color: #9aa5ba; }
+.input:hover:not(:disabled):not(:focus) { border-color: #c5cfe0; }
+.input:focus { border-color: var(--meta); box-shadow: var(--ring); }
+.input:disabled { background: var(--canvas); color: var(--ink-soft); }
+.input-inline { width: auto; }
+select.input { padding-right: 36px; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b7590' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; }
 
 /* generic panel */
 .panel {
@@ -195,6 +278,22 @@ p {
   border-radius: var(--r);
   box-shadow: var(--shadow-sm);
 }
+/* A card: white, a real edge, a little depth, a lit top edge. */
+.card {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: inset 0 1px 0 #fff, var(--shadow-sm);
+}
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.card-head h2 { font-family: var(--display); font-size: 16px; font-weight: 700; letter-spacing: -0.015em; }
 
 /* sentiment chip */
 .chip {
@@ -211,27 +310,12 @@ p {
   height: 7px;
   border-radius: 99px;
 }
-.chip.promoter {
-  color: var(--promoter);
-  background: var(--promoter-tint);
-}
-.chip.promoter .pip {
-  background: var(--promoter);
-}
-.chip.passive {
-  color: var(--passive);
-  background: var(--passive-tint);
-}
-.chip.passive .pip {
-  background: var(--passive);
-}
-.chip.detractor {
-  color: var(--detractor);
-  background: var(--detractor-tint);
-}
-.chip.detractor .pip {
-  background: var(--detractor);
-}
+.chip.promoter { color: var(--promoter); background: var(--promoter-tint); }
+.chip.promoter .pip { background: var(--promoter); }
+.chip.passive { color: var(--passive); background: var(--passive-tint); }
+.chip.passive .pip { background: var(--passive); }
+.chip.detractor { color: var(--detractor); background: var(--detractor-tint); }
+.chip.detractor .pip { background: var(--detractor); }
 
 /* theme tag */
 .tag {
@@ -259,55 +343,17 @@ p {
   gap: 14px;
 }
 @media (max-width: 720px) {
-  .tiles {
-    grid-template-columns: 1fr 1fr;
-  }
-  .tiles .tile:nth-child(2) {
-    grid-column: span 2;
-  }
+  .tiles { grid-template-columns: 1fr 1fr; }
+  .tiles .tile:nth-child(2) { grid-column: span 2; }
 }
-.tile {
-  padding: 18px 20px;
-}
-.tile-n {
-  font-size: 2rem;
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  line-height: 1;
-}
-.tile-l {
-  font-size: 13px;
-  color: var(--ink-soft);
-  margin-top: 8px;
-}
-.split {
-  display: flex;
-  height: 12px;
-  border-radius: 99px;
-  overflow: hidden;
-  gap: 2px;
-}
-.split span {
-  display: block;
-}
-.split-key {
-  display: flex;
-  gap: 16px;
-  margin-top: 10px;
-  font-size: 12.5px;
-  color: var(--ink-2);
-}
-.split-key span {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.pip {
-  width: 8px;
-  height: 8px;
-  border-radius: 99px;
-  display: inline-block;
-}
+.tile { padding: 18px 20px; }
+.tile-n { font-size: 2rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1; }
+.tile-l { font-size: 13px; color: var(--ink-soft); margin-top: 8px; }
+.split { display: flex; height: 12px; border-radius: 99px; overflow: hidden; gap: 2px; }
+.split span { display: block; }
+.split-key { display: flex; gap: 16px; margin-top: 10px; font-size: 12.5px; color: var(--ink-2); }
+.split-key span { display: inline-flex; align-items: center; gap: 6px; }
+.pip { width: 8px; height: 8px; border-radius: 99px; display: inline-block; }
 
 .dash-grid {
   display: grid;
@@ -317,9 +363,7 @@ p {
   align-items: start;
 }
 @media (max-width: 860px) {
-  .dash-grid {
-    grid-template-columns: 1fr;
-  }
+  .dash-grid { grid-template-columns: 1fr; }
 }
 .fix-row {
   display: flex;
@@ -329,23 +373,10 @@ p {
   padding: 11px 0;
   border-bottom: 1px solid var(--line-soft);
 }
-.fix-row:last-child {
-  border-bottom: none;
-}
-.sev {
-  font-size: 11px;
-  font-weight: 700;
-  padding: 3px 9px;
-  border-radius: 99px;
-  white-space: nowrap;
-}
+.fix-row:last-child { border-bottom: none; }
+.sev { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 99px; white-space: nowrap; }
 
-.filter-row {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 14px;
-  flex-wrap: wrap;
-}
+.filter-row { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
 .filter {
   font-family: inherit;
   font-size: 13px;
@@ -357,35 +388,17 @@ p {
   color: var(--ink-2);
   cursor: pointer;
 }
-.filter.on {
-  background: var(--ink);
-  color: #fff;
-  border-color: var(--ink);
-}
-.fb-top {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-.fb-reply {
-  margin-top: 14px;
-  padding: 12px 14px;
-  background: var(--canvas);
-  border: 1px solid var(--line-soft);
-  border-radius: 12px;
-}
+.filter.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+.fb-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.fb-reply { margin-top: 14px; padding: 12px 14px; background: var(--canvas); border: 1px solid var(--line-soft); border-radius: 12px; }
 
 :focus-visible {
-  outline: 2px solid var(--violet);
+  outline: 2px solid var(--meta);
   outline-offset: 2px;
   border-radius: 8px;
 }
 @media (prefers-reduced-motion: reduce) {
-  * {
-    transition: none !important;
-  }
+  * { transition: none !important; }
 }
 
 /* ---------------------------------------------------------------------------
@@ -398,16 +411,14 @@ p {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: none; }
 }
-
 @keyframes rb-sheen {
   from { background-position: -200% 0; }
   to { background-position: 200% 0; }
 }
-
 @keyframes rb-pulse-ring {
-  0% { box-shadow: 0 0 0 0 rgba(11, 78, 162, 0.35); }
-  70% { box-shadow: 0 0 0 10px rgba(11, 78, 162, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(11, 78, 162, 0); }
+  0% { box-shadow: 0 0 0 0 rgba(8, 102, 255, 0.35); }
+  70% { box-shadow: 0 0 0 10px rgba(8, 102, 255, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(8, 102, 255, 0); }
 }
 
 .rise { animation: rb-rise 0.42s var(--ease) both; }
@@ -418,9 +429,7 @@ p {
 
 /* A card you can act on lifts a little under the cursor. */
 .lift { transition: transform 0.22s var(--ease), box-shadow 0.22s var(--ease), border-color 0.22s var(--ease); }
-.lift:hover { transform: translateY(-2px); box-shadow: var(--shadow-lift); border-color: color-mix(in srgb, var(--meta) 35%, var(--line)); }
-
-/* The band of colour the logo has, for headers and the primary button. */
+.lift:hover { transform: translateY(-3px); box-shadow: var(--shadow-lift); border-color: color-mix(in srgb, var(--meta) 40%, var(--line)); }
 
 /* Something is loading and there is nothing to show yet. */
 .shimmer {
@@ -428,7 +437,6 @@ p {
   background-size: 200% 100%;
   animation: rb-sheen 1.4s linear infinite;
 }
-
 .pulse-ring { animation: rb-pulse-ring 1.8s var(--ease) infinite; }
 
 @media (prefers-reduced-motion: reduce) {
@@ -438,18 +446,28 @@ p {
 }
 
 /* ---------------------------------------------------------------------------
-   Rubin chrome
+   Chrome: the rail the workspace sits beside, and the aurora the sign-in and setup pages open on.
+   Both are the blue, deep at the top and brighter at the foot, with a glow of the sky and a
+   little violet in it so the colour has depth rather than one flat fill.
    --------------------------------------------------------------------------- */
-
-/* The blue bezel the workspace sits in. */
-.night { background: linear-gradient(170deg, var(--night) 0%, var(--night-2) 55%, var(--night-3) 100%); }
-.rubin-gradient { background: linear-gradient(135deg, var(--meta-deep) 0%, var(--meta) 60%, var(--meta-bright) 100%); }
-
-/* The one gem on the page: a ruby that catches the light as you approach it. */
-.gem {
+.night {
   position: relative;
-  overflow: hidden;
+  background:
+    radial-gradient(620px 420px at 110% 100%, rgba(0, 209, 255, 0.35) 0%, transparent 60%),
+    radial-gradient(520px 360px at -20% 0%, rgba(109, 93, 255, 0.45) 0%, transparent 60%),
+    linear-gradient(180deg, var(--night) 0%, var(--night-2) 58%, var(--night-3) 100%);
 }
+.aurora {
+  background:
+    radial-gradient(900px 520px at 12% -20%, rgba(109, 93, 255, 0.75) 0%, transparent 58%),
+    radial-gradient(760px 480px at 92% 0%, rgba(0, 209, 255, 0.55) 0%, transparent 58%),
+    radial-gradient(600px 300px at 50% 120%, rgba(56, 169, 255, 0.6) 0%, transparent 60%),
+    linear-gradient(135deg, var(--night) 0%, #0a3690 48%, var(--meta) 100%);
+}
+.rubin-gradient { background: linear-gradient(135deg, var(--meta-deep) 0%, var(--meta) 60%, var(--sky) 100%); }
+
+/* A gleam that crosses a thing as you approach it. */
+.gem { position: relative; overflow: hidden; }
 .gem::after {
   content: "";
   position: absolute;
@@ -465,26 +483,42 @@ p {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 11px;
-  border-radius: 10px;
-  padding: 11px 12px;
-  font-size: 15px;
-  color: rgba(255, 255, 255, 0.78);
+  gap: 12px;
+  border-radius: 12px;
+  padding: 8px 10px;
+  font-size: 14.5px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.74);
   transition: color 0.18s var(--ease), background 0.18s var(--ease), transform 0.18s var(--ease);
 }
-.nav-link:hover { color: #fff; background: rgba(255, 255, 255, 0.1); transform: translateX(2px); }
-.nav-link.on { color: #fff; background: rgba(255, 255, 255, 0.16); font-weight: 600; }
+.nav-link:hover { color: #fff; background: rgba(255, 255, 255, 0.08); transform: translateX(2px); }
+.nav-link.on { color: #fff; background: rgba(255, 255, 255, 0.14); font-weight: 600; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12); }
 .nav-link.on::before {
   content: "";
   position: absolute;
-  left: -11px;
-  top: 8px;
-  bottom: 8px;
+  left: -12px;
+  top: 10px;
+  bottom: 10px;
   width: 3px;
   border-radius: 0 3px 3px 0;
-  background: #fff;
+  background: var(--cyan);
+  box-shadow: 0 0 12px rgba(0, 209, 255, 0.8);
 }
-.nav-link .ico { width: 18px; height: 18px; flex: none; opacity: 0.95; }
+.nav-ico {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+  transition: background 0.18s var(--ease), color 0.18s var(--ease), transform 0.18s var(--ease);
+}
+.nav-ico .ico { width: 18px; height: 18px; }
+.nav-link:hover .nav-ico { background: rgba(255, 255, 255, 0.16); transform: scale(1.05); }
+.nav-link.on .nav-ico { background: #fff; color: var(--meta); box-shadow: 0 6px 14px -6px rgba(0, 0, 0, 0.5); }
+.ico { width: 18px; height: 18px; flex: none; }
 
 /* Where you are in a batch: four steps, and the ones behind you stay lit. */
 .steps { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
@@ -521,9 +555,9 @@ a.step:hover { background: var(--meta-tint); color: var(--meta-ink); }
   position: relative;
   overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 16px;
   background: #fff;
-  padding: 14px 16px;
+  padding: 14px 16px 14px 18px;
   box-shadow: var(--shadow-sm);
   transition: transform 0.22s var(--ease), box-shadow 0.22s var(--ease);
 }
@@ -532,13 +566,12 @@ a.step:hover { background: var(--meta-tint); color: var(--meta-ink); }
   content: "";
   position: absolute;
   inset: 0 auto 0 0;
-  width: 3px;
-  background: var(--meta);
-  opacity: 0.85;
+  width: 4px;
+  background: linear-gradient(180deg, var(--sky), var(--meta));
 }
-.stat.gold::before { background: var(--meta-bright); }
-.stat .k { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-soft); }
-.stat .v { margin-top: 3px; font-size: 26px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: var(--ink); }
+.stat.gold::before { background: linear-gradient(180deg, var(--cyan), var(--sky)); }
+.stat .k { font-size: 11px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--ink-soft); }
+.stat .v { margin-top: 3px; font-family: var(--display); font-size: 27px; font-weight: 800; letter-spacing: -0.025em; font-variant-numeric: tabular-nums; color: var(--ink); }
 .stat .s { margin-top: 2px; font-size: 11.5px; color: var(--ink-soft); }
 
 /* A key on the keyboard, written down. */
@@ -557,6 +590,7 @@ a.step:hover { background: var(--meta-tint); color: var(--meta-ink); }
   font-size: 10.5px;
   color: var(--ink-2);
 }
+.night .kbd { background: rgba(255, 255, 255, 0.12); border-color: rgba(255, 255, 255, 0.22); color: #fff; }
 
 /* Command palette */
 .palette-back {
@@ -565,12 +599,10 @@ a.step:hover { background: var(--meta-tint); color: var(--meta-ink); }
   z-index: 60;
   display: flex;
   justify-content: center;
-  /* Hug the results. Left to stretch, the panel fills the overlay and three matches sit at the
-     top of a tall empty box. */
   align-items: flex-start;
   padding: 12vh 16px 16px;
-  background: rgba(11, 43, 97, 0.42);
-  backdrop-filter: blur(3px);
+  background: rgba(6, 22, 54, 0.5);
+  backdrop-filter: blur(4px);
   animation: rb-fade 0.16s var(--ease) both;
 }
 .palette {
@@ -580,9 +612,9 @@ a.step:hover { background: var(--meta-tint); color: var(--meta-ink); }
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: 18px;
   background: #fff;
-  box-shadow: 0 30px 80px -30px rgba(11, 43, 97, 0.5);
+  box-shadow: 0 40px 90px -30px rgba(6, 22, 54, 0.6);
   animation: rb-pop 0.2s var(--ease) both;
 }
 .palette input {
@@ -621,27 +653,40 @@ a.step:hover { background: var(--meta-tint); color: var(--meta-ink); }
    Home: three jobs, each a card you can press, with the one next step on it.
    --------------------------------------------------------------------------- */
 .job {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 10px;
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: 20px;
   background: #fff;
-  padding: 22px 22px 20px;
-  box-shadow: var(--shadow-sm);
+  padding: 24px 24px 22px;
+  box-shadow: inset 0 1px 0 #fff, var(--shadow-sm);
   color: inherit;
+  overflow: hidden;
 }
+.job::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--meta), var(--sky), var(--cyan));
+  opacity: 0;
+  transition: opacity 0.22s var(--ease);
+}
+.job:hover::before { opacity: 1; }
 .job .job-ico {
   display: grid;
   place-items: center;
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  background: var(--meta-tint);
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--meta-tint) 0%, var(--meta-tint-2) 100%);
   color: var(--meta);
+  box-shadow: inset 0 1px 0 #fff, 0 1px 2px rgba(8, 102, 255, 0.12);
 }
-.job .job-ico svg { width: 24px; height: 24px; }
-.job h2 { font-size: 19px; font-weight: 700; letter-spacing: -0.015em; }
+.job .job-ico .ico { width: 24px; height: 24px; }
+.job h2 { font-family: var(--display); font-size: 20px; font-weight: 800; letter-spacing: -0.02em; }
 .job p { font-size: 14.5px; color: var(--ink-2); }
 .job .job-go {
   margin-top: auto;
@@ -649,15 +694,13 @@ a.step:hover { background: var(--meta-tint); color: var(--meta-ink); }
   align-items: center;
   gap: 6px;
   align-self: flex-start;
-  border-radius: 10px;
-  background: var(--meta);
-  color: #fff;
+  border-radius: 12px;
   font-weight: 600;
   font-size: 15px;
   padding: 10px 16px;
-  transition: background 0.18s var(--ease);
+  transition: transform 0.18s var(--ease), box-shadow 0.18s var(--ease);
 }
-.job:hover .job-go { background: var(--meta-deep); }
+.job:hover .job-go { transform: translateY(-1px); }
 
 /* A batch on the way: what it is and the one thing to do next. */
 .next-step {
@@ -669,42 +712,60 @@ a.step:hover { background: var(--meta-tint); color: var(--meta-ink); }
   color: var(--meta-ink);
   font-size: 13px;
   font-weight: 600;
-  padding: 4px 11px;
+  padding: 5px 12px;
+  transition: background 0.18s var(--ease);
 }
+.next-step:hover { background: var(--meta-tint-2); }
 .next-step.done { background: var(--promoter-tint); color: var(--promoter); }
 
-/* ---------------------------------------------------------------------------
-   Emoji chips. A button and a menu item lead with a picture of what they do,
-   sat in a little round chip the way a reaction sits on a post.
-   --------------------------------------------------------------------------- */
-.emo-btn {
-  display: inline-grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  margin-left: -4px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.22);
-  font-size: 14px;
-  line-height: 1;
-  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+/* The checklist a new shop works down. */
+.onboard {
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: inset 0 1px 0 #fff, var(--shadow-sm);
+  overflow: hidden;
 }
-.emo-btn.emo-sm { width: 20px; height: 20px; font-size: 12px; margin-left: -3px; }
-/* On a white button the chip is the blue tint. */
-button:not(.bg-\[var\(--meta\)\]) > .emo-btn, a:not(.bg-\[var\(--meta\)\]) > .emo-btn { background: var(--meta-tint); }
-.nav-link .emo {
+.onboard-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 16px 22px;
+  background: linear-gradient(90deg, var(--meta-tint) 0%, #fff 70%);
+  border-bottom: 1px solid var(--line-soft);
+}
+.onboard-head h2 { font-family: var(--display); font-size: 17px; font-weight: 800; letter-spacing: -0.02em; }
+.onboard-meter { display: inline-flex; align-items: center; gap: 10px; font-size: 13px; color: var(--ink-soft); }
+.onboard-meter .bar-track { width: 120px; height: 6px; border-radius: 99px; background: var(--meta-tint-2); overflow: hidden; }
+.onboard-meter .bar-fill { height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--meta), var(--cyan)); }
+.onboard-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--canvas);
+  border: 1px solid transparent;
+  transition: border-color 0.18s var(--ease), background 0.18s var(--ease);
+}
+.onboard-item:hover { border-color: var(--meta-tint-2); background: #fff; }
+.onboard-item.done { opacity: 0.6; }
+.onboard-n {
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  width: 26px;
+  height: 26px;
   flex: none;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.14);
-  font-size: 16px;
-  line-height: 1;
-  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
-  transition: background 0.18s var(--ease), transform 0.18s var(--ease);
+  font-size: 12px;
+  font-weight: 800;
+  color: #fff;
+  background: linear-gradient(135deg, var(--meta), var(--sky));
+  box-shadow: 0 4px 10px -4px rgba(8, 102, 255, 0.7);
 }
-.nav-link:hover .emo { background: rgba(255, 255, 255, 0.24); transform: scale(1.06); }
-.nav-link.on .emo { background: #fff; }
-.job .job-ico { font-size: 26px; line-height: 1; font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }
+.onboard-item.done .onboard-n { background: var(--promoter); box-shadow: none; }
+
+/* Emoji chips are gone from the buttons; the class stays harmless for anything still using it. */
+.emo-btn { display: none; }

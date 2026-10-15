@@ -17,19 +17,22 @@ export function GettingStarted({ profile, learned, aiReady, staff, imports }: { 
   if (left.length === 0) return null;
   const done = items.length - left.length;
   return (
-    <section className="mb-8 rounded-[14px] border border-[var(--meta-tint-2)] bg-[var(--meta-tint)] p-5" aria-labelledby="getting-started">
-      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-        <h2 id="getting-started" className="text-[17px] font-bold tracking-tight">Getting started</h2>
-        <span className="text-[13px] text-[var(--ink-soft)]">{done} of {items.length} done{!profile.setupDone && <> · <Link href="/setup" className="font-semibold text-[var(--meta)]">Carry on with setup</Link></>}</span>
+    <section className="onboard mb-8" aria-labelledby="getting-started">
+      <div className="onboard-head">
+        <h2 id="getting-started">Getting started</h2>
+        <span className="onboard-meter">
+          <span className="bar-track" aria-hidden><span className="bar-fill" style={{ width: `${(done / items.length) * 100}%` }} /></span>
+          <span>{done} of {items.length} done{!profile.setupDone && <> · <Link href="/setup" className="font-semibold text-[var(--meta)]">Carry on with setup</Link></>}</span>
+        </span>
       </div>
-      <ol className="grid gap-2 md:grid-cols-2">
+      <ol className="grid gap-2.5 p-4 md:grid-cols-2">
         {items.map((i, n) => (
-          <li key={i.title} className={`flex items-start gap-3 rounded-[12px] bg-white p-3 ${i.done ? "opacity-60" : ""}`}>
-            <span className={`mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full text-[11px] font-bold ${i.done ? "bg-[var(--promoter)] text-white" : "border-2 border-[var(--meta)] text-[var(--meta)]"}`} aria-hidden>{i.done ? "✓" : n + 1}</span>
+          <li key={i.title} className={`onboard-item ${i.done ? "done" : ""}`}>
+            <span className="onboard-n" aria-hidden>{i.done ? "✓" : n + 1}</span>
             <div className="min-w-0">
               <div className="font-semibold">{i.title}</div>
               <div className="text-[13px] text-[var(--ink-soft)]">{i.text}</div>
-              {!i.done && <Link href={i.href} className="mt-1 inline-block text-[13px] font-semibold text-[var(--meta)]">{i.go} →</Link>}
+              {!i.done && <Link href={i.href} className="mt-1.5 inline-block text-[13px] font-semibold text-[var(--meta)]">{i.go} →</Link>}
             </div>
           </li>
         ))}

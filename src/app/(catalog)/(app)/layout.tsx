@@ -7,6 +7,7 @@ import { logoutAction } from "@/app/(catalog)/actions";
 import { NavLinks } from "./NavLinks";
 import { CommandPalette, type PaletteItem } from "@/app/(catalog)/CommandPalette";
 import { Kbd } from "@/app/(catalog)/ui";
+import { Logo } from "@/app/Logo";
 import { vendorMode } from "@/lib/catalog/licence";
 import { currentLicence } from "@/lib/catalog/licence-store";
 import "../catalog.css";
@@ -54,39 +55,44 @@ export default async function CatalogLayout({ children }: { children: React.Reac
   return (
     <div className="flex min-h-screen bg-[var(--canvas)]">
       <aside className="night hidden w-64 shrink-0 flex-col md:flex">
-        <Link href="/" className="block px-5 py-5">
-          <div className="wordmark text-[22px] text-white">Flöda</div>
-          <div className="mt-1 text-[12px] text-white/65">Paperwork in, listings out</div>
+        <Link href="/" className="block px-5 pb-4 pt-5">
+          <Logo size={22} tone="light" />
+          <div className="mt-2 text-[12px] text-white/60">Paperwork in, listings out</div>
         </Link>
         <NavLinks isAdmin={user.role === "ADMIN"} vendor={vendor} />
-        <div className="mt-auto px-5 py-4 text-xs">
-          <div className="mb-3 flex items-center gap-1.5 text-[11px] text-white/55">
+        <div className="mt-auto px-4 pb-4 text-xs">
+          <div className="mb-3 flex items-center gap-1.5 px-1 text-[11px] text-white/55">
             <Kbd>⌘</Kbd><Kbd>K</Kbd> <span>to go anywhere</span>
           </div>
-          <div className="text-[13px] font-medium text-white/90">{user.name}</div>
-          <div className="text-white/55">{user.role === "ADMIN" ? "Admin" : "Staff"}</div>
-          <form action={logoutAction} className="mt-2">
-            <button className="text-[13px] text-white/85 hover:underline">Sign out</button>
-          </form>
+          <div className="flex items-center gap-3 rounded-[14px] bg-white/[0.07] p-3 ring-1 ring-inset ring-white/10">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-[var(--sky)] to-[var(--meta)] text-[13px] font-bold text-white shadow-[0_6px_14px_-6px_rgba(0,0,0,0.6)]" aria-hidden>{user.name.trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase()}</span>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[13px] font-semibold text-white">{user.name}</div>
+              <div className="text-white/55">{user.role === "ADMIN" ? "Admin" : "Staff"}</div>
+            </div>
+            <form action={logoutAction}>
+              <button className="rounded-[8px] px-2 py-1 text-[12px] font-medium text-white/75 transition hover:bg-white/10 hover:text-white">Sign out</button>
+            </form>
+          </div>
         </div>
       </aside>
-      <main className="min-w-0 flex-1 px-4 py-6 md:px-8">
+      <main className="min-w-0 flex-1 px-4 py-6 md:px-9 md:py-8">
         <div className="mb-4 flex items-center justify-between md:hidden">
-          <Link href="/" className="wordmark text-[18px] text-[var(--ink)]">Flöda</Link>
+          <Link href="/"><Logo size={18} /></Link>
           <NavLinks isAdmin={user.role === "ADMIN"} vendor={vendor} compact />
         </div>
         {licence.kind === "lapsed" && (
-          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <div className="mb-4 rounded-[12px] border border-[#f1dcb0] bg-[var(--passive-tint)] px-4 py-3 text-sm text-[#7a4e06] shadow-[inset_4px_0_0_var(--passive)]">
             <strong>This copy&rsquo;s licence needs attention.</strong> {licence.why} Everything keeps working while it is sorted out; write to hello@floda.ai, or enter a new key in Settings.
           </div>
         )}
         {licence.kind === "none" && user.role === "ADMIN" && (
-          <div className="mb-4 rounded-lg border border-[var(--meta-tint-2)] bg-[var(--meta-tint)] px-4 py-3 text-sm">
+          <div className="mb-4 rounded-[12px] border border-[var(--meta-tint-2)] bg-[var(--meta-tint)] px-4 py-3 text-sm text-[var(--meta-ink)] shadow-[inset_4px_0_0_var(--meta)]">
             <strong>No licence key yet.</strong> Enter the one Flöda sent you in <Link href="/settings" className="font-semibold text-[var(--meta)]">Settings</Link>.
           </div>
         )}
         {isEphemeralDb() && (
-          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
+          <div className="mb-4 rounded-[12px] border border-[#f3c3bd] bg-[var(--detractor-tint)] px-4 py-3 text-sm text-[#8f2318] shadow-[inset_4px_0_0_var(--detractor)]">
             <strong>No database connected.</strong> This deployment is running on a temporary database that resets whenever the server restarts, so batches and accounts will disappear.
             {process.env.VERCEL ? " In Vercel: Storage → Create Database → Neon (Postgres), connect it to this project, then redeploy." : " Set DATABASE_URL and restart."}
           </div>

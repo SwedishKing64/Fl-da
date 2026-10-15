@@ -1737,7 +1737,7 @@ export async function saveApiKeyAction(_prev: ActionResult | null, formData: For
 }
 
 /** A step of setup put off until later. It stays on the Home checklist. */
-export async function skipSetupStepAction(step: "learn" | "ai"): Promise<ActionResult> {
+export async function skipSetupStepAction(step: "learn" | "house" | "ai"): Promise<ActionResult> {
   await requireUser("ADMIN");
   return safely(async () => {
     const { saveShopProfile } = await import("@/lib/catalog/shop-profile");
@@ -1881,5 +1881,109 @@ export async function activateLicenceAction(_prev: ActionResult | null, formData
     revalidatePath("", "layout");
     if (licence.why) return { ok: false, error: `Flöda says: ${licence.why} The key has been kept; contact hello@floda.ai.` };
     return { ok: true, message: `Licensed to ${licence.client}${licence.expiresAt ? ` until ${new Date(licence.expiresAt).toLocaleDateString("en-AU")}` : ""}.` };
+  });
+}
+
+
+// ---------------------------------------------------------------------------
+// How the shop writes a listing, and feedback to the people who make Flöda
+// ---------------------------------------------------------------------------
+
+/** The tag rules the "How you list" form writes are named so it can find and replace its own. */
+const HOUSE_RULE_PREFIX = "house: ";
+
+/** The rules the form wrote before, in its own shape. */
+export async function houseTagRules(): Promise<import("@/lib/catalog/house").TagRuleInput[]> {
+  const rows = await prisma.tagRule.findMany({ where: { name: { startsWith: HOUSE_RULE_PREFIX } }, orderBy: { createdAt: "asc" } });
+  return rows.map((r) => ({ id: r.id, field: (["any", "title", "brand", "productType"].includes(r.matchField) ? r.matchField : "any") as import("@/lib/catalog/house").TagRuleInput["field"], pattern: r.pattern, addTags: r.addTags }));
+}
+
+/** How the shop writes a listing, and the tag rules it told us, from the "How you list" form. */
+export async function saveHouseAction(input: { house: import("@/lib/catalog/house").HouseConventions; tagRules: import("@/lib/catalog/house").TagRuleInput[] }): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const { cleanHouse, TAG_RULE_FIELDS } = await import("@/lib/catalog/house");
+    const { saveHouseConventions, saveShopProfile } = await import("@/lib/catalog/shop-profile");
+    const house = { ...cleanHouse(input.house), savedAt: new Date().toISOString() };
+    await saveHouseConventions(house);
+    const fields = new Set(TAG_RULE_FIELDS.map((f) => f.key));
+    const rules = (Array.isArray(input.tagRules) ? input.tagRules : []).slice(0, 200)
+      .map((r) => ({ field: fields.has(r.field) ? r.field : "any", pattern: String(r.pattern ?? "").trim().slice(0, 200), addTags: String(r.addTags ?? "").split(",").map((t) => t.trim()).filter(Boolean).slice(0, 40).join(", ") }))
+      .filter((r) => r.pattern && r.addTags);
+    // The form's rules replace the form's rules; rules made anywhere else are left alone.
+    await prisma.tagRule.deleteMany({ where: { name: { startsWith: HOUSE_RULE_PREFIX } } });
+    for (const r of rules) {
+      await prisma.tagRule.create({ data: { name: `${HOUSE_RULE_PREFIX}${r.field} ~ ${r.pattern}`.slice(0, 160), matchField: r.field, pattern: r.pattern, addTags: r.addTags } });
+    }
+    await saveShopProfile({ skipped: { house: false } });
+    await logAudit("shop.house", { userId: user.id, details: { naming: house.naming, identifiers: house.identifiers, weights: house.weights.mode, rules: rules.length } });
+    revalidatePath("", "layout");
+    return { ok: true, message: `Kept${rules.length ? `, with ${rules.length} tag rule${rules.length === 1 ? "" : "s"}` : ""}.` };
+  });
+}
+
+/**
+ * A word from someone using Flöda to the people who make it. On the vendor's own deployment it
+ * is kept there; an installed copy sends it to the vendor with the shop, page and version on it,
+ * and keeps it here as well if the vendor cannot be reached.
+ */
+export async function sendNoteToFlodaAction(input: { message: string; email?: string; page?: string }): Promise<ActionResult> {
+  const user = await requireUser();
+  return safely(async () => {
+    const message = String(input.message ?? "").trim().slice(0, 4000);
+    if (message.length < 3) return { ok: false, error: "Say a little more than that." };
+    const { FEEDBACK_KEY } = await import("@/lib/catalog/feedback-box");
+    const { vendorMode, licenceServer } = await import("@/lib/catalog/licence");
+    const { shopName } = await import("@/lib/catalog/shop-profile");
+    const row = {
+      at: new Date().toISOString(),
+      message,
+      email: String(input.email ?? "").trim().slice(0, 200),
+      page: String(input.page ?? "").slice(0, 200),
+      shop: shopName(),
+      user: user.name,
+      version: process.env.FLODA_VERSION ?? "",
+      install: "",
+      key: "",
+    };
+    const keepHere = async () => {
+      const existing = await prisma.appSetting.findUnique({ where: { key: FEEDBACK_KEY } });
+      const rows = parseJson<unknown[]>(existing?.value, []);
+      rows.push(row);
+      const value = JSON.stringify(rows.slice(-500));
+      await prisma.appSetting.upsert({ where: { key: FEEDBACK_KEY }, create: { key: FEEDBACK_KEY, value }, update: { value } });
+    };
+    await logAudit("feedback.sent", { userId: user.id, details: { page: row.page, length: message.length } });
+    if (vendorMode() || !licenceServer()) {
+      await keepHere();
+      return { ok: true, message: vendorMode() ? "Kept. It is on the Clients page." : "Thank you. It is kept with this copy; write to hello@floda.ai as well if it is urgent." };
+    }
+    try {
+      const { getLicence, installId } = await import("@/lib/catalog/licence-store");
+      const [licence, install] = await Promise.all([getLicence(), installId()]);
+      const res = await fetch(`${licenceServer()}/api/feedback`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...row, install, key: licence?.key ?? "" }),
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return { ok: true, message: "Sent. Thank you — a person reads every one." };
+    } catch {
+      await keepHere();
+      return { ok: true, message: "Flöda could not be reached just now, so it is kept with this copy. Write to hello@floda.ai if it is urgent." };
+    }
+  });
+}
+
+export async function dismissFeedbackAction(at: string): Promise<ActionResult> {
+  return safely(async () => {
+    await requireVendorAdmin();
+    const { FEEDBACK_KEY } = await import("@/lib/catalog/feedback-box");
+    const row = await prisma.appSetting.findUnique({ where: { key: FEEDBACK_KEY } });
+    const rows = parseJson<Array<{ at: string }>>(row?.value, []);
+    await prisma.appSetting.upsert({ where: { key: FEEDBACK_KEY }, create: { key: FEEDBACK_KEY, value: "[]" }, update: { value: JSON.stringify(rows.filter((r) => r.at !== at)) } });
+    revalidatePath("/clients");
+    return { ok: true };
   });
 }

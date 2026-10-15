@@ -26,6 +26,7 @@
  */
 
 import { LIVE_TAG_SPELLING, TAG_ALSO } from "./tag-spelling";
+import { DEFAULT_HOUSE, type HouseConventions } from "./house";
 
 export interface TaxonomyGroup {
   /** The bold heading. This is the value written to the Shopify `Type` column. */
@@ -172,6 +173,8 @@ export interface Conventions {
    * on the end ("123abc-zb"). Empty means the shop writes no marker.
    */
   marker: string;
+  /** How the shop writes a listing — names, SKUs and barcodes, weights (see house.ts). */
+  house?: HouseConventions;
 }
 
 interface Vocabulary {
@@ -186,10 +189,10 @@ interface Vocabulary {
 }
 
 /** Blank: no pack, nothing learned, no marker. What a fresh install runs on until setup. */
-export const BLANK_CONVENTIONS: Conventions = { pack: "general", learned: null, marker: "" };
+export const BLANK_CONVENTIONS: Conventions = { pack: "general", learned: null, marker: "", house: DEFAULT_HOUSE };
 
 /** The conventions of the shop Flöda was built in; the tests are written against them. */
-export const ALPSPORT_CONVENTIONS: Conventions = { pack: "snow-outdoor", learned: null, marker: "123abc" };
+export const ALPSPORT_CONVENTIONS: Conventions = { pack: "snow-outdoor", learned: null, marker: "123abc", house: DEFAULT_HOUSE };
 
 /**
  * The menu draws an ampersand and the catalogue spells it out, so the two have to meet: without
@@ -327,6 +330,11 @@ export function tagAlso(): Record<string, readonly string[]> {
 }
 
 /** The fixed half of the shop's marker tag; empty when the shop writes none. */
+/** How the shop writes a listing, as last put in force. */
+export function houseConventions(): HouseConventions {
+  return conventions.house ?? DEFAULT_HOUSE;
+}
+
 export function markerPrefix(): string {
   return conventions.marker.trim().toLowerCase();
 }

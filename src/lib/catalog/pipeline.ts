@@ -1,7 +1,7 @@
 // Server-side orchestration: ingest -> extract -> map -> group -> price -> images -> review -> export.
 
 import type { Prisma } from "@prisma/client";
-import { productTitle, seasonTagFrom, seoTitle } from "./titles";
+import { productTitle, seasonTagFrom, seoTitle, titledForShop } from "./titles";
 import { isOfType, isSkipped, parseDirectives, typeKey } from "./instructions";
 import { prisma, parseJson } from "./db";
 import { extractFile, type UploadKind } from "./extract";
@@ -23,6 +23,8 @@ import { askToJoin } from "./reference-ai";
 import { aiAvailable } from "./anthropic";
 import { repairCategoryRules, repairProductTags, repairTagRuleSpelling } from "./seed";
 import { applyTagRules, type TagRuleLike } from "./rules";
+import { conventionGrams, conventionIdentifiers } from "./house";
+import { houseConventions } from "./taxonomy";
 import { applyTemplates, type ProductTemplateLike } from "./templates";
 import { allocateFreight, exGstCostAud, priceVariant } from "./pricing";
 import { getSettings } from "./settings";
@@ -842,7 +844,7 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
     // A seasonal product carries its year after the name — the same products that carry a year tag.
     // The SEO title is that title with the brand in front of it, which is the one place it appears.
     const season = seasonTagFrom(g.tags);
-    const title = productTitle(g.title, season);
+    const title = titledForShop(g.brand, productTitle(g.title, season));
     // Everything the product owns goes in with it: its variants, each with the order line it came
     // from, and its pictures. One round trip per product instead of one per row — a build on a
     // database in another region was waiting on the network a dozen times per product.
@@ -895,13 +897,14 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
           create: g.variants.map((v) => {
             const src = items[v.sourceIndex];
             variantCount++;
+            const ids = conventionIdentifiers(houseConventions(), { sku: v.item.sku ?? "", barcode: v.item.barcode ?? "" });
             return {
-              sku: v.item.sku,
-              barcode: v.item.barcode,
+              sku: ids.sku,
+              barcode: ids.barcode,
               option1Value: v.option1Value,
               option2Value: v.option2Value,
               option3Value: v.option3Value,
-              grams: v.item.grams ?? 0,
+              grams: v.item.grams ?? conventionGrams(houseConventions(), g.productType) ?? 0,
               quantity: v.item.quantity ?? 0,
               sortOrder: vsort++,
               costPrice: v.item.costPrice ?? 0,

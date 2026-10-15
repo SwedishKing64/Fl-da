@@ -247,6 +247,7 @@ export interface RowFlag {
     | "MISSING_PRICE"
     | "MISSING_COST"
     | "MISSING_SKU"
+    | "MISSING_BARCODE"
     | "DUPLICATE_SKU_BATCH"
     | "DUPLICATE_SKU_SHOPIFY"
     | "DUPLICATE_HANDLE"
@@ -274,6 +275,7 @@ export const WARNING_CODES: RowFlag["code"][] = [
   "MISSING_VENDOR",
   "MISSING_TYPE",
   "MISSING_SKU",
+  "MISSING_BARCODE",
   "UPDATE_EXISTING",
   "DUPLICATE_SKU_SHOPIFY",
 ];

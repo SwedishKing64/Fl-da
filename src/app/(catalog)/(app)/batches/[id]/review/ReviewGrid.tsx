@@ -80,7 +80,7 @@ const BANDS = VARIANT_COLS.reduce<Array<{ name: string; span: number }>>((acc, c
 }, []);
 
 const FLAG_LABELS: Record<string, string> = {
-  MISSING_TITLE: "Missing title", MISSING_PRICE: "Missing price", MISSING_COST: "Missing cost", MISSING_SKU: "Missing SKU",
+  MISSING_TITLE: "Missing title", MISSING_PRICE: "Missing price", MISSING_COST: "Missing cost", MISSING_SKU: "Missing SKU", MISSING_BARCODE: "Missing barcode",
   DUPLICATE_SKU_BATCH: "Duplicate SKU (batch)", DUPLICATE_SKU_SHOPIFY: "SKU exists in Shopify", DUPLICATE_HANDLE: "Duplicate handle",
   INVALID_HANDLE: "Invalid handle", DUPLICATE_OPTIONS: "Duplicate option values", MISSING_OPTION_VALUE: "Missing option value",
   NO_IMAGE: "No image", INVALID_IMAGE_URL: "Bad image URL", LOW_MARGIN: "Low margin", NEGATIVE_PROFIT: "Negative profit",
@@ -287,7 +287,7 @@ export function ReviewGrid({ initial, batchId }: { initial: ReviewData; batchId:
     const ids = Array.from(selected);
     const patch: Record<string, unknown> = {};
     switch (bulk.field) {
-      case "dismissWarnings": patch.dismissWarnings = bulk.value ? [bulk.value] : ["NO_IMAGE", "LOW_MARGIN", "MISSING_SKU", "MISSING_VENDOR", "MISSING_TYPE", "INVALID_IMAGE_URL", "NEGATIVE_PROFIT", "DUPLICATE_SKU_SHOPIFY", "UPDATE_EXISTING"]; break;
+      case "dismissWarnings": patch.dismissWarnings = bulk.value ? [bulk.value] : ["NO_IMAGE", "LOW_MARGIN", "MISSING_SKU", "MISSING_BARCODE", "MISSING_VENDOR", "MISSING_TYPE", "INVALID_IMAGE_URL", "NEGATIVE_PROFIT", "DUPLICATE_SKU_SHOPIFY", "UPDATE_EXISTING"]; break;
       case "restoreWarnings": patch.restoreWarnings = true; break;
       case "clearOverride": patch.clearOverride = true; break;
       default: patch[bulk.field] = bulk.value;
@@ -365,7 +365,7 @@ export function ReviewGrid({ initial, batchId }: { initial: ReviewData; batchId:
           {bulk.field === "category" && <select value={bulk.value} onChange={(e) => setBulk({ ...bulk, value: e.target.value })} className={`${INPUT_INLINE} w-40`}><option value="">Choose…</option>{CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}</select>}
           {bulk.field === "status" && <select value={bulk.value} onChange={(e) => setBulk({ ...bulk, value: e.target.value })} className={`${INPUT_INLINE} w-40`}><option value="">Choose…</option><option value="draft">Draft</option><option value="active">Active</option></select>}
           {bulk.field === "gstTreatment" && <select value={bulk.value} onChange={(e) => setBulk({ ...bulk, value: e.target.value })} className={`${INPUT_INLINE} w-40`}><option value="">Choose…</option><option value="EXCLUSIVE">Ex GST</option><option value="INCLUSIVE">Inc GST</option><option value="NONE">No GST</option></select>}
-          {bulk.field === "dismissWarnings" && <select value={bulk.value} onChange={(e) => setBulk({ ...bulk, value: e.target.value })} className={`${INPUT_INLINE} w-56`}><option value="">All warnings</option>{["NO_IMAGE", "LOW_MARGIN", "MISSING_SKU", "MISSING_VENDOR", "MISSING_TYPE", "NEGATIVE_PROFIT", "UPDATE_EXISTING", "DUPLICATE_SKU_SHOPIFY"].map((c) => <option key={c} value={c}>{FLAG_LABELS[c]}</option>)}</select>}
+          {bulk.field === "dismissWarnings" && <select value={bulk.value} onChange={(e) => setBulk({ ...bulk, value: e.target.value })} className={`${INPUT_INLINE} w-56`}><option value="">All warnings</option>{["NO_IMAGE", "LOW_MARGIN", "MISSING_SKU", "MISSING_BARCODE", "MISSING_VENDOR", "MISSING_TYPE", "NEGATIVE_PROFIT", "UPDATE_EXISTING", "DUPLICATE_SKU_SHOPIFY"].map((c) => <option key={c} value={c}>{FLAG_LABELS[c]}</option>)}</select>}
           <Button size="sm" variant="primary" icon="✅" onClick={runBulk} disabled={pending}>Apply</Button>
           <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>Clear</Button>
         </div>

@@ -1,6 +1,8 @@
 // AI-written SEO titles/descriptions and product copy, with a deterministic template fallback.
 
 import Anthropic from "@anthropic-ai/sdk";
+import { houseGuidance } from "./house";
+import { houseConventions } from "./taxonomy";
 import { englishVariant, retailer, shopName } from "./shop-profile";
 import { anthropicClient, EXTRACTION_MODEL, aiAvailable } from "./anthropic";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
@@ -86,7 +88,7 @@ export async function enrichBatchSeo(batchId: string, opts: { onlyMissing: boole
       guidance: templateGuidance(
         { vendor: p.vendor, productType: p.productType, category: p.category },
         templates,
-        settings.houseRules,
+        [houseGuidance(houseConventions()), settings.houseRules].filter((t) => t.trim()).join("\n"),
         titleExamplesFor({ vendor: p.vendor, productType: p.productType, category: p.category }, templates),
       ),
       title: p.title,

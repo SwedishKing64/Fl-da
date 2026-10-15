@@ -163,10 +163,10 @@ export function LearnStep({ learned }: { learned: LearnedVocabulary | null }) {
       <p className="mb-4 text-[14px] text-[var(--ink-soft)]">
         Flöda learns how your shop files and tags products from the products you already sell: which kinds of product you have, which menu tags go with each, how each shelf tag is spelled, and the conventions each brand follows. New listings are then built to match. You can do this again whenever your catalogue changes.
       </p>
-      <LearnPanel learned={learned} next="/setup?step=ai" />
+      <LearnPanel learned={learned} next="/setup?step=house" />
       <div className="mt-5 flex items-center justify-between border-t border-[var(--line-soft)] pt-4 text-[13px] text-[var(--ink-soft)]">
         <span>No export to hand? Flöda works without one; it just has less to go on.</span>
-        <Button size="sm" variant="ghost" disabled={pending} onClick={() => start(async () => { await skipSetupStepAction("learn"); router.push("/setup?step=ai"); })}>Skip for now</Button>
+        <Button size="sm" variant="ghost" disabled={pending} onClick={() => start(async () => { await skipSetupStepAction("learn"); router.push("/setup?step=house"); })}>Skip for now</Button>
       </div>
     </Card>
   );

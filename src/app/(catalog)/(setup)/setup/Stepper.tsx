@@ -1,9 +1,10 @@
-export type SetupStep = "account" | "shop" | "learn" | "ai" | "done";
+export type SetupStep = "account" | "shop" | "learn" | "house" | "ai" | "done";
 
 export const STEPS: Array<{ key: SetupStep; label: string }> = [
   { key: "account", label: "Your account" },
   { key: "shop", label: "Your shop" },
   { key: "learn", label: "Your catalogue" },
+  { key: "house", label: "How you list" },
   { key: "ai", label: "Reading documents" },
   { key: "done", label: "Ready" },
 ];

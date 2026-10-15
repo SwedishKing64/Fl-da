@@ -5,6 +5,7 @@ import { isEphemeralDb } from "@/lib/catalog/db";
 import { databaseGate } from "../DatabaseGate";
 import { logoutAction } from "@/app/(catalog)/actions";
 import { NavLinks } from "./NavLinks";
+import { FeedbackButton } from "./FeedbackButton";
 import { CommandPalette, type PaletteItem } from "@/app/(catalog)/CommandPalette";
 import { Kbd } from "@/app/(catalog)/ui";
 import { Logo } from "@/app/Logo";
@@ -100,6 +101,7 @@ export default async function CatalogLayout({ children }: { children: React.Reac
         <div className="rise">{children}</div>
       </main>
       <CommandPalette items={items} />
+      <FeedbackButton />
     </div>
   );
 }

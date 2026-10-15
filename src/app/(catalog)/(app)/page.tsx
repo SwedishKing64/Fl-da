@@ -3,7 +3,7 @@ import { prisma, parseJson } from "@/lib/catalog/db";
 import { Badge, Card, Details, Empty, PageHeader, Stat, fmtDate, statusTone } from "@/app/(catalog)/ui";
 import type { ReviewSummary } from "@/lib/catalog/review-types";
 import { apiKeySource } from "@/lib/catalog/anthropic";
-import { getLearnedVocabulary, getShopProfile } from "@/lib/catalog/shop-profile";
+import { getHouseConventions, getLearnedVocabulary, getShopProfile } from "@/lib/catalog/shop-profile";
 import { GettingStarted } from "./GettingStarted";
 import { NavIcon } from "./NavLinks";
 
@@ -50,7 +50,7 @@ const JOBS = [
 ];
 
 export default async function DashboardPage() {
-  const [batches, recent, exported, audit, profile, learned, staff] = await Promise.all([
+  const [batches, recent, exported, audit, profile, learned, staff, house] = await Promise.all([
     prisma.importBatch.count(),
     prisma.importBatch.findMany({ orderBy: { updatedAt: "desc" }, take: 8, include: { supplier: true, _count: { select: { products: true, files: true } } } }),
     // Capped: this reads a JSON blob per batch, and a shop two seasons in has hundreds. The
@@ -60,6 +60,7 @@ export default async function DashboardPage() {
     getShopProfile(),
     getLearnedVocabulary(),
     prisma.user.count(),
+    getHouseConventions(),
   ]);
 
   let products = 0, variants = 0, units = 0;
@@ -75,7 +76,7 @@ export default async function DashboardPage() {
   return (
     <>
       <PageHeader title="What would you like to do?" subtitle="Pick a job. Each one walks you through it a step at a time." />
-      <GettingStarted profile={profile} learned={Boolean(learned)} aiReady={apiKeySource() !== "none"} staff={staff} imports={batches} />
+      <GettingStarted profile={profile} learned={Boolean(learned)} houseDone={Boolean(house.savedAt) || Boolean(profile.skipped.house)} aiReady={apiKeySource() !== "none"} staff={staff} imports={batches} />
       <div className="mb-8 grid gap-4 md:grid-cols-3">
         {JOBS.map((j, i) => (
           <Link key={j.href} href={j.href} className={`job lift rise rise-${i + 1}`}>

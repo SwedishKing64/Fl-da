@@ -25,7 +25,7 @@ export interface ShopProfile {
   /** Setup has been walked through to the end. */
   setupDone: boolean;
   /** Steps a person chose to come back to. */
-  skipped: { learn?: boolean; ai?: boolean };
+  skipped: { learn?: boolean; house?: boolean; ai?: boolean };
 }
 
 export const DEFAULT_PROFILE: ShopProfile = {

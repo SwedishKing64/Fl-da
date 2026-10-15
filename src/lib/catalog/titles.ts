@@ -10,6 +10,7 @@
  */
 
 import { EVERGREEN_SEASON, MANUAL_SEASON } from "./tagging";
+import { houseConventions } from "./taxonomy";
 
 const YEAR_IN_NAME = /\b20\d{2}\b/;
 
@@ -27,9 +28,15 @@ function isSeason(value: string | number | undefined | null): boolean {
  * Junior 2025 2026" — and so is anything without a season, which is how a tent stays a tent.
  */
 export function productTitle(name: string, season?: string | number | null): string {
-  const title = asShopWritesIt(name);
-  if (!title || !isSeason(season) || YEAR_IN_NAME.test(title)) return title;
+  const { naming } = houseConventions();
+  const title = naming.casing === "supplier" ? name.trim().replace(/\s+/g, " ") : asShopWritesIt(name);
+  if (!title || naming.season === "never" || !isSeason(season) || YEAR_IN_NAME.test(title)) return title;
   return `${title} ${season}`;
+}
+
+/** The Title column with the brand in front, for a shop whose titles lead with it. */
+export function titledForShop(vendor: string, title: string): string {
+  return houseConventions().naming.brandInTitle === "always" ? seoTitle(vendor, title) : title;
 }
 
 /** Words the shop keeps lower case inside a name, and the units it writes that way. */

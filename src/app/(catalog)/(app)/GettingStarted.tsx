@@ -8,7 +8,7 @@ import type { ShopProfile } from "@/lib/catalog/shop";
  */
 export function GettingStarted({ profile, learned, houseDone, aiReady, suppliersDone, staff, imports }: { profile: ShopProfile; learned: boolean; houseDone: boolean; aiReady: boolean; suppliersDone: boolean; staff: number; imports: number }) {
   const items: Array<{ done: boolean; title: string; text: string; href: string; go: string }> = [
-    { done: Boolean(profile.name), title: "Your shop", text: "Name, country, what you sell, and the rules to start from.", href: "/setup?step=shop", go: "Set up the shop" },
+    { done: Boolean(profile.name), title: "Your shop", text: "Name, country, currency and what you sell.", href: "/setup?step=shop", go: "Set up the shop" },
     { done: learned, title: "Your catalogue", text: "Your Shopify export shows it how you file, tag and name products. Without it, Flöda has only the supplier's paperwork to go on.", href: "/setup?step=learn", go: "Upload the export" },
     { done: houseDone, title: "How you list", text: "The brand in the title or not, SKUs and barcodes, weights, and the tags certain products always get.", href: "/setup?step=house", go: "Set the conventions" },
     { done: aiReady, title: "Reading documents", text: "PDFs, photos and brand pages need it. Spreadsheets do not.", href: "/setup?step=ai", go: "Add the key" },

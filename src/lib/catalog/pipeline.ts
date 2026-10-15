@@ -1161,7 +1161,7 @@ export interface ReviewData {
   unassignedImages: Array<{ id: string; filename: string; url: string; hint: string }>;
   products: ReviewProduct[];
   summary: ReviewSummary;
-  settings: { gstRate: number; pricesIncludeGst: boolean; minMarginPct: number; maxMarginPct: number; shopifyConfigured: boolean; catalogueKnown: boolean; publicBaseUrl: string };
+  settings: { gstRate: number; pricesIncludeGst: boolean; minMarginPct: number; shopifyConfigured: boolean; catalogueKnown: boolean; publicBaseUrl: string };
   metafieldColumns: string[];
 }
 
@@ -1241,7 +1241,7 @@ export async function loadReview(batchId: string): Promise<ReviewData> {
   }));
 
   const catalog = await shopifyLookups(view);
-  validateReview(view, { minMarginPct: settings.minMarginPct, maxMarginPct: settings.maxMarginPct, shopifySkus: catalog.skus, shopifyHandles: catalog.handles });
+  validateReview(view, { minMarginPct: settings.minMarginPct, shopifySkus: catalog.skus, shopifyHandles: catalog.handles });
   const summary = summarise(view);
   await prisma.importBatch.update({ where: { id: batchId }, data: { summary: JSON.stringify(summary) } });
 
@@ -1266,7 +1266,6 @@ export async function loadReview(batchId: string): Promise<ReviewData> {
       gstRate: settings.gstRate,
       pricesIncludeGst: settings.pricesIncludeGst,
       minMarginPct: settings.minMarginPct,
-      maxMarginPct: settings.maxMarginPct,
       shopifyConfigured: Boolean(settings.shopify.storeDomain && settings.shopify.accessToken),
       // Something to check the batch against: the store itself, or the shop's own export.
       catalogueKnown: Boolean(settings.shopify.storeDomain && settings.shopify.accessToken) || (await prisma.shopListing.count()) > 0,

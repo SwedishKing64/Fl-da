@@ -16,9 +16,6 @@ import { HouseForm } from "@/app/(catalog)/(setup)/setup/HouseStep";
 import { LicenceForm } from "./LicenceForm";
 import { Backups } from "./Backups";
 import { backupDir, listBackups, sqliteFile } from "@/lib/catalog/backup";
-import { DemoLink } from "./DemoLink";
-import { getDemoToken } from "@/lib/catalog/demo";
-import { headers } from "next/headers";
 import { licenceServer } from "@/lib/catalog/licence";
 import { currentLicence, getServerOverride, monthUse, servers } from "@/lib/catalog/licence-store";
 
@@ -33,14 +30,6 @@ import { currentLicence, getServerOverride, monthUse, servers } from "@/lib/cata
  */
 /** Teaching from a large export is several requests; each takes the page's limit. */
 export const maxDuration = 300;
-
-/** Where this page was asked at, for links a person will open from elsewhere. */
-async function requestOrigin(): Promise<string> {
-  const h = await headers();
-  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "";
-  const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") || host.startsWith("127.") ? "http" : "https");
-  return host ? `${proto}://${host}` : "";
-}
 
 export default async function SettingsPage() {
   const me = await requireUser("ADMIN");
@@ -91,9 +80,6 @@ export default async function SettingsPage() {
             <tbody>{users.map((u) => <tr key={u.id} className="border-t border-[var(--line-soft)]"><td className="py-1.5">{u.name}</td><td>{u.email}</td><td>{u.role}</td><td className="text-xs text-[var(--ink-soft)]">{fmtDate(u.createdAt)}</td><td className="text-right">{u.id !== me.id && <DeleteUserButton id={u.id} />}</td></tr>)}</tbody>
           </table>
           <UserForm />
-        </Card>
-        <Card title="A demo anyone can open">
-          <DemoLink token={await getDemoToken()} origin={await requestOrigin()} />
         </Card>
         <Card title="Backups">
           {sqliteFile() ? (

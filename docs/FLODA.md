@@ -105,13 +105,12 @@ menu shows the version the copy is.
 
 **What stops an export.** The shop imports the CSV as it is, so a wrong number in the file is a
 wrong number on the shop. Most of what Shopify would reject has one right answer and is repaired
-on the way out (`repair.ts`); four things have no right answer a program can pick, and they stop
+on the way out (`repair.ts`); three things have no right answer a program can pick, and they stop
 the export by name (`hardErrors` in `validate.ts`, `HARD_CODES` in `types.ts`): a barcode that
 fails its own check digit (`gtin.ts`: EAN-8, UPC-A, EAN-13, GTIN-14), a SKU column holding good
-barcodes while the barcode column does not (the two columns swapped), a price under the landed
-cost, and a margin above the ceiling (a cost in the price column, a list price in the cost column,
-a carton price read as a unit price). The margin band — warn under the floor, refuse over the
-ceiling, 20% and 80% to start — is on the Pricing page. Errors cannot be dismissed; warnings can.
+barcodes while the barcode column does not (the two columns swapped), and a price under the landed
+cost. A margin under the floor (20% to start, on the Pricing page) is a warning; there is no
+ceiling, since a shop's margins are its own business. Errors cannot be dismissed; warnings can.
 A barcode of an odd length is a warning. The sample invoices carry barcodes with real check digits.
 
 **A product that could be one of several.** A batch is checked against what the shop already
@@ -151,13 +150,6 @@ three. The page asked before doing that, but only within one page load and only 
 delivery is now remembered by what is on it (`applied-memory.ts`: a fingerprint of the lines),
 in the browser's storage, so the question is asked after a reload or a re-saved file too, with
 when it was applied; undoing the delivery forgets it.
-
-**A demo anyone can open.** An admin makes a link on Settings (`demo.ts`: a random token kept in
-`AppSetting`, or `DEMO_TOKEN` in the environment). `/demo/<token>` signs the visitor in as "Demo
-visitor", a staff member, builds a made-up Northwind Supply order the first time
-(`samples/northwind-order.csv`, embedded), and lands on its review grid. Revoking the link on
-Settings signs every demo visitor out. The visitor sees everything a staff member sees on that
-copy, so it is for a copy kept for demos.
 
 **Gone from Flöda:** Bills for QuickBooks, the copy-from-the-old-site migration, and every seed
 that belonged to one shop.

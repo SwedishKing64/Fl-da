@@ -18,7 +18,6 @@ export function ShopForm({ profile, next }: { profile: ShopProfile; next?: strin
   const [currency, setCurrency] = useState(profile.currency);
   const [taxName, setTaxName] = useState(profile.taxName);
   const [taxRate, setTaxRate] = useState(String(Math.round(profile.taxRate * 1000) / 10));
-  const [pack, setPack] = useState<ShopProfile["pack"]>(profile.pack);
 
   useEffect(() => {
     if (next && state?.ok) router.push(next);
@@ -43,23 +42,12 @@ export function ShopForm({ profile, next }: { profile: ShopProfile; next?: strin
       <Field label="Sales tax is called" hint="Leave empty if prices carry none."><input name="taxName" value={taxName} onChange={(e) => setTaxName(e.target.value)} className={INPUT} placeholder="GST" /></Field>
       <Field label="Rate (%)"><input name="taxRate" type="number" step="0.1" min={0} max={100} value={taxRate} onChange={(e) => setTaxRate(e.target.value)} className={INPUT} /></Field>
 
-      <fieldset className="sm:col-span-2">
-        <legend className="mb-2 text-[14px] font-semibold">Rules to start from</legend>
-        <label className={`mb-2 flex cursor-pointer gap-3 rounded-[12px] border p-3 ${pack === "general" ? "border-[var(--meta)] bg-[var(--meta-tint)]" : "border-[var(--line)] bg-white"}`}>
-          <input type="radio" name="pack" value="general" checked={pack === "general"} onChange={() => setPack("general")} className="mt-1" />
-          <span>
-            <span className="block font-semibold">Start blank and learn from my catalogue</span>
-            <span className="block text-[13px] text-[var(--ink-soft)]">Flöda takes its kinds of product, menus and tag spellings from your Shopify export on the next step, and its conventions per brand from the same file. Right for any shop whose paperwork is not snow gear.</span>
-          </span>
-        </label>
-        <label className={`flex cursor-pointer gap-3 rounded-[12px] border p-3 ${pack === "snow-outdoor" ? "border-[var(--meta)] bg-[var(--meta-tint)]" : "border-[var(--line)] bg-white"}`}>
-          <input type="radio" name="pack" value="snow-outdoor" checked={pack === "snow-outdoor"} onChange={() => setPack("snow-outdoor")} className="mt-1" />
-          <span>
-            <span className="block font-semibold">Snow and outdoor</span>
-            <span className="block text-[13px] text-[var(--ink-soft)]">Skis, snowboards, boots, bindings, packages, outerwear, packs, tents and climbing gear, with the menu, binding classification, mount charges, package and season rules Flöda was built with. Your own export still teaches it on top.</span>
-          </span>
-        </label>
-      </fieldset>
+      {/* Every shop starts blank. Nothing from the shop Flöda was built in carries over: the kinds of
+          product come from the shop's own website or export, the supplier formats from its invoices. */}
+      <input type="hidden" name="pack" value="general" />
+      <p className="rounded-[12px] bg-[var(--meta-tint)] px-3 py-2.5 text-[13.5px] sm:col-span-2">
+        Flöda starts blank for every shop. It learns your kinds of product from your website or your Shopify export, your supplier formats from their invoices, and how you list from the rules you set, all on <strong>Training and Rules</strong>. Nothing from any other shop carries over.
+      </p>
 
       <Field label="Marker tag" hint="Optional. A tag written on everything Flöda builds, with the builder's initials on the end (abc → abc-jd), so you can find its work in Shopify. Leave empty for none." className="sm:col-span-2">
         <input name="marker" defaultValue={profile.marker} maxLength={12} className={INPUT} placeholder="floda" />

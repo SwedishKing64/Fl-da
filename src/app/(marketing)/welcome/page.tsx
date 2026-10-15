@@ -3,6 +3,7 @@ import { RegisterForm } from "./RegisterForm";
 import { CountUp, Demo, Reveal, Tilt } from "./Motion";
 import { Site } from "../Shell";
 import { Story } from "../Story";
+import { Screens } from "../Screens";
 import { describePlanSize, PLANS } from "@/lib/catalog/plans";
 import "./welcome.css";
 
@@ -166,6 +167,18 @@ export default function WelcomePage() {
                 <p>An app for Windows and Mac, with its database on your machine. Or hosted, if you&rsquo;d rather. Your supplier costs never sit on someone else&rsquo;s server unless you choose it.</p>
               </Reveal>
             </div>
+          </div>
+        </section>
+
+        {/* ----------------------------------------------------------- screens */}
+        <section id="screens" className="band">
+          <div className="wrap">
+            <Reveal className="head">
+              <span className="eyebrow">The product</span>
+              <h2>What it looks like, with a real order in it.</h2>
+              <p className="lede">These are screens from a copy of Flöda with a Burton order read into it, not drawings. Pick one.</p>
+            </Reveal>
+            <Reveal delay={1}><Screens /></Reveal>
           </div>
         </section>
 

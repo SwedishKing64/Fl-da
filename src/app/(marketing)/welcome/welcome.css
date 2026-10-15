@@ -402,3 +402,20 @@
 .floda .foot a:hover { color: var(--f-meta); }
 .floda .foot .fine { margin-top: 36px; font-size: 12.5px; color: var(--f-soft); }
 @media (min-width: 760px) { .floda .foot .cols { grid-template-columns: 2fr 1fr 1fr 1fr; gap: 40px; } }
+
+/* ------------------------------------------------------------------------------- screens */
+.floda .screens { display: grid; gap: 20px; }
+.floda .screens-list { display: grid; gap: 8px; }
+.floda .screens-list button { text-align: left; display: grid; gap: 4px; padding: 14px 16px; border-radius: 14px; border: 1px solid var(--f-line); background: var(--f-white); font: inherit; cursor: pointer; transition: border-color 0.2s ease, box-shadow 0.3s ease, background 0.2s ease; }
+.floda .screens-list button.on { border-color: var(--f-meta); background: var(--f-tint); box-shadow: 0 18px 40px -30px rgba(8, 102, 255, 0.6); }
+.floda .screens-list .t { font-size: 15px; font-weight: 700; color: var(--f-ink); }
+.floda .screens-list .x { font-size: 13px; line-height: 1.45; color: var(--f-ink-2); display: none; }
+.floda .screens-list button.on .x { display: block; }
+.floda .screens-frame { border-radius: 18px; background: var(--f-white); border: 1px solid var(--f-line); box-shadow: 0 50px 100px -60px rgba(8, 43, 97, 0.5), 0 10px 30px -20px rgba(5, 5, 5, 0.2); overflow: hidden; }
+.floda .screens-frame .chrome { display: flex; align-items: center; gap: 6px; padding: 10px 14px; background: var(--f-grey); border-bottom: 1px solid var(--f-line); }
+.floda .screens-frame .chrome i { width: 10px; height: 10px; border-radius: 50%; background: var(--f-line-2); }
+.floda .screens-frame .chrome .url { margin-left: 10px; flex: 1; font-family: var(--f-mono); font-size: 12px; color: var(--f-soft); background: var(--f-white); border-radius: 8px; padding: 5px 10px; border: 1px solid var(--f-line); }
+.floda .screens-frame .shot { position: relative; background: var(--f-grey); transition: aspect-ratio 0.3s ease; }
+.floda .screens-frame .shot img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; object-position: top left; opacity: 0; transition: opacity 0.35s ease; }
+.floda .screens-frame .shot img.on { opacity: 1; }
+@media (min-width: 860px) { .floda .screens { grid-template-columns: 300px 1fr; gap: 28px; align-items: start; } .floda .screens-list { position: sticky; top: 100px; } }

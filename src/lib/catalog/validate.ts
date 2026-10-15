@@ -2,10 +2,11 @@
 // returns flags per product / variant. Errors block export; warnings can be overridden.
 
 import { isPublicHttpsUrl } from "./csv";
+import { gtinVerdict, isGtin } from "./gtin";
 import { houseConventions } from "./taxonomy";
 import { isValidHandle } from "./handle";
 import type { ReviewProduct, ReviewSummary, ReviewVariant } from "./review-types";
-import type { RowFlag } from "./types";
+import { HARD_CODES, type RowFlag } from "./types";
 
 /**
  * How many photographs a product should carry. The shop's own catalogue is mostly short of this —
@@ -16,6 +17,8 @@ export const MAX_IMAGES = 8;
 
 export interface ValidationContext {
   minMarginPct: number;
+  /** A margin above this is not a price, it is a cost in the wrong column. Default 80. */
+  maxMarginPct?: number;
   /** Lower-cased SKUs that already exist in the live Shopify catalog, mapped to their handle. */
   shopifySkus?: Map<string, string>;
   /** Handles that already exist in the live Shopify catalog. */
@@ -78,18 +81,29 @@ export function validateReview(products: ReviewProduct[], ctx: ValidationContext
       const sku = v.sku.trim().toLowerCase();
       if (!sku && houseConventions().identifiers.sku !== "none") vf.push({ code: "MISSING_SKU", severity: "warning", message: "No SKU" });
       if (!v.barcode.trim() && houseConventions().identifiers.barcode === "required") vf.push({ code: "MISSING_BARCODE", severity: "warning", message: "No barcode, and the shop puts one on every variant" });
-      else {
-        if ((skuCounts.get(sku) ?? 0) > 1) vf.push({ code: "DUPLICATE_SKU_BATCH", severity: "error", message: "SKU appears more than once in this batch" });
-        const liveHandle = ctx.shopifySkus?.get(sku);
-        if (liveHandle && v.reconcileStatus !== "UPDATE") vf.push({ code: "DUPLICATE_SKU_SHOPIFY", severity: "warning", message: `SKU already exists in Shopify (${liveHandle})` });
-      }
+      if (sku && (skuCounts.get(sku) ?? 0) > 1) vf.push({ code: "DUPLICATE_SKU_BATCH", severity: "error", message: "SKU appears more than once in this batch" });
+      const liveHandle = sku ? ctx.shopifySkus?.get(sku) : undefined;
+      if (liveHandle && v.reconcileStatus !== "UPDATE") vf.push({ code: "DUPLICATE_SKU_SHOPIFY", severity: "warning", message: `SKU already exists in Shopify (${liveHandle})` });
+      // A barcode is a number with a check digit. One that fails its own check digit was never
+      // scanned off a product: it is a date, a weight or a typo in the barcode column. And when
+      // the SKU column holds a good barcode while the barcode column does not, the two columns
+      // are the wrong way round — one of the five things a new layout gets wrong.
+      const barcodeVerdict = gtinVerdict(v.barcode);
+      if (isGtin(v.sku) && barcodeVerdict !== "ok") vf.push({ code: "SWAPPED_CODES", severity: "error", message: `The SKU (${v.sku.trim()}) is a barcode and the barcode column is not — the two columns look swapped` });
+      else if (barcodeVerdict === "bad-check-digit") vf.push({ code: "INVALID_BARCODE", severity: "error", message: `${v.barcode.trim()} is not a barcode: its check digit is wrong` });
+      else if (barcodeVerdict === "odd-length") vf.push({ code: "ODD_BARCODE", severity: "warning", message: `${v.barcode.trim()} is ${v.barcode.trim().replace(/^'/, "").length} digits — a barcode is 8, 12, 13 or 14` });
       if (p.option1Name) {
         const missing = [p.option1Name && !v.option1Value?.trim(), p.option2Name && !v.option2Value?.trim(), p.option3Name && !v.option3Value?.trim()].some(Boolean);
         if (missing) vf.push({ code: "MISSING_OPTION_VALUE", severity: "error", message: "Missing an option value" });
         const combo = [v.option1Value, v.option2Value, v.option3Value].map((s) => (s ?? "").trim().toLowerCase()).join("|");
         if ((combos.get(combo) ?? 0) > 1) vf.push({ code: "DUPLICATE_OPTIONS", severity: "error", message: "Two variants share the same option values" });
       }
-      if (v.profitPerUnit < 0 && v.retailPrice > 0) vf.push({ code: "NEGATIVE_PROFIT", severity: "warning", message: "Selling below landed cost" });
+      // A price below the landed cost, or a margin no shop earns, is a cost that landed in the
+      // price column or a list price that landed in the cost column. Either way the number on the
+      // shop would be wrong, so these stop the export rather than warn.
+      const maxMargin = ctx.maxMarginPct ?? 80;
+      if (v.profitPerUnit < 0 && v.retailPrice > 0) vf.push({ code: "NEGATIVE_PROFIT", severity: "error", message: `Selling below landed cost (${v.retailPrice.toFixed(2)} against ${v.landedCostAud.toFixed(2)}) — a cost in the price column?` });
+      else if (v.retailPrice > 0 && v.costPrice > 0 && v.marginPct > maxMargin) vf.push({ code: "HIGH_MARGIN", severity: "error", message: `Margin ${v.marginPct.toFixed(1)}% is above ${maxMargin}% — is the cost in the right column, and per unit?` });
       else if (v.retailPrice > 0 && v.costPrice > 0 && v.marginPct < ctx.minMarginPct) vf.push({ code: "LOW_MARGIN", severity: "warning", message: `Margin ${v.marginPct.toFixed(1)}% is below ${ctx.minMarginPct}%` });
       v.flags = vf.filter((f) => f.severity === "error" || !dismissed.has(f.code));
     }
@@ -141,6 +155,20 @@ export function blockingErrors(products: ReviewProduct[]): string[] {
   for (const p of products) {
     for (const f of p.flags) if (f.severity === "error") out.push(`${p.title || p.handle}: ${f.message}`);
     for (const v of p.variants) for (const f of v.flags) if (f.severity === "error") out.push(`${p.title || p.handle} / ${v.sku || "(no sku)"}: ${f.message}`);
+  }
+  return out;
+}
+
+/**
+ * The errors the export cannot repair, so they stop it: a wrong barcode, swapped code columns, a
+ * price below cost, a margin no shop earns. Each names the product and variant to go and fix.
+ */
+export function hardErrors(products: ReviewProduct[]): string[] {
+  const hard = new Set<string>(HARD_CODES);
+  const out: string[] = [];
+  for (const p of products) {
+    for (const f of p.flags) if (hard.has(f.code)) out.push(`${p.title || p.handle}: ${f.message}`);
+    for (const v of p.variants) for (const f of v.flags) if (hard.has(f.code)) out.push(`${p.title || p.handle} / ${v.sku || v.option1Value || "(no sku)"}: ${f.message}`);
   }
   return out;
 }

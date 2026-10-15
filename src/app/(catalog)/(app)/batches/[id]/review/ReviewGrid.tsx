@@ -85,6 +85,7 @@ const FLAG_LABELS: Record<string, string> = {
   INVALID_HANDLE: "Invalid handle", DUPLICATE_OPTIONS: "Duplicate option values", MISSING_OPTION_VALUE: "Missing option value",
   NO_IMAGE: "No image", INVALID_IMAGE_URL: "Bad image URL", LOW_MARGIN: "Low margin", NEGATIVE_PROFIT: "Negative profit",
   MISSING_VENDOR: "No vendor", MISSING_TYPE: "No product type", UPDATE_EXISTING: "Updates existing Shopify product",
+  INVALID_BARCODE: "Barcode fails its check digit", ODD_BARCODE: "Barcode of an odd length", SWAPPED_CODES: "SKU and barcode swapped", HIGH_MARGIN: "Margin too high to be right",
 };
 
 function fmt(v: ReviewVariant, key: Col["key"]): string {

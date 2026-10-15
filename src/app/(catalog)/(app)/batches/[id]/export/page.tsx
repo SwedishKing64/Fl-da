@@ -2,7 +2,7 @@ import { aiAvailable } from "@/lib/catalog/anthropic";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/catalog/db";
 import { loadReview } from "@/lib/catalog/pipeline";
-import { blockingErrors, warningList } from "@/lib/catalog/validate";
+import { blockingErrors, hardErrors, warningList } from "@/lib/catalog/validate";
 import { getSettings } from "@/lib/catalog/settings";
 import { requireUser } from "@/lib/catalog/auth";
 import { Badge, Card, LinkButton, PageHeader, cx, fmtDate, money, pct, statusTone } from "@/app/(catalog)/ui";
@@ -16,7 +16,9 @@ export default async function ExportPage(props: PageProps<"/batches/[id]/export"
   const batch = await prisma.importBatch.findUnique({ where: { id }, include: { exports: { orderBy: { partIndex: "asc" } }, feedback: { orderBy: { createdAt: "asc" } }, auditLogs: { orderBy: { createdAt: "desc" }, take: 20, include: { user: true } } } });
   if (!batch) notFound();
   const [review, settings] = await Promise.all([loadReview(id), getSettings()]);
-  const errors = blockingErrors(review.products);
+  const hard = hardErrors(review.products);
+  // The repairable ones, listed as what the export will do; the hard ones are listed as what stops it.
+  const errors = blockingErrors(review.products).filter((e) => !hard.includes(e));
   const warnings = warningList(review.products);
   const s = review.summary;
   const reconciled = review.products.filter((p) => p.reconcileStatus !== "UNKNOWN").length;
@@ -30,6 +32,7 @@ export default async function ExportPage(props: PageProps<"/batches/[id]/export"
           <ExportPanel
             batchId={id}
             status={batch.status}
+            hard={hard}
             errors={errors}
             warnings={warnings}
             productCount={review.products.length}

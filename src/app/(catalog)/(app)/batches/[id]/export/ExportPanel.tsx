@@ -8,8 +8,8 @@ import { csvFilename } from "@/lib/catalog/csv";
 
 interface ExportFileRow { id: string; filename: string; rowCount: number; sizeBytes: number; partIndex: number; partCount: number; createdAt: string }
 
-export function ExportPanel(props: { batchId: string; status: string; errors: string[]; warnings: string[]; productCount: number; shopifyConfigured: boolean; reconciled: number; counts: { new: number; variantAdd: number; update: number }; isAdmin: boolean; files: ExportFileRow[] }) {
-  const { batchId, errors, warnings } = props;
+export function ExportPanel(props: { batchId: string; status: string; hard: string[]; errors: string[]; warnings: string[]; productCount: number; shopifyConfigured: boolean; reconciled: number; counts: { new: number; variantAdd: number; update: number }; isAdmin: boolean; files: ExportFileRow[] }) {
+  const { batchId, hard, errors, warnings } = props;
   const router = useRouter();
   const [pending, start] = useTransition();
   // The download gets its own flag. Sharing one `pending` meant any other transition on the page
@@ -19,9 +19,11 @@ export function ExportPanel(props: { batchId: string; status: string; errors: st
   const [override, setOverride] = useState(false);
   const [confirmPush, setConfirmPush] = useState(false);
   const [result, setResult] = useState<{ tone: "success" | "danger" | "warning" | "info"; text: string; list?: string[] } | null>(null);
-  // Nothing about the products blocks the CSV any more — what Shopify would reject is repaired on
-  // the way out (see repair.ts). Only having nothing to export stops the button.
-  const blocked = props.productCount === 0;
+  // What Shopify would reject is repaired on the way out (see repair.ts). What stops the button
+  // is having nothing to export, or a number the export cannot repair: a barcode that fails its
+  // check digit, swapped code columns, a price below cost, a margin no shop earns. The shop
+  // imports the file as it is, so a wrong number in it is a wrong number on the shop.
+  const blocked = props.productCount === 0 || hard.length > 0;
   // Warnings do not gate the CSV. They still gate the push, which writes to the live store.
   const pushNeedsOverride = warnings.length > 0 && !override;
 
@@ -84,7 +86,15 @@ export function ExportPanel(props: { batchId: string; status: string; errors: st
     <div className="space-y-6">
       <Card title="Export gate">
         {props.productCount === 0 && <Alert tone="warning">Nothing to export yet.</Alert>}
-        {props.productCount > 0 && <Alert tone="success">Ready to export. Products are exported as DRAFT, so each one can be checked before it goes live.</Alert>}
+        {props.productCount > 0 && hard.length === 0 && <Alert tone="success">Ready to export. Products are exported as DRAFT, so each one can be checked before it goes live.</Alert>}
+        {hard.length > 0 && (
+          <Alert tone="danger">
+            <div className="font-semibold">{hard.length} thing{hard.length === 1 ? "" : "s"} stop{hard.length === 1 ? "s" : ""} the export</div>
+            <p className="mt-1 text-xs">A wrong number in the file is a wrong number on the shop, and nothing on the way out can tell which number was meant. Fix these in the review grid, or dismiss nothing — errors cannot be dismissed.</p>
+            <ul className="mt-2 max-h-40 list-disc space-y-0.5 overflow-auto pl-5 text-xs">{hard.slice(0, 40).map((e, i) => <li key={i}>{e}</li>)}{hard.length > 40 && <li>…and {hard.length - 40} more</li>}</ul>
+            <a href={`/batches/${batchId}/review`} className="mt-2 inline-block text-xs font-semibold underline">Back to the review grid →</a>
+          </Alert>
+        )}
         {errors.length > 0 && (
           <Alert tone="info" className="mt-3">
             <div className="font-semibold">{errors.length} thing{errors.length === 1 ? "" : "s"} the export will repair for you</div>

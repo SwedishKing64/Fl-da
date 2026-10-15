@@ -669,6 +669,7 @@ export async function saveSettingsAction(patch: Partial<AppSettings>): Promise<A
       gstRate: z.number().min(0).max(1).optional(),
       pricesIncludeGst: z.boolean().optional(),
       minMarginPct: z.number().min(0).max(100).optional(),
+      maxMarginPct: z.number().min(0).max(100).optional(),
       defaultRoundTo: z.string().optional(),
       fxRates: z.record(z.string(), z.number().positive()).optional(),
       shopify: z.object({ storeDomain: z.string(), accessToken: z.string(), apiVersion: z.string() }).partial().optional(),

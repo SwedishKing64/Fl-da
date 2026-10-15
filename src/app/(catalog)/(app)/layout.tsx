@@ -28,6 +28,7 @@ const PAGES: PaletteItem[] = [
   { id: "p-tidy", label: "Tidy a document", hint: "a photo into a table", group: "Pages", href: "/tidy" },
   { id: "p-pricing", label: "Price calculator", group: "Pages", href: "/pricing" },
   { id: "p-history", label: "History", group: "Pages", href: "/history" },
+  { id: "p-training", label: "Training and Rules", hint: "your website, suppliers, export and rules", group: "Pages", href: "/training" },
   { id: "p-settings", label: "Settings", group: "Pages", href: "/settings" },
   { id: "p-setup", label: "Setup", hint: "the shop, its catalogue, the key", group: "Pages", href: "/setup" },
 ];

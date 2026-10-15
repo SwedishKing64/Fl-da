@@ -19,6 +19,7 @@ import { prisma, parseJson } from "./db";
 import { setRelay, setStoredApiKey } from "./anthropic";
 import { LICENCE_KEY_SETTING, licenceServer, licenceState, type Licence } from "./licence";
 import { activateConventions, type LearnedVocabulary } from "./taxonomy";
+import type { WebsiteCategories } from "./website";
 import { COUNTRIES, DEFAULT_PROFILE, type ShopProfile } from "./shop";
 import { cleanHouse, DEFAULT_HOUSE, type HouseConventions } from "./house";
 
@@ -28,6 +29,7 @@ const PROFILE_KEY = "shop";
 const VOCABULARY_KEY = "shop.vocabulary";
 const API_KEY_KEY = "ai.key";
 const HOUSE_KEY = "shop.house";
+const WEBSITE_KEY = "shop.website";
 
 export async function getShopProfile(): Promise<ShopProfile> {
   const row = await prisma.appSetting.findUnique({ where: { key: PROFILE_KEY } });
@@ -65,6 +67,18 @@ export async function saveHouseConventions(house: HouseConventions): Promise<voi
   await refreshConventions();
 }
 
+export async function getWebsiteCategories(): Promise<WebsiteCategories | null> {
+  const row = await prisma.appSetting.findUnique({ where: { key: WEBSITE_KEY } });
+  const parsed = parseJson<WebsiteCategories | null>(row?.value, null);
+  return parsed && Array.isArray(parsed.categories) ? parsed : null;
+}
+
+export async function saveWebsiteCategories(website: WebsiteCategories | null): Promise<void> {
+  if (!website) await prisma.appSetting.deleteMany({ where: { key: WEBSITE_KEY } });
+  else await prisma.appSetting.upsert({ where: { key: WEBSITE_KEY }, create: { key: WEBSITE_KEY, value: JSON.stringify(website) }, update: { value: JSON.stringify(website) } });
+  await refreshConventions();
+}
+
 export async function getStoredApiKey(): Promise<string> {
   const row = await prisma.appSetting.findUnique({ where: { key: API_KEY_KEY } });
   return parseJson<string>(row?.value, "");
@@ -88,12 +102,12 @@ let loading: Promise<void> | null = null;
 const TRUST_MS = 30_000;
 
 async function load(): Promise<void> {
-  const [profile, learned, key, house, licenceRow] = await Promise.all([
-    getShopProfile(), getLearnedVocabulary(), getStoredApiKey(), getHouseConventions(),
+  const [profile, learned, key, house, website, licenceRow] = await Promise.all([
+    getShopProfile(), getLearnedVocabulary(), getStoredApiKey(), getHouseConventions(), getWebsiteCategories(),
     prisma.appSetting.findUnique({ where: { key: LICENCE_KEY_SETTING } }),
   ]);
   activeProfile = profile;
-  activateConventions({ pack: profile.pack, learned, marker: profile.marker, house });
+  activateConventions({ pack: profile.pack, learned, marker: profile.marker, house, website });
   setStoredApiKey(key);
   // A copy in good standing with its vendor reads through Flöda when it has no key of its own.
   const standing = licenceState(parseJson<Licence | null>(licenceRow?.value, null));

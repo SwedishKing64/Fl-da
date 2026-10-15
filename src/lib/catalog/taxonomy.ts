@@ -27,6 +27,7 @@
 
 import { LIVE_TAG_SPELLING, TAG_ALSO } from "./tag-spelling";
 import { DEFAULT_HOUSE, type HouseConventions } from "./house";
+import type { WebsiteCategories } from "./website";
 
 export interface TaxonomyGroup {
   /** The bold heading. This is the value written to the Shopify `Type` column. */
@@ -175,6 +176,8 @@ export interface Conventions {
   marker: string;
   /** How the shop writes a listing — names, SKUs and barcodes, weights (see house.ts). */
   house?: HouseConventions;
+  /** The categories read off the shop's own website: each one is a kind of product (see website.ts). */
+  website?: WebsiteCategories | null;
 }
 
 interface Vocabulary {
@@ -263,6 +266,14 @@ function build(conventions: Conventions): Vocabulary {
     // A learned section's own name is the tag the shop writes, however it is spelled.
     for (const section of learned.sections) spelling[section] ??= section;
   }
+  // Every category on the shop's website is a place a product can be filed, so each is a Type.
+  // One the pack or the export already knows is left as it was; the rest are headings of their own.
+  for (const category of conventions.website?.categories ?? []) {
+    const type = category.title.trim();
+    if (!type || base.productTypes.some((t) => norm(t) === norm(type))) continue;
+    base.productTypes.push(type);
+    base.typeLeaves[type] = [];
+  }
   return { tree, ...base, spelling, also, sections };
 }
 
@@ -281,6 +292,11 @@ export function activateConventions(next: Conventions): void {
 
 export function activeConventions(): Conventions {
   return conventions;
+}
+
+/** True once the shop has told Flöda its kinds of product, from its website or its export, so a Type can be checked against them. */
+export function typesAreKnown(): boolean {
+  return active.productTypes.length > 0;
 }
 
 /** The menu tree in force: the snow-and-outdoor menu, or nothing. */

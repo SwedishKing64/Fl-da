@@ -85,7 +85,7 @@ const FLAG_LABELS: Record<string, string> = {
   DUPLICATE_SKU_BATCH: "Duplicate SKU (batch)", DUPLICATE_SKU_SHOPIFY: "SKU exists in Shopify", DUPLICATE_HANDLE: "Duplicate handle",
   INVALID_HANDLE: "Invalid handle", DUPLICATE_OPTIONS: "Duplicate option values", MISSING_OPTION_VALUE: "Missing option value",
   NO_IMAGE: "No image", INVALID_IMAGE_URL: "Bad image URL", LOW_MARGIN: "Low margin", NEGATIVE_PROFIT: "Negative profit",
-  MISSING_VENDOR: "No vendor", MISSING_TYPE: "No product type", UPDATE_EXISTING: "Updates existing Shopify product",
+  MISSING_VENDOR: "No vendor", MISSING_TYPE: "No product type", UNKNOWN_TYPE: "Not one of your kinds of product", UPDATE_EXISTING: "Updates existing Shopify product",
   INVALID_BARCODE: "Barcode fails its check digit", ODD_BARCODE: "Barcode of an odd length", SWAPPED_CODES: "SKU and barcode swapped", AMBIGUOUS_MATCH: "Fits several shop products",
 };
 
@@ -114,7 +114,7 @@ function worst(flags: RowFlag[]): "error" | "warning" | null {
   return null;
 }
 
-export function ReviewGrid({ initial, batchId }: { initial: ReviewData; batchId: string }) {
+export function ReviewGrid({ initial, batchId, kinds = [] }: { initial: ReviewData; batchId: string; kinds?: string[] }) {
   const [data, setData] = useState<ReviewData>(initial);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(initial.products.map((p) => p.id)));
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -387,7 +387,8 @@ export function ReviewGrid({ initial, batchId }: { initial: ReviewData; batchId:
             <option value="category">Set category</option><option value="status">Set status</option><option value="gstTreatment">Set cost GST treatment</option>
             <option value="clearOverride">Clear retail overrides</option><option value="dismissWarnings">Dismiss warnings</option><option value="restoreWarnings">Restore dismissed warnings</option>
           </select>
-          {["addTag", "addCollection", "vendor", "productType"].includes(bulk.field) && <input value={bulk.value} onChange={(e) => setBulk({ ...bulk, value: e.target.value })} className={`${INPUT_INLINE} w-48`} placeholder="Value" />}
+          {bulk.field === "productType" && kinds.length > 0 && <select value={bulk.value} onChange={(e) => setBulk({ ...bulk, value: e.target.value })} className={`${INPUT_INLINE} w-56`}><option value="">Choose a kind…</option>{kinds.map((k) => <option key={k} value={k}>{k}</option>)}</select>}
+          {(["addTag", "addCollection", "vendor"].includes(bulk.field) || (bulk.field === "productType" && kinds.length === 0)) && <input value={bulk.value} onChange={(e) => setBulk({ ...bulk, value: e.target.value })} className={`${INPUT_INLINE} w-48`} placeholder="Value" />}
           {bulk.field === "category" && <select value={bulk.value} onChange={(e) => setBulk({ ...bulk, value: e.target.value })} className={`${INPUT_INLINE} w-40`}><option value="">Choose…</option>{CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}</select>}
           {bulk.field === "status" && <select value={bulk.value} onChange={(e) => setBulk({ ...bulk, value: e.target.value })} className={`${INPUT_INLINE} w-40`}><option value="">Choose…</option><option value="draft">Draft</option><option value="active">Active</option></select>}
           {bulk.field === "gstTreatment" && <select value={bulk.value} onChange={(e) => setBulk({ ...bulk, value: e.target.value })} className={`${INPUT_INLINE} w-40`}><option value="">Choose…</option><option value="EXCLUSIVE">Ex GST</option><option value="INCLUSIVE">Inc GST</option><option value="NONE">No GST</option></select>}
@@ -443,7 +444,7 @@ export function ReviewGrid({ initial, batchId }: { initial: ReviewData; batchId:
                       <span className="text-[var(--ink-soft)]">/</span>
                       <ProductCell p={p} field="handle" width={200} edit={productEdit} setEdit={setProductEdit} commit={commitProduct} locked={locked} mono />
                       <ProductCell p={p} field="vendor" width={110} edit={productEdit} setEdit={setProductEdit} commit={commitProduct} locked={locked} label="Vendor" />
-                      <ProductCell p={p} field="productType" width={110} edit={productEdit} setEdit={setProductEdit} commit={commitProduct} locked={locked} label="Type" />
+                      <ProductCell p={p} field="productType" width={110} edit={productEdit} setEdit={setProductEdit} commit={commitProduct} locked={locked} label="Type" options={kinds.length ? ["", ...(p.productType && !kinds.includes(p.productType) ? [p.productType] : []), ...kinds] : undefined} />
                       <ProductCell p={p} field="category" width={100} edit={productEdit} setEdit={setProductEdit} commit={commitProduct} locked={locked} label="Category" options={[...CATEGORIES]} />
                       <ProductCell p={p} field="tags" width={180} edit={productEdit} setEdit={setProductEdit} commit={commitProduct} locked={locked} label="Tags" />
                       <ProductCell p={p} field="collections" width={130} edit={productEdit} setEdit={setProductEdit} commit={commitProduct} locked={locked} label="Collections" />

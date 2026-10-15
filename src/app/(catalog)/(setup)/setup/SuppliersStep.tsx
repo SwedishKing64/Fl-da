@@ -36,7 +36,7 @@ const WAIT_MS = 4 * 60_000;
  * place, and the corrected layout is kept for that supplier. The next invoice from them reads the
  * way this one was left.
  */
-export function SuppliersStep({ fields, templates, next }: { fields: FieldDef[]; templates: number; next: string }) {
+export function SuppliersStep({ fields, templates, next, standalone }: { fields: FieldDef[]; templates: number; next?: string; standalone?: boolean }) {
   const router = useRouter();
   const [examples, setExamples] = useState<Example[]>([]);
   const [running, setRunning] = useState(false);
@@ -189,10 +189,12 @@ export function SuppliersStep({ fields, templates, next }: { fields: FieldDef[];
         ))}
       </div>
 
-      <div className="mt-5 flex items-center justify-between border-t border-[var(--line-soft)] pt-4 text-[13px] text-[var(--ink-soft)]">
-        <span>{anyRead || templates > 0 ? "You can add more suppliers any time from Home." : "You can do this later, one supplier at a time, as their paperwork comes in."}</span>
-        <Button size="sm" variant={anyRead || templates > 0 ? "primary" : "ghost"} disabled={pending || running} onClick={() => start(async () => { if (!anyRead && templates === 0) await skipSetupStepAction("suppliers"); router.push(next); })}>{anyRead || templates > 0 ? "Continue →" : "Skip for now"}</Button>
-      </div>
+      {!standalone && next && (
+        <div className="mt-5 flex items-center justify-between border-t border-[var(--line-soft)] pt-4 text-[13px] text-[var(--ink-soft)]">
+          <span>{anyRead || templates > 0 ? "You can add more suppliers any time from Training and Rules." : "You can do this later, one supplier at a time, as their paperwork comes in."}</span>
+          <Button size="sm" variant={anyRead || templates > 0 ? "primary" : "ghost"} disabled={pending || running} onClick={() => start(async () => { if (!anyRead && templates === 0) await skipSetupStepAction("suppliers"); router.push(next); })}>{anyRead || templates > 0 ? "Continue →" : "Skip for now"}</Button>
+        </div>
+      )}
     </Card>
   );
 }

@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { productTypes, typesAreKnown } from "@/lib/catalog/taxonomy";
 import { prisma } from "@/lib/catalog/db";
 import { loadReview } from "@/lib/catalog/pipeline";
 import { isPlaceholderBody } from "@/lib/catalog/extract/lookup";
@@ -81,7 +82,7 @@ async function renderReviewPage(props: PageProps<"/batches/[id]/review">) {
             products={review.products.map((p) => ({ id: p.id, title: p.title, handle: p.handle, url: ["LINKED", "RELINKED", "LINK_FAILED", "PAGE", "PAGE_UNSURE"].includes(p.lookupStatus) ? p.lookupSource : "", status: p.lookupStatus, inShop: inShop.has(p.handle) }))}
           />
           <LookupPanel batchId={id} outstanding={outstanding} enabled={lookupEnabled()} states={states} />
-          <ReviewGrid initial={review} batchId={id} />
+          <ReviewGrid initial={review} batchId={id} kinds={typesAreKnown() ? productTypes() : []} />
         </>
       )}
     </>

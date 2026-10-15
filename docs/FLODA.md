@@ -114,6 +114,13 @@ what changed, the mapping screen shows it, and applying it there remembers the n
 the old. A file that shares fewer than two headings with any remembered layout is a different
 document and is read as before.
 
+**Backups.** A copy on a file (every desktop copy) is copied with SQLite's `VACUUM INTO` into
+a `backups` folder beside the database (`backup.ts`): once a night while the app is open (checked
+after each page, `nightlyIfDue`), from "Back up now" on Settings, and before a restore. The newest
+fourteen are kept; each can be downloaded from Settings (admins) and the desktop File menu opens
+the folder. Restore puts a copy in place after backing up what is there, and asks for a restart.
+A hosted copy on Postgres has none of this: its host keeps the backups.
+
 **Gone from Flöda:** Bills for QuickBooks, the copy-from-the-old-site migration, and every seed
 that belonged to one shop.
 

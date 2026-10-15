@@ -74,7 +74,7 @@ function menu() {
   const isMac = process.platform === "darwin";
   const template = [
     ...(isMac ? [{ role: "appMenu" }] : []),
-    { label: "File", submenu: [{ label: "Open data folder", click: () => shell.openPath(app.getPath("userData")) }, { type: "separator" }, isMac ? { role: "close" } : { role: "quit" }] },
+    { label: "File", submenu: [{ label: "Open data folder", click: () => shell.openPath(app.getPath("userData")) }, { label: "Open backups folder", click: () => { const dir = path.join(app.getPath("userData"), "backups"); try { require("node:fs").mkdirSync(dir, { recursive: true }); } catch {} shell.openPath(dir); } }, { type: "separator" }, isMac ? { role: "close" } : { role: "quit" }] },
     { role: "editMenu" },
     { label: "View", submenu: [{ role: "reload" }, { role: "resetZoom" }, { role: "zoomIn" }, { role: "zoomOut" }, { type: "separator" }, { role: "togglefullscreen" }] },
     { role: "windowMenu" },

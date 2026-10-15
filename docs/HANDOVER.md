@@ -50,7 +50,9 @@ invoices, scans, handwriting, product pages, bills, the Prices and stock chat, t
 `LIGHT_MODEL` is Claude Haiku 5.5 (about $0.10/$0.50) for colour checks on pictures, SEO lines and
 reading the batch chat. Both can be overridden in Vercel with `CATALOG_AI_MODEL` /
 `CATALOG_LIGHT_MODEL`. Neither accepts thinking switched off or a forced tool; set `effort`
-explicitly (both default to `medium`). Fast mode (invoice reading) runs at twice the price.
+explicitly (both default to `medium`). Fast mode for photographed invoices (twice the price) is off
+since 2026-10-15 at the shop's choice; `CATALOG_FAST_READS=1` turns it back on. The build check
+still runs by itself after every build, also the shop's choice.
 
 **No gender in any title (asked 2026-10-15).** "Men's", "Women's", "Ladies", "Unisex" never go in a
 product's title, whether the supplier's name carries them or the shop's older listings do

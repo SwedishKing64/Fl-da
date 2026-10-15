@@ -210,11 +210,12 @@ export function ranOutOfTime(message: string | null | undefined): boolean {
 /**
  * One read of a document, inside the budget.
  *
- * A photograph is read at the API's fast speed — the same model, answering up to two and a half
- * times faster — because the time a read takes is almost all the answer being written, and a
- * photographed invoice read at standard speed ran past the minute. Fast speed is a beta with its
- * own rate limit and not every model has it, so a refusal of it falls back to standard speed with
- * whatever time is left; a read that cannot finish in the time says so rather than being killed.
+ * Read at standard speed. A photograph used to be read at the API's fast speed — answering up to
+ * two and a half times faster, at twice the price — when a read had a minute; it now has four
+ * (READ_BUDGET_MS), and the shop chose the saving over the speed (2026-10-15). Setting
+ * CATALOG_FAST_READS=1 in Vercel turns fast speed back on for photographs. Fast speed is a beta
+ * with its own rate limit, so a refusal of it falls back to standard speed with whatever time is
+ * left; a read that cannot finish in the time says so rather than being killed.
  */
 /** How a document is read: a photograph at the service's fast speed, a known supplier's on the lighter model. */
 export interface ReadOptions {
@@ -276,8 +277,9 @@ async function readOnce(content: ContentBlocks, options: ReadOptions, budgetMs: 
   let message: Anthropic.Message | Anthropic.Beta.BetaMessage;
   try {
     message = await retrying(async () => {
-      // Fast speed is the reading model's alone; the lighter model is quick as it is.
-      if (!options.visual || options.known) return standard();
+      // Standard speed, at half the price, unless CATALOG_FAST_READS=1 (the ski shop chose the
+      // saving, 2026-10-15). Fast speed is the reading model's alone; the lighter model is quick as it is.
+      if (!options.visual || options.known || process.env.CATALOG_FAST_READS !== "1") return standard();
       try {
         return await fast();
       } catch (err) {

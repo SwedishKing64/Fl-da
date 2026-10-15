@@ -20,7 +20,7 @@ export async function getServerOverride(): Promise<string> {
 
 export async function saveServerOverride(url: string): Promise<void> {
   const clean = url.trim().replace(/\/+$/, "");
-  if (clean && !isServerUrl(clean)) throw new Error("That is not an address Flöda can be asked at. It looks like https://floda.ai");
+  if (clean && !isServerUrl(clean)) throw new Error("That is not an address Flöda can be asked at. It looks like https://fl-da.vercel.app");
   if (!clean) await prisma.appSetting.deleteMany({ where: { key: SERVER_KEY } });
   else await prisma.appSetting.upsert({ where: { key: SERVER_KEY }, create: { key: SERVER_KEY, value: JSON.stringify(clean) }, update: { value: JSON.stringify(clean) } });
 }

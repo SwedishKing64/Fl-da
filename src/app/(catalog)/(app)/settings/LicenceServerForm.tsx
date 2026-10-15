@@ -17,7 +17,7 @@ export function LicenceServerForm({ servers, override }: { servers: string[]; ov
       <summary className="cursor-pointer font-medium">Can&rsquo;t reach Flöda? Its address</summary>
       <p className="mt-2 text-[var(--ink-soft)]">This copy asks, in order: {servers.length ? servers.join(", then ") : "nowhere — it checks no licence"}. If none of those can be reached and you were given another address, put it here.</p>
       <ActionForm action={action} state={state} className="mt-2 flex flex-wrap items-end gap-2">
-        <Field label="Flöda's address" className="min-w-[16rem] flex-1"><input name="server" className={INPUT} defaultValue={override} placeholder="https://floda.ai" autoComplete="off" /></Field>
+        <Field label="Flöda's address" className="min-w-[16rem] flex-1"><input name="server" className={INPUT} defaultValue={override} placeholder="https://fl-da.vercel.app" autoComplete="off" /></Field>
         <Button type="submit" disabled={pending}>{pending ? "Saving…" : "Use this address"}</Button>
       </ActionForm>
       {state && (state.ok ? <Alert tone="success" className="mt-2">{state.message}</Alert> : <Alert tone="danger" className="mt-2">{state.error}</Alert>)}

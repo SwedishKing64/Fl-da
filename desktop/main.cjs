@@ -78,7 +78,7 @@ function menu() {
     { role: "editMenu" },
     { label: "View", submenu: [{ role: "reload" }, { role: "resetZoom" }, { role: "zoomIn" }, { role: "zoomOut" }, { type: "separator" }, { role: "togglefullscreen" }] },
     { role: "windowMenu" },
-    { label: "Help", submenu: [{ label: "Flöda website", click: () => shell.openExternal("https://floda.ai") }, { label: "Show the log", click: () => shell.openPath(path.join(app.getPath("userData"), "floda.log")) }, { type: "separator" }, { label: `Flöda ${app.getVersion()}`, enabled: false }] },
+    { label: "Help", submenu: [{ label: "Flöda website", click: () => shell.openExternal("https://fl-da.vercel.app") }, { label: "Show the log", click: () => shell.openPath(path.join(app.getPath("userData"), "floda.log")) }, { type: "separator" }, { label: `Flöda ${app.getVersion()}`, enabled: false }] },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }

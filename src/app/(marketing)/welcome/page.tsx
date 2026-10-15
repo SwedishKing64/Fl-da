@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { Logo } from "@/app/Logo";
 import { RegisterForm } from "./RegisterForm";
-import { Bar, CountUp, Demo, Reveal, Tilt } from "./Motion";
+import { CountUp, Demo, Reveal, Tilt } from "./Motion";
+import { Site } from "../Shell";
+import { Story } from "../Story";
 import { describePlanSize, PLANS } from "@/lib/catalog/plans";
 import "./welcome.css";
 
@@ -20,24 +20,7 @@ const BRANDS = ["Burton", "Völkl", "Marker", "Dalbello", "Atomic", "Salomon", "
  */
 export default function WelcomePage() {
   return (
-    <div className="floda">
-      <Bar>
-        <div className="wrap">
-          <Link href="/welcome" className="mark"><Logo size={24} /></Link>
-          <nav aria-label="Sections">
-            <a href="#product">Product</a>
-            <a href="#how">How it works</a>
-            <a href="#who">Who it&rsquo;s for</a>
-            <a href="#pricing">Pricing</a>
-          </nav>
-          <div className="bar-ctas">
-            <Link href="/login" className="btn btn-grey">Sign in</Link>
-            <a href="#register" className="btn btn-meta">Start free trial</a>
-          </div>
-        </div>
-      </Bar>
-
-      <main>
+    <Site>
         {/* ---------------------------------------------------------------- hero */}
         <section className="hero" aria-labelledby="hero-title">
           <div className="mesh" aria-hidden><i /><i /><i /></div>
@@ -119,11 +102,18 @@ export default function WelcomePage() {
               <h2>Three steps. The third one is you checking.</h2>
               <p className="lede">Nothing goes to your store on Flöda&rsquo;s say-so. It does the reading and the matching; you look at the result and press import.</p>
             </Reveal>
-            <ol className="steps">
-              <Reveal as="li" delay={0}><span className="n">1</span><div className="ico" aria-hidden>📷</div><h3>Drop in what the supplier sent</h3><p>A spreadsheet, a PDF, or a photo off your phone, pen marks and all. Flöda reads the print and the handwriting: a price in the margin is the RRP, a percentage is the discount, a year is the season.</p></Reveal>
-              <Reveal as="li" delay={1}><span className="n">2</span><div className="ico" aria-hidden>🧩</div><h3>It becomes your catalogue&rsquo;s shape</h3><p>Lines are matched to what you already sell by barcode, code or name. New products are named, categorised, tagged and priced the way your shop does it, learned from your own Shopify export.</p></Reveal>
-              <Reveal as="li" delay={2}><span className="n">3</span><div className="ico" aria-hidden>✅</div><h3>Check it, then import it</h3><p>Every product in a grid, every changed cell listed. Download a Shopify CSV, or only the kinds of product you&rsquo;re working on today, and import it yourself.</p></Reveal>
-            </ol>
+            <Story
+              steps={[
+                { title: "Drop in what the supplier sent", text: "A spreadsheet, a PDF, or a photo off your phone, pen marks and all. Flöda reads the print and the handwriting: a price in the margin is the RRP, a percentage is the discount, a year is the season." },
+                { title: "It becomes your catalogue\u2019s shape", text: "Lines are matched to what you already sell by barcode, code or name. New products are named, categorised, tagged and priced the way your shop does it, learned from your own Shopify export." },
+                { title: "Check it, then import it", text: "Every product in a grid, every changed cell listed. Download a Shopify CSV, or only the kinds of product you\u2019re working on today, and import it yourself." },
+              ]}
+              panels={[
+                <div key="in" className="sp sp-in"><div className="sheet"><span className="pen">×3</span><i /><i /><i /><i /><span className="pen two">YT 27</span></div><div className="cap">What the rep sent, photographed</div></div>,
+                <div key="shape" className="sp sp-shape"><div className="rowz"><div className="r h"><span>Product</span><span>Type</span><span>Tags</span><span>Price</span></div><div className="r"><span>Custom Camber 154</span><span>Snowboards</span><span>freestyle · 2027</span><span>$999</span></div><div className="r"><span>Freestyle Re:Flex M</span><span>Bindings</span><span>snowboard-bindings</span><span>$299</span></div><div className="r"><span>Gore Glove L</span><span>Gloves</span><span>ski-gloves · outdoor</span><span>$89.95</span></div></div><div className="cap">Named, filed, tagged and priced your way</div></div>,
+                <div key="check" className="sp sp-check"><div className="grid"><div className="cell ok">✓ 3 products</div><div className="cell ok">✓ 9 variants</div><div className="cell warn">! 1 to check</div><div className="cell dl">↓ Shopify CSV</div></div><div className="cap">You check, you press import</div></div>,
+              ]}
+            />
           </div>
         </section>
 
@@ -291,14 +281,6 @@ export default function WelcomePage() {
             </Reveal>
           </div>
         </section>
-      </main>
-
-      <footer>
-        <div className="wrap">
-          <span className="mark"><Logo size={20} /></span>
-          <span>Supplier paperwork in, shop-ready listings out · hello@floda.ai · Sydney</span>
-        </div>
-      </footer>
-    </div>
+    </Site>
   );
 }

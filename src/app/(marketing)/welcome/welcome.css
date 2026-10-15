@@ -305,5 +305,100 @@
 .floda .cta .lede { text-align: center; }
 
 /* ------------------------------------------------------------------------------ footer */
-.floda footer { background: var(--f-white); color: var(--f-soft); border-top: 1px solid var(--f-line); padding-block: 40px; font-size: 14px; }
-.floda footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: space-between; align-items: center; }
+
+/* ------------------------------------------------------------------------------- menus */
+.floda .bar .progress { position: absolute; left: 0; top: 0; height: 2px; width: 100%; background: linear-gradient(90deg, var(--f-meta), var(--f-meta-bright)); transform-origin: left; transform: scaleX(0); pointer-events: none; }
+.floda .bar nav { align-items: center; }
+.floda .bar nav > a, .floda .menu > button { font: inherit; font-weight: 600; color: var(--f-ink-2); background: none; border: 0; padding: 6px 0; cursor: pointer; position: relative; }
+.floda .menu { position: relative; }
+.floda .menu > button { display: inline-flex; align-items: center; gap: 4px; }
+.floda .menu .chev { font-size: 14px; line-height: 0; transform: translateY(-3px); transition: transform 0.2s var(--f-ease); }
+.floda .menu.open .chev { transform: translateY(0) rotate(180deg); }
+.floda .menu .panel { position: absolute; top: calc(100% + 10px); left: -12px; min-width: 300px; display: grid; gap: 2px; padding: 8px; border-radius: 16px; background: var(--f-white); border: 1px solid var(--f-line); box-shadow: 0 30px 60px -30px rgba(8, 43, 97, 0.45), 0 8px 24px -16px rgba(5, 5, 5, 0.25); opacity: 0; transform: translateY(6px); pointer-events: none; transition: opacity 0.18s ease, transform 0.22s var(--f-ease); }
+.floda .menu.open .panel { opacity: 1; transform: none; pointer-events: auto; }
+.floda .menu .panel a { display: grid; gap: 2px; padding: 10px 12px; border-radius: 10px; }
+.floda .menu .panel a:hover, .floda .menu .panel a:focus-visible { background: var(--f-tint); }
+.floda .menu .panel .t { font-size: 14px; font-weight: 700; color: var(--f-ink); }
+.floda .menu .panel .h { font-size: 12.5px; font-weight: 500; color: var(--f-soft); }
+.floda .burger { display: inline-grid; gap: 4px; width: 40px; height: 40px; place-content: center; border: 1px solid var(--f-line); border-radius: 999px; background: var(--f-white); cursor: pointer; }
+.floda .burger i { display: block; width: 16px; height: 2px; border-radius: 2px; background: var(--f-ink); }
+.floda .mobile { display: grid; gap: 18px; padding: 8px 16px 20px; background: var(--f-white); border-bottom: 1px solid var(--f-line); }
+.floda .mobile .group { display: grid; gap: 6px; }
+.floda .mobile .gl { font-size: 11.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--f-soft); }
+.floda .mobile a { font-size: 16px; font-weight: 600; padding: 6px 0; }
+@media (min-width: 860px) { .floda .burger, .floda .mobile { display: none; } }
+@media (max-width: 859px) { .floda .bar-ctas .btn-grey { display: none; } }
+
+/* ------------------------------------------------------------------------------- story */
+.floda .story { display: grid; gap: 28px; }
+.floda .story-pin { position: relative; min-height: 300px; }
+.floda .story-panel { position: absolute; inset: 0; display: grid; align-content: center; justify-items: center; gap: 14px; opacity: 0; transform: translateY(14px) scale(0.98); transition: opacity 0.45s var(--f-ease), transform 0.55s var(--f-ease); pointer-events: none; }
+.floda .story-panel.on { opacity: 1; transform: none; }
+.floda .story-panel .cap { font-size: 13px; font-weight: 600; color: var(--f-soft); }
+.floda .sp { width: 100%; }
+.floda .sp .sheet { position: relative; margin: 0 auto; width: min(340px, 100%); aspect-ratio: 4 / 3; border-radius: 14px; background: #fffdf6; border: 1px solid #ebe3c9; box-shadow: 0 30px 60px -36px rgba(5, 5, 5, 0.35); padding: 26px 22px; display: grid; gap: 12px; align-content: start; transform: rotate(-1.5deg); }
+.floda .sp .sheet i { display: block; height: 10px; border-radius: 6px; background: #d8d2bd; width: 85%; }
+.floda .sp .sheet i:nth-child(3) { width: 70%; } .floda .sp .sheet i:nth-child(5) { width: 60%; }
+.floda .sp .sheet .pen { position: absolute; right: 18px; top: 18px; font-family: "Comic Sans MS", "Segoe Print", cursive; color: #1f4fd8; font-size: 20px; transform: rotate(6deg); }
+.floda .sp .sheet .pen.two { top: auto; bottom: 22px; right: 36px; }
+.floda .sp .rowz { width: min(520px, 100%); margin: 0 auto; border-radius: 14px; background: var(--f-white); border: 1px solid var(--f-line); overflow: hidden; box-shadow: 0 30px 60px -36px rgba(8, 43, 97, 0.4); }
+.floda .sp .r { display: grid; grid-template-columns: 1.5fr 1fr 1.3fr 0.7fr; gap: 10px; padding: 10px 14px; font-size: 13px; border-top: 1px solid var(--f-line); }
+.floda .sp .r.h { border-top: 0; background: var(--f-grey); font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--f-soft); }
+.floda .sp .r span:nth-child(3) { color: var(--f-meta); font-weight: 600; } .floda .sp .r span:last-child { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+.floda .sp .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: min(420px, 100%); margin: 0 auto; }
+.floda .sp .cell { padding: 20px 16px; border-radius: 14px; font-weight: 700; font-size: 15px; background: var(--f-white); border: 1px solid var(--f-line); }
+.floda .sp .cell.ok { color: #0a7a3b; } .floda .sp .cell.warn { color: #9a5b00; } .floda .sp .cell.dl { background: var(--f-meta); color: #fff; border-color: var(--f-meta); }
+.floda .story-steps { list-style: none; padding: 0; margin: 0; display: grid; gap: 14px; }
+.floda .story-steps li { position: relative; padding: 22px 24px 22px 64px; border-radius: var(--f-r); border: 1px solid var(--f-line); background: var(--f-white); cursor: pointer; transition: border-color 0.2s ease, box-shadow 0.3s ease, transform 0.3s var(--f-ease); }
+.floda .story-steps li.on { border-color: var(--f-meta); box-shadow: 0 24px 50px -36px rgba(8, 102, 255, 0.6); }
+.floda .story-steps .n { position: absolute; left: 22px; top: 22px; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--f-grey); color: var(--f-ink-2); font-size: 13px; font-weight: 800; transition: background 0.2s, color 0.2s; }
+.floda .story-steps li.on .n { background: var(--f-meta); color: #fff; }
+.floda .story-steps h3 { font-size: 18px; }
+.floda .story-steps p { margin-top: 6px; color: var(--f-ink-2); font-size: 15px; }
+@media (min-width: 860px) {
+  .floda .story { grid-template-columns: 1.1fr 1fr; gap: 48px; align-items: start; }
+  .floda .story-pin { position: sticky; top: 110px; min-height: 420px; }
+  .floda .story-steps { padding-block: 40px; gap: 56px; }
+}
+
+/* -------------------------------------------------------------------------- inner pages */
+.floda .page-head { padding-block: 72px 40px; }
+.floda .page-head h1 { font-size: clamp(34px, 5vw, 60px); }
+.floda .page-head .head { max-width: 820px; margin-bottom: 0; }
+.floda .wrap.narrow { max-width: 820px; }
+.floda .prose { max-width: 760px; display: grid; gap: 36px; }
+.floda .prose h2 { font-size: 26px; margin-bottom: 12px; }
+.floda .prose p { font-size: 17px; line-height: 1.6; color: var(--f-ink-2); }
+.floda .prose p + p { margin-top: 12px; }
+.floda .prose ul { padding-left: 20px; display: grid; gap: 10px; color: var(--f-ink-2); font-size: 17px; line-height: 1.55; }
+.floda .prose a { color: var(--f-meta); font-weight: 600; }
+.floda .faq { display: grid; gap: 10px; }
+.floda .faq .q { border-radius: 16px; background: var(--f-white); border: 1px solid var(--f-line); overflow: hidden; transition: border-color 0.2s ease, box-shadow 0.3s ease; }
+.floda .faq .q.open { border-color: var(--f-tint-2); box-shadow: 0 24px 50px -40px rgba(8, 43, 97, 0.4); }
+.floda .faq button { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 22px; background: none; border: 0; font: inherit; font-size: 17px; font-weight: 700; text-align: left; color: var(--f-ink); cursor: pointer; }
+.floda .faq .pm { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--f-tint); color: var(--f-meta); font-weight: 800; }
+.floda .faq .a { padding: 0 22px 20px; font-size: 15.5px; line-height: 1.6; color: var(--f-ink-2); }
+.floda .faq .a a { color: var(--f-meta); font-weight: 600; }
+.floda .dl { display: grid; gap: 18px; }
+.floda .dl-card { display: grid; gap: 12px; justify-items: start; padding: 30px; border-radius: var(--f-r); background: var(--f-white); border: 1px solid var(--f-line); }
+.floda .dl-card .os { font-size: 30px; line-height: 1; }
+.floda .dl-card h3 { font-size: 24px; }
+.floda .dl-card p { color: var(--f-ink-2); font-size: 15px; }
+.floda .dl-card .two { display: flex; flex-wrap: wrap; gap: 8px; }
+.floda .dl-card .note { font-size: 13.5px; color: var(--f-soft); border-top: 1px solid var(--f-line); padding-top: 12px; width: 100%; }
+.floda .dl-after { margin-top: 28px; display: grid; gap: 12px; max-width: 720px; }
+.floda .dl-after h3 { font-size: 20px; }
+.floda .dl-after ol { padding-left: 22px; display: grid; gap: 8px; font-size: 16px; color: var(--f-ink-2); }
+.floda .dl-after a { color: var(--f-meta); font-weight: 600; }
+@media (min-width: 760px) { .floda .dl { grid-template-columns: 1fr 1fr; } }
+
+/* -------------------------------------------------------------------------------- foot */
+.floda .foot { padding-block: 56px 32px; border-top: 1px solid var(--f-line); background: var(--f-white); }
+.floda .foot .cols { display: grid; gap: 28px; }
+.floda .foot .cols > div { display: grid; gap: 8px; align-content: start; font-size: 14.5px; }
+.floda .foot .brand p { color: var(--f-ink-2); max-width: 36ch; }
+.floda .foot .fl { font-size: 11.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--f-soft); margin-bottom: 4px; }
+.floda .foot a { color: var(--f-ink-2); font-weight: 500; }
+.floda .foot a:hover { color: var(--f-meta); }
+.floda .foot .fine { margin-top: 36px; font-size: 12.5px; color: var(--f-soft); }
+@media (min-width: 760px) { .floda .foot .cols { grid-template-columns: 2fr 1fr 1fr 1fr; gap: 40px; } }

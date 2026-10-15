@@ -140,6 +140,13 @@ delivery is now remembered by what is on it (`applied-memory.ts`: a fingerprint 
 in the browser's storage, so the question is asked after a reload or a re-saved file too, with
 when it was applied; undoing the delivery forgets it.
 
+**A demo anyone can open.** An admin makes a link on Settings (`demo.ts`: a random token kept in
+`AppSetting`, or `DEMO_TOKEN` in the environment). `/demo/<token>` signs the visitor in as "Demo
+visitor", a staff member, builds a made-up Northwind Supply order the first time
+(`samples/northwind-order.csv`, embedded), and lands on its review grid. Revoking the link on
+Settings signs every demo visitor out. The visitor sees everything a staff member sees on that
+copy, so it is for a copy kept for demos.
+
 **Gone from Flöda:** Bills for QuickBooks, the copy-from-the-old-site migration, and every seed
 that belonged to one shop.
 

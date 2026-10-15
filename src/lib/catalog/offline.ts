@@ -36,7 +36,7 @@ export function runOffline(
   mappingOptions: MappingOptions,
   batch: OfflineBatch,
   categoryRules: CategoryRuleLike[],
-  settings: Pick<AppSettings, "gstRate" | "pricesIncludeGst" | "minMarginPct"> & { maxMarginPct?: number },
+  settings: Pick<AppSettings, "gstRate" | "pricesIncludeGst" | "minMarginPct">,
 ): OfflineResult {
   const items = table.rows.map((row) => applyMapping(row, mapping, mappingOptions)).filter((i) => i.title || i.sku || i.costPrice !== null);
   const grouped = groupLineItems(items, categoryRules);
@@ -98,7 +98,7 @@ export function runOffline(
     Object.assign(v, { landedCostAud: r.landedCostAud, retailPrice: r.retailPrice, exGstRevenue: r.exGstRevenue, gstComponent: r.gstComponent, profitPerUnit: r.profitPerUnit, marginPct: r.marginPct, markupPct: r.markupPct, pricingRuleName: r.ruleName });
   }
 
-  validateReview(products, { minMarginPct: settings.minMarginPct, maxMarginPct: settings.maxMarginPct });
+  validateReview(products, { minMarginPct: settings.minMarginPct });
   const csvProducts = toCsvProducts(products);
   return {
     products,

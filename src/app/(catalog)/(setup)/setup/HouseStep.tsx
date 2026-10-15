@@ -38,6 +38,22 @@ export function previewTitle(naming: HouseConventions["naming"]): string {
   return `${brand}${name}${year}`;
 }
 
+/** The one question the form asks about identifiers, folded out of the two settings it keeps. */
+type Recorded = "both" | "sku" | "barcode";
+
+function recorded(id: HouseConventions["identifiers"]): Recorded {
+  if (id.sku === "none") return id.barcode === "none" ? "both" : "barcode";
+  return id.barcode === "none" ? "sku" : "both";
+}
+
+/** The two settings a choice stands for. The SKU column always carries the supplier's code when it is used at all. */
+function recordedAs(choice: Recorded, id: HouseConventions["identifiers"]): HouseConventions["identifiers"] {
+  const barcode = id.barcode === "none" ? "keep" : id.barcode;
+  if (choice === "sku") return { sku: "supplier", barcode: "none" };
+  if (choice === "barcode") return { sku: "none", barcode };
+  return { sku: "supplier", barcode };
+}
+
 export function HouseForm({ house: initial, tagRules: initialRules, kinds, next }: { house: HouseConventions; tagRules: TagRuleInput[]; kinds: string[]; next?: string }) {
   const [house, setHouse] = useState<HouseConventions>(initial);
   const [rules, setRules] = useState<TagRuleInput[]>(initialRules.length ? initialRules : []);
@@ -82,16 +98,18 @@ export function HouseForm({ house: initial, tagRules: initialRules, kinds, next 
 
       <section className="space-y-4">
         <h3 className="text-[15px] font-bold">SKUs and barcodes</h3>
-        <Choice<HouseConventions["identifiers"]["sku"]> label="What goes in the SKU column" value={house.identifiers.sku} onChange={(v) => set("identifiers", { sku: v })} options={[
-          { key: "supplier", title: "The supplier’s code", text: "The article or style number from the paperwork, as most shops do." },
-          { key: "barcode", title: "The barcode", text: "The EAN or UPC doubles as the SKU; the supplier’s code is used when there is none." },
-          { key: "none", title: "We don’t use SKUs", text: "The column goes out empty and nothing is flagged for it." },
+        <p className="text-[13.5px] text-[var(--ink-soft)]">A Shopify file has a column for each: the SKU is the supplier’s article or style code, the barcode is the EAN or UPC. Say which you record on a variant.</p>
+        <Choice<Recorded> label="What do you record on each variant?" value={recorded(house.identifiers)} onChange={(v) => set("identifiers", recordedAs(v, house.identifiers))} options={[
+          { key: "both", title: "SKUs and barcodes", text: "The supplier’s code goes in the SKU column and the EAN or UPC in the barcode column." },
+          { key: "sku", title: "SKUs only", text: "The supplier’s code goes in the SKU column; the barcode column goes out empty." },
+          { key: "barcode", title: "Barcodes only", text: "The EAN or UPC goes in the barcode column; the SKU column goes out empty." },
         ]} />
-        <Choice<HouseConventions["identifiers"]["barcode"]> label="Barcodes" value={house.identifiers.barcode} onChange={(v) => set("identifiers", { barcode: v })} options={[
-          { key: "keep", title: "When the paperwork has one", text: "Written when the invoice or spec sheet gives it; otherwise left empty." },
-          { key: "required", title: "On every variant", text: "A variant without one is flagged on the review grid so it can be filled in." },
-          { key: "none", title: "We don’t use barcodes", text: "The column goes out empty." },
-        ]} />
+        {house.identifiers.barcode !== "none" && (
+          <Choice<HouseConventions["identifiers"]["barcode"]> label="A variant with no barcode on the paperwork" value={house.identifiers.barcode} onChange={(v) => set("identifiers", { barcode: v })} options={[
+            { key: "keep", title: "Is left empty", text: "The barcode is written when the invoice or spec sheet gives it; otherwise the cell stays blank." },
+            { key: "required", title: "Is flagged", text: "It shows on the review grid so the barcode can be filled in before the export." },
+          ]} />
+        )}
       </section>
 
       <section className="space-y-4">

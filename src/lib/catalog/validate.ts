@@ -19,7 +19,6 @@ export const MAX_IMAGES = 8;
 export interface ValidationContext {
   minMarginPct: number;
   /** A margin above this is not a price, it is a cost in the wrong column. Default 80. */
-  maxMarginPct?: number;
   /** Lower-cased SKUs that already exist in the live Shopify catalog, mapped to their handle. */
   shopifySkus?: Map<string, string>;
   /** Handles that already exist in the live Shopify catalog. */
@@ -101,12 +100,10 @@ export function validateReview(products: ReviewProduct[], ctx: ValidationContext
         const combo = [v.option1Value, v.option2Value, v.option3Value].map((s) => (s ?? "").trim().toLowerCase()).join("|");
         if ((combos.get(combo) ?? 0) > 1) vf.push({ code: "DUPLICATE_OPTIONS", severity: "error", message: "Two variants share the same option values" });
       }
-      // A price below the landed cost, or a margin no shop earns, is a cost that landed in the
-      // price column or a list price that landed in the cost column. Either way the number on the
-      // shop would be wrong, so these stop the export rather than warn.
-      const maxMargin = ctx.maxMarginPct ?? 80;
+      // A price below the landed cost is a cost that landed in the price column or a list price
+      // that landed in the cost column. The number on the shop would be wrong, so it stops the
+      // export rather than warns. A thin margin is only a warning.
       if (v.profitPerUnit < 0 && v.retailPrice > 0) vf.push({ code: "NEGATIVE_PROFIT", severity: "error", message: `Selling below landed cost (${v.retailPrice.toFixed(2)} against ${v.landedCostAud.toFixed(2)}) — a cost in the price column?` });
-      else if (v.retailPrice > 0 && v.costPrice > 0 && v.marginPct > maxMargin) vf.push({ code: "HIGH_MARGIN", severity: "error", message: `Margin ${v.marginPct.toFixed(1)}% is above ${maxMargin}% — is the cost in the right column, and per unit?` });
       else if (v.retailPrice > 0 && v.costPrice > 0 && v.marginPct < ctx.minMarginPct) vf.push({ code: "LOW_MARGIN", severity: "warning", message: `Margin ${v.marginPct.toFixed(1)}% is below ${ctx.minMarginPct}%` });
       v.flags = vf.filter((f) => f.severity === "error" || !dismissed.has(f.code));
     }

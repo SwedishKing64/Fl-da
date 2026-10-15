@@ -457,6 +457,15 @@ select.input { padding-right: 36px; appearance: none; background-image: url("dat
     radial-gradient(520px 360px at -20% 0%, rgba(109, 93, 255, 0.45) 0%, transparent 60%),
     linear-gradient(180deg, var(--night) 0%, var(--night-2) 58%, var(--night-3) 100%);
 }
+/* The app's navigation stays in view while the page scrolls. After .night, whose position it overrides. */
+@media (min-width: 768px) {
+  .sidebar-pinned {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+  }
+}
 .aurora {
   background:
     radial-gradient(900px 520px at 12% -20%, rgba(109, 93, 255, 0.75) 0%, transparent 58%),

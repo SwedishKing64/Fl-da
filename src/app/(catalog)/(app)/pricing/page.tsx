@@ -2,7 +2,7 @@ import { getSettings } from "@/lib/catalog/settings";
 import { requireUser } from "@/lib/catalog/auth";
 import { Card, PageHeader } from "@/app/(catalog)/ui";
 import { PriceCalculator } from "./PriceCalculator";
-import { MarginBand } from "./MarginBand";
+import { MarginFloor } from "./MarginFloor";
 
 export default async function PricingPage() {
   await requireUser();
@@ -13,8 +13,8 @@ export default async function PricingPage() {
       <Card title="Price calculator">
         <PriceCalculator settings={{ gstRate: settings.gstRate, pricesIncludeGst: settings.pricesIncludeGst, minMarginPct: settings.minMarginPct, fxRates: settings.fxRates }} />
       </Card>
-      <Card title="The margin a price can have" className="mt-6">
-        <MarginBand minMarginPct={settings.minMarginPct} maxMarginPct={settings.maxMarginPct} />
+      <Card title="The margin to warn under" className="mt-6">
+        <MarginFloor minMarginPct={settings.minMarginPct} />
       </Card>
     </>
   );

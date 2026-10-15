@@ -69,7 +69,7 @@ export default async function CatalogLayout({ children }: { children: React.Reac
 
   return (
     <div className="flex min-h-screen bg-[var(--canvas)]">
-      <aside className="night hidden w-64 shrink-0 flex-col md:flex">
+      <aside className="night sidebar-pinned hidden w-64 shrink-0 flex-col md:flex">
         <Link href="/" className="block px-5 pb-4 pt-5">
           <Logo size={22} tone="light" />
           <div className="mt-2 text-[12px] text-white/60">Paperwork in, listings out</div>

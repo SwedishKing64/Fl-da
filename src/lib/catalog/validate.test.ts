@@ -47,24 +47,22 @@ describe("review validation", () => {
     expect(v.flags).toEqual([]);
   });
 
-  it("stops the export on a bad check digit, swapped code columns, a price below cost or a margin no shop earns", () => {
+  it("stops the export on a bad check digit, swapped code columns, or a price below cost", () => {
     const base = { productId: "p1", costPrice: 300, retailPrice: 550, exGstRevenue: 500, gstComponent: 50, landedCostAud: 300, profitPerUnit: 200, marginPct: 40 };
     const badDigit = emptyVariantView({ ...base, id: "v1", sku: "A-1", option1Value: "1", barcode: "9312345000127" });
     const swapped = emptyVariantView({ ...base, id: "v2", sku: "9312345000128", option1Value: "2", barcode: "A-2" });
     const shortCode = emptyVariantView({ ...base, id: "v3", sku: "A-3", option1Value: "3", barcode: "2025101512" });
     const belowCost = emptyVariantView({ ...base, id: "v4", sku: "A-4", option1Value: "4", retailPrice: 250, exGstRevenue: 227.27, profitPerUnit: -72.73, marginPct: -32 });
-    const tooGood = emptyVariantView({ ...base, id: "v5", sku: "A-5", option1Value: "5", costPrice: 3, landedCostAud: 3, profitPerUnit: 497, marginPct: 99.4 });
     const fine = emptyVariantView({ ...base, id: "v6", sku: "A-6", option1Value: "6", barcode: "9312345000128" });
-    const p = product({ variants: [badDigit, swapped, shortCode, belowCost, tooGood, fine] });
-    validateReview([p], { minMarginPct: 20, maxMarginPct: 80 });
+    const p = product({ variants: [badDigit, swapped, shortCode, belowCost, fine] });
+    validateReview([p], { minMarginPct: 20 });
     expect(badDigit.flags.map((f) => f.code)).toEqual(["INVALID_BARCODE"]);
     expect(swapped.flags.map((f) => f.code)).toEqual(["SWAPPED_CODES"]);
     expect(shortCode.flags.map((f) => `${f.code}:${f.severity}`)).toEqual(["ODD_BARCODE:warning"]);
     expect(belowCost.flags.map((f) => `${f.code}:${f.severity}`)).toEqual(["NEGATIVE_PROFIT:error"]);
-    expect(tooGood.flags.map((f) => `${f.code}:${f.severity}`)).toEqual(["HIGH_MARGIN:error"]);
     expect(fine.flags).toEqual([]);
     const hard = hardErrors([p]);
-    expect(hard.length).toBe(4);
+    expect(hard.length).toBe(3);
     expect(hard[0]).toContain("A-1");
     expect(hard.join(" ")).toContain("swapped");
   });

@@ -16,7 +16,8 @@
  */
 
 import { prisma, parseJson } from "./db";
-import { setStoredApiKey } from "./anthropic";
+import { setRelay, setStoredApiKey } from "./anthropic";
+import { LICENCE_KEY_SETTING, licenceServer, licenceState, type Licence } from "./licence";
 import { activateConventions, type LearnedVocabulary } from "./taxonomy";
 import { COUNTRIES, DEFAULT_PROFILE, type ShopProfile } from "./shop";
 import { cleanHouse, DEFAULT_HOUSE, type HouseConventions } from "./house";
@@ -87,10 +88,16 @@ let loading: Promise<void> | null = null;
 const TRUST_MS = 30_000;
 
 async function load(): Promise<void> {
-  const [profile, learned, key, house] = await Promise.all([getShopProfile(), getLearnedVocabulary(), getStoredApiKey(), getHouseConventions()]);
+  const [profile, learned, key, house, licenceRow] = await Promise.all([
+    getShopProfile(), getLearnedVocabulary(), getStoredApiKey(), getHouseConventions(),
+    prisma.appSetting.findUnique({ where: { key: LICENCE_KEY_SETTING } }),
+  ]);
   activeProfile = profile;
   activateConventions({ pack: profile.pack, learned, marker: profile.marker, house });
   setStoredApiKey(key);
+  // A copy in good standing with its vendor reads through Flöda when it has no key of its own.
+  const standing = licenceState(parseJson<Licence | null>(licenceRow?.value, null));
+  setRelay(standing.kind === "ok" ? { server: licenceServer(), key: standing.licence.key } : null);
   loadedAt = Date.now();
 }
 

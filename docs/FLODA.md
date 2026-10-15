@@ -131,3 +131,15 @@ Everything in `HANDOVER.md` under "Working on it" applies. In addition:
   without its `next` package fails there, not on a customer's machine (as v0.1.3 did).
 - Leads from the landing page are kept in `AppSetting` under `floda.leads` until they become
   clients.
+- Reading through Flöda (`src/app/api/ai/[...path]/route.ts`, `src/lib/catalog/ai-usage.ts`): a
+  copy on a plan with no key of its own has its SDK pointed at the vendor's `/api/ai` with the
+  licence key as bearer token (`anthropic.ts` `setRelay`, put in force by `shop-profile.ts` from
+  the licence row). The vendor checks the key's standing and the month's allowance, forwards
+  `v1/messages` (and `count_tokens`, nothing else) with its own `ANTHROPIC_API_KEY`, streams the
+  answer back, and counts the tokens on the `Client` row (`aiMonth`, `aiInput`…, `aiCapCents`,
+  default $60 a month; 0 is no limit). A paused or ended client, or a spent allowance, is refused
+  with a `floda_error` whose sentence `api-errors.ts` shows as it is. A key the shop pastes in
+  Settings, or one on the host, is used instead of the relay. The documents being read pass
+  through floda.ai on their way to Anthropic and are not kept there. Two limits of the vendor's
+  host: a request body over Vercel's limit (4.5 MB) cannot pass, and a reading longer than the
+  route's `maxDuration` is cut off.

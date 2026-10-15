@@ -8,6 +8,8 @@ import { ActionForm } from "@/app/(catalog)/ActionForm";
 
 export interface ClientRow {
   id: string; name: string; contact: string; email: string; plan: string; status: string; licenceKey: string; notes: string;
+  /** This month's reading through Flöda, in a line, and the allowance in dollars for the form. */
+  reading: string; readingExhausted: boolean; aiCap: string;
   expiresAt: string | null; lastSeenAt: string | null; lastVersion: string; lastInstall: string; checkIns: number; createdAt: string;
 }
 export interface LeadRow { email: string; shop: string; sells: string; platform: string; note: string; at: string }
@@ -36,6 +38,7 @@ function Row({ c }: { c: ClientRow }) {
         <td className="py-2 pr-3"><Badge tone={TONE[c.status] ?? "neutral"}>{STATUS_WORD[c.status] ?? c.status}</Badge><div className="mt-1 text-xs text-[var(--ink-soft)]">{c.plan}{c.expiresAt ? ` · until ${fmtDate(c.expiresAt)}` : ""}</div></td>
         <td className="py-2 pr-3 font-mono text-xs"><button type="button" onClick={copy} title="Copy" className="rounded px-1 hover:bg-[var(--meta-tint)]">{c.licenceKey}</button></td>
         <td className="py-2 pr-3 text-xs text-[var(--ink-soft)]">{seen}{c.checkIns > 0 && <div>{c.checkIns} check-in{c.checkIns === 1 ? "" : "s"}</div>}</td>
+        <td className={`py-2 pr-3 text-xs ${c.readingExhausted ? "text-[var(--danger-ink,#b42318)]" : "text-[var(--ink-soft)]"}`}>{c.reading}</td>
         <td className="py-2 text-right whitespace-nowrap">
           {c.status === "TRIAL" && <Button size="sm" disabled={pending} onClick={() => act(() => updateClientAction(c.id, { status: "ACTIVE", expiresAt: "" }))}>Make active</Button>}
           {c.status === "ACTIVE" && <Button size="sm" disabled={pending} onClick={() => act(() => updateClientAction(c.id, { status: "PAUSED" }))}>Pause</Button>}
@@ -45,7 +48,7 @@ function Row({ c }: { c: ClientRow }) {
       </tr>
       {(note || open) && (
         <tr className="align-top">
-          <td colSpan={5} className="pb-3">
+          <td colSpan={6} className="pb-3">
             {note && <div className="mb-2 text-xs text-[var(--meta-ink)]">{note}</div>}
             {open && (
               <form
@@ -53,7 +56,7 @@ function Row({ c }: { c: ClientRow }) {
                 onSubmit={(e) => {
                   e.preventDefault();
                   const f = new FormData(e.currentTarget);
-                  act(() => updateClientAction(c.id, { name: String(f.get("name") ?? ""), contact: String(f.get("contact") ?? ""), email: String(f.get("email") ?? ""), plan: String(f.get("plan") ?? ""), status: String(f.get("status") ?? ""), expiresAt: String(f.get("expiresAt") ?? ""), notes: String(f.get("notes") ?? "") }));
+                  act(() => updateClientAction(c.id, { name: String(f.get("name") ?? ""), contact: String(f.get("contact") ?? ""), email: String(f.get("email") ?? ""), plan: String(f.get("plan") ?? ""), status: String(f.get("status") ?? ""), expiresAt: String(f.get("expiresAt") ?? ""), notes: String(f.get("notes") ?? ""), aiCap: String(f.get("aiCap") ?? "") }));
                 }}
               >
                 <Field label="Shop"><input name="name" defaultValue={c.name} className={INPUT} /></Field>
@@ -62,7 +65,8 @@ function Row({ c }: { c: ClientRow }) {
                 <Field label="Plan"><select name="plan" defaultValue={c.plan} className={INPUT}><option value="trial">trial</option><option value="founding">founding</option><option value="standard">standard</option></select></Field>
                 <Field label="Standing"><select name="status" defaultValue={c.status} className={INPUT}><option value="TRIAL">on trial</option><option value="ACTIVE">active</option><option value="PAUSED">paused</option><option value="ENDED">ended</option></select></Field>
                 <Field label="Until" hint="Empty for no end date."><input name="expiresAt" type="date" defaultValue={dateInput(c.expiresAt)} className={INPUT} /></Field>
-                <Field label="Notes" className="sm:col-span-3"><textarea name="notes" defaultValue={c.notes} rows={2} className={INPUT} /></Field>
+                <Field label="Reading allowance a month ($)" hint="What their reading through Flöda may cost before it is turned away until next month. 0 for no limit."><input name="aiCap" inputMode="decimal" defaultValue={c.aiCap} className={INPUT} /></Field>
+                <Field label="Notes" className="sm:col-span-2"><textarea name="notes" defaultValue={c.notes} rows={2} className={INPUT} /></Field>
                 <div className="flex flex-wrap gap-2 sm:col-span-3">
                   <Button type="submit" variant="primary" size="sm" disabled={pending}>Save</Button>
                   <Button type="button" size="sm" disabled={pending} onClick={() => { if (confirm("Issue a new key? Their copy will have to enter it.")) act(async () => { const r = await regenerateClientKeyAction(c.id); return r.ok ? { ok: true, message: `New key: ${r.data!.key}` } : r; }); }}>New key</Button>
@@ -149,7 +153,7 @@ export function ClientsPanel({ clients, leads, feedback }: { clients: ClientRow[
         <h3 className="mb-2 text-[15px] font-semibold">Clients ({clients.length})</h3>
         {clients.length === 0 ? <Empty>No clients yet. Add one below, or make one from a lead.</Empty> : (
           <table className="w-full text-sm">
-            <thead className="text-left text-xs text-[var(--ink-soft)]"><tr><th className="py-1">Shop</th><th>Standing</th><th>Key</th><th>Last seen</th><th /></tr></thead>
+            <thead className="text-left text-xs text-[var(--ink-soft)]"><tr><th className="py-1">Shop</th><th>Standing</th><th>Key</th><th>Last seen</th><th>Reading</th><th /></tr></thead>
             <tbody>{clients.map((c) => <Row key={c.id} c={c} />)}</tbody>
           </table>
         )}

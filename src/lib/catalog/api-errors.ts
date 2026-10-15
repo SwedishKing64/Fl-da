@@ -61,6 +61,12 @@ export async function retrying<T>(call: () => Promise<T>, waits: number[] = [2_0
   }
 }
 
+function relayMessage(err: APIError): string | null {
+  const body = err.error as { error?: { message?: unknown } } | undefined;
+  const message = body?.error?.message;
+  return typeof message === "string" && message.trim() ? message.trim() : null;
+}
+
 /** A sentence somebody can act on, or null when the error did not come from the API at all. */
 export function describeApiError(err: unknown): string | null {
   if (err instanceof Anthropic.APIConnectionError) {
@@ -69,6 +75,8 @@ export function describeApiError(err: unknown): string | null {
   if (!(err instanceof Anthropic.APIError)) return null;
   const status = err.status ?? 0;
   switch (typeOf(err)) {
+    // Flöda's own relay turning a reading away: a lapsed licence or a month's allowance spent. Its sentence is written for the page.
+    case "floda_error": return relayMessage(err) ?? "Flöda turned this reading away. Check the licence under Settings.";
     case "overloaded_error": return "The reading service is overloaded right now and turned this away, even after waiting and trying again several times. Nothing was changed. This is on the service's side, not your file — try again in a few minutes.";
     case "rate_limit_error": return "Too much was sent to the reading service at once and it turned this away. Nothing was changed. Wait a minute and try again.";
     case "timeout_error": return "The reading service took too long and this was not read. Nothing was changed. Try again in a minute.";

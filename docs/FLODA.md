@@ -177,7 +177,10 @@ Everything in `HANDOVER.md` under "Working on it" applies. In addition:
   limit. The landing page sells a 14-day trial on any plan, and promises that a forward-deployed
   engineer sets every shop up on a call, on its own invoices. The sums on it come from the shop
   it was built in: a 50-product order is about 12 hours and $350 of staff time by hand, 2 hours
-  and $60 through Flöda, checking included.
+  and $60 through Flöda, checking included. The pricing section now carries a savings calculator
+  (`Calculator.tsx`): hourly wage, products a month, hours per 100 products by hand and the
+  shop's own checking time are sliders; Flöda's own time is about 15 minutes per 100
+  products with a 5-minute floor and economies of scale (`15 × (n/100)^0.75`, never under 5); the plan is suggested from the volume and the monthly saving is net of its price.
 - Reading through Flöda (`src/app/api/ai/[...path]/route.ts`, `src/lib/catalog/ai-usage.ts`): a
   copy on a plan with no key of its own has its SDK pointed at the vendor's `/api/ai` with the
   licence key as bearer token (`anthropic.ts` `setRelay`, put in force by `shop-profile.ts` from

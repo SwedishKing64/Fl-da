@@ -1,0 +1,47 @@
+import { describe, expect, it } from "vitest";
+import { allowanceOf, costCents, describeAllowance, monthKey, StreamMeter, usageOf } from "./ai-usage";
+
+describe("what a reading used", () => {
+  it("reads the service's usage object and ignores what is not a count", () => {
+    expect(usageOf({ input_tokens: 1200, output_tokens: 300.4, cache_read_input_tokens: -5, cache_creation_input_tokens: "x" })).toEqual({ input: 1200, cacheWrite: 0, cacheRead: 0, output: 300 });
+    expect(usageOf(null)).toEqual({ input: 0, cacheWrite: 0, cacheRead: 0, output: 0 });
+  });
+  it("prices a reading at the Opus rates", () => {
+    expect(costCents({ input: 1_000_000, cacheWrite: 0, cacheRead: 0, output: 0 })).toBe(500);
+    expect(costCents({ input: 20_000, cacheWrite: 0, cacheRead: 0, output: 4_000 })).toBe(20);
+  });
+  it("meters a streamed answer from message_start and the last message_delta", () => {
+    const m = new StreamMeter();
+    m.feed('event: message_start\ndata: {"type":"message_start","message":{"usage":{"input_tokens":900,"cache_read_input_tokens":100,"output_tokens":1}}}\n\n');
+    m.feed('event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"text":"hi"}}\n\nevent: message_delta\ndata: {"type":"message_delta","usage":{"output_tokens":40}}\n\n');
+    m.feed('event: message_delta\ndata: {"type":"message_delta","usage":{"output_tokens":85}}');
+    expect(m.end()).toEqual({ input: 900, cacheWrite: 0, cacheRead: 100, output: 85 });
+  });
+  it("survives a data line split across chunks", () => {
+    const m = new StreamMeter();
+    const line = 'data: {"type":"message_start","message":{"usage":{"input_tokens":50,"output_tokens":0}}}\n';
+    m.feed(line.slice(0, 30));
+    m.feed(line.slice(30));
+    expect(m.end().input).toBe(50);
+  });
+});
+
+describe("a client's month", () => {
+  const row = { aiMonth: monthKey(), aiInput: 2_000_000, aiCacheWrite: 0, aiCacheRead: 0, aiOutput: 100_000, aiCalls: 12, aiCapCents: 6000 };
+  it("adds up what was read this month against the allowance", () => {
+    const a = allowanceOf(row);
+    expect(a.spentCents).toBe(1250);
+    expect(a.exhausted).toBe(false);
+    expect(describeAllowance(a)).toBe("$12.50 of $60.00 this month, 12 readings");
+  });
+  it("starts a new month from nothing", () => {
+    const a = allowanceOf({ ...row, aiMonth: "2001-01" });
+    expect(a.spentCents).toBe(0);
+    expect(a.calls).toBe(0);
+  });
+  it("turns the next reading away once the allowance is spent, unless there is none", () => {
+    expect(allowanceOf({ ...row, aiCapCents: 1000 }).exhausted).toBe(true);
+    expect(allowanceOf({ ...row, aiCapCents: 0 }).exhausted).toBe(false);
+    expect(describeAllowance(allowanceOf({ ...row, aiCapCents: 1000 }))).toContain("allowance used up");
+  });
+});

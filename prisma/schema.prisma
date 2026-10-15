@@ -520,6 +520,14 @@ model Client {
   lastVersion String    @default("")
   lastInstall String    @default("") // the install's own id, so two copies on one key show up
   checkIns    Int       @default(0)
+  /// Reading through Flöda's relay this month: the month, what it used, and the month's allowance in cents (0 = none).
+  aiMonth      String    @default("")
+  aiInput      Int       @default(0)
+  aiCacheWrite Int       @default(0)
+  aiCacheRead  Int       @default(0)
+  aiOutput     Int       @default(0)
+  aiCalls      Int       @default(0)
+  aiCapCents   Int       @default(6000)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 }

@@ -1,3 +1,4 @@
+import { allowanceOf, describeAllowance } from "@/lib/catalog/ai-usage";
 import { notFound } from "next/navigation";
 import { prisma, parseJson } from "@/lib/catalog/db";
 import { requireUser } from "@/lib/catalog/auth";
@@ -26,10 +27,11 @@ export default async function ClientsPage() {
   const rows: ClientRow[] = clients.map((c) => ({
     id: c.id, name: c.name, contact: c.contact, email: c.email, plan: c.plan, status: c.status, licenceKey: c.licenceKey, notes: c.notes,
     expiresAt: c.expiresAt?.toISOString() ?? null, lastSeenAt: c.lastSeenAt?.toISOString() ?? null, lastVersion: c.lastVersion, lastInstall: c.lastInstall, checkIns: c.checkIns, createdAt: c.createdAt.toISOString(),
+    reading: describeAllowance(allowanceOf(c)), readingExhausted: allowanceOf(c).exhausted, aiCap: (c.aiCapCents / 100).toFixed(c.aiCapCents % 100 === 0 ? 0 : 2),
   }));
   return (
     <>
-      <PageHeader title="Clients" subtitle="Every shop running Flöda, the key their copy runs under, and when it last checked in. A copy asks about its key when the key is entered and about once a day after that; pausing or ending a client is felt within the day." />
+      <PageHeader title="Clients" subtitle="Every shop running Flöda, the key their copy runs under, when it last checked in, and what its reading through Flöda has cost this month. A copy asks about its key when the key is entered and about once a day after that; pausing or ending a client is felt within the day, and stops its reading at once." />
       <Card>
         <ClientsPanel clients={rows} leads={leads} feedback={feedback} />
       </Card>

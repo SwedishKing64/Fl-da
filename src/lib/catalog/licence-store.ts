@@ -6,7 +6,7 @@
 import { randomUUID } from "node:crypto";
 import { prisma, parseJson } from "./db";
 import { CHECK_EVERY_MS, LICENCE_KEY_SETTING, askVendor, licenceFromAnswer, licenceServer, licenceState, type CheckIn, type Licence, type LicenceState } from "./licence";
-import { shopProfile } from "./shop-profile";
+import { refreshConventions, shopProfile } from "./shop-profile";
 
 const INSTALL_KEY = "install.id";
 
@@ -48,6 +48,7 @@ export async function activate(key: string): Promise<Licence> {
   const answer = await askVendor(server, "activate", await checkIn(key));
   const licence = licenceFromAnswer(key, answer, previous);
   await saveLicence(licence);
+  await refreshConventions();
   return licence;
 }
 
@@ -67,6 +68,7 @@ export async function currentLicence(): Promise<LicenceState> {
       const answer = await askVendor(licenceServer(), "check", await checkIn(licence.key));
       licence = licenceFromAnswer(licence.key, answer, licence);
       await saveLicence(licence);
+      await refreshConventions();
     } catch (err) {
       console.warn("[licence] could not check in:", err instanceof Error ? err.message : err);
     }

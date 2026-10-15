@@ -1775,7 +1775,13 @@ const clientSchema = z.object({
   status: z.enum(["TRIAL", "ACTIVE", "PAUSED", "ENDED"]).default("TRIAL"),
   expiresAt: z.string().trim().default(""),
   notes: z.string().trim().max(2000).default(""),
+  /** Dollars a month their reading through Flöda may cost; 0 for no limit. */
+  aiCap: z.string().trim().regex(/^\d{0,5}(\.\d{1,2})?$/, "The reading allowance is dollars a month, like 60").default("60"),
 });
+
+function capCents(dollars: string): number {
+  return Math.round(Number(dollars || "0") * 100);
+}
 
 function expiry(value: string): Date | null {
   if (!value) return null;
@@ -1786,21 +1792,21 @@ function expiry(value: string): Date | null {
 export async function createClientAction(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
   return safely(async () => {
     const user = await requireVendorAdmin();
-    const data = clientSchema.parse(Object.fromEntries(formData.entries()));
+    const { aiCap, ...data } = clientSchema.parse(Object.fromEntries(formData.entries()));
     const { newLicenceKey } = await import("@/lib/catalog/licence");
-    const client = await prisma.client.create({ data: { ...data, expiresAt: expiry(data.expiresAt), licenceKey: newLicenceKey() } });
+    const client = await prisma.client.create({ data: { ...data, expiresAt: expiry(data.expiresAt), aiCapCents: capCents(aiCap), licenceKey: newLicenceKey() } });
     await logAudit("client.created", { userId: user.id, details: { client: client.id, name: client.name, plan: client.plan } });
     revalidatePath("/clients");
     return { ok: true, message: `${client.name} added. Their key is ${client.licenceKey}.` };
   });
 }
 
-export async function updateClientAction(id: string, patch: { status?: string; plan?: string; expiresAt?: string; notes?: string; contact?: string; email?: string; name?: string }): Promise<ActionResult> {
+export async function updateClientAction(id: string, patch: { status?: string; plan?: string; expiresAt?: string; notes?: string; contact?: string; email?: string; name?: string; aiCap?: string }): Promise<ActionResult> {
   return safely(async () => {
     const user = await requireVendorAdmin();
     const data = clientSchema.partial().parse(patch);
-    const { expiresAt, ...rest } = data;
-    await prisma.client.update({ where: { id }, data: { ...rest, ...(expiresAt === undefined ? {} : { expiresAt: expiry(expiresAt) }) } });
+    const { expiresAt, aiCap, ...rest } = data;
+    await prisma.client.update({ where: { id }, data: { ...rest, ...(expiresAt === undefined ? {} : { expiresAt: expiry(expiresAt) }), ...(aiCap === undefined ? {} : { aiCapCents: capCents(aiCap) }) } });
     await logAudit("client.updated", { userId: user.id, details: { client: id, keys: Object.keys(data) } });
     revalidatePath("/clients");
     return { ok: true, message: "Saved" };

@@ -1,4 +1,13 @@
-import { allowanceOf, describeAllowance } from "@/lib/catalog/ai-usage";
+import { allowanceOf, describeAllowance, monthKey } from "@/lib/catalog/ai-usage";
+import { describeMonthUse, overPlan, planOf } from "@/lib/catalog/plans";
+
+/** What the copy last said its month held, against the plan; empty until a copy has said. */
+function monthLine(c: { plan: string; useMonth: string; monthBatches: number; monthProducts: number }): { text: string; over: boolean } {
+  if (c.useMonth !== monthKey()) return { text: "", over: false };
+  const plan = planOf(c.plan);
+  const use = { invoices: c.monthBatches, products: c.monthProducts };
+  return { text: describeMonthUse(plan, use), over: overPlan(plan, use) };
+}
 import { notFound } from "next/navigation";
 import { prisma, parseJson } from "@/lib/catalog/db";
 import { requireUser } from "@/lib/catalog/auth";
@@ -28,6 +37,7 @@ export default async function ClientsPage() {
     id: c.id, name: c.name, contact: c.contact, email: c.email, plan: c.plan, status: c.status, licenceKey: c.licenceKey, notes: c.notes,
     expiresAt: c.expiresAt?.toISOString() ?? null, lastSeenAt: c.lastSeenAt?.toISOString() ?? null, lastVersion: c.lastVersion, lastInstall: c.lastInstall, checkIns: c.checkIns, createdAt: c.createdAt.toISOString(),
     reading: describeAllowance(allowanceOf(c)), readingExhausted: allowanceOf(c).exhausted, aiCap: (c.aiCapCents / 100).toFixed(c.aiCapCents % 100 === 0 ? 0 : 2),
+    month: monthLine(c),
   }));
   return (
     <>

@@ -5,15 +5,18 @@ import { activateLicenceAction } from "@/app/(catalog)/actions";
 import { Alert, Button, Field, INPUT } from "@/app/(catalog)/ui";
 import { ActionForm } from "@/app/(catalog)/ActionForm";
 import type { LicenceState } from "@/lib/catalog/licence";
+import { describeMonthUse, describePlanSize, overPlan, planOf, type MonthUse } from "@/lib/catalog/plans";
 
 /** The key Flöda sent the shop, and what Flöda last said about it. */
-export function LicenceForm({ state }: { state: LicenceState }) {
+export function LicenceForm({ state, use }: { state: LicenceState; use: MonthUse }) {
   const [result, action, pending] = useActionState(activateLicenceAction, null);
+  const plan = state.kind === "ok" ? planOf(state.licence.plan) : null;
   return (
     <ActionForm action={action} state={result} className="space-y-3">
-      {state.kind === "ok" && (
+      {state.kind === "ok" && plan && (
         <Alert tone="success">
-          Licensed to <strong>{state.licence.client}</strong> ({state.licence.plan}{state.licence.status === "TRIAL" ? ", trial" : ""}){state.daysLeft !== null ? `, ${state.daysLeft} day${state.daysLeft === 1 ? "" : "s"} left` : ""}.
+          Licensed to <strong>{state.licence.client}</strong> on the <strong>{plan.name}</strong> plan{state.licence.status === "TRIAL" ? " (trial)" : ""}{state.daysLeft !== null ? `, ${state.daysLeft} day${state.daysLeft === 1 ? "" : "s"} left` : ""}. {describePlanSize(plan)}; {describeMonthUse(plan, use)}.
+          {overPlan(plan, use) ? " This month has gone past the plan. Nothing stops; write to hello@floda.ai to move up." : ""}
           {state.stale ? " Flöda has not been reached lately; it will be asked again." : ""}
         </Alert>
       )}

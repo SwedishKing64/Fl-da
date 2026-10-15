@@ -15,7 +15,7 @@ import { LearnPanel } from "@/app/(catalog)/(setup)/setup/LearnStep";
 import { HouseForm } from "@/app/(catalog)/(setup)/setup/HouseStep";
 import { LicenceForm } from "./LicenceForm";
 import { licenceServer } from "@/lib/catalog/licence";
-import { currentLicence } from "@/lib/catalog/licence-store";
+import { currentLicence, monthUse } from "@/lib/catalog/licence-store";
 
 /**
  * The shop, the people who can sign in, what Flöda has learned, the key it reads with, and
@@ -61,7 +61,7 @@ export default async function SettingsPage() {
           </Card>
           {licenceServer() && (
             <Card title="Licence">
-              <LicenceForm state={await currentLicence()} />
+              <LicenceForm state={await currentLicence()} use={await monthUse()} />
             </Card>
           )}
         </div>

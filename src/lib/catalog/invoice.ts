@@ -19,6 +19,7 @@
  * prices to put in front of customers.
  */
 
+import { deduceColumns, isSize } from "./columns";
 import { detectHeaderRow } from "./extract/tabular";
 import { normaliseBarcode, type InvoiceLine } from "./reconcile";
 import { yearMonth } from "./deliveries";
@@ -39,7 +40,7 @@ export interface InvoiceRead {
    * the Marker tab with no quantity against it.
    */
   priceList?: PriceRow[];
-  /** For an order form read by its sections: whether it must be turned into rows — a size grid, or a form whose columns are not properly headed. */
+  /** For an order form read by its sections: whether any quantity came off a size grid. */
   sizeGrid?: boolean;
   /**
    * "grid" when the quantities were read off a size grid — a column per length, a number in the
@@ -183,7 +184,7 @@ function looksLikeItemCode(value: string): boolean {
   return value.length >= 3 && value.length <= 40 && (value.match(/\s/g) ?? []).length <= 1 && /^[A-Za-z0-9]/.test(value);
 }
 
-interface Section { at: number; end: number; sku: number; title: number; titleHeaded: boolean; barcode: number; gender: number; rrp: number; cost: number; colour: number; qty: number; qtys: number[]; qtyTotal: number; size: number; sizes: Array<[number, string]> }
+interface Section { at: number; end: number; sku: number; title: number; barcode: number; gender: number; rrp: number; cost: number; colour: number; qty: number; qtys: number[]; qtyTotal: number; size: number; sizes: Array<[number, string]> }
 
 /** A barcode's heading: "UPC", "EAN", "Barcode", "GTIN". Never the product's name. */
 const BARCODE_HEADING = /^(upc|ean|barcode|bar code|gtin|ean13|upc code|ean code)( no)?$/;
@@ -214,21 +215,21 @@ function sectionsOf(grid: string[][]): Section[] {
     if (cost < 0) cost = headings.findIndex((c) => /\b(wholesale|w s|dealer)\b.*\bprice\b|\bcost price\b/.test(norm(c)) && !/total|differ|change/.test(norm(c)));
     // A form with one line per size says the size in a column of its own, beside the quantity.
     const size = sizes.length === 0 ? find(/^(size|sizes|length|size desc(ription)?)$/) : -1;
-    // The product's NAME. Volkl's forms head it with a section name ("RACETIGER"), so the column
-    // beside the item code is taken — but Osprey's form has its "Description" heading, and the
-    // column beside its "Product Code" is the UPC: taking that made every product a barcode.
-    const barcode = find(BARCODE_HEADING);
-    let title = find(/^(description|product description|style description|item description|product name|style name|name|model)$/);
-    const titleHeaded = title >= 0;
-    if (title < 0) {
-      title = sku + 1;
-      while (title < headings.length && BARCODE_HEADING.test(norm(headings[title] ?? ""))) title++;
-    }
     // A quantity column per delivery month — Osprey's Sep, Oct and Nov drops each have their own
     // QTY — is one order. Their own total, where they give one, is the answer; otherwise they add up.
     const qtys = headings.map((c, i) => [i, norm(c)] as [number, string]).filter(([, c]) => /^(total )?qty$|^quantity$|^units$/.test(c)).map(([i]) => i);
     const qtyTotal = find(/^(qty|quantity|units) total$|^total (qty|quantity|units)$/);
-    return { at, end: n + 1 < heads.length ? heads[n + 1] : grid.length, sku, title, titleHeaded, barcode, gender: find(/^gender$/), rrp: find(RRP), cost, colour: find(/^colou?r$/), qty, qtys, qtyTotal, size, sizes };
+    const rrp = find(RRP);
+    // Every other column told by what is in it, not where it sits (see columns.ts): the name is
+    // the column of words that tell products apart — under a "Description" heading, a section
+    // name like "RACETIGER", or none — never the UPC that happens to sit beside the code.
+    const end = n + 1 < heads.length ? heads[n + 1] : grid.length;
+    const known = [sku, qty, ...qtys, qtyTotal, rrp, cost, ...sizes.map(([i]) => i)].filter((i) => i >= 0);
+    const roles = deduceColumns(headings, grid.slice(at + 1, end).filter((r) => looksLikeItemCode(text((r ?? [])[sku]))), known);
+    const named = find(/^(description|product description|style description|item description|product name|style name|name|model)$/);
+    const title = roles.name >= 0 ? roles.name : named >= 0 ? named : sku + 1;
+    const colour = roles.colour >= 0 ? roles.colour : find(/^colou?r$/);
+    return { at, end, sku, title, barcode: roles.barcode >= 0 ? roles.barcode : find(BARCODE_HEADING), gender: roles.gender >= 0 ? roles.gender : find(/^gender$/), rrp, cost, colour, qty, qtys, qtyTotal, size: size >= 0 ? size : sizes.length === 0 ? roles.size : -1, sizes };
   });
 }
 
@@ -298,10 +299,8 @@ function readOrder(name: string, grid: string[][]): InvoiceRead | null {
     lines,
     priceList,
     sheet: name,
-    // Turned into rows of its own unless it is a plain list with its columns properly headed —
-    // Volkl's section-headed forms are not, Osprey's one-row-per-size form is.
-    sizeGrid: sizeGrid || sections.some((s) => !s.titleHeaded),
-    columns: { barcode: heading(first.barcode), sku: heading(first.sku) || "Item No.", rrp: heading(first.rrp) || "RRP", quantity: sizeGrid ? "the length columns" : "QTY", title: first.title === first.sku + 1 && !/descri|name|model/i.test(heading(first.title)) ? `the column beside "${heading(first.sku)}"` : heading(first.title), size: sizeGrid ? "the column heading" : lines.some((l) => l.size) ? "Size" : "", colour: "" },
+    sizeGrid,
+    columns: { barcode: heading(first.barcode), sku: heading(first.sku) || "Item No.", rrp: heading(first.rrp) || "RRP", quantity: sizeGrid ? "the length columns" : "QTY", title: heading(first.title) || `column ${first.title + 1}`, size: sizeGrid ? "the column heading" : lines.some((l) => l.size) ? "Size" : "", colour: "" },
     warnings: [],
   };
 }
@@ -435,7 +434,7 @@ function readGrid(name: string, source: string[][]): InvoiceRead | null {
   // and a line that says all four is not a line about one of them.
   // And not the fit: Burton's "Size Z Description" is Wide / Regular / Low Bridge beside a "Size
   // Description" that is the size. A column of fits is the fit column, below.
-  const size = pick(headings, rows, SIZE, NOT_SIZE, (v) => v.length <= 12 && !v.includes("/") && !v.includes(",") && !FIT_VALUE.test(v), false, /^size( desc(ription)?)?$|^sizes?$/);
+  const size = pick(headings, rows, SIZE, NOT_SIZE, (v) => !FIT_VALUE.test(v) && (isSize(v) || (v.length <= 12 && !v.includes("/") && !v.includes(","))), false, /^size( desc(ription)?)?$|^sizes?$/);
   const fit = pick(headings, rows, /fit|width|^size z/, /qty|quantity|price|date|code|colou?r/, (v) => FIT_VALUE.test(v));
 
   // The colour's NAME ("627 BRIGHT BLUE"), not its code ("627", or the style-colour code).
@@ -460,7 +459,13 @@ function readGrid(name: string, source: string[][]): InvoiceRead | null {
   let title = pick(headings, rows, TITLE, titleVeto(null), (v) => v.length >= 3 && !/^\d+$/.test(v) && !isCode(v), false, /\bname\b|^descri|^style descri|^product descri|^item descri/);
   if (title && constant(title)) title = pick(headings, rows, TITLE, titleVeto(new RegExp(`^${title.heading.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i")), (v) => v.length >= 3 && !/^\d+$/.test(v) && !isCode(v), false, /\bname\b|^descri/);
   if (title && constant(title)) title = null;
-  title ??= sku ? { index: sku.index + 1, heading: `the column beside "${sku.heading}"` } : null;
+  // No heading named it: the column whose contents are names (columns.ts), wherever it sits —
+  // not "the column beside the code", which on one supplier's form is the barcode.
+  if (!title) {
+    const known = [barcode, sku, rrp, quantity, cancelled, delivery, size, colour, cost, gender, brandColumn, kindColumn].filter((c): c is Column => c !== null).map((c) => c.index);
+    const deduced = deduceColumns(headings, rows, known).name;
+    if (deduced >= 0) title = { index: deduced, heading: headings[deduced] || `column ${deduced + 1}` };
+  }
 
   /**
    * An order form, read flat: a quantity column that somebody has filled in on SOME rows.
@@ -571,9 +576,7 @@ export function readInvoiceGrids(grids: Array<{ name: string; grid: string[][] }
     return {
       lines,
       priceList: everyTab,
-      // A size grid has to be turned into rows; a form with a line per size already is a table,
-      // and read as one keeps every column under its own heading for the mapping.
-      shape: ordered.some((o) => o.sizeGrid) ? "grid" : "flat",
+      shape: "grid",
       sheet: ordered.map((o) => o.sheet).join(", "),
       columns: ordered[0].columns,
       warnings: [`Read as an order: ${lines.length} line${lines.length === 1 ? "" : "s"} from the quantities written on ${ordered.length === 1 ? `the "${ordered[0].sheet}" tab` : `${ordered.length} tabs`}. The rest of the form is the supplier's price list, not this delivery, so it was left alone.`],

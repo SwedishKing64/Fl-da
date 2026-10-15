@@ -2,6 +2,7 @@
 // fingerprint header rows so a saved template is auto-detected next time, and apply a
 // mapping to raw rows to produce CanonicalLineItems.
 
+import { deduceColumns, notNames } from "./columns";
 import { createHash } from "node:crypto";
 import { FEATURE_COLUMN, emptyLineItem, type CanonicalLineItem } from "./types";
 import { fieldsInForce, snowTrade } from "./taxonomy";
@@ -145,7 +146,10 @@ export function suggestMapping(headers: string[], rows: Array<Record<string, str
     if (key === "modelCode") return NEEDS_CODE_VALUES.test(norm(header)) && !valuesLookLikeCodes(header, rows);
     if (key === "title" || key === "brand" || key === "description") {
       if (party.has(header)) return true;
-      if (key !== "title" || rows.length < 5) return false;
+      if (key !== "title") return false;
+      // A "Description" full of barcodes or codes is not naming anything, however it is headed.
+      if (notNames(rows.map((r) => (r[header] ?? "").toString()))) return true;
+      if (rows.length < 5) return false;
       const { values, share: numeric } = share(header, rows, (v) => /^\d+$/.test(v));
       return values.length > 0 && (new Set(values.map((v) => v.toLowerCase())).size < 2 || numeric >= 0.8);
     }
@@ -263,6 +267,26 @@ export function suggestMapping(headers: string[], rows: Array<Record<string, str
     claim("category", (v) => KIND_VALUE.test(v) && v.split(/\s+/).length <= 4 && !/^(hard|soft)goods$/i.test(v), 0.7);
     claim("productType", (v) => KIND_VALUE.test(v) && v.split(/\s+/).length <= 4 && !/^(hard|soft)goods$/i.test(v), 0.7);
     claim("width", (v) => FIT_VALUE.test(v), 0.8);
+
+    /**
+     * Pass 5: what no heading said, told by the contents (see columns.ts) — the product's name
+     * under a heading that names a product family, a barcode column headed "Code 2", sizes and
+     * colours under headings nobody thought to give a synonym for. Only into columns nothing has
+     * claimed, and only fields nothing has filled.
+     */
+    const grid = rows.map((r) => headers.map((h) => (r[h] ?? "").toString()));
+    const taken = headers.map((h, i) => (mapping[h] || skip.has(h) || party.has(h) ? i : -1)).filter((i) => i >= 0);
+    const roles = deduceColumns(headers, grid, taken);
+    const fill = (key: keyof CanonicalLineItem, at: number) => {
+      if (at < 0 || used.has(key) || mapping[headers[at]]) return;
+      mapping[headers[at]] = key;
+      used.add(key);
+    };
+    fill("title", roles.name);
+    fill("barcode", roles.barcode);
+    if (!used.has("length")) fill("size", roles.size);
+    fill("colour", roles.colour);
+    fill("gender", roles.gender);
   }
   return mapping;
 }

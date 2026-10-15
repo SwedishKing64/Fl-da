@@ -33,6 +33,14 @@ and buttons. The owner asked for "extremely easy UI" and buttons "mimicking Meta
 
 ## How the shop works (rules it told us)
 
+**No reader written for one brand's layout (asked 2026-10-15).** A supplier's file is read by
+deducing what each column holds, not by where it sits or how one brand heads it:
+`src/lib/catalog/columns.ts` knows a barcode by its check digit, a size (XS-XXL, S/M, WXS/S, O/S,
+lengths, Mondo), a colour, a gender, a code, and the product's name as the words that tell
+products apart. The order-form reader, the flat invoice reader and the mapping suggestions all
+use it, and a heading is only evidence. Do not add "the name is the column beside the code" or any
+rule that only holds for one supplier's form; make the deduction better instead.
+
 **Bindings.** A ski package has a "Please Mount My Bindings" variant priced over its "Do Not
 Mount" twin. The mounting charge differs by binding kind, and the classifier in
 `src/lib/catalog/mount.ts` decides. Told by the shop, in this order, and the latest word wins:
@@ -194,6 +202,9 @@ from its QuickBooks list, batch PDFs split into one bill per invoice) live in Ru
   Bills for QuickBooks writes the shop's own one-row-per-bill sheet instead of the line layout,
   and splits a scanned batch PDF of any size into one bill per invoice.
 - 2026-10-14 Bills take the supplier's name from the shop's QuickBooks supplier list.
+- 2026-10-15 Columns told by their contents for every supplier (`columns.ts`); the order form's
+  lines reach the mapping as Item No., SKU, Barcode, Brand, Description, Gender, Colour, Length,
+  Size, RRP, Cost, Qty, already mapped; a "Description" of barcodes is never suggested as the name.
 - 2026-10-15 Osprey's forward order form (a row per size, a QTY per delivery month, the name under
   "Description", the UPC beside the product code) was read by the size-grid order reader, which
   took the column beside the code — the UPC — as every product's name and counted only the first

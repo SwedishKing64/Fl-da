@@ -63,16 +63,23 @@ function uniqueHeaders(raw: string[]): string[] {
 export function orderToTable(order: { lines: InvoiceLine[]; sheet: string; warnings: string[] }): ExtractedTable {
   // Cost and colour too: dropping them left every Volkl line with no cost, though the form prices
   // every row, and the Griffon with no colour to tell its black from its orange.
-  const headers = ["Item No.", "SKU", "Brand", "Description", "Colour", "Length", "RRP", "Cost", "Qty"];
+  // Barcode, gender and size too: the reader finds them on any supplier's form, and a form with a
+  // line per size (Osprey's S/M and L/XL) has a size where a ski has a length.
+  const headers = ["Item No.", "SKU", "Barcode", "Brand", "Description", "Gender", "Colour", "Length", "Size", "RRP", "Cost", "Qty"];
   const rows = order.lines.map((line) => {
-    const length = (line.size ?? "").trim();
+    const size = (line.size ?? "").trim();
+    const length = /^\d{2,3}(\.\d)?$/.test(size) ? size : "";
     return {
       "Item No.": line.sku,
+      // The per-length SKU the spec sheets use — but a code that is already per size stands alone.
       SKU: length ? `${line.sku}.${length}` : line.sku,
+      Barcode: (line.barcode ?? "").trim(),
       Brand: (line.brand ?? "").trim(),
       Description: line.title,
+      Gender: (line.gender ?? "").trim(),
       Colour: (line.colour ?? "").trim(),
       Length: length,
+      Size: length ? "" : size,
       RRP: line.rrp === null ? "" : String(line.rrp),
       Cost: line.costPrice === null ? "" : String(Math.round(line.costPrice * 100) / 100),
       Qty: line.quantity === null ? "" : String(line.quantity),
@@ -177,11 +184,6 @@ export async function extractXlsx(buffer: Buffer, sheetName?: string): Promise<E
     if (order && order.shape === "grid" && order.lines.some((l) => l.quantity !== null)) {
       return orderToTable(order);
     }
-    // A flat order form is read as the table it is — but from the tab the order was written on.
-    // Osprey's workbook carries a "Price Changes" tab of the same 690-odd products, bigger by the
-    // cells it fills in, and left to size alone that tab was read instead of the order.
-    const orderedOn = order && order.lines.some((l) => l.quantity !== null) ? sheets.find((s) => s.name === order.sheet) : undefined;
-    if (orderedOn) return extractXlsx(buffer, orderedOn.name);
   }
 
   const scored = sheets.map(({ name, grid }) => {

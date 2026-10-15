@@ -12,6 +12,7 @@ import { allocateBatchFreight, applyMappings, autoApplyMappings, applyRulesToBat
 import { logAudit } from "@/lib/catalog/audit";
 import { getSettings, saveSettings } from "@/lib/catalog/settings";
 import { checkImageUrl, recordLibraryImages } from "@/lib/catalog/images";
+import { backupNow, restoreBackup } from "@/lib/catalog/backup";
 import { pushBatch, reconcileBatch, rollbackBatch, syncCatalog, ShopifyError } from "@/lib/catalog/shopify";
 import { enrichBatchSeo } from "@/lib/catalog/seo";
 import { slugify } from "@/lib/catalog/handle";
@@ -581,6 +582,30 @@ export async function reconcileAction(batchId: string): Promise<ActionResult<{ n
     const data = await reconcileBatch(batchId);
     await logAudit("batch.reconciled", { batchId, userId: user.id, details: data });
     return { ok: true, data };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+export async function backupNowAction(): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  try {
+    const b = await backupNow("manual");
+    await logAudit("backup.made", { userId: user.id, details: { name: b.name, bytes: b.bytes } });
+    revalidatePath("/settings");
+    return { ok: true, message: `Backed up to ${b.name} (${(b.bytes / 1024 / 1024).toFixed(1)} MB).` };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+export async function restoreBackupAction(name: string): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  try {
+    const { safety } = await restoreBackup(name);
+    await logAudit("backup.restored", { userId: user.id, details: { name, safety: safety.name } });
+    revalidatePath("", "layout");
+    return { ok: true, message: `Restored from ${name}. What was there is kept as ${safety.name}. Restart Flöda now so every page reads the restored data.` };
   } catch (err) {
     return fail(err);
   }

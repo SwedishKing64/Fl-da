@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { after } from "next/server";
+import { nightlyIfDue } from "@/lib/catalog/backup";
 import { prisma } from "@/lib/catalog/db";
 import { requireUser } from "@/lib/catalog/auth";
 import { isEphemeralDb } from "@/lib/catalog/db";
@@ -34,6 +36,8 @@ export default async function CatalogLayout({ children }: { children: React.Reac
   if (gate) return gate;
   const user = await requireUser();
   const vendor = vendorMode();
+  // A copy on a file is backed up once a night while it is open: after this page, if it is due.
+  after(() => nightlyIfDue());
   const licence = await currentLicence();
   // A copy that may not run shows the paywall instead of the app, data untouched behind it.
   if (licence.kind === "none" || licence.kind === "lapsed") return <Paywall state={licence} isAdmin={user.role === "ADMIN"} name={user.name.trim().split(/\s+/)[0] || user.name} />;

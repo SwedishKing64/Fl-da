@@ -14,6 +14,8 @@ import { ApiKeyForm } from "@/app/(catalog)/(setup)/setup/AiStep";
 import { LearnPanel } from "@/app/(catalog)/(setup)/setup/LearnStep";
 import { HouseForm } from "@/app/(catalog)/(setup)/setup/HouseStep";
 import { LicenceForm } from "./LicenceForm";
+import { Backups } from "./Backups";
+import { backupDir, listBackups, sqliteFile } from "@/lib/catalog/backup";
 import { licenceServer } from "@/lib/catalog/licence";
 import { currentLicence, monthUse } from "@/lib/catalog/licence-store";
 
@@ -77,6 +79,13 @@ export default async function SettingsPage() {
             <tbody>{users.map((u) => <tr key={u.id} className="border-t border-[var(--line-soft)]"><td className="py-1.5">{u.name}</td><td>{u.email}</td><td>{u.role}</td><td className="text-xs text-[var(--ink-soft)]">{fmtDate(u.createdAt)}</td><td className="text-right">{u.id !== me.id && <DeleteUserButton id={u.id} />}</td></tr>)}</tbody>
           </table>
           <UserForm />
+        </Card>
+        <Card title="Backups">
+          {sqliteFile() ? (
+            <Backups backups={listBackups()} db={sqliteFile()!} dir={backupDir(sqliteFile()!)} />
+          ) : (
+            <p className="text-sm text-[var(--ink-soft)]">This copy&apos;s database is a server (Postgres), which keeps its own backups and point-in-time restore; nothing to do here.</p>
+          )}
         </Card>
         <Card title="How this deployment is doing">
           <Status

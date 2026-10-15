@@ -10,6 +10,8 @@ import { parseDirectives } from "@/lib/catalog/instructions";
 import { LookupPanel } from "./LookupPanel";
 import { lookupEnabled } from "@/lib/catalog/enrich";
 import { guarded } from "@/app/(catalog)/page-failed";
+import { SupplierNote } from "./SupplierNote";
+import { supplierRecordFor } from "@/lib/catalog/supplier-score";
 
 /**
  * Server Actions on a page take the page's maxDuration, so this is what the web lookup runs under.
@@ -42,6 +44,8 @@ async function renderReviewPage(props: PageProps<"/batches/[id]/review">) {
   // has its page already; only the new products are asked for one.
   // Unless every product here is new, which the person has said: then a handle that happens to
   // match is not a listing, and each product is asked for its page.
+  // How this supplier's paperwork has read before, or that nobody has checked it before.
+  const record = batch.supplierId ? await supplierRecordFor(batch.supplierId, batch.id) : null;
   const inShop = parseDirectives(batch.directives).allNew
     ? new Set<string>()
     : new Set((await prisma.shopListing.findMany({ where: { handle: { in: review.products.map((p) => p.handle) } }, select: { handle: true } })).map((l) => l.handle));
@@ -57,6 +61,7 @@ async function renderReviewPage(props: PageProps<"/batches/[id]/review">) {
         <Alert tone="warning">No products yet — upload a supplier file first.</Alert>
       ) : (
         <>
+          {record && <SupplierNote record={record} />}
           <LinksPanel
             batchId={id}
             locked={["EXPORTED", "PUSHED"].includes(batch.status)}

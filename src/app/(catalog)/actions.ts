@@ -1737,7 +1737,7 @@ export async function saveApiKeyAction(_prev: ActionResult | null, formData: For
 }
 
 /** A step of setup put off until later. It stays on the Home checklist. */
-export async function skipSetupStepAction(step: "learn" | "house" | "ai"): Promise<ActionResult> {
+export async function skipSetupStepAction(step: "learn" | "house" | "ai" | "suppliers"): Promise<ActionResult> {
   await requireUser("ADMIN");
   return safely(async () => {
     const { saveShopProfile } = await import("@/lib/catalog/shop-profile");
@@ -1991,5 +1991,54 @@ export async function dismissFeedbackAction(at: string): Promise<ActionResult> {
     await prisma.appSetting.upsert({ where: { key: FEEDBACK_KEY }, create: { key: FEEDBACK_KEY, value: "[]" }, update: { value: JSON.stringify(rows.filter((r) => r.at !== at)) } });
     revalidatePath("/clients");
     return { ok: true };
+  });
+}
+
+// ---------------------------------------------------------------------------------------------
+// Setup: one example of each supplier's paperwork
+// ---------------------------------------------------------------------------------------------
+
+/** A batch to read one supplier's example into, named so it is known for what it is. */
+export async function createExampleBatchAction(supplierName: string, filename: string): Promise<ActionResult<{ batchId: string }>> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const name = supplierName.trim().slice(0, 80);
+    if (!name) return { ok: false, error: "Say which supplier the example is from." };
+    const supplier = await prisma.supplier.upsert({ where: { name }, create: { name }, update: {} });
+    const batch = await prisma.importBatch.create({
+      data: { name: `Setup: ${name} example (${filename.slice(0, 60)})`, supplierId: supplier.id, createdById: user.id, builtBy: initialsFrom(user.name || user.email), currency: supplier.defaultCurrency, gstTreatment: supplier.defaultGstTreatment, notes: "Read during setup, as an example of this supplier's paperwork." },
+    });
+    await logAudit("batch.created", { batchId: batch.id, userId: user.id, details: { name: batch.name, setup: true } });
+    return { ok: true, data: { batchId: batch.id } };
+  });
+}
+
+export interface ExampleState {
+  rows: number;
+  method: string | null;
+  /** Why the file could not be read, when it could not. */
+  failed: string | null;
+  groups: Array<{ hash: string; headers: string[]; sampleRows: Record<string, string>[]; suggestion: import("@/lib/catalog/mapping").Mapping; options: import("@/lib/catalog/mapping").MappingOptions; templateId: string | null; templateName: string | null; isCanonical: boolean; confident: boolean }>;
+}
+
+/** How one example came out of reading: the lines found, and each layout with what its columns were taken for. */
+export async function exampleStateAction(batchId: string): Promise<ActionResult<ExampleState>> {
+  await requireUser("ADMIN");
+  return safely(async () => {
+    const files = await prisma.sourceFile.findMany({ where: { batchId }, select: { extractionStatus: true, extractionError: true, extractionMethod: true } });
+    const failed = files.find((f) => f.extractionStatus === "FAILED");
+    const stillReading = files.some((f) => f.extractionStatus === "PENDING");
+    const { mappingState } = await import("@/lib/catalog/pipeline");
+    const groups = failed || stillReading ? [] : await mappingState(batchId);
+    const rows = groups.reduce((n, g) => n + g.rowCount, 0);
+    return {
+      ok: true,
+      data: {
+        rows,
+        method: files.find((f) => f.extractionMethod)?.extractionMethod ?? null,
+        failed: failed ? failed.extractionError || "The file could not be read." : stillReading ? "Reading took longer than setup waits for. It carries on in the background; look under Imports in a minute." : null,
+        groups: groups.map((g) => ({ hash: g.hash, headers: g.headers, sampleRows: g.sampleRows.slice(0, 3), suggestion: g.suggestion, options: g.options, templateId: g.templateId, templateName: g.templateName, isCanonical: g.isCanonical, confident: g.confident })),
+      },
+    };
   });
 }

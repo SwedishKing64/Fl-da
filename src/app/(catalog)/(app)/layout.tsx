@@ -17,6 +17,7 @@ import { openMode } from "@/lib/catalog/open";
 import { currentLicence, monthUse, getServerOverride, servers } from "@/lib/catalog/licence-store";
 import { describeMonthUse, overPlan, planOf } from "@/lib/catalog/plans";
 import "../catalog.css";
+import { SUPPORT_EMAIL } from "@/lib/catalog/support";
 
 export const dynamic = "force-dynamic";
 
@@ -110,12 +111,12 @@ export default async function CatalogLayout({ children }: { children: React.Reac
         </div>
         {endingSoon && standing && (
           <div className="mb-4 rounded-[12px] border border-[#f5c87a] bg-[#fff7e6] px-4 py-3 text-[13.5px] text-[#7a4b00]">
-            <strong>Your free trial ends in {standing.daysLeft} day{standing.daysLeft === 1 ? "" : "s"}.</strong> Nothing is lost when it does: your batches, suppliers and what Flöda has learned stay on this machine, and a key from hello@floda.ai opens it again. <Link href="/settings" className="font-semibold underline">Your plan</Link>
+            <strong>Your free trial ends in {standing.daysLeft} day{standing.daysLeft === 1 ? "" : "s"}.</strong> Nothing is lost when it does: your batches, suppliers and what Flöda has learned stay on this machine, and a paid plan or a key from {SUPPORT_EMAIL} opens it again. <Link href="/settings" className="font-semibold underline">Your plan</Link>
           </div>
         )}
         {pastPlan && (
           <div className="mb-4 rounded-[12px] border border-[#f5c87a] bg-[#fff7e6] px-4 py-3 text-[13.5px] text-[#7a4b00]">
-            <strong>This month has gone past the {pastPlan.plan.name} plan</strong> ({describeMonthUse(pastPlan.plan, pastPlan.use)}). Nothing stops. Write to hello@floda.ai to move up a plan.
+            <strong>This month has gone past the {pastPlan.plan.name} plan</strong> ({describeMonthUse(pastPlan.plan, pastPlan.use)}). Nothing stops. Write to {SUPPORT_EMAIL} to move up a plan.
           </div>
         )}
         {isEphemeralDb() && (

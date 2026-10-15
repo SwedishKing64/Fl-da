@@ -4,6 +4,7 @@ import { z } from "zod";
 import { PLAN_IDS } from "@/lib/catalog/plans";
 import { prisma } from "@/lib/catalog/db";
 import { logAudit } from "@/lib/catalog/audit";
+import { SUPPORT_EMAIL } from "@/lib/catalog/support";
 
 /**
  * A retailer putting their hand up from the landing page.
@@ -49,6 +50,6 @@ export async function registerInterestAction(_prev: RegisterResult | null, form:
     return { ok: true };
   } catch (err) {
     console.error("[floda] could not keep a lead", err);
-    return { ok: false, error: "Something went wrong saving that. Email hello@floda.ai instead and we will get back to you." };
+    return { ok: false, error: `Something went wrong saving that. Email ${SUPPORT_EMAIL} instead and we will get back to you.` };
   }
 }

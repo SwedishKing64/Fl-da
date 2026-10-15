@@ -74,6 +74,27 @@ error says why for each (no DNS record, nothing answering, certificate refused, 
 seconds) rather than "fetch failed". The trial step shows the address form when the trial could
 not be started for that reason.
 
+**Paying for a plan.** Stripe, on the vendor (`stripe.ts`): the copy's paywall and the Licence
+card on Settings carry a button per plan that asks the vendor for a checkout page
+(`POST /api/licence/checkout`, the licence key and the plan) and opens it in the browser; a copy
+that has paid gets "Card, plan and invoices" instead, Stripe's customer portal
+(`/api/licence/portal`). Stripe reports back on `POST /api/billing/webhook`: the signature is
+checked by hand (`verifyWebhook`, HMAC over `t.body`, five minutes' tolerance), then
+`checkout.session.completed` makes the client ACTIVE on the plan paid for and keeps the Stripe
+customer and subscription ids on the `Client` row, and `customer.subscription.*` keeps the
+standing current (`standingFromSubscription`: paid is active, a failed renewal pauses, a
+cancellation runs to the end of the period paid for, then ends; the Clients page shows Stripe's
+word). The copy learns of a change the next time it checks its key; the pages Stripe sends the
+person back to (`/billing/paid`, `/billing/cancelled`, `/billing/portal-done`) say to press
+"Check the key". Stripe is reached with plain fetch, no SDK. On the vendor: `STRIPE_SECRET_KEY`,
+`STRIPE_WEBHOOK_SECRET` (the endpoint is `https://<vendor>/api/billing/webhook`, events
+`checkout.session.completed` and `customer.subscription.*`) and a price id per plan in
+`STRIPE_PRICE_STARTER`, `STRIPE_PRICE_SHOP`, `STRIPE_PRICE_UNLIMITED`; with any of them missing
+the buttons say paying online is not set up and name the support address instead. **The support
+address** is one constant (`support.ts`, `NEXT_PUBLIC_FLODA_SUPPORT_EMAIL`, hello@floda.ai until
+it is set; the desktop workflow passes `vars.FLODA_SUPPORT_EMAIL`), used by every page, notice
+and refusal. **The terms** are at `/terms`, in the same voice as the privacy page.
+
 **The desktop app.** `desktop/main.cjs` (Electron) opens a window on the same Next.js server,
 started on this machine on a free port with a SQLite database and a files folder in the user's
 app-data directory (`desktop/launch.cjs`). `scripts/desktop-build.mjs` builds the server as a

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Logo } from "@/app/Logo";
+import { SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/catalog/support";
 
 /**
  * The site's frame: the bar with its menus, and the footer. Every public page sits inside it so
@@ -26,7 +27,8 @@ const MENUS: Array<{ label: string; items: Array<{ href: string; label: string; 
     items: [
       { href: "/about", label: "About Flöda", hint: "Built inside a working shop, by people who set it up with you" },
       { href: "/privacy", label: "Privacy", hint: "Where your data lives and where it goes" },
-      { href: "mailto:hello@floda.ai", label: "Contact", hint: "hello@floda.ai, answered by a person" },
+      { href: "/terms", label: "Terms", hint: "Plans, billing, cancelling, and who is responsible for what" },
+      { href: SUPPORT_MAILTO, label: "Contact", hint: `${SUPPORT_EMAIL}, answered by a person` },
     ],
   },
   {
@@ -129,7 +131,7 @@ export function SiteFooter() {
           <div className="brand">
             <Logo size={22} />
             <p>Supplier paperwork in, shop-ready listings out. Built inside a working shop; set up with you by a Flöda engineer.</p>
-            <p className="soft">hello@floda.ai · Sydney</p>
+            <p className="soft">{SUPPORT_EMAIL} · Sydney</p>
           </div>
           <div>
             <div className="fl">Product</div>
@@ -143,13 +145,14 @@ export function SiteFooter() {
             <div className="fl">Company</div>
             <Link href="/about">About</Link>
             <Link href="/faq">Questions</Link>
-            <a href="mailto:hello@floda.ai">Contact</a>
+            <a href={SUPPORT_MAILTO}>Contact</a>
           </div>
           <div>
             <div className="fl">Legal</div>
             <Link href="/privacy">Privacy</Link>
             <Link href="/privacy#data">Your data</Link>
             <Link href="/privacy#ai">Reading by AI</Link>
+            <Link href="/terms">Terms</Link>
           </div>
         </div>
         <div className="fine">© {new Date().getFullYear()} Flöda · Flöda is not affiliated with Shopify Inc.</div>

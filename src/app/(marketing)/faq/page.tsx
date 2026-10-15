@@ -5,6 +5,7 @@ import { Faq } from "../Story";
 import { Reveal } from "../welcome/Motion";
 import { PLANS, TRIAL_DAYS } from "@/lib/catalog/plans";
 import "../welcome/welcome.css";
+import { SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/catalog/support";
 
 export const metadata: Metadata = { title: "Questions about Flöda", description: "Data, security, suppliers, Shopify, plans and the trial: the questions retailers ask before they start." };
 
@@ -22,14 +23,14 @@ export default function FaqPage() {
     { q: "Does it work for shops that are not snow or outdoor?", a: <p>Yes. Flöda starts blank and learns your kinds of product, your menus, your tags and your naming from your own Shopify export. Snow and outdoor is where it was built, so binding mount charges and ski packages are built in; a bike, fishing or camping shop teaches it theirs in setup.</p> },
     { q: "Windows or Mac?", a: <p>Both, as an app you install, with everything on your machine. A hosted copy is available if you would rather not install anything. <Link href="/download">The downloads are here.</Link> The app keeps itself current on Windows; on a Mac it tells you when a newer version is out.</p> },
     { q: "Can my staff use it?", a: <p>On the Shop and Unlimited plans, everyone. Each person signs in as themselves, and the marker tag on a listing says who built it. The Starter plan is one person.</p> },
-    { q: "How do I get help?", a: <p>The Feedback button inside the app reaches us directly, or write to hello@floda.ai. The same engineer who set you up answers. There is no ticket queue.</p> },
+    { q: "How do I get help?", a: <p>The Feedback button inside the app reaches us directly, or write to {SUPPORT_EMAIL}. The same engineer who set you up answers. There is no ticket queue.</p> },
     { q: "How do I cancel?", a: <p>Write to us and say so; the plan ends at the end of the month you have paid for. Your data stays on your machine either way, and you can keep every file Flöda made.</p> },
   ];
   return (
     <Site>
       <section className="band page-head">
         <div className="wrap">
-          <Reveal className="head"><span className="eyebrow">Questions</span><h1>What retailers ask before they start.</h1><p className="lede">If yours is not here, write to <a href="mailto:hello@floda.ai">hello@floda.ai</a> and a person answers.</p></Reveal>
+          <Reveal className="head"><span className="eyebrow">Questions</span><h1>What retailers ask before they start.</h1><p className="lede">If yours is not here, write to <a href={SUPPORT_MAILTO}>{SUPPORT_EMAIL}</a> and a person answers.</p></Reveal>
         </div>
       </section>
       <section className="band grey">

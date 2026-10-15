@@ -29,6 +29,7 @@ import { initialsFrom } from "@/lib/catalog/tagging";
 import { answerFeedback, feedbackAvailable, withRule, type FeedbackTurn } from "@/lib/catalog/feedback";
 import { describeDirectives, instructionsAvailable, parseDirectives, readInstructions, NO_DIRECTIVES } from "@/lib/catalog/instructions";
 import { lookupBatch, lookupEnabled, LOOKUP_LIMIT, REQUESTED_BUDGET_MS, type LookupOutcome } from "@/lib/catalog/enrich";
+import { SUPPORT_EMAIL } from "@/lib/catalog/support";
 
 export type ActionResult<T = undefined> = { ok: true; data?: T; message?: string } | { ok: false; error: string };
 
@@ -1977,11 +1978,28 @@ export async function activateLicenceAction(_prev: ActionResult | null, formData
     }
     await logAudit("licence.entered", { userId: user.id, details: { status: licence.status, client: licence.client } });
     revalidatePath("", "layout");
-    if (licence.why) return { ok: false, error: `Flöda says: ${licence.why} The key has been kept; contact hello@floda.ai.` };
+    if (licence.why) return { ok: false, error: `Flöda says: ${licence.why} The key has been kept; contact ${SUPPORT_EMAIL}.` };
     return { ok: true, message: `Licensed to ${licence.client}${licence.expiresAt ? ` until ${new Date(licence.expiresAt).toLocaleDateString("en-AU")}` : ""}.` };
   });
 }
 
+
+/** A Stripe checkout page for a plan, or the billing page, from the vendor. The browser opens it. */
+export async function billingLinkAction(what: "checkout" | "portal", plan?: string): Promise<ActionResult<{ url: string }>> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const { billingLink } = await import("@/lib/catalog/licence-store");
+    let out;
+    try {
+      out = await billingLink(what, plan);
+    } catch (err) {
+      return { ok: false, error: `Flöda could not be reached: ${said(err)}` };
+    }
+    if ("refused" in out) return { ok: false, error: out.refused };
+    await logAudit(what === "checkout" ? "licence.checkout_opened" : "licence.portal_opened", { userId: user.id, details: { plan } });
+    return { ok: true, data: { url: out.url } };
+  });
+}
 
 // ---------------------------------------------------------------------------
 // How the shop writes a listing, and feedback to the people who make Flöda
@@ -2054,7 +2072,7 @@ export async function sendNoteToFlodaAction(input: { message: string; email?: st
     await logAudit("feedback.sent", { userId: user.id, details: { page: row.page, length: message.length } });
     if (vendorMode() || !licenceServer()) {
       await keepHere();
-      return { ok: true, message: vendorMode() ? "Kept. It is on the Clients page." : "Thank you. It is kept with this copy; write to hello@floda.ai as well if it is urgent." };
+      return { ok: true, message: vendorMode() ? "Kept. It is on the Clients page." : `Thank you. It is kept with this copy; write to ${SUPPORT_EMAIL} as well if it is urgent.` };
     }
     try {
       const { getLicence, installId } = await import("@/lib/catalog/licence-store");
@@ -2069,7 +2087,7 @@ export async function sendNoteToFlodaAction(input: { message: string; email?: st
       return { ok: true, message: "Sent. Thank you — a person reads every one." };
     } catch {
       await keepHere();
-      return { ok: true, message: "Flöda could not be reached just now, so it is kept with this copy. Write to hello@floda.ai if it is urgent." };
+      return { ok: true, message: `Flöda could not be reached just now, so it is kept with this copy. Write to ${SUPPORT_EMAIL} if it is urgent.` };
     }
   });
 }

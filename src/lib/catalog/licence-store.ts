@@ -5,7 +5,7 @@
 
 import { randomUUID } from "node:crypto";
 import { prisma, parseJson } from "./db";
-import { CHECK_EVERY_MS, LICENCE_KEY_SETTING, askForTrial, askVendor, isServerUrl, licenceFromAnswer, licenceServer, licenceServers, licenceState, reachVendor, type CheckIn, type Licence, type LicenceState } from "./licence";
+import { CHECK_EVERY_MS, LICENCE_KEY_SETTING, askForBilling, askForTrial, askVendor, isServerUrl, licenceFromAnswer, licenceServer, licenceServers, licenceState, reachVendor, type CheckIn, type Licence, type LicenceState } from "./licence";
 import { refreshConventions, shopProfile } from "./shop-profile";
 import type { MonthUse } from "./plans";
 
@@ -121,4 +121,16 @@ export async function currentLicence(): Promise<LicenceState> {
     }
   }
   return licenceState(licence);
+}
+
+/**
+ * A payment page for this copy's client on a plan, or its billing page, from the vendor. The
+ * link is opened in the browser; the copy's standing changes when the vendor hears from Stripe
+ * and this copy next checks its key.
+ */
+export async function billingLink(what: "checkout" | "portal", plan?: string): Promise<{ url: string } | { refused: string }> {
+  const licence = await getLicence();
+  if (!licence) return { refused: "This copy has no licence key yet. Start the trial first; paying comes after." };
+  const answer = await reachVendor(await servers(), (server) => askForBilling(server, what, { key: licence.key, ...(plan ? { plan } : {}) }));
+  return answer.ok ? { url: answer.url } : { refused: answer.why };
 }

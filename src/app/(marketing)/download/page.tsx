@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Site } from "../Shell";
 import { Reveal } from "../welcome/Motion";
 import "../welcome/welcome.css";
+import { SUPPORT_MAILTO } from "@/lib/catalog/support";
 
 export const metadata: Metadata = { title: "Download Flöda", description: "Flöda for Windows and Mac. Everything on your machine; the app keeps itself current." };
 
@@ -73,7 +74,7 @@ export default async function DownloadPage() {
               <li>Pick a plan and start the 14-day free trial from inside the app. No card.</li>
               <li>Tell us when you would like your set-up call. A Flöda engineer loads your catalogue and reads your first invoices with you.</li>
             </ol>
-            <p className="soft">Would rather not install anything? A hosted copy is available on every plan; <a href="mailto:hello@floda.ai">write to us</a>. Every version and its notes are on the <a href={RELEASES}>releases page</a>. <Link href="/privacy">What leaves your machine.</Link></p>
+            <p className="soft">Would rather not install anything? A hosted copy is available on every plan; <a href={SUPPORT_MAILTO}>write to us</a>. Every version and its notes are on the <a href={RELEASES}>releases page</a>. <Link href="/privacy">What leaves your machine.</Link></p>
           </Reveal>
         </div>
       </section>

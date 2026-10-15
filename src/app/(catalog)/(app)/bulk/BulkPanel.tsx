@@ -1,5 +1,7 @@
 "use client";
 
+import { appliedBefore, fingerprint, forgetApplied, rememberApplied } from "@/lib/catalog/applied-memory";
+
 import { useRef, useState } from "react";
 import { joinOrderAction, readPageAction, rememberListingsAction, logAdjustmentAction, planAdjustmentAction, readInstructionSheetAction, readInvoiceAction, readReferenceAction, readSheetAgainstFilesAction } from "@/app/(catalog)/actions";
 import { applyPlan, describeFile, foldPlans, isWholeFile, whyNoMatch, type AdjustResult, type FoldStep, type Plan } from "@/lib/catalog/adjust";
@@ -522,9 +524,15 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
    */
   async function applyDeliveryNow() {
     if (!order) return;
-    if (applied === order.filename && !againConfirmed) {
+    // Asked by what is on the delivery, not by its name, and remembered across reloads: a file
+    // saved again under another name, or dropped in after the page was reopened, is the same
+    // stock arriving twice.
+    const key = fingerprint(order.lines);
+    const before = typeof localStorage === "undefined" ? null : appliedBefore(localStorage, key);
+    if ((applied === order.filename || before) && !againConfirmed) {
       setAgainConfirmed(true);
-      setError(`${order.filename} has already been applied to these files. Applying it again adds its stock again — three arriving on the three already counted makes six. If that is what you want, press the button once more; otherwise undo the last change first.`);
+      const when = before ? ` (as ${before.filename}, ${new Date(before.at).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })})` : "";
+      setError(`This delivery has already been applied${when}. Applying it again adds its stock again — three arriving on the three already counted makes six. If that is what you want, press the button once more; otherwise undo the last change first.`);
       return;
     }
     setAgainConfirmed(false);
@@ -666,6 +674,7 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
       fields.quantity ? (stock === "add" ? "the arriving stock onto the counts already there" : "the stock count, set to the invoice's own number") : "",
     ].filter(Boolean);
     setApplied(order.filename);
+    if (typeof localStorage !== "undefined") rememberApplied(localStorage, fingerprint(order.lines), order.filename);
     setRecent({
       what: `the ${order.filename} delivery`,
       handles: [...new Set(results.filter((r) => !r.result.refused).flatMap((r) => [...r.result.carryOver.map((m) => m.handle), ...r.result.freshSizes.map((x) => x.handle), ...r.result.fresh.map((p) => p.handle)]))],
@@ -831,6 +840,7 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
     setFeed((f) => f.slice(0, -1));
     // Undone, the delivery is not applied any more, so applying it is not applying it again.
     setApplied(null); setAgainConfirmed(false);
+    if (order && typeof localStorage !== "undefined") forgetApplied(localStorage, fingerprint(order.lines));
     // The files are what was undone. Rows already marked applied stay marked — reading the sheet
     // again is the clean way to start it over.
     setRows((current) => current.map((r) => ({ ...r, results: measure(r, nextSheets) })));

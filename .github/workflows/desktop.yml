@@ -50,6 +50,9 @@ jobs:
           path: |
             dist-desktop/*.exe
             dist-desktop/*.dmg
+            dist-desktop/*.zip
+            dist-desktop/*.blockmap
+            dist-desktop/latest*.yml
           if-no-files-found: error
       - name: Which version this is
         id: version
@@ -66,6 +69,11 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag }}
           name: Flöda ${{ steps.version.outputs.tag }}
           target_commitish: ${{ github.sha }}
+          # The yml files are what an installed copy reads to learn a newer version exists; the
+          # blockmaps let Windows download only what changed.
           files: |
             dist-desktop/*.exe
             dist-desktop/*.dmg
+            dist-desktop/*.zip
+            dist-desktop/*.blockmap
+            dist-desktop/latest*.yml

@@ -9,6 +9,7 @@ const { app, BrowserWindow, dialog, shell, Menu } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
 const { launch } = require("./launch.cjs");
+const { keepCurrent } = require("./update.cjs");
 
 // The name in the app menu, in "About" and "Quit", and of the data folder in app-data — on every
 // platform, whatever the bundle or the executable is called on disk (Floda, ASCII, so that the
@@ -77,7 +78,7 @@ function menu() {
     { role: "editMenu" },
     { label: "View", submenu: [{ role: "reload" }, { role: "resetZoom" }, { role: "zoomIn" }, { role: "zoomOut" }, { type: "separator" }, { role: "togglefullscreen" }] },
     { role: "windowMenu" },
-    { label: "Help", submenu: [{ label: "Flöda website", click: () => shell.openExternal("https://floda.ai") }, { label: "Show the log", click: () => shell.openPath(path.join(app.getPath("userData"), "floda.log")) }] },
+    { label: "Help", submenu: [{ label: "Flöda website", click: () => shell.openExternal("https://floda.ai") }, { label: "Show the log", click: () => shell.openPath(path.join(app.getPath("userData"), "floda.log")) }, { type: "separator" }, { label: `Flöda ${app.getVersion()}`, enabled: false }] },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
@@ -93,6 +94,7 @@ if (!app.requestSingleInstanceLock()) {
     try {
       await start();
       openWindow();
+      keepCurrent({ log, window: () => win });
     } catch (err) {
       log(`[desktop] could not start: ${err.message}`);
       dialog.showErrorBox("Flöda could not start", `${err.message}\n\nThe last few lines of the log:\n${lines.slice(-12).join("\n")}`);

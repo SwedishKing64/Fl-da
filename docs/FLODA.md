@@ -148,6 +148,15 @@ Everything in `HANDOVER.md` under "Working on it" applies. In addition:
   supplier's `MappingTemplate` and builds the products so they can be looked over. A PDF or photo
   read by AI has no columns; its lines go to the review grid, where corrections count on the
   supplier's record. The step can be skipped and comes back on the Home checklist.
+- A copy that checks a licence begins setup with its plan (`TrialStep.tsx`): the admin picks a
+  plan and starts the 14-day trial from inside the app, or enters a key. The vendor answers
+  `POST /api/licence/trial` by making the client and the key (one trial per email address) and
+  the copy keeps the key at once (`beginTrial` in `licence-store.ts`). When a copy may not run
+  (`licenceState` is `none` or `lapsed`: no key, the trial over, paused, ended, or the vendor
+  unreachable for a month) `(app)/layout.tsx` shows `Paywall.tsx` instead of every page: what
+  happened, the plans, a Subscribe button that writes to hello@floda.ai with the key, and a field
+  for a new key. Nothing is charged by the app; a person turns the key back on. Staff see who to
+  ask. The vendor's own deployment and development (no `FLODA_LICENCE_SERVER`) have no gate.
 - Plans (`src/lib/catalog/plans.ts`) are sized by the month's paperwork: Starter $49 (2 invoices,
   about 100 products, one person, $20 of reading), Shop $149 (10 invoices, about 500 products,
   everyone, $60 of reading; the founding price, held), Unlimited $299 (no counts, $150 of

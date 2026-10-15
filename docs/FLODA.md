@@ -148,6 +148,13 @@ Everything in `HANDOVER.md` under "Working on it" applies. In addition:
   supplier's `MappingTemplate` and builds the products so they can be looked over. A PDF or photo
   read by AI has no columns; its lines go to the review grid, where corrections count on the
   supplier's record. The step can be skipped and comes back on the Home checklist.
+- The public site (`src/app/(marketing)/`): `Shell.tsx` is the frame every public page sits in
+  (the bar with Product and Company menus, Pricing and Download, a mobile menu, a progress line,
+  the footer); `Story.tsx` holds the scroll story on the landing page (a pinned panel that
+  changes with the step in view) and the FAQ accordion. Pages: `/welcome` (landing), `/about`,
+  `/faq`, `/privacy`, `/download` (the newest release's installers, asked of GitHub's API and
+  remembered for ten minutes, with the releases page as the fallback). `src/proxy.ts` lists them
+  as public.
 - Plans (`src/lib/catalog/plans.ts`) are sized by the month's paperwork: Starter $49 (2 invoices,
   about 100 products, one person, $20 of reading), Shop $149 (10 invoices, about 500 products,
   everyone, $60 of reading; the founding price, held), Unlimited $299 (no counts, $150 of

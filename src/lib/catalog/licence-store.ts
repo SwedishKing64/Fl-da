@@ -5,7 +5,7 @@
 
 import { randomUUID } from "node:crypto";
 import { prisma, parseJson } from "./db";
-import { CHECK_EVERY_MS, LICENCE_KEY_SETTING, askVendor, licenceFromAnswer, licenceServer, licenceState, type CheckIn, type Licence, type LicenceState } from "./licence";
+import { CHECK_EVERY_MS, LICENCE_KEY_SETTING, askForTrial, askVendor, licenceFromAnswer, licenceServer, licenceState, type CheckIn, type Licence, type LicenceState } from "./licence";
 import { refreshConventions, shopProfile } from "./shop-profile";
 import type { MonthUse } from "./plans";
 
@@ -64,6 +64,19 @@ export async function activate(key: string): Promise<Licence> {
   await saveLicence(licence);
   await refreshConventions();
   return licence;
+}
+
+/** Start this copy's trial: the vendor makes the client and the key, and the key is kept as entered. */
+export async function beginTrial(input: { shop: string; email: string; plan: string }): Promise<{ licence: Licence } | { refused: string }> {
+  const server = licenceServer();
+  if (!server) throw new Error("This copy is not set up to check a licence.");
+  const base = await checkIn("");
+  const answer = await askForTrial(server, { shop: input.shop, email: input.email, plan: input.plan, install: base.install, version: base.version, platform: base.platform });
+  if (!answer.ok) return { refused: answer.why };
+  const licence = licenceFromAnswer(answer.key, { ok: true, client: answer.client, plan: answer.plan, status: answer.status, expiresAt: answer.expiresAt }, null);
+  await saveLicence(licence);
+  await refreshConventions();
+  return { licence };
 }
 
 let lastAsked = 0;

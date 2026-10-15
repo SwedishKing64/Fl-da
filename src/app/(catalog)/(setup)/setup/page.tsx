@@ -37,7 +37,8 @@ export default async function SetupPage({ searchParams }: { searchParams: Promis
 
   return (
     <>
-      <Stepper current={step} />
+      <Stepper current={step} hidePlan={!licenceServer()} />
+      {step === "plan" && <TrialStep email={user.email} next="/setup?step=shop" />}
       {step === "shop" && <ShopStep profile={profile} />}
       {step === "learn" && <LearnStep learned={learned} />}
       {step === "house" && <HouseStep house={house} tagRules={tagRules} kinds={productTypes()} />}

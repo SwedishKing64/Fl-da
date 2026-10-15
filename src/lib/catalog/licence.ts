@@ -138,6 +138,32 @@ export async function askVendor(server: string, path: "activate" | "check", body
   return data;
 }
 
+/** What a copy sends to start a trial from inside the app: who the shop is, and which plan. */
+export interface TrialRequest {
+  shop: string;
+  email: string;
+  plan: string;
+  install: string;
+  version: string;
+  platform: string;
+}
+
+/** The vendor's answer to a trial request: the key it made, or why not. */
+export type TrialAnswer = { ok: true; key: string; client: string; plan: string; status: string; expiresAt: string | null } | { ok: false; status: string; why: string };
+
+/** Ask the vendor for a trial. Throws on a network failure; the caller decides what that means. */
+export async function askForTrial(server: string, body: TrialRequest): Promise<TrialAnswer> {
+  const res = await fetch(`${server}/api/licence/trial`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(15_000),
+  });
+  const data = (await res.json().catch(() => null)) as TrialAnswer | null;
+  if (!data || typeof data !== "object" || !("ok" in data)) throw new Error(`Flöda answered ${res.status} without a verdict`);
+  return data;
+}
+
 /** The licence as kept after an answer. */
 export function licenceFromAnswer(key: string, answer: CheckAnswer, previous: Licence | null, now = new Date()): Licence {
   if (answer.ok) return { key, client: answer.client, plan: answer.plan, status: answer.status, expiresAt: answer.expiresAt, checkedAt: now.toISOString() };

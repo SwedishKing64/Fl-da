@@ -6,6 +6,7 @@ import { databaseGate } from "../DatabaseGate";
 import { logoutAction } from "@/app/(catalog)/actions";
 import { NavLinks } from "./NavLinks";
 import { FeedbackButton } from "./FeedbackButton";
+import { Paywall } from "./Paywall";
 import { CommandPalette, type PaletteItem } from "@/app/(catalog)/CommandPalette";
 import { Kbd } from "@/app/(catalog)/ui";
 import { Logo } from "@/app/Logo";
@@ -34,6 +35,8 @@ export default async function CatalogLayout({ children }: { children: React.Reac
   const user = await requireUser();
   const vendor = vendorMode();
   const licence = await currentLicence();
+  // A copy that may not run shows the paywall instead of the app, data untouched behind it.
+  if (licence.kind === "none" || licence.kind === "lapsed") return <Paywall state={licence} isAdmin={user.role === "ADMIN"} name={user.name.trim().split(/\s+/)[0] || user.name} />;
   const pastPlan = licence.kind === "ok" && user.role === "ADMIN" ? await monthUse().then((use) => (overPlan(planOf(licence.licence.plan), use) ? { plan: planOf(licence.licence.plan), use } : null)).catch(() => null) : null;
 
   // The palette's contents come down with the page. There are never many batches, and matching
@@ -84,19 +87,9 @@ export default async function CatalogLayout({ children }: { children: React.Reac
           <Link href="/"><Logo size={18} /></Link>
           <NavLinks isAdmin={user.role === "ADMIN"} vendor={vendor} compact />
         </div>
-        {licence.kind === "lapsed" && (
-          <div className="mb-4 rounded-[12px] border border-[#f1dcb0] bg-[var(--passive-tint)] px-4 py-3 text-sm text-[#7a4e06] shadow-[inset_4px_0_0_var(--passive)]">
-            <strong>This copy&rsquo;s licence needs attention.</strong> {licence.why} Everything keeps working while it is sorted out; write to hello@floda.ai, or enter a new key in Settings.
-          </div>
-        )}
         {pastPlan && (
           <div className="mb-4 rounded-[12px] border border-[#f5c87a] bg-[#fff7e6] px-4 py-3 text-[13.5px] text-[#7a4b00]">
             <strong>This month has gone past the {pastPlan.plan.name} plan</strong> ({describeMonthUse(pastPlan.plan, pastPlan.use)}). Nothing stops. Write to hello@floda.ai to move up a plan.
-          </div>
-        )}
-        {licence.kind === "none" && user.role === "ADMIN" && (
-          <div className="mb-4 rounded-[12px] border border-[var(--meta-tint-2)] bg-[var(--meta-tint)] px-4 py-3 text-sm text-[var(--meta-ink)] shadow-[inset_4px_0_0_var(--meta)]">
-            <strong>No licence key yet.</strong> Enter the one Flöda sent you in <Link href="/settings" className="font-semibold text-[var(--meta)]">Settings</Link>.
           </div>
         )}
         {isEphemeralDb() && (

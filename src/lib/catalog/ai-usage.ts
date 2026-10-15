@@ -4,7 +4,7 @@
  * A shop on a plan reads documents through the vendor's relay (`/api/ai`) rather than with a key
  * of its own. The relay forwards each call to the reading service with the vendor's key and
  * counts what the call used, so the Clients page can show what each shop's reading costs and so
- * a shop cannot run up more than its month's allowance. Pure; the route keeps the rows.
+ * a shop cannot run up more than its fortnight's allowance. Pure; the route keeps the rows.
  */
 
 export interface Usage {
@@ -80,10 +80,23 @@ export class StreamMeter {
   }
 }
 
-/** The month a reading falls in, as the Client row keeps it: "2026-10". */
-export function monthKey(now = new Date()): string {
-  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+/** The fortnight a reading falls in, as the Client row keeps it (in the column once named for the month). */
+/**
+ * The billing period a moment falls in: fortnights counted from a fixed Monday, so every copy and
+ * the vendor agree on where one ends without a calendar. Kept on the Client row in the columns
+ * named for the month they used to hold (`aiMonth`, `useMonth`).
+ */
+const PERIOD_MS = 14 * 86_400_000;
+const PERIOD_EPOCH = Date.UTC(2026, 0, 5); // a Monday
+export function periodKey(now = new Date()): string {
+  return `F${Math.floor((now.getTime() - PERIOD_EPOCH) / PERIOD_MS)}`;
 }
+/** When the current fortnight began. */
+export function periodStart(now = new Date()): Date {
+  return new Date(PERIOD_EPOCH + Math.floor((now.getTime() - PERIOD_EPOCH) / PERIOD_MS) * PERIOD_MS);
+}
+/** The old name. */
+export const monthKey = periodKey;
 
 /** What a Client row keeps about its reading. */
 export interface MeteredClient {
@@ -93,7 +106,7 @@ export interface MeteredClient {
   aiCacheRead: number;
   aiOutput: number;
   aiCalls: number;
-  /** The month's allowance in cents; 0 means no limit. */
+  /** The fortnight's allowance in cents; 0 means no limit. */
   aiCapCents: number;
 }
 
@@ -103,13 +116,13 @@ export interface Allowance {
   calls: number;
   spentCents: number;
   capCents: number;
-  /** The month's allowance is used up, so the relay turns the next call away. */
+  /** The fortnight's allowance is used up, so the relay turns the next call away. */
   exhausted: boolean;
 }
 
-/** Where a client stands this month. A row from an earlier month counts as nothing spent. */
+/** Where a client stands this fortnight. A row from an earlier fortnight counts as nothing spent. */
 export function allowanceOf(c: MeteredClient, now = new Date()): Allowance {
-  const month = monthKey(now);
+  const month = periodKey(now);
   const current = c.aiMonth === month;
   const usage: Usage = current ? { input: c.aiInput, cacheWrite: c.aiCacheWrite, cacheRead: c.aiCacheRead, output: c.aiOutput } : { ...NO_USAGE };
   const spentCents = costCents(usage);
@@ -120,9 +133,9 @@ export function dollars(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
-/** One line for the Clients page: "$4.20 of $60 this month, 12 readings". */
+/** One line for the Clients page: "$4.20 of $60 this fortnight, 12 readings". */
 export function describeAllowance(a: Allowance): string {
   const cap = a.capCents > 0 ? ` of ${dollars(a.capCents)}` : "";
   const calls = `${a.calls} reading${a.calls === 1 ? "" : "s"}`;
-  return `${dollars(a.spentCents)}${cap} this month, ${calls}${a.exhausted ? " · allowance used up" : ""}`;
+  return `${dollars(a.spentCents)}${cap} this fortnight, ${calls}${a.exhausted ? " · allowance used up" : ""}`;
 }

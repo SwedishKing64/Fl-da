@@ -45,7 +45,7 @@ export function Paywall({ state, isAdmin, name, servers = [], override = "" }: {
                   <div className="mt-6 grid gap-3 md:grid-cols-3">
                     {PLANS.map((p) => (
                       <div key={p.id} className={`rounded-[14px] border p-4 ${p.id === was?.id ? "border-[var(--meta)] bg-[var(--meta-tint)]" : "border-[var(--line-soft)] bg-white"}`}>
-                        <div className="flex items-baseline justify-between"><span className="text-[15px] font-bold">{p.name}</span><span className="text-[13px] font-semibold">${p.price}<span className="font-normal text-[var(--ink-soft)]">/mo</span></span></div>
+                        <div className="flex items-baseline justify-between"><span className="text-[15px] font-bold">{p.name}</span><span className="text-[13px] font-semibold">${p.price}<span className="font-normal text-[var(--ink-soft)]">/fortnight</span></span></div>
                         <div className="mt-1 text-[12.5px] text-[var(--ink-soft)]">{describePlanSize(p)}. {p.people}.</div>
                         {p.id === was?.id && <div className="mt-1 text-[11.5px] font-semibold text-[var(--meta)]">What you were on</div>}
                       </div>

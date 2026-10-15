@@ -34,7 +34,7 @@ const MENUS: Array<{ label: string; items: Array<{ href: string; label: string; 
   {
     label: "Pricing",
     items: [
-      { href: "/welcome#pricing", label: "Plans", hint: "Starter, Shop and Unlimited, sized by the month's paperwork" },
+      { href: "/welcome#pricing", label: "Plans", hint: "Starter, Shop and Unlimited, billed by the fortnight" },
       { href: "/welcome#pricing", label: "What it saves", hint: "A 50-product order by hand against through Flöda" },
       { href: "/welcome#register", label: "Start the free trial", hint: "14 days on any plan, no card" },
     ],

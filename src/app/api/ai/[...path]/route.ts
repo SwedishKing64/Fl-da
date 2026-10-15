@@ -1,7 +1,7 @@
 import { after, NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/catalog/db";
 import { normaliseKey, vendorMode, verdictFor } from "@/lib/catalog/licence";
-import { allowanceOf, dollars, monthKey, noUsage, StreamMeter, usageOf, type Usage } from "@/lib/catalog/ai-usage";
+import { allowanceOf, dollars, periodKey, noUsage, StreamMeter, usageOf, type Usage } from "@/lib/catalog/ai-usage";
 import { SUPPORT_EMAIL } from "@/lib/catalog/support";
 
 export const runtime = "nodejs";
@@ -19,7 +19,7 @@ const PASSED = new Set(["v1/messages", "v1/messages/count_tokens"]);
  * A shop on a plan has no key of its own: its copy sends each reading here with its licence key
  * as the bearer token, and this forwards it to the reading service with the vendor's key, passes
  * the answer straight back (streamed when it was streamed), and counts what it used against the
- * shop's month. A paused or ended licence, or a month's allowance used up, is turned away with a
+ * shop's fortnight. A paused or ended licence, or a fortnight's allowance used up, is turned away with a
  * message the copy shows as it is. Only on the vendor's own deployment.
  */
 export async function POST(req: NextRequest, ctx: RouteContext<"/api/ai/[...path]">) {
@@ -34,7 +34,7 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/ai/[...path
   const verdict = verdictFor(client);
   if (!client || !verdict.ok) return refuse(403, "floda_error", `${verdict.ok ? "" : verdict.why} Reading through Flöda stops with it. A key of your own under Reading documents in Settings still works.`.trim());
   const allowance = allowanceOf(client);
-  if (allowance.exhausted) return refuse(403, "floda_error", `This month's reading allowance (${dollars(allowance.capCents)}) is used up, so nothing more can be read through Flöda until next month. Write to ${SUPPORT_EMAIL} to raise it, or put a key of your own under Reading documents in Settings.`);
+  if (allowance.exhausted) return refuse(403, "floda_error", `This fortnight's reading allowance (${dollars(allowance.capCents)}) is used up, so nothing more can be read through Flöda until the next one. Write to ${SUPPORT_EMAIL} to raise it, or put a key of your own under Reading documents in Settings.`);
   const vendorKey = (process.env.ANTHROPIC_API_KEY ?? "").trim();
   if (!vendorKey) return refuse(503, "api_error", "Flöda's own reading key is not set, so nothing can be read through it right now.");
 
@@ -94,10 +94,10 @@ function refuse(status: number, type: string, message: string) {
   return NextResponse.json({ type: "error", error: { type, message } }, { status });
 }
 
-/** Add a reading to the client's month, starting the month over when it has turned. */
+/** Add a reading to the client's fortnight, starting over when a new one has begun. */
 async function record(clientId: string, usage: Usage): Promise<void> {
   if (noUsage(usage)) return;
-  const month = monthKey();
+  const month = periodKey();
   try {
     const current = await prisma.client.findUnique({ where: { id: clientId }, select: { aiMonth: true } });
     if (!current) return;

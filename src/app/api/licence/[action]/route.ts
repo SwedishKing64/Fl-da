@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/catalog/db";
 import { newLicenceKey, normaliseKey, vendorMode, verdictFor, type CheckAnswer, type TrialAnswer, type TrialRequest } from "@/lib/catalog/licence";
 import { planOf, TRIAL_DAYS } from "@/lib/catalog/plans";
-import { monthKey } from "@/lib/catalog/ai-usage";
+import { periodKey } from "@/lib/catalog/ai-usage";
 import { createCheckout, createPortal, stripeConfigured } from "@/lib/catalog/stripe";
 import { SUPPORT_EMAIL } from "@/lib/catalog/support";
 
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/licence/[ac
         lastVersion: String(body?.version ?? "").slice(0, 40),
         lastInstall: String(body?.install ?? "").slice(0, 80),
         checkIns: { increment: 1 },
-        ...(typeof body?.monthBatches === "number" ? { useMonth: monthKey(), monthBatches: Math.max(0, Math.round(body.monthBatches)), monthProducts: Math.max(0, Math.round(Number(body.monthProducts) || 0)) } : {}),
+        ...(typeof body?.monthBatches === "number" ? { useMonth: periodKey(), monthBatches: Math.max(0, Math.round(body.monthBatches)), monthProducts: Math.max(0, Math.round(Number(body.monthProducts) || 0)) } : {}),
         // A copy that names its shop fills in a client made from a lead before the shop was known.
         ...(client.name.trim() ? {} : { name: String(body?.shop ?? "").slice(0, 120) }),
       },

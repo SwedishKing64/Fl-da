@@ -1,12 +1,12 @@
-import { allowanceOf, describeAllowance, monthKey } from "@/lib/catalog/ai-usage";
-import { describeMonthUse, overPlan, planOf } from "@/lib/catalog/plans";
+import { allowanceOf, describeAllowance, periodKey } from "@/lib/catalog/ai-usage";
+import { describePeriodUse, overPlan, planOf } from "@/lib/catalog/plans";
 
-/** What the copy last said its month held, against the plan; empty until a copy has said. */
+/** What the copy last said its fortnight held, against the plan; empty until a copy has said. */
 function monthLine(c: { plan: string; useMonth: string; monthBatches: number; monthProducts: number }): { text: string; over: boolean } {
-  if (c.useMonth !== monthKey()) return { text: "", over: false };
+  if (c.useMonth !== periodKey()) return { text: "", over: false };
   const plan = planOf(c.plan);
   const use = { invoices: c.monthBatches, products: c.monthProducts };
-  return { text: describeMonthUse(plan, use), over: overPlan(plan, use) };
+  return { text: describePeriodUse(plan, use), over: overPlan(plan, use) };
 }
 import { notFound } from "next/navigation";
 import { prisma, parseJson } from "@/lib/catalog/db";
@@ -41,7 +41,7 @@ export default async function ClientsPage() {
   }));
   return (
     <>
-      <PageHeader title="Clients" subtitle="Every shop running Flöda, the key their copy runs under, when it last checked in, and what its reading through Flöda has cost this month. A copy asks about its key when the key is entered and about once a day after that; pausing or ending a client is felt within the day, and stops its reading at once." />
+      <PageHeader title="Clients" subtitle="Every shop running Flöda, the key their copy runs under, when it last checked in, and what its reading through Flöda has cost this fortnight. A copy asks about its key when the key is entered and about once a day after that; pausing or ending a client is felt within the day, and stops its reading at once." />
       <Card>
         <ClientsPanel clients={rows} leads={leads} feedback={feedback} />
       </Card>

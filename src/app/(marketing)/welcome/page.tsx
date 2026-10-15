@@ -209,7 +209,7 @@ export default function WelcomePage() {
           <div className="wrap">
             <Reveal className="head">
               <span className="eyebrow">Pricing</span>
-              <h2>Priced by the month&rsquo;s paperwork. Work out what it saves you.</h2>
+              <h2>Priced by the fortnight&rsquo;s paperwork, billed every two weeks. Work out what it saves you.</h2>
               <p className="lede">Listing 100 products by hand is a day of someone&rsquo;s time. Flöda reads, matches and prices them in about 15 minutes, faster per product the bigger the order, and you check the grid. Put your own numbers in.</p>
             </Reveal>
             <Reveal delay={1}><Calculator /></Reveal>
@@ -219,7 +219,7 @@ export default function WelcomePage() {
                   {p.founding && <span className="tier-tag">Founding price, held for you</span>}
                   <h3>{p.name}</h3>
                   <p className="tier-blurb">{p.blurb}</p>
-                  <div className="tier-price"><span className="cur" aria-hidden>$</span><span className="amt">{p.price}</span><span className="per">a month</span></div>
+                  <div className="tier-price"><span className="cur" aria-hidden>$</span><span className="amt">{p.price}</span><span className="per">a fortnight</span></div>
                   <ul className="ticks">
                     <li>{describePlanSize(p)}</li>
                     <li>{p.people}</li>
@@ -258,7 +258,7 @@ export default function WelcomePage() {
           <div className="wrap">
             <Reveal>
               <h2>Your next season&rsquo;s paperwork, read for you.</h2>
-              <p className="lede">Two weeks free on any plan, then from $49 a month. A Flöda engineer sets it up with you on one of your own supplier invoices.</p>
+              <p className="lede">Two weeks free on any plan, then from $49 a fortnight. A Flöda engineer sets it up with you on one of your own supplier invoices.</p>
               <a href="#register" className="btn btn-meta btn-lg">Start free trial<span aria-hidden>→</span></a>
             </Reveal>
           </div>

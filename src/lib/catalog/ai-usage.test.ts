@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allowanceOf, costCents, describeAllowance, monthKey, StreamMeter, usageOf } from "./ai-usage";
+import { allowanceOf, costCents, describeAllowance, periodKey, periodStart, StreamMeter, usageOf } from "./ai-usage";
 
 describe("what a reading used", () => {
   it("reads the service's usage object and ignores what is not a count", () => {
@@ -27,12 +27,12 @@ describe("what a reading used", () => {
 });
 
 describe("a client's month", () => {
-  const row = { aiMonth: monthKey(), aiInput: 2_000_000, aiCacheWrite: 0, aiCacheRead: 0, aiOutput: 100_000, aiCalls: 12, aiCapCents: 6000 };
-  it("adds up what was read this month against the allowance", () => {
+  const row = { aiMonth: periodKey(), aiInput: 2_000_000, aiCacheWrite: 0, aiCacheRead: 0, aiOutput: 100_000, aiCalls: 12, aiCapCents: 6000 };
+  it("adds up what was read this fortnight against the allowance", () => {
     const a = allowanceOf(row);
     expect(a.spentCents).toBe(1250);
     expect(a.exhausted).toBe(false);
-    expect(describeAllowance(a)).toBe("$12.50 of $60.00 this month, 12 readings");
+    expect(describeAllowance(a)).toBe("$12.50 of $60.00 this fortnight, 12 readings");
   });
   it("starts a new month from nothing", () => {
     const a = allowanceOf({ ...row, aiMonth: "2001-01" });
@@ -43,5 +43,15 @@ describe("a client's month", () => {
     expect(allowanceOf({ ...row, aiCapCents: 1000 }).exhausted).toBe(true);
     expect(allowanceOf({ ...row, aiCapCents: 0 }).exhausted).toBe(false);
     expect(describeAllowance(allowanceOf({ ...row, aiCapCents: 1000 }))).toContain("allowance used up");
+  });
+});
+
+describe("the billing fortnight", () => {
+  it("runs Monday to Sunday fortnight, the same on every copy", () => {
+    const monday = new Date("2026-10-12T00:00:00Z");
+    expect(periodStart(new Date("2026-10-15T09:00:00Z")).toISOString()).toBe(monday.toISOString());
+    expect(periodKey(new Date("2026-10-15T09:00:00Z"))).toBe(periodKey(new Date("2026-10-25T23:59:59Z")));
+    expect(periodKey(new Date("2026-10-26T00:00:00Z"))).not.toBe(periodKey(new Date("2026-10-25T23:59:59Z")));
+    expect(periodKey(new Date("2026-10-15T09:00:00Z"))).toMatch(/^F\d+$/);
   });
 });

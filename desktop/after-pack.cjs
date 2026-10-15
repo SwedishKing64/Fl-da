@@ -1,4 +1,5 @@
-// After electron-builder has laid the app out and before it is wrapped in a disk image.
+// After electron-builder has laid the app out and before it is wrapped in an installer: the
+// packaged server is started once as a check, on every platform, and then, on a Mac only:
 //
 // On a Mac every binary must carry a code signature or Gatekeeper reports the app as "damaged"
 // on Apple silicon, and on macOS 26 V8 needs the hardened runtime's permission to write machine
@@ -52,10 +53,23 @@ function showAs(app, name) {
   console.log(`[after-pack] CFBundleName ${bundleName} (helper at ${path.relative(app, helper)}); shown as ${name} in ${lprojs.length} localisations`);
 }
 
+// The packaged server, started once under plain Node and asked for three pages, the way the
+// app will start it. What electron-builder leaves out of the copy (it drops a folder's top-level
+// node_modules, for one) shows up here and not on a customer's machine.
+function checkPackagedServer(resources) {
+  for (const must of ["standalone/server.js", "standalone/node_modules/next/package.json", "template.db", "floda.json"]) {
+    if (!fs.existsSync(path.join(resources, must))) throw new Error(`[after-pack] the packaged app is missing ${must} under ${resources}`);
+  }
+  console.log(`[after-pack] starting the packaged server under ${process.execPath} from ${resources}`);
+  execFileSync(process.execPath, [path.join(__dirname, "launch.cjs"), "--check", "--root", resources], { stdio: "inherit", timeout: 120_000 });
+}
+
 module.exports = async function afterPack(context) {
-  if (context.electronPlatformName !== "darwin") return;
+  const mac = context.electronPlatformName === "darwin";
   const app = path.join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`);
-  if (!fs.existsSync(app)) throw new Error(`[after-pack] no app bundle at ${app}: ${fs.readdirSync(context.appOutDir).join(", ")}`);
+  if (mac && !fs.existsSync(app)) throw new Error(`[after-pack] no app bundle at ${app}: ${fs.readdirSync(context.appOutDir).join(", ")}`);
+  checkPackagedServer(mac ? path.join(app, "Contents", "Resources") : path.join(context.appOutDir, "resources"));
+  if (!mac) return;
   const entitlements = path.join(__dirname, "entitlements.mac.plist");
   showAs(app, SHOWN_NAME);
   // A link to nothing anywhere in the bundle fails the seal; say which and drop it first.

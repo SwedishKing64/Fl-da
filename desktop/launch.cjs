@@ -123,11 +123,14 @@ function readConfig(root) {
 
 module.exports = { launch, standaloneDir, freePort, ensureDatabase };
 
-// `node desktop/launch.cjs --check [dataDir]`: start the build under plain Node, hit a page, stop.
+// `node desktop/launch.cjs --check [dataDir] [--root dir]`: start the build under plain Node, hit
+// a page, stop. The root is the checkout by default, or a packaged app's resources folder.
 if (require.main === module && process.argv.includes("--check")) {
-  const root = path.resolve(__dirname, "..");
-  const dataDir = process.argv[process.argv.indexOf("--check") + 1] || path.join(require("node:os").tmpdir(), "floda-check");
-  launch({ root, dataDir, execPath: process.execPath, templateDb: path.join(root, "prisma", "template.db"), env: { ELECTRON_RUN_AS_NODE: "" }, log: (l) => console.log("[server]", l) })
+  const argAfter = (flag) => { const i = process.argv.indexOf(flag); return i === -1 || process.argv[i + 1]?.startsWith("--") ? undefined : process.argv[i + 1]; };
+  const root = path.resolve(argAfter("--root") ?? path.join(__dirname, ".."));
+  const dataDir = argAfter("--check") || fs.mkdtempSync(path.join(require("node:os").tmpdir(), "floda-check-"));
+  const templateDb = [path.join(root, "template.db"), path.join(root, "prisma", "template.db")].find((p) => fs.existsSync(p));
+  launch({ root, dataDir, execPath: process.execPath, templateDb, env: { ELECTRON_RUN_AS_NODE: "" }, log: (l) => console.log("[server]", l) })
     .then(async (s) => {
       console.log(`[check] up at ${s.url}, database ${s.db}`);
       for (const p of ["/login", "/setup", "/welcome"]) {

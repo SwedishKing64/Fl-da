@@ -56,21 +56,21 @@ export function Calculator() {
           <input type="range" min={20} max={80} step={1} value={wage} onChange={(e) => setWage(Number(e.target.value))} aria-label="Hourly wage" />
         </label>
         <label>
-          <span className="l">Products you list a month</span>
+          <span className="l">Products/variants you list a month</span>
           <span className="v">{products}</span>
-          <input type="range" min={25} max={2000} step={25} value={products} onChange={(e) => setProducts(Number(e.target.value))} aria-label="Products a month" />
+          <input type="range" min={25} max={2000} step={25} value={products} onChange={(e) => setProducts(Number(e.target.value))} aria-label="Products/variants a month" />
         </label>
         <label>
-          <span className="l">Hours to list 100 products by hand</span>
+          <span className="l">Hours to list 100 products/variants by hand</span>
           <span className="v">{handHours}<small> h</small></span>
-          <input type="range" min={4} max={60} step={1} value={handHours} onChange={(e) => setHandHours(Number(e.target.value))} aria-label="Hours per 100 products by hand" />
+          <input type="range" min={4} max={60} step={1} value={handHours} onChange={(e) => setHandHours(Number(e.target.value))} aria-label="Hours per 100 products/variants by hand" />
           <span className="h">Typing names, sizes, colours, prices; finding pictures; writing a description; checking it.</span>
         </label>
         <label>
           <span className="l">Your checking time per 100, through Flöda</span>
           <span className="v">{checkHours}<small> h</small></span>
-          <input type="range" min={0.25} max={6} step={0.25} value={checkHours} onChange={(e) => setCheckHours(Number(e.target.value))} aria-label="Checking hours per 100 products" />
-          <span className="h">Looking over the grid and pressing import. Flöda&rsquo;s own time for your {products} is about {Math.round(flodaMinutes(products))} minutes.</span>
+          <input type="range" min={0.25} max={6} step={0.25} value={checkHours} onChange={(e) => setCheckHours(Number(e.target.value))} aria-label="Checking hours per 100 products/variants" />
+          <span className="h">Looking over the grid and pressing import. Flöda&rsquo;s own time for your {products} products/variants is about {Math.round(flodaMinutes(products))} minutes.</span>
         </label>
       </div>
       <div className="calc-out">
@@ -85,7 +85,7 @@ export function Calculator() {
           <div><span>Suggested plan</span><b>{plan.name} · ${plan.price} a month</b></div>
           <div><span>Pays for itself</span><b>{times >= 1 ? `${times >= 10 ? Math.round(times) : Math.round(times * 10) / 10} times over` : "not at this volume"}</b></div>
         </div>
-        <p className="fine">Flöda reads, matches, prices and illustrates about 100 products in {FLODA_MIN_PER_100} minutes, never under {FLODA_FLOOR_MIN} for an order of any size, and less per product on a big order, because the reading and the brand pages run side by side. The checking is yours and the slider is how long you give it. The plan is suggested from the products a month: {PLANS.map((p) => `${p.name} up to ${p.products ?? "any number"}`).join(", ")}.</p>
+        <p className="fine">Flöda reads, matches, prices and illustrates about 100 products/variants in {FLODA_MIN_PER_100} minutes, never under {FLODA_FLOOR_MIN} for an order of any size, and less per product/variant on a big order, because the reading and the brand pages run side by side. The checking is yours and the slider is how long you give it. The plan is suggested from the products/variants a month: {PLANS.map((p) => `${p.name} up to ${p.products ?? "any number"}`).join(", ")}.</p>
       </div>
     </div>
   );

@@ -114,6 +114,12 @@ what changed, the mapping screen shows it, and applying it there remembers the n
 the old. A file that shares fewer than two headings with any remembered layout is a different
 document and is read as before.
 
+**The review grid's first columns stay put** (the box, the arrow, the dots, the picture, the SKU,
+and a product row's title) while the rest scrolls; the offsets are measured off the header cells.
+The dots are explained above the grid, and the errors pill filters the grid to the rows with
+errors. Product pages take several links pasted at once, placed by name or in order. On the shop's
+first two batches the review page names a Flöda engineer to write to. The home checklist is
+named the way the setup steps are. The "How you list" step shows what a title comes out as.
 **Backups.** A copy on a file (every desktop copy) is copied with SQLite's `VACUUM INTO` into
 a `backups` folder beside the database (`backup.ts`): once a night while the app is open (checked
 after each page, `nightlyIfDue`), from "Back up now" on Settings, and before a restore. The newest

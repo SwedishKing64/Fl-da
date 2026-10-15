@@ -30,6 +30,14 @@ function Choice<T extends string>({ label, value, onChange, options }: { label: 
  * How the shop writes a listing: the things an export cannot show. The same form sits on
  * Settings; in setup it moves on once saved.
  */
+/** The three naming choices applied to one made-up product, so they can be seen rather than imagined. */
+export function previewTitle(naming: HouseConventions["naming"]): string {
+  const name = naming.casing === "supplier" ? "M7 MANTRA 88 TI" : "M7 Mantra 88 Ti";
+  const brand = naming.brandInTitle === "always" ? "Völkl " : "";
+  const year = naming.season === "never" ? "" : " 2026";
+  return `${brand}${name}${year}`;
+}
+
 export function HouseForm({ house: initial, tagRules: initialRules, kinds, next }: { house: HouseConventions; tagRules: TagRuleInput[]; kinds: string[]; next?: string }) {
   const [house, setHouse] = useState<HouseConventions>(initial);
   const [rules, setRules] = useState<TagRuleInput[]>(initialRules.length ? initialRules : []);
@@ -66,6 +74,7 @@ export function HouseForm({ house: initial, tagRules: initialRules, kinds, next 
           { key: "shop", title: "Mixed case", text: "A supplier’s “M7 MANTRA 88 TI” becomes “M7 Mantra 88 Ti”." },
           { key: "supplier", title: "As the supplier writes it", text: "Names go out exactly as they came in." },
         ]} />
+        <p className="rounded-[10px] bg-[var(--meta-tint)] px-3 py-2 text-[13.5px]">With these choices a title comes out as <strong>{previewTitle(house.naming)}</strong>.</p>
         <Field label="A typical title of yours" hint="One real product name, written the way you would list it. The reader copies its shape.">
           <input className={INPUT} value={house.naming.example} onChange={(e) => set("naming", { example: e.target.value })} placeholder="Mantra 88 2026" />
         </Field>

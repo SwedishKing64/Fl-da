@@ -7,7 +7,7 @@ import { recordWord } from "@/lib/catalog/supplier-record";
 
 export default async function BatchesPage() {
   const [batches, suppliers] = await Promise.all([
-    prisma.importBatch.findMany({ orderBy: { createdAt: "desc" }, include: { supplier: true, createdBy: true, _count: { select: { products: true, files: true } } } }),
+    prisma.importBatch.findMany({ orderBy: { createdAt: "desc" }, take: 200, include: { supplier: true, createdBy: true, _count: { select: { products: true, files: true } } } }),
     supplierRecords(),
   ]);
   const withRecord = suppliers.filter((s) => s.share !== null);
@@ -33,7 +33,7 @@ export default async function BatchesPage() {
       )}
       <Card>
         {batches.length === 0 ? <Empty>No batches yet.</Empty> : (
-          <table className="w-full text-sm">
+          <table className="w-full text-sm [&_td]:px-3 [&_th]:px-3">
             <thead className="text-left text-xs text-[var(--ink-soft)]"><tr><th className="py-1">Batch</th><th>Supplier</th><th>Status</th><th className="text-right">Files</th><th className="text-right">Products</th><th className="text-right">Units</th><th>Created</th></tr></thead>
             <tbody>
               {batches.map((b) => {
@@ -46,7 +46,7 @@ export default async function BatchesPage() {
                     <td className="text-right">{b._count.files}</td>
                     <td className="text-right">{b._count.products}</td>
                     <td className="text-right">{s?.units ?? "–"}</td>
-                    <td className="text-xs text-[var(--ink-soft)]">{fmtDate(b.createdAt)} · {b.createdBy.name}</td>
+                    <td className="whitespace-nowrap text-xs text-[var(--ink-soft)]">{fmtDate(b.createdAt)} · {b.createdBy.name}</td>
                   </tr>
                 );
               })}

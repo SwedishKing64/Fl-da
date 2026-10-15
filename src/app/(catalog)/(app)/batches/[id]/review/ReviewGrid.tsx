@@ -129,6 +129,21 @@ export function ReviewGrid({ initial, batchId }: { initial: ReviewData; batchId:
   const locked = ["EXPORTED", "PUSHED"].includes(data.batch.status);
   const tableRef = useRef<HTMLTableElement>(null);
 
+  // Where each frozen column starts, measured off the header so the offsets are right whatever
+  // the cells' padding makes them. The title in a product row freezes where the SKU column does.
+  useEffect(() => {
+    const table = tableRef.current;
+    if (!table) return;
+    const measure = () => {
+      const ths = table.querySelectorAll<HTMLTableCellElement>("thead tr:nth-child(2) th.pin");
+      ths.forEach((th, i) => table.style.setProperty(`--pin-${i}`, `${th.offsetLeft}px`));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(table);
+    return () => ro.disconnect();
+  }, [data.products.length]);
+
   const refresh = useCallback(async () => {
     const fresh = await getReviewAction(batchId);
     setData(fresh);
@@ -337,10 +352,19 @@ export function ReviewGrid({ initial, batchId }: { initial: ReviewData; batchId:
           <Button size="sm" disabled={pending} onClick={() => start(async () => { const r = await verifyImagesAction(batchId); setMessage(r.ok ? { tone: r.data!.failed ? "warning" : "success", text: `Checked ${r.data!.checked} image URLs, ${r.data!.failed} unreachable.` } : { tone: "danger", text: r.error }); await refresh(); })}>Check images</Button>
           <Button size="sm" disabled={pending || locked} onClick={() => start(async () => { const r = await enrichSeoAction(batchId, true); setMessage(r.ok ? { tone: "success", text: `SEO written for ${r.data!.updated} products (${r.data!.source === "AI" ? "AI" : r.data!.source === "TEMPLATE" ? "template - set ANTHROPIC_API_KEY for AI copy" : "AI + template"}).` } : { tone: "danger", text: r.error }); await refresh(); })}>Write SEO copy</Button>
           <Button size="sm" disabled={pending || !data.settings.catalogueKnown} title={!data.settings.catalogueKnown ? "Connect Shopify in Settings, or teach Flöda your catalogue from an export, first" : pending ? "Working…" : "Match this batch against what the shop already sells"} onClick={() => start(async () => { const r = await reconcileAction(batchId); setMessage(r.ok ? { tone: r.data!.ambiguous ? "warning" : "info", text: `Checked against the shop: ${r.data!.new} new, ${r.data!.variantAdd} add variants, ${r.data!.update} update existing${r.data!.ambiguous ? `, ${r.data!.ambiguous} could be one of several — open each and say which` : ""}.` } : { tone: "danger", text: r.error }); await refresh(); })}>Check against the shop</Button>
-          <Link href={`/batches/${batchId}/export`} style={{ color: "#fff" }} className={cx("inline-flex items-center rounded-lg px-3 py-1.5 text-xs font-medium", summary.errors ? "bg-neutral-400" : "bg-[var(--ink)] hover:bg-black")}>{summary.errors ? `${summary.errors} errors block export` : "Export →"}</Link>
+          {summary.errors ? (
+            <button type="button" style={{ color: "#fff" }} className={cx("inline-flex items-center rounded-lg px-3 py-1.5 text-xs font-medium", filter.flags === "errors" ? "bg-[var(--detractor)]" : "bg-neutral-500 hover:bg-[var(--detractor)]")} title="Show only the rows with errors" onClick={() => { setFilter((f) => ({ ...f, flags: f.flags === "errors" ? "" : "errors" })); setExpanded(new Set(data.products.map((p) => p.id))); }}>{summary.errors} error{summary.errors === 1 ? "" : "s"} block export{filter.flags === "errors" ? " · showing" : " · show"}</button>
+          ) : (
+            <Link href={`/batches/${batchId}/export`} style={{ color: "#fff" }} className="inline-flex items-center rounded-lg bg-[var(--ink)] px-3 py-1.5 text-xs font-medium hover:bg-black">Export →</Link>
+          )}
         </div>
       </div>
 
+      <div className="flag-legend mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-[var(--ink-soft)]" aria-label="What the dots mean">
+        <span><span className="flag error" /> stops the export until it is fixed</span>
+        <span><span className="flag warning" /> worth a look; the file goes out regardless</span>
+        <span>Hover a row&rsquo;s dots to read them. The first columns stay put as the grid scrolls.</span>
+      </div>
       {(withoutPrice > 0 || withoutDescription > 0) && !locked && (
         <Alert tone="info" className="mb-3">
           {[
@@ -383,11 +407,11 @@ export function ReviewGrid({ initial, batchId }: { initial: ReviewData; batchId:
               <th />
             </tr>
             <tr>
-              <th style={{ width: 28 }}><input type="checkbox" checked={selected.size > 0 && visible.every((p) => selected.has(p.id))} onChange={(e) => toggleAll(e.target.checked)} /></th>
-              <th style={{ width: 24 }} />
-              <th style={{ width: 60 }}>Flags</th>
-              <th style={{ width: 40 }}>Img</th>
-              {VARIANT_COLS.map((c) => <th key={c.key} style={{ minWidth: c.width }} className={cx(c.num && "text-right", c.band && "band-start", !c.editable && "calculated")} title={c.editable ? "Double-click a cell in this column to edit it" : "Calculated — not editable"}>{c.label}</th>)}
+              <th style={{ width: 28 }} className="pin pin-0"><input type="checkbox" checked={selected.size > 0 && visible.every((p) => selected.has(p.id))} onChange={(e) => toggleAll(e.target.checked)} /></th>
+              <th style={{ width: 24 }} className="pin pin-1" />
+              <th style={{ width: 60 }} className="pin pin-2">Flags</th>
+              <th style={{ width: 40 }} className="pin pin-3">Img</th>
+              {VARIANT_COLS.map((c, ci) => <th key={c.key} style={{ minWidth: c.width }} className={cx(c.num && "text-right", c.band && "band-start", !c.editable && "calculated", ci === 0 && "pin pin-4 pin-end")} title={c.editable ? "Double-click a cell in this column to edit it" : "Calculated — not editable"}>{c.label}</th>)}
               <th />
             </tr>
           </thead>
@@ -408,14 +432,14 @@ export function ReviewGrid({ initial, batchId }: { initial: ReviewData; batchId:
                     ]
                   : []),
                 <tr key={p.id} className={cx("product-row", tone && `row-${tone}`, selected.has(p.id) && "selected")}>
-                  <td><span className="cell"><input type="checkbox" checked={selected.has(p.id)} onChange={(e) => { const s = new Set(selected); if (e.target.checked) s.add(p.id); else s.delete(p.id); setSelected(s); }} /></span></td>
-                  <td><button className="cell" onClick={() => { const s = new Set(expanded); if (open) s.delete(p.id); else s.add(p.id); setExpanded(s); }}>{open ? "▾" : "▸"}</button></td>
-                  <td><span className="cell" title={pFlags.map((f) => f.message).join("\n")}>{p.flags.map((f, i) => <span key={i} className={cx("flag", f.severity)} />)}{p.variants.some((v) => v.flags.length) && <span className="text-[10px] text-[var(--ink-soft)]">+{p.variants.reduce((s, v) => s + v.flags.length, 0)}</span>}</span></td>
-                  <td><button className="cell" onClick={() => setDrawer(p.id)} title="Images & details">{/* eslint-disable-next-line @next/next/no-img-element -- supplier CDN hosts are arbitrary */}
+                  <td className="pin pin-0"><span className="cell"><input type="checkbox" checked={selected.has(p.id)} onChange={(e) => { const s = new Set(selected); if (e.target.checked) s.add(p.id); else s.delete(p.id); setSelected(s); }} /></span></td>
+                  <td className="pin pin-1"><button className="cell" onClick={() => { const s = new Set(expanded); if (open) s.delete(p.id); else s.add(p.id); setExpanded(s); }}>{open ? "▾" : "▸"}</button></td>
+                  <td className="pin pin-2"><span className="cell" title={pFlags.map((f) => f.message).join("\n")}>{p.flags.map((f, i) => <span key={i} className={cx("flag", f.severity)} />)}{p.variants.some((v) => v.flags.length) && <span className="text-[10px] text-[var(--ink-soft)]">+{p.variants.reduce((s, v) => s + v.flags.length, 0)}</span>}</span></td>
+                  <td className="pin pin-3"><button className="cell" onClick={() => setDrawer(p.id)} title="Images & details">{/* eslint-disable-next-line @next/next/no-img-element -- supplier CDN hosts are arbitrary */}
                   {p.images[0] ? <img src={p.images[0].url} alt="" className="thumb" /> : <span className="thumb inline-block text-center text-[10px] leading-7 text-[var(--ink-soft)]">+</span>}</button></td>
                   <td colSpan={VARIANT_COLS.length + 1}>
                     <div className="flex items-center gap-3 px-2">
-                      <ProductCell p={p} field="title" width={260} edit={productEdit} setEdit={setProductEdit} commit={commitProduct} locked={locked} strong />
+                      <span className="pin-title"><ProductCell p={p} field="title" width={260} edit={productEdit} setEdit={setProductEdit} commit={commitProduct} locked={locked} strong /></span>
                       <span className="text-[var(--ink-soft)]">/</span>
                       <ProductCell p={p} field="handle" width={200} edit={productEdit} setEdit={setProductEdit} commit={commitProduct} locked={locked} mono />
                       <ProductCell p={p} field="vendor" width={110} edit={productEdit} setEdit={setProductEdit} commit={commitProduct} locked={locked} label="Vendor" />
@@ -437,16 +461,16 @@ export function ReviewGrid({ initial, batchId }: { initial: ReviewData; batchId:
                       const vt = worst(v.flags);
                       return (
                         <tr key={v.id} className={cx("variant-row", vt && `row-${vt}`, selected.has(p.id) && "selected")}>
-                          <td /><td />
-                          <td><span className="cell" title={v.flags.map((f) => f.message).join("\n")}>{v.flags.map((f, i) => <span key={i} className={cx("flag", f.severity)} />)}</span></td>
+                          <td className="pin pin-0" /><td className="pin pin-1" />
+                          <td className="pin pin-2"><span className="cell" title={v.flags.map((f) => f.message).join("\n")}>{v.flags.map((f, i) => <span key={i} className={cx("flag", f.severity)} />)}</span></td>
                           {/* eslint-disable-next-line @next/next/no-img-element -- supplier CDN hosts are arbitrary */}
-                          <td><span className="cell">{p.images.find((i) => i.variantId === v.id) ? <img src={p.images.find((i) => i.variantId === v.id)!.url} alt="" className="thumb" /> : null}</span></td>
+                          <td className="pin pin-3"><span className="cell">{p.images.find((i) => i.variantId === v.id) ? <img src={p.images.find((i) => i.variantId === v.id)!.url} alt="" className="thumb" /> : null}</span></td>
                           {VARIANT_COLS.map((c, ci) => {
                             const isFocus = focus?.variantId === v.id && focus.col === ci;
                             const isEdit = editing?.variantId === v.id && editing.col === ci;
                             const disabledOpt = (c.key === "option2Value" && !p.option2Name) || (c.key === "option3Value" && !p.option3Name) || (c.key === "option1Value" && !p.option1Name);
                             return (
-                              <td key={c.key} data-cell={`${v.id}:${ci}`} className={cx(c.band && "band-start", !c.editable && "calculated")}>
+                              <td key={c.key} data-cell={`${v.id}:${ci}`} className={cx(c.band && "band-start", !c.editable && "calculated", ci === 0 && "pin pin-4 pin-end")}>
                                 {isEdit ? (
                                   c.kind === "select" && c.key === "gstTreatment" ? (
                                     <span className="cell"><select autoFocus value={editing.value} onChange={(e) => { commitVariant(v.id, "gstTreatment", e.target.value); setEditing(null); }} onBlur={() => setEditing(null)}><option value="EXCLUSIVE">Ex GST</option><option value="INCLUSIVE">Inc GST</option><option value="NONE">No GST</option></select></span>

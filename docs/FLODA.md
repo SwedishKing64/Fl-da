@@ -81,6 +81,20 @@ standalone folder with an empty template database; `electron-builder.yml` wraps 
 `.github/workflows/desktop.yml` builds the Windows installer on a Windows runner and the Mac
 disk image on a Mac runner whenever a `v*` tag is pushed, and attaches them to the release.
 
+**Training and Rules.** One page (`/training`, admins) for everything Flöda is taught: the
+shop's website, each supplier's paperwork (`SuppliersStep` standing alone, with the remembered
+layouts listed), the Shopify export (`LearnPanel`) and the rules for every listing (`HouseForm`).
+Settings keeps the shop's name and tax, the reading key, staff, backups and the deployment's
+health. **The website is the list of kinds of product** (`website.ts`): a Shopify store is read
+from `/collections.json`, page by page; any other site from the links in its menus; promotions,
+brands, gift cards and pages about the shop are left out (`isKindOfProduct`). The person ticks
+what to keep, can add a category the reader missed, and the list is kept under `shop.website`
+and folded into the vocabulary (`Conventions.website` in `taxonomy.ts`): every category is a
+Type. Once the shop has any kinds of product at all (`typesAreKnown`), a Type outside them is
+`UNKNOWN_TYPE`, a hard error that stops the export, and the review grid's Type cell and bulk
+action pick from the list rather than take typing. Nothing a reader proposes is ever written as
+a Type the site does not have.
+
 **The open copy.** A desktop build made with `FLODA_OPEN=1` (`electron-builder.open.yml`, the
 "open" box on the Desktop app workflow) has no sign-in and no licence: `/open` signs whoever opens
 the window in as the copy's owner, an admin called "Shop owner" made the first time

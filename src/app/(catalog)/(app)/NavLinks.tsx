@@ -13,6 +13,7 @@ const ICONS: Record<string, React.ReactNode> = {
   pricing: <><rect x="5" y="3" width="14" height="18" rx="2" /><path d="M8.5 7h7M8.5 11.5h2M13.5 11.5h2M8.5 15h2M13.5 15h2M8.5 18.5h7" /></>,
   history: <><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1" /><path d="M3.5 4.5v4.2h4.2M12 7.5V12l3 2" /></>,
   settings: <><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></>,
+  training: <><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4H20v13H6.5A2.5 2.5 0 0 0 4 19.5z" /><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M8.5 8.5h7M8.5 12h4.5" /></>,
   clients: <><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.6a3.5 3.5 0 0 1 0 6.8M21.5 20a6.5 6.5 0 0 0-4.5-6.2" /></>,
 };
 
@@ -23,6 +24,7 @@ const LINKS = [
   { href: "/tidy", label: "Tidy a document", icon: "tidy" },
   { href: "/pricing", label: "Price calculator", icon: "pricing" },
   { href: "/history", label: "History", icon: "history" },
+  { href: "/training", label: "Training and Rules", icon: "training", admin: true },
   { href: "/settings", label: "Settings", icon: "settings", admin: true },
   { href: "/clients", label: "Clients", icon: "clients", admin: true, vendor: true },
 ];

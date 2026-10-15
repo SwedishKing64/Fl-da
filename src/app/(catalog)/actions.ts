@@ -1753,6 +1753,49 @@ export async function learnTemplatesAction(input: { file: string; groups: import
   });
 }
 
+/** Read the shop's website for its categories. Nothing is kept until the person says so. */
+export async function readWebsiteAction(url: string): Promise<ActionResult<import("@/lib/catalog/website").WebsiteCategories>> {
+  await requireUser("ADMIN");
+  return safely(async () => {
+    const { readWebsite } = await import("@/lib/catalog/website");
+    const found = await readWebsite(String(url ?? "").slice(0, 300));
+    return { ok: true, data: found };
+  });
+}
+
+/** Keep the categories the person ticked as the shop's kinds of product. */
+export async function saveWebsiteAction(input: { url: string; source: "shopify" | "menu"; categories: Array<{ title: string; path: string }> }): Promise<ActionResult<{ kinds: number }>> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const { saveWebsiteCategories } = await import("@/lib/catalog/shop-profile");
+    const { siteOrigin } = await import("@/lib/catalog/website");
+    const url = siteOrigin(String(input.url ?? ""));
+    if (!url) throw new Error("That is not a website address.");
+    const seen = new Set<string>();
+    const categories = (input.categories ?? [])
+      .map((c) => ({ title: String(c.title ?? "").trim().slice(0, 120), path: String(c.path ?? "").trim().slice(0, 300) }))
+      .filter((c) => c.title && !seen.has(c.title.toLowerCase()) && seen.add(c.title.toLowerCase()))
+      .slice(0, 1500);
+    if (categories.length === 0) throw new Error("Tick at least one category to keep.");
+    await saveWebsiteCategories({ url, source: input.source === "menu" ? "menu" : "shopify", categories, readAt: new Date().toISOString() });
+    await logAudit("shop.website", { userId: user.id, details: { url, kinds: categories.length } });
+    revalidatePath("", "layout");
+    return { ok: true, data: { kinds: categories.length } };
+  });
+}
+
+/** Forget the website's categories; the kinds of product come from the export alone again. */
+export async function forgetWebsiteAction(): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const { saveWebsiteCategories } = await import("@/lib/catalog/shop-profile");
+    await saveWebsiteCategories(null);
+    await logAudit("shop.website_forgotten", { userId: user.id });
+    revalidatePath("", "layout");
+    return { ok: true };
+  });
+}
+
 /** The key the shop reads documents with, when the host sets none. Tried once before it is kept. */
 export async function saveApiKeyAction(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
   const user = await requireUser("ADMIN");

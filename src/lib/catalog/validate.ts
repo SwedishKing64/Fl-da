@@ -4,7 +4,7 @@
 import { isPublicHttpsUrl } from "./csv";
 import { gtinVerdict, isGtin } from "./gtin";
 import { describeCandidates } from "./match-candidates";
-import { houseConventions } from "./taxonomy";
+import { houseConventions, isValidType, typesAreKnown } from "./taxonomy";
 import { isValidHandle } from "./handle";
 import type { ReviewProduct, ReviewSummary, ReviewVariant } from "./review-types";
 import { HARD_CODES, type RowFlag } from "./types";
@@ -43,6 +43,9 @@ export function validateReview(products: ReviewProduct[], ctx: ValidationContext
     else if ((handleCounts.get(p.handle) ?? 0) > 1) flags.push({ code: "DUPLICATE_HANDLE", severity: "error", message: "Another product in this batch uses the same handle" });
     if (!p.vendor.trim()) flags.push({ code: "MISSING_VENDOR", severity: "warning", message: "No vendor/brand" });
     if (!p.productType.trim()) flags.push({ code: "MISSING_TYPE", severity: "warning", message: "No product type" });
+    // Once the shop has said what its kinds of product are (its website's categories, its export),
+    // a Type outside that list is a place on the site that does not exist. It is never written.
+    else if (typesAreKnown() && !isValidType(p.productType)) flags.push({ code: "UNKNOWN_TYPE", severity: "error", message: `"${p.productType.trim()}" is not one of your kinds of product — pick one from the list` });
     const validImages = p.images.filter((i) => isPublicHttpsUrl(i.url));
     if (p.images.length === 0) flags.push({ code: "NO_IMAGE", severity: "warning", message: "No image - add one or export anyway" });
     else {

@@ -261,6 +261,7 @@ export interface RowFlag {
     | "NEGATIVE_PROFIT"
     | "MISSING_VENDOR"
     | "MISSING_TYPE"
+    | "UNKNOWN_TYPE"
     | "UPDATE_EXISTING"
     | "INVALID_BARCODE"
     | "ODD_BARCODE"
@@ -290,7 +291,7 @@ export const WARNING_CODES: RowFlag["code"][] = [
  * export applies itself (see repair.ts); these are a number or a code that is wrong in a way
  * only a person can settle, and a file with one in it would put that wrong number on the shop.
  */
-export const HARD_CODES: RowFlag["code"][] = ["INVALID_BARCODE", "SWAPPED_CODES", "NEGATIVE_PROFIT", "AMBIGUOUS_MATCH"];
+export const HARD_CODES: RowFlag["code"][] = ["INVALID_BARCODE", "SWAPPED_CODES", "NEGATIVE_PROFIT", "AMBIGUOUS_MATCH", "UNKNOWN_TYPE"];
 
 /**
  * A column holding one of the supplier's own feature bullets: "Bullet 3", "Feature 1", "Tech Spec 2".

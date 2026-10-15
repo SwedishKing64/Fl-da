@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { prisma, databaseLatency } from "@/lib/catalog/db";
 import { requireUser } from "@/lib/catalog/auth";
 import { Card, PageHeader, fmtDate } from "@/app/(catalog)/ui";
@@ -5,14 +6,9 @@ import { UserForm, DeleteUserButton, Status } from "./SettingsForms";
 import { usingBlob, blobTokenSource } from "@/lib/catalog/storage";
 import { blobEnvNamesPresent } from "@/lib/catalog/blob-token";
 import { apiKeySource, keyTail } from "@/lib/catalog/anthropic";
-import { getHouseConventions, getLearnedVocabulary, getShopProfile, getStoredApiKey } from "@/lib/catalog/shop-profile";
-import { productTypes } from "@/lib/catalog/taxonomy";
-import { houseTagRules } from "@/app/(catalog)/actions";
-import { describeLearned } from "@/lib/catalog/learn";
+import { getShopProfile, getStoredApiKey } from "@/lib/catalog/shop-profile";
 import { ShopForm } from "@/app/(catalog)/(setup)/setup/ShopStep";
 import { ApiKeyForm } from "@/app/(catalog)/(setup)/setup/AiStep";
-import { LearnPanel } from "@/app/(catalog)/(setup)/setup/LearnStep";
-import { HouseForm } from "@/app/(catalog)/(setup)/setup/HouseStep";
 import { LicenceForm } from "./LicenceForm";
 import { Backups } from "./Backups";
 import { backupDir, listBackups, sqliteFile } from "@/lib/catalog/backup";
@@ -33,14 +29,11 @@ export const maxDuration = 300;
 
 export default async function SettingsPage() {
   const me = await requireUser("ADMIN");
-  const [users, latency, profile, learned, storedKey, house, tagRules] = await Promise.all([
+  const [users, latency, profile, storedKey] = await Promise.all([
     prisma.user.findMany({ orderBy: { createdAt: "asc" } }),
     databaseLatency(),
     getShopProfile(),
-    getLearnedVocabulary(),
     getStoredApiKey(),
-    getHouseConventions(),
-    houseTagRules(),
   ]);
   return (
     <>
@@ -50,13 +43,8 @@ export default async function SettingsPage() {
           <ShopForm profile={profile} />
         </Card>
         <div className="grid gap-6">
-          <Card title="What Flöda has learned">
-            {learned ? (
-              <ul className="mb-4 list-disc pl-5 text-[14px]">{describeLearned(learned).map((l) => <li key={l}>{l}</li>)}</ul>
-            ) : (
-              <p className="mb-4 text-[14px] text-[var(--ink-soft)]">Nothing yet. Flöda learns how you file, tag and name products from your Shopify export, and this card then reads like: &ldquo;14 kinds of product, filed under Snow and Outdoor&rdquo;, &ldquo;shelf tags spelt with hyphens (ski-accessories)&rdquo;, &ldquo;titles lead with the model, not the brand&rdquo;.</p>
-            )}
-            <LearnPanel learned={learned} />
+          <Card title="Training and Rules">
+            <p className="text-[14px] text-[var(--ink-soft)]">What Flöda is taught lives on its own page: your website&apos;s categories as the kinds of product, each supplier&apos;s paperwork, your Shopify export, and the rules for every listing. <Link href="/training" className="font-semibold text-[var(--meta)]">Open Training and Rules →</Link></p>
           </Card>
           <Card title="Reading documents">
             <ApiKeyForm source={apiKeySource()} tail={keyTail(storedKey)} />
@@ -68,10 +56,6 @@ export default async function SettingsPage() {
           )}
         </div>
       </div>
-      <Card title="How you list" className="mb-6">
-        <p className="mb-5 text-[14px] text-[var(--ink-soft)]">The choices a person makes on every listing, which an export cannot show: the brand in the title or not, what the SKU is, what you write for weight, and the tags certain products always get.</p>
-        <HouseForm house={house} tagRules={tagRules} kinds={productTypes()} />
-      </Card>
       <div className="grid gap-6 lg:grid-cols-2">
         <Card title="Staff accounts">
           <p className="mb-3 text-[13.5px] text-[var(--ink-soft)]">Everyone signs in on this same copy: the batches, suppliers and what Flöda has learned live here, so staff use Flöda on this machine (or a hosted copy you run), not each on an install of their own.</p>

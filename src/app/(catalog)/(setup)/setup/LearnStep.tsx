@@ -6,8 +6,8 @@ import Link from "next/link";
 import { learnTemplatesAction, learnVocabularyAction, rememberListingsAction, skipSetupStepAction } from "@/app/(catalog)/actions";
 import { Alert, Button, Card } from "@/app/(catalog)/ui";
 import { describeLearned, learnVocabulary } from "@/lib/catalog/learn";
-import { listingsFromCsv } from "@/lib/catalog/shop-memory";
-import { analyseShopifyCsvGroups } from "@/lib/catalog/templates";
+import { listingsFromCsv, type Listing } from "@/lib/catalog/shop-memory";
+import { analyseShopifyCsvGroups, type TemplateGroup } from "@/lib/catalog/templates";
 import { parseCsv } from "@/lib/catalog/csv";
 import type { LearnedVocabulary } from "@/lib/catalog/taxonomy";
 
@@ -19,40 +19,73 @@ function isShopifyExport(header: string[]): boolean {
 
 type Outcome = { learned: LearnedVocabulary; lines: string[]; templates: number; remembered: number; warnings: string[] };
 
+/** What one chosen export looks like before it is read in full. */
+type Chosen = { file: File; problem?: string };
+
+const fmtSize = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`);
+
+/** The same brand and kind from two exports count once, the bigger group winning. */
+function mergeGroups(all: TemplateGroup[]): TemplateGroup[] {
+  const byKey = new Map<string, TemplateGroup>();
+  for (const g of all) {
+    const key = `${g.vendor.trim().toLowerCase()}\u0000${g.productType.trim().toLowerCase()}`;
+    const have = byKey.get(key);
+    if (!have || g.analysis.productCount > have.analysis.productCount) byKey.set(key, g);
+  }
+  return [...byKey.values()];
+}
+
 /**
- * Teach Flöda the shop from its own Shopify export. The file is read here in the browser — it can
- * be tens of megabytes — and three small things go to the server: the vocabulary, the templates
- * per brand and kind, and the listings in chunks.
+ * Teach Flöda the shop from its own Shopify export — one file, or several when the shop exports
+ * a category at a time. The files are read here in the browser — they can be tens of megabytes —
+ * and three small things go to the server: the vocabulary, the templates per brand and kind, and
+ * the listings in chunks. A product in two files counts once.
  */
 export function LearnPanel({ learned: before, next, onDone }: { learned: LearnedVocabulary | null; next?: string; onDone?: () => void }) {
   const [pending, start] = useTransition();
+  const [chosen, setChosen] = useState<Chosen[]>([]);
   const [progress, setProgress] = useState("");
   const [error, setError] = useState("");
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const router = useRouter();
+  const usable = chosen.filter((c) => !c.problem);
 
-  const teach = (file: File) => {
+  const add = async (files: File[]) => {
+    setError(""); setOutcome(null);
+    const checked = await Promise.all(files.map(async (file): Promise<Chosen> => {
+      const header = parseCsv(await file.slice(0, 20000).text())[0] ?? [];
+      return isShopifyExport(header) ? { file } : { file, problem: "Not a Shopify product export: it needs Handle, Title and Variant Price columns." };
+    }));
+    setChosen((was) => [...was.filter((c) => !checked.some((n) => n.file.name === c.file.name)), ...checked]);
+  };
+
+  const teach = () => {
+    const files = usable.map((c) => c.file);
+    if (files.length === 0) return;
     setError(""); setOutcome(null);
     start(async () => {
       try {
-        setProgress("Reading the file…");
-        const text = await file.text();
-        const header = parseCsv(text.slice(0, 20000))[0] ?? [];
-        if (!isShopifyExport(header)) {
-          setError("That is not a Shopify product export: it needs Handle, Title and Variant Price columns. In Shopify, Products → Export → All products, as a CSV.");
-          setProgress("");
-          return;
+        const byHandle = new Map<string, Listing>();
+        const groups: TemplateGroup[] = [];
+        const warnings: string[] = [];
+        for (const [i, file] of files.entries()) {
+          setProgress(files.length > 1 ? `Reading ${file.name} (${i + 1} of ${files.length})…` : "Reading the file…");
+          const text = await file.text();
+          for (const l of listingsFromCsv(text)) byHandle.set(l.handle, l);
+          const found = analyseShopifyCsvGroups(text);
+          groups.push(...found.groups);
+          warnings.push(...found.warnings.map((w) => (files.length > 1 ? `${file.name}: ${w}` : w)));
         }
-        const listings = listingsFromCsv(text);
-        if (listings.length === 0) { setError("No products were found in the file."); setProgress(""); return; }
+        const listings = [...byHandle.values()];
+        if (listings.length === 0) { setError(files.length > 1 ? "No products were found in the files." : "No products were found in the file."); setProgress(""); return; }
+        const label = files.map((f) => f.name).join(" + ");
         setProgress(`Working out how ${listings.length.toLocaleString("en-AU")} products are filed and tagged…`);
-        const learned = learnVocabulary(listings, file.name);
-        const { groups, warnings } = analyseShopifyCsvGroups(text);
+        const learned = learnVocabulary(listings, label);
 
         setProgress("Keeping what was learned…");
         const v = await learnVocabularyAction(learned);
         if (!v.ok) throw new Error(v.error);
-        const t = await learnTemplatesAction({ file: file.name, groups });
+        const t = await learnTemplatesAction({ file: label, groups: mergeGroups(groups) });
         if (!t.ok) throw new Error(t.error);
 
         let remembered = 0;
@@ -63,6 +96,7 @@ export function LearnPanel({ learned: before, next, onDone }: { learned: Learned
           remembered += r.data!.remembered;
         }
         setOutcome({ learned, lines: describeLearned(learned), templates: t.data!.templates, remembered, warnings });
+        setChosen([]);
         setProgress("");
         onDone?.();
         router.refresh();
@@ -81,10 +115,29 @@ export function LearnPanel({ learned: before, next, onDone }: { learned: Learned
         </Alert>
       )}
       <label className={`block cursor-pointer rounded-[12px] border-2 border-dashed p-6 text-center ${pending ? "border-[var(--line)] bg-neutral-50" : "border-[var(--meta)] bg-[var(--meta-tint)] hover:bg-[var(--meta-tint-2)]"}`}>
-        <input type="file" accept=".csv,text/csv" className="sr-only" disabled={pending} onChange={(e) => { const f = e.target.files?.[0]; if (f) teach(f); e.target.value = ""; }} />
-        <span className="block text-[15px] font-semibold">{pending ? progress || "Working…" : "Choose your Shopify product export (CSV)"}</span>
-        {!pending && <span className="mt-1 block text-[13px] text-[var(--ink-soft)]">In Shopify: Products → Export → All products → CSV for Excel, Numbers or other. The whole file is read here on your computer; only what was learned is kept.</span>}
+        <input type="file" accept=".csv,text/csv" multiple className="sr-only" disabled={pending} onChange={(e) => { const files = Array.from(e.target.files ?? []); if (files.length) void add(files); e.target.value = ""; }} />
+        <span className="block text-[15px] font-semibold">{pending ? progress || "Working…" : chosen.length ? "Add another export" : "Choose your Shopify product export (CSV)"}</span>
+        {!pending && <span className="mt-1 block text-[13px] text-[var(--ink-soft)]">In Shopify: Products → Export → All products → CSV for Excel, Numbers or other. One file, or several if you export a category at a time. The whole file is read here on your computer; only what was learned is kept.</span>}
       </label>
+      {chosen.length > 0 && !pending && (
+        <div className="rounded-[12px] border border-[var(--line)] bg-white">
+          <ul className="divide-y divide-[var(--line-soft)] text-[14px]">
+            {chosen.map((c) => (
+              <li key={c.file.name} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                <span className="min-w-0">
+                  <span className="block truncate font-medium">{c.file.name}</span>
+                  <span className={`block text-[12px] ${c.problem ? "text-[var(--danger)]" : "text-[var(--ink-soft)]"}`}>{c.problem ?? fmtSize(c.file.size)}</span>
+                </span>
+                <button type="button" className="shrink-0 text-[13px] text-[var(--ink-soft)] hover:text-[var(--ink)]" onClick={() => setChosen((was) => was.filter((x) => x !== c))}>Remove</button>
+              </li>
+            ))}
+          </ul>
+          <div className="flex items-center justify-between gap-3 border-t border-[var(--line-soft)] px-4 py-3">
+            <span className="text-[13px] text-[var(--ink-soft)]">{usable.length === 1 ? "1 export" : `${usable.length} exports`} to learn from{usable.length > 1 ? "; a product in two of them counts once" : ""}.</span>
+            <Button size="sm" disabled={usable.length === 0} onClick={teach}>Teach Flöda</Button>
+          </div>
+        </div>
+      )}
       {error && <Alert tone="danger">{error}</Alert>}
       {outcome && (
         <Alert tone="success">

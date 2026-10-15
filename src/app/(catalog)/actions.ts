@@ -5,7 +5,7 @@ import { after } from "next/server";
 import type { ExportResult } from "@/lib/catalog/pipeline";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { PLAN_IDS, planOf } from "@/lib/catalog/plans";
+import { PLAN_IDS, planOf, TRIAL_DAYS } from "@/lib/catalog/plans";
 import { prisma, parseJson, createTables, databaseStatus } from "@/lib/catalog/db";
 import { createSession, destroySession, hashPassword, requireUser, usersExist, verifyPassword } from "@/lib/catalog/auth";
 import { allocateBatchFreight, applyMappings, autoApplyMappings, applyRulesToBatch, attachUnassignedPhotos, extractStoredFile, loadReview, repriceBatch, repriceVariant, verifyBatchImages, exportBatch, exportFileText, type ApplyMappingInput, type ReviewData } from "@/lib/catalog/pipeline";
@@ -1842,7 +1842,7 @@ export async function deleteClientAction(id: string): Promise<ActionResult> {
   });
 }
 
-/** A lead from the landing page becomes a client on a 30-day trial, with a key to send them. */
+/** A lead from the landing page becomes a client on a 14-day trial, with a key to send them. */
 export async function clientFromLeadAction(at: string): Promise<ActionResult<{ key: string }>> {
   return safely(async () => {
     const user = await requireVendorAdmin();
@@ -1854,7 +1854,7 @@ export async function clientFromLeadAction(at: string): Promise<ActionResult<{ k
     const key = newLicenceKey();
     const plan = planOf(lead.plan);
     const client = await prisma.client.create({
-      data: { name: lead.shop, email: lead.email, plan: plan.id, status: "TRIAL", expiresAt: new Date(Date.now() + 30 * 86_400_000), licenceKey: key, aiCapCents: plan.readingCapCents, notes: [lead.sells && `Sells: ${lead.sells}`, lead.platform && `Platform: ${lead.platform}`, lead.note && `Note: ${lead.note}`].filter(Boolean).join("\n") },
+      data: { name: lead.shop, email: lead.email, plan: plan.id, status: "TRIAL", expiresAt: new Date(Date.now() + TRIAL_DAYS * 86_400_000), licenceKey: key, aiCapCents: plan.readingCapCents, notes: [lead.sells && `Sells: ${lead.sells}`, lead.platform && `Platform: ${lead.platform}`, lead.note && `Note: ${lead.note}`].filter(Boolean).join("\n") },
     });
     const rest = leads.filter((l) => l.at !== at);
     await prisma.appSetting.update({ where: { key: "floda.leads" }, data: { value: JSON.stringify(rest) } });

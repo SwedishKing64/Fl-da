@@ -116,7 +116,7 @@ function Leads({ leads }: { leads: LeadRow[] }) {
               <div className="text-xs text-[var(--ink-soft)]">{[l.plan && `${planOf(l.plan).name} plan`, l.sells, l.platform, fmtDate(l.at)].filter(Boolean).join(" · ")}{l.note ? ` — ${l.note}` : ""}</div>
             </div>
             <div className="flex gap-1">
-              <Button size="sm" variant="primary" disabled={pending} onClick={() => start(async () => { const r = await clientFromLeadAction(l.at); setNote(r.ok ? `${l.shop} is a client on a 30-day trial. Send them their key: ${r.data!.key}` : r.error); })}>Make a client</Button>
+              <Button size="sm" variant="primary" disabled={pending} onClick={() => start(async () => { const r = await clientFromLeadAction(l.at); setNote(r.ok ? `${l.shop} is a client on a 14-day trial. Send them their key: ${r.data!.key}` : r.error); })}>Make a client</Button>
               <Button size="sm" variant="ghost" disabled={pending} onClick={() => { if (confirm("Drop this lead?")) start(async () => { await dismissLeadAction(l.at); }); }}>Drop</Button>
             </div>
           </li>

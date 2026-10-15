@@ -8,6 +8,9 @@
  * only hard stop, and it is the vendor's to raise.
  */
 
+/** Every plan starts with this many days free. */
+export const TRIAL_DAYS = 14;
+
 export type PlanId = "starter" | "shop" | "unlimited";
 
 export interface Plan {

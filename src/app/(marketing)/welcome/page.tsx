@@ -265,7 +265,7 @@ export default function WelcomePage() {
                 <h3>A Flöda engineer sets it up with you. Not a help centre.</h3>
                 <p>Every plan starts the same way: a forward-deployed engineer gets on a call with you, loads your Shopify catalogue so Flöda learns how you file and name things, and reads your first invoices with you, supplier by supplier, fixing anything in the wrong column until it reads the way you would. What you settle together is remembered for every invoice after.</p>
                 <ul className="ticks">
-                  <li>30 days free, no card to start</li>
+                  <li>14 days free, no card to start</li>
                   <li>Windows and Mac app, or hosted</li>
                   <li>Your data stays on your machine</li>
                   <li>Change plan any month; nothing stops when a busy month runs past it</li>
@@ -273,7 +273,7 @@ export default function WelcomePage() {
               </Reveal>
               <Reveal delay={2} className="form-card">
                 <div id="register">
-                  <h3>Start your 30-day trial</h3>
+                  <h3>Start your 14-day trial</h3>
                   <RegisterForm />
                 </div>
               </Reveal>
@@ -286,7 +286,7 @@ export default function WelcomePage() {
           <div className="wrap">
             <Reveal>
               <h2>Your next season&rsquo;s paperwork, read for you.</h2>
-              <p className="lede">Thirty days free, then from $49 a month. A Flöda engineer sets it up with you on one of your own supplier invoices.</p>
+              <p className="lede">Two weeks free on any plan, then from $49 a month. A Flöda engineer sets it up with you on one of your own supplier invoices.</p>
               <a href="#register" className="btn btn-meta btn-lg">Start free trial<span aria-hidden>→</span></a>
             </Reveal>
           </div>

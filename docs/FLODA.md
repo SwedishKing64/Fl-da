@@ -154,7 +154,8 @@ Everything in `HANDOVER.md` under "Working on it" applies. In addition:
   changes with the step in view) and the FAQ accordion. Pages: `/welcome` (landing), `/about`,
   `/faq`, `/privacy`, `/download` (the newest release's installers, asked of GitHub's API and
   remembered for ten minutes, with the releases page as the fallback). `src/proxy.ts` lists them
-  as public.
+  as public. The landing page's "The product" section (`Screens.tsx`) shows real screens from a
+  copy with a Burton order read into it (`public/shots/`); every header page has a menu.
 - A copy that checks a licence begins setup with its plan (`TrialStep.tsx`): the admin picks a
   plan and starts the 14-day trial from inside the app, or enters a key. The vendor answers
   `POST /api/licence/trial` by making the client and the key (one trial per email address) and

@@ -15,6 +15,7 @@ const MENUS: Array<{ label: string; items: Array<{ href: string; label: string; 
     label: "Product",
     items: [
       { href: "/welcome#product", label: "What it does", hint: "New products, prices and stock, tidying a document" },
+      { href: "/welcome#screens", label: "The screens", hint: "The product with a real order in it" },
       { href: "/welcome#how", label: "How it works", hint: "Three steps; the third one is you checking" },
       { href: "/welcome#who", label: "Who it's for", hint: "Retailers whose suppliers send paperwork" },
       { href: "/faq", label: "Questions", hint: "Data, security, suppliers, Shopify, the trial" },
@@ -28,6 +29,22 @@ const MENUS: Array<{ label: string; items: Array<{ href: string; label: string; 
       { href: "mailto:hello@floda.ai", label: "Contact", hint: "hello@floda.ai, answered by a person" },
     ],
   },
+  {
+    label: "Pricing",
+    items: [
+      { href: "/welcome#pricing", label: "Plans", hint: "Starter, Shop and Unlimited, sized by the month's paperwork" },
+      { href: "/welcome#pricing", label: "What it saves", hint: "A 50-product order by hand against through Flöda" },
+      { href: "/welcome#register", label: "Start the free trial", hint: "14 days on any plan, no card" },
+    ],
+  },
+  {
+    label: "Download",
+    items: [
+      { href: "/download", label: "Windows", hint: "Windows 10 or 11; keeps itself current" },
+      { href: "/download", label: "Mac", hint: "Apple silicon and Intel" },
+      { href: "/welcome#screens", label: "See the screens", hint: "The product with a real order in it" },
+    ],
+  },
 ];
 
 function Menu({ label, items, open, onOpen, onClose }: { label: string; items: (typeof MENUS)[number]["items"]; open: boolean; onOpen: () => void; onClose: () => void }) {
@@ -38,7 +55,7 @@ function Menu({ label, items, open, onOpen, onClose }: { label: string; items: (
       </button>
       <div className="panel" role="menu">
         {items.map((it) => (
-          <Link key={it.href} href={it.href} role="menuitem" onClick={onClose}>
+          <Link key={it.label} href={it.href} role="menuitem" onClick={onClose}>
             <span className="t">{it.label}</span>
             <span className="h">{it.hint}</span>
           </Link>
@@ -79,8 +96,6 @@ export function SiteBar() {
         <Link href="/welcome" className="mark" aria-label="Flöda home"><Logo size={24} /></Link>
         <nav aria-label="Site">
           {MENUS.map((m) => <Menu key={m.label} label={m.label} items={m.items} open={open === m.label} onOpen={() => openMenu(m.label)} onClose={closeMenu} />)}
-          <Link href="/welcome#pricing">Pricing</Link>
-          <Link href="/download">Download</Link>
         </nav>
         <div className="bar-ctas">
           <Link href="/login" className="btn btn-grey">Sign in</Link>
@@ -93,13 +108,11 @@ export function SiteBar() {
           {MENUS.map((m) => (
             <div key={m.label} className="group">
               <div className="gl">{m.label}</div>
-              {m.items.map((it) => <Link key={it.href} href={it.href} onClick={() => setMobile(false)}>{it.label}</Link>)}
+              {m.items.map((it) => <Link key={it.label} href={it.href} onClick={() => setMobile(false)}>{it.label}</Link>)}
             </div>
           ))}
           <div className="group">
-            <div className="gl">More</div>
-            <Link href="/welcome#pricing" onClick={() => setMobile(false)}>Pricing</Link>
-            <Link href="/download" onClick={() => setMobile(false)}>Download</Link>
+            <div className="gl">Account</div>
             <Link href="/login" onClick={() => setMobile(false)}>Sign in</Link>
           </div>
         </div>

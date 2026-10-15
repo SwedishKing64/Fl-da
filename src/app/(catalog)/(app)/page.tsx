@@ -5,6 +5,7 @@ import type { ReviewSummary } from "@/lib/catalog/review-types";
 import { apiKeySource } from "@/lib/catalog/anthropic";
 import { getLearnedVocabulary, getShopProfile } from "@/lib/catalog/shop-profile";
 import { GettingStarted } from "./GettingStarted";
+import { NavIcon } from "./NavLinks";
 
 /**
  * Home. Three jobs the shop comes here to do, each a card you press, and the batches on the way
@@ -30,24 +31,21 @@ const JOBS = [
     title: "Add new products",
     text: "An invoice or order confirmation goes in — a spreadsheet, a PDF or a photo — and ready-to-import Shopify products come out, priced and tagged the way the shop does it.",
     go: "Start with an invoice",
-    goIcon: "🧾",
-    icon: "📦",
+    icon: "batches",
   },
   {
     href: "/bulk",
     title: "Change prices or stock",
     text: "Load your shop export, say what should change in plain words — a sale, a clearance, a delivery to add to stock — check the list, download the file.",
     go: "Open prices and stock",
-    goIcon: "✨",
-    icon: "🏷️",
+    icon: "bulk",
   },
   {
     href: "/tidy",
     title: "Tidy a photo of paperwork",
     text: "A scribbled-on order confirmation, read into a table you can check, pen marks and all, and saved as a CSV the other two pages take.",
     go: "Read a photo",
-    goIcon: "📷",
-    icon: "📸",
+    icon: "tidy",
   },
 ];
 
@@ -81,10 +79,10 @@ export default async function DashboardPage() {
       <div className="mb-8 grid gap-4 md:grid-cols-3">
         {JOBS.map((j, i) => (
           <Link key={j.href} href={j.href} className={`job lift rise rise-${i + 1}`}>
-            <span className="job-ico" aria-hidden>{j.icon}</span>
+            <span className="job-ico" aria-hidden><NavIcon name={j.icon} /></span>
             <h2>{j.title}</h2>
             <p>{j.text}</p>
-            <span className="job-go"><span className="emo-btn" aria-hidden>{j.goIcon}</span>{j.go} <span aria-hidden>→</span></span>
+            <span className="job-go btn-primary">{j.go} <span aria-hidden>→</span></span>
           </Link>
         ))}
       </div>

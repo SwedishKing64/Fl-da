@@ -264,7 +264,7 @@ async function readOnce(content: ContentBlocks, options: ReadOptions, budgetMs: 
   const left = () => Math.max(5_000, deadline - Date.now());
   const params = {
     model: options.known ? WORKING_MODEL : READING_MODEL,
-    max_tokens: 16000,
+    max_tokens: 32_000,
     system: cachedSystem(reader.system, SHOP()),
     thinking: { type: "adaptive" as const },
     output_config: { format: zodOutputFormat(reader.schema), effort: "medium" as const },

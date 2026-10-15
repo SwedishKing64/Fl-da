@@ -56,7 +56,7 @@ export async function generateSeo(input: SeoInput): Promise<{ result: z.infer<ty
   try {
     const response = await getClient().messages.parse({
       model: WORKING_MODEL,
-      max_tokens: 4000,
+      max_tokens: 16_000,
       system: [
         `You write product copy for the Shopify store of ${retailer()}. Tone: ${settings.seoTone}. ${englishVariant()}. Use only facts given; never invent specs. seoTitle max 60 characters, seoDescription 120-155 characters.`,
         // The shop's own written conventions outrank the generic instructions above, but never

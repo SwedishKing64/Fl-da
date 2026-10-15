@@ -382,7 +382,7 @@ export async function planAdjustment(
 
   const response = await retrying(() => getClient().messages.stream({
     model: WORKING_MODEL,
-    max_tokens: 2000,
+    max_tokens: 32_000,
     system: cachedSystem(SYSTEM, SHOP()),
     output_config: { format: zodOutputFormat(PlanSchema), effort: "low" },
     messages: [{ role: "user", content: context }],
@@ -535,7 +535,7 @@ export async function splitInstructions(input: string | { pdf: Buffer } | { imag
 
   const response = await retrying(() => getClient().messages.stream({
     model: WORKING_MODEL,
-    max_tokens: 8000,
+    max_tokens: 32_000,
     system: cachedSystem(SPLIT_SYSTEM, SHOP()),
     output_config: { format: zodOutputFormat(SplitSchema), effort: "low" },
     messages: [{ role: "user", content }],
@@ -565,7 +565,7 @@ export async function readInstructionImage(buffer: Buffer, mimeType: string): Pr
   const isPdf = mimeType === "application/pdf";
   const response = await retrying(() => getClient().messages.stream({
     model: WORKING_MODEL,
-    max_tokens: 4000,
+    max_tokens: 32_000,
     output_config: { effort: "low" },
     system: "Transcribe this document. Write out the text on it, in order, keeping every brand, product name, tag, year, percentage and price exactly as printed. Keep the line and list structure. Do not summarise, explain or reorder, and do not add anything that is not on the page. If part of it is handwritten, transcribe that too and mark it (handwritten).",
     messages: [{
@@ -653,7 +653,7 @@ export async function screenInstructions(
   try {
     response = await retrying(() => getClient().messages.stream({
       model: LIGHT_MODEL,
-      max_tokens: 8000,
+      max_tokens: 32_000,
       system: cachedSystem(SCREEN_SYSTEM, SHOP()),
       output_config: { format: zodOutputFormat(ScreenSchema), effort: "low" },
       messages: [{ role: "user", content: context }],

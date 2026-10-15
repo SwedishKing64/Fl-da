@@ -273,7 +273,7 @@ export async function auditBatchAction(batchId: string): Promise<ActionResult<{ 
   try {
     const { auditReading } = await import("@/lib/catalog/batch-agent");
     const audit = await auditReading(batchId, user.id);
-    if (!audit) return { ok: false, error: "No API key is set, so the build cannot be checked. Add ANTHROPIC_API_KEY in Settings." };
+    if (!audit) return { ok: false, error: (await import("@/lib/catalog/extract/ai")).aiAvailable() ? "The check ran but its answer came back unreadable, so nothing was changed. Press it again." : "No API key is set, so the build cannot be checked. Add ANTHROPIC_API_KEY in the Vercel project's Environment Variables and redeploy." };
     revalidatePath(`/batches/${batchId}`);
     const verdict = audit.verdict === "right" ? "read right" : audit.verdict === "wrong" ? "read wrong" : "not sure";
     const remapped = audit.remapped.length ? `, ${audit.remapped.length} column${audit.remapped.length === 1 ? "" : "s"} re-read${audit.rebuilt ? " and rebuilt" : ""}` : "";
@@ -288,7 +288,7 @@ export async function reviewBatchAction(batchId: string, options: { audited?: bo
   try {
     const { reviewBatch } = await import("@/lib/catalog/batch-agent");
     const review = await reviewBatch(batchId, user.id, undefined, { audit: !options.audited });
-    if (!review) return { ok: false, error: "No API key is set, so the build cannot be checked. Add ANTHROPIC_API_KEY in Settings." };
+    if (!review) return { ok: false, error: (await import("@/lib/catalog/extract/ai")).aiAvailable() ? "The check ran but its answer came back unreadable, so nothing was changed. Press it again." : "No API key is set, so the build cannot be checked. Add ANTHROPIC_API_KEY in the Vercel project's Environment Variables and redeploy." };
     revalidatePath(`/batches/${batchId}`);
     revalidatePath(`/batches/${batchId}/review`);
     // After the check's fixes, what has earned it goes to the store on its own, when the shop has said to.
@@ -1701,27 +1701,29 @@ export async function sendInstructionAction(batchId: string, message: string): P
         // What the build found on the order is the build's to say, whatever the reading made of it.
         directives = { ...reading.directives, typesSeen: directives.typesSeen };
         await prisma.importBatch.update({ where: { id: batchId }, data: { directives: JSON.stringify(directives) } });
-        // Brand, Type, tags and packages are decided when products are BUILT, so a batch already
-        // built has to be built again for them to take — it used to only re-price, and "package
-        // them with the Griffon" changed nothing while the reply said it would.
-        const built = await prisma.product.count({ where: { batchId } });
+        // Brand, Type, tags and packages are decided when products are BUILT, so the products are
+        // built again with the instruction, there and then. The shop asked for exactly that: it
+        // used to rebuild only a batch nobody had edited, and otherwise only re-price and say to
+        // build again from Column mapping — a reply that said the change was made when it was not.
+        // A hand edit on the review page is replaced by the rebuild, and the reply says so.
         let outcome = "";
-        if (built > 0) {
-          const { untouchedSinceBuilt } = await import("@/lib/catalog/pipeline");
-          if (await untouchedSinceBuilt(batchId)) {
-            const rebuilt = await autoApplyMappings(batchId, user.id);
-            // The build check runs again from the page once it sees the rebuild — two requests of
-            // its own. It used to run here as well, after the instruction had been read and the
-            // products rebuilt: four model calls in one request, which the host cut off at its
-            // minute, and the page went down with it.
-            outcome = rebuilt.products > 0 ? ` Rebuilt the ${rebuilt.products} products with this; the build check runs again now.` : "";
-          } else {
-            await repriceBatch(batchId);
-            outcome = " The products have been edited by hand, so they were only re-priced: open Column mapping and build again to apply the rest (that replaces the edits).";
-          }
+        const { untouchedSinceBuilt } = await import("@/lib/catalog/pipeline");
+        const built = await prisma.product.count({ where: { batchId } });
+        const edited = built > 0 && !(await untouchedSinceBuilt(batchId));
+        const rebuilt = await autoApplyMappings(batchId, user.id);
+        if (rebuilt.products > 0) {
+          outcome = ` Rebuilt the ${rebuilt.products} product${rebuilt.products === 1 ? "" : "s"} with this now${edited ? " — the edits made by hand on the review page were replaced by the rebuild" : ""}.`;
+        } else if (built > 0) {
+          await repriceBatch(batchId);
+          outcome = " The products could not be rebuilt automatically (a file's columns need mapping first), so they were re-priced; open Column mapping to build them with this.";
+        } else if (rebuilt.unmapped.length > 0) {
+          outcome = ` It applies as soon as the products are built: ${rebuilt.unmapped.join(", ")} need${rebuilt.unmapped.length === 1 ? "s" : ""} its columns mapped first.`;
         }
         await prisma.batchInstruction.create({ data: { batchId, role: "ASSISTANT", body: `${reading.reply}${outcome}` } });
         await logAudit("batch.instruction", { batchId, userId: user.id, details: directives });
+      } else {
+        // Said plainly rather than nothing at all: the instruction is kept, but nothing acted on it.
+        await prisma.batchInstruction.create({ data: { batchId, role: "ASSISTANT", body: "I could not make sense of that one, so nothing was changed. Say it again, perhaps in other words." } });
       }
     }
 

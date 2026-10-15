@@ -330,7 +330,7 @@ export type AskPage = (system: string, content: string, deadline?: Deadline) => 
 const askModel: AskPage = async (system, content, d = deadline()) => {
   const response = await retrying(() => getClient().messages.stream({
     model: WORKING_MODEL,
-    max_tokens: 5000,
+    max_tokens: 32_000,
     system,
     output_config: { format: zodOutputFormat(ReadSchema), effort: "low" },
     messages: [{ role: "user", content }],
@@ -435,7 +435,7 @@ export async function readViaModelFetch(link: string, hint: PageHint, by: Deadli
   if (!aiAvailable() || outOfTime(by)) return null;
   const research = await retrying(() => getClient().messages.stream({
     model: WORKING_MODEL,
-    max_tokens: 8000,
+    max_tokens: 32_000,
     system: FETCH_SYSTEM(),
     thinking: { type: "adaptive" },
     output_config: { effort: "low" },
@@ -446,7 +446,7 @@ export async function readViaModelFetch(link: string, hint: PageHint, by: Deadli
   if (!notes || outOfTime(by)) return null;
   const shaped = await retrying(() => getClient().messages.stream({
     model: LIGHT_MODEL,
-    max_tokens: 4000,
+    max_tokens: 32_000,
     system: "Turn the notes into fields. Copy what the notes establish and leave everything else empty — never fill a gap with something plausible. Keep the manufacturer's wording.",
     output_config: { format: zodOutputFormat(FetchedSchema), effort: "low" },
     messages: [{ role: "user", content: `${describeHint(hint)}\n\nNotes on the page ${link}:\n${notes}` }],

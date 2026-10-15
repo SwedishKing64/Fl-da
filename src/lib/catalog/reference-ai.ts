@@ -45,7 +45,7 @@ type Ask = (content: string) => Promise<string | undefined>;
 const askModel: Ask = async (content) => {
   const response = await retrying(() => getClient().messages.stream({
     model: WORKING_MODEL,
-    max_tokens: 4000,
+    max_tokens: 32_000,
     system: SYSTEM,
     output_config: { format: zodOutputFormat(Answer), effort: "low" },
     messages: [{ role: "user", content }],

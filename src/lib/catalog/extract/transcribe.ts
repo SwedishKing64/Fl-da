@@ -46,7 +46,7 @@ export type Transcriber = (system: string, content: Anthropic.MessageParam["cont
 const askModel: Transcriber = async (system, content) => {
   const response = await retrying(() => getClient().messages.stream({
     model: READING_MODEL,
-    max_tokens: 16_000,
+    max_tokens: 32_000,
     system,
     output_config: { format: zodOutputFormat(TranscriptSchema), effort: "medium" },
     messages: [{ role: "user", content }],

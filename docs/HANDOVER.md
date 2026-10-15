@@ -33,6 +33,17 @@ and buttons. The owner asked for "extremely easy UI" and buttons "mimicking Meta
 
 ## How the shop works (rules it told us)
 
+**The batch chatbox rebuilds at once (asked 2026-10-15).** An instruction typed on a batch is read
+and the products are built again with it in the same request — whether or not they had been
+built, and even where they were edited by hand on the review page (the reply says the edits were
+replaced). Only a file whose columns still need mapping holds it back, and the reply says which.
+
+**AI answers and the token allowance.** The model thinks before it answers and the thinking comes
+out of the same `max_tokens`; small allowances (2,000-8,000) cut answers off mid-JSON, which showed
+as "No API key is set, so the build cannot be checked" though a key was set. Every call now
+streams with 32,000 (the bill reader 64,000), and the build check says when an answer came back
+unreadable rather than blaming the key.
+
 **No gender in any title (asked 2026-10-15).** "Men's", "Women's", "Ladies", "Unisex" never go in a
 product's title, whether the supplier's name carries them or the shop's older listings do
 (`withoutGender` in `mapping.ts`, used by the import, the delivery builder and the grouping). The

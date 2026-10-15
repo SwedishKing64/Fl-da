@@ -63,7 +63,7 @@ export type Looker = (system: string, content: Anthropic.MessageParam["content"]
 const askModel: Looker = async (system, content) => {
   const response = await getClient().messages.stream({
     model: WORKING_MODEL,
-    max_tokens: 2000,
+    max_tokens: 32_000,
     system,
     output_config: { format: zodOutputFormat(Verdict), effort: "low" },
     messages: [{ role: "user", content }],

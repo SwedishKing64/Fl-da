@@ -79,7 +79,7 @@ export function instructionsAvailable(): boolean {
 }
 
 const ReadSchema = z.object({
-  reply: z.string().describe("One or two short sentences confirming what will be done, in the person's own terms. Plain text."),
+  reply: z.string().describe("One or two short sentences saying what has been done, in the person's own terms and the past tense — the products are rebuilt with it straight after, so never “will”, “next build” or “when you rebuild”. Plain text."),
   directives: DirectivesSchema,
 });
 
@@ -100,7 +100,7 @@ export async function readInstructions(thread: Array<{ role: "USER" | "ASSISTANT
 
   const response = await retrying(() => getClient().messages.stream({
     model: WORKING_MODEL,
-    max_tokens: 3000,
+    max_tokens: 32_000,
     system: cachedSystem(SYSTEM),
     thinking: { type: "adaptive" },
     output_config: { format: zodOutputFormat(ReadSchema), effort: "low" },

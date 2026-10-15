@@ -54,7 +54,7 @@ export function runOffline(
     status: "draft",
     published: false,
     seoTitle: seoTitle(g.brand, titleFor(g)),
-    seoDescription: "", lookupStatus: "NONE", lookupSource: "",
+    seoDescription: "", lookupStatus: "NONE", lookupSource: "", matchCandidates: [], matchDecided: false,
     option1Name: g.option1Name,
     option2Name: g.option2Name,
     option3Name: g.option3Name,

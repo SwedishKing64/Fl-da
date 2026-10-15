@@ -188,8 +188,12 @@ model Product {
   option2Name     String?
   option3Name     String?
   metafields      String   @default("{}") // JSON { [key]: value } keyed by ski metafield key
-  reconcileStatus String   @default("UNKNOWN") // UNKNOWN | NEW | VARIANT_ADD | UPDATE
+  reconcileStatus String   @default("UNKNOWN") // UNKNOWN | NEW | VARIANT_ADD | UPDATE | AMBIGUOUS
   shopifyProductId String?
+  // The products in the shop this one could be, when the check found more than one (JSON, see
+  // match-candidates.ts), and whether a person has settled which — a decision a re-check keeps.
+  matchCandidates String   @default("[]")
+  matchDecided    Boolean  @default(false)
   // What the web lookup did about the columns the invoice left empty.
   lookupStatus    String   @default("NONE") // NONE | FOUND | UNSURE | NOT_FOUND | FAILED
   lookupSource    String   @default("") // the manufacturer page the copy was taken from

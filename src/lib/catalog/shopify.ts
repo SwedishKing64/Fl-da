@@ -6,6 +6,7 @@ import { prisma, parseJson } from "./db";
 import { getSettings } from "./settings";
 import { logAudit } from "./audit";
 import { loadReview, toCsvProducts } from "./pipeline";
+import { candidatesFor, type CatalogueRow, type MatchCandidate } from "./match-candidates";
 import type { ReviewProduct } from "./review-types";
 import { SKI_METAFIELDS, type ShopifyLocation } from "./types";
 import { blockingErrors } from "./validate";
@@ -129,41 +130,132 @@ export async function fetchLocations(): Promise<ShopifyLocation[]> {
 // Reconcile: classify each product/variant against the cached catalog
 // ---------------------------------------------------------------------------
 
-export async function reconcileBatch(batchId: string): Promise<{ new: number; variantAdd: number; update: number }> {
+export interface ReconcileCounts { new: number; variantAdd: number; update: number; ambiguous: number }
+
+/**
+ * What the batch is checked against: the store's own catalogue when a store is connected and has
+ * been read, otherwise the listings learned from the shop's export. The export carries handles
+ * and barcodes, which is enough to say "the shop already sells this", if not which variant.
+ */
+async function catalogueRows(): Promise<{ rows: CatalogueRow[]; live: boolean }> {
+  const items = await prisma.shopifyCatalogItem.findMany();
+  if (items.length > 0) return { live: true, rows: items.map((m) => ({ id: m.shopifyProductId, handle: m.handle, title: m.title, sku: m.sku, barcode: m.barcode })) };
+  const listings = await prisma.shopListing.findMany({ select: { handle: true, title: true, barcodes: true } });
+  const rows: CatalogueRow[] = [];
+  for (const l of listings) {
+    const codes = l.barcodes.split(",").map((b) => b.trim()).filter(Boolean);
+    if (codes.length === 0) rows.push({ id: `listing:${l.handle}`, handle: l.handle, title: l.title, sku: "", barcode: "" });
+    for (const b of codes) rows.push({ id: `listing:${l.handle}`, handle: l.handle, title: l.title, sku: "", barcode: b });
+  }
+  return { live: false, rows };
+}
+
+/** Whether there is anything at all to check a batch against. */
+export async function catalogueKnown(): Promise<boolean> {
+  const settings = await getSettings();
+  if (settings.shopify.storeDomain && settings.shopify.accessToken) return true;
+  return (await prisma.shopListing.count()) > 0;
+}
+
+const CACHE_FRESH_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Read the store again when the copy of it is a day old or missing. The check used to read the
+ * store once, the first time, and never again, so a product added in the store last week looked
+ * new to every batch after.
+ */
+export async function refreshCatalogueIfStale(userId: string | null): Promise<void> {
+  const settings = await getSettings();
+  if (!(settings.shopify.storeDomain && settings.shopify.accessToken)) return;
+  const newest = await prisma.shopifyCatalogItem.findFirst({ orderBy: { syncedAt: "desc" }, select: { syncedAt: true } });
+  if (newest && Date.now() - newest.syncedAt.getTime() < CACHE_FRESH_MS) return;
+  await syncCatalog(userId);
+}
+
+/**
+ * Classify each product against what the shop already sells. One match is taken; none is a new
+ * product; more than one is a question for a person, and until it is answered the product is
+ * AMBIGUOUS, which stops the export. A decision somebody made is kept across checks.
+ */
+export async function reconcileBatch(batchId: string): Promise<ReconcileCounts> {
   const products = await prisma.product.findMany({ where: { batchId }, include: { variants: true } });
-  const counts = { new: 0, variantAdd: 0, update: 0 };
+  const { rows, live } = await catalogueRows();
+  const counts: ReconcileCounts = { new: 0, variantAdd: 0, update: 0, ambiguous: 0 };
   for (const p of products) {
-    const skus = p.variants.map((v) => v.sku.trim()).filter(Boolean);
-    const matches = await prisma.shopifyCatalogItem.findMany({ where: { OR: [{ handle: p.handle }, ...(skus.length ? [{ sku: { in: skus } }] : [])] } });
-    if (matches.length === 0) {
-      counts.new++;
-      await prisma.product.update({ where: { id: p.id }, data: { reconcileStatus: "NEW", shopifyProductId: null } });
-      await prisma.variant.updateMany({ where: { productId: p.id }, data: { reconcileStatus: "NEW", shopifyVariantId: null, shopifyInventoryItemId: null } });
+    if (p.matchDecided) {
+      if (p.reconcileStatus === "NEW") counts.new++;
+      else if (p.reconcileStatus === "VARIANT_ADD") counts.variantAdd++;
+      else counts.update++;
       continue;
     }
-    const shopifyProductId = matches[0].shopifyProductId;
-    const bySku = new Map(matches.filter((m) => m.sku).map((m) => [m.sku.toLowerCase(), m]));
-    // The shop does not use SKUs, so on its own a SKU match recognises almost nothing: every
-    // variant already in the store would come back as one to add, and a re-import would read as
-    // duplicating what is there. What identifies a variant on a product is the options it is sold
-    // by, so that is what is matched when there is no SKU to match on.
-    const byOptions = new Map(matches.map((m) => [optionKey([m.option1, m.option2, m.option3]), m]));
-    let anyNew = false;
-    for (const v of p.variants) {
-      const m = (v.sku ? bySku.get(v.sku.trim().toLowerCase()) : undefined)
-        ?? byOptions.get(optionKey([v.option1Value, v.option2Value, v.option3Value]));
-      if (m) await prisma.variant.update({ where: { id: v.id }, data: { reconcileStatus: "UPDATE", shopifyVariantId: m.shopifyVariantId, shopifyInventoryItemId: m.inventoryItemId } });
-      else {
-        anyNew = true;
-        await prisma.variant.update({ where: { id: v.id }, data: { reconcileStatus: "VARIANT_ADD", shopifyVariantId: null, shopifyInventoryItemId: null } });
-      }
+    const candidates = candidatesFor(p, rows);
+    if (candidates.length === 0) {
+      counts.new++;
+      await setNew(p.id, "[]");
+      continue;
     }
-    const status = anyNew ? "VARIANT_ADD" : "UPDATE";
-    if (anyNew) counts.variantAdd++;
+    if (candidates.length > 1) {
+      counts.ambiguous++;
+      await prisma.product.update({ where: { id: p.id }, data: { reconcileStatus: "AMBIGUOUS", shopifyProductId: null, matchCandidates: JSON.stringify(candidates) } });
+      await prisma.variant.updateMany({ where: { productId: p.id }, data: { reconcileStatus: "UNKNOWN", shopifyVariantId: null, shopifyInventoryItemId: null } });
+      continue;
+    }
+    const status = await attachTo(p, candidates[0], live, JSON.stringify(candidates));
+    if (status === "VARIANT_ADD") counts.variantAdd++;
     else counts.update++;
-    await prisma.product.update({ where: { id: p.id }, data: { reconcileStatus: status, shopifyProductId } });
   }
   return counts;
+}
+
+async function setNew(productId: string, candidatesJson: string): Promise<void> {
+  await prisma.product.update({ where: { id: productId }, data: { reconcileStatus: "NEW", shopifyProductId: null, matchCandidates: candidatesJson } });
+  await prisma.variant.updateMany({ where: { productId }, data: { reconcileStatus: "NEW", shopifyVariantId: null, shopifyInventoryItemId: null } });
+}
+
+/**
+ * Attach a product to the one it is in the shop. Against the store's own catalogue each variant
+ * is placed by SKU, or by its option values — the shop does not use SKUs, so on their own they
+ * recognise almost nothing — and what is not placed is a variant to add. Against the shop's
+ * export only the product is known, so it is an update by handle and the variants are left open.
+ * The handle is set to the shop's, because that is what the CSV updates by.
+ */
+async function attachTo(p: { id: string; handle: string; variants: Array<{ id: string; sku: string; option1Value: string | null; option2Value: string | null; option3Value: string | null }> }, c: MatchCandidate, live: boolean, candidatesJson: string): Promise<"UPDATE" | "VARIANT_ADD"> {
+  if (!live || c.id.startsWith("listing:")) {
+    await prisma.product.update({ where: { id: p.id }, data: { reconcileStatus: "UPDATE", shopifyProductId: null, handle: c.handle, matchCandidates: candidatesJson } });
+    await prisma.variant.updateMany({ where: { productId: p.id }, data: { reconcileStatus: "UNKNOWN", shopifyVariantId: null, shopifyInventoryItemId: null } });
+    return "UPDATE";
+  }
+  const matches = await prisma.shopifyCatalogItem.findMany({ where: { shopifyProductId: c.id } });
+  const bySku = new Map(matches.filter((m) => m.sku).map((m) => [m.sku.toLowerCase(), m]));
+  const byOptions = new Map(matches.map((m) => [optionKey([m.option1, m.option2, m.option3]), m]));
+  let anyNew = false;
+  for (const v of p.variants) {
+    const m = (v.sku ? bySku.get(v.sku.trim().toLowerCase()) : undefined) ?? byOptions.get(optionKey([v.option1Value, v.option2Value, v.option3Value]));
+    if (m) await prisma.variant.update({ where: { id: v.id }, data: { reconcileStatus: "UPDATE", shopifyVariantId: m.shopifyVariantId, shopifyInventoryItemId: m.inventoryItemId } });
+    else {
+      anyNew = true;
+      await prisma.variant.update({ where: { id: v.id }, data: { reconcileStatus: "VARIANT_ADD", shopifyVariantId: null, shopifyInventoryItemId: null } });
+    }
+  }
+  const status = anyNew ? "VARIANT_ADD" : "UPDATE";
+  await prisma.product.update({ where: { id: p.id }, data: { reconcileStatus: status, shopifyProductId: c.id, handle: c.handle, matchCandidates: candidatesJson } });
+  return status;
+}
+
+/**
+ * A person's answer to "which is it": one of the candidates, or none of them. Kept across later
+ * checks (`matchDecided`), and offered again in the drawer in case it was wrong.
+ */
+export async function decideMatch(productId: string, choice: "new" | string): Promise<void> {
+  const p = await prisma.product.findUniqueOrThrow({ where: { id: productId }, include: { variants: true } });
+  const candidates = JSON.parse(p.matchCandidates || "[]") as MatchCandidate[];
+  if (choice === "new") await setNew(p.id, p.matchCandidates);
+  else {
+    const c = candidates.find((x) => x.id === choice);
+    if (!c) throw new Error("That is not one of the products this could be. Run the check again.");
+    await attachTo(p, c, (await prisma.shopifyCatalogItem.count()) > 0, p.matchCandidates);
+  }
+  await prisma.product.update({ where: { id: productId }, data: { matchDecided: true } });
 }
 
 // ---------------------------------------------------------------------------

@@ -7,7 +7,7 @@ describe("productSet input", () => {
   it("maps a reviewed product into the Admin API shape", () => {
     const p: ReviewProduct = {
       id: "p", handle: "atomic-bent-90", title: "Atomic Bent 90", bodyHtml: "<p>x</p>", vendor: "Atomic", productType: "Skis", category: "skis",
-      tags: "skis, Atomic", collections: "Skis", status: "draft", published: false, seoTitle: "t", seoDescription: "d", lookupStatus: "NONE", lookupSource: "",
+      tags: "skis, Atomic", collections: "Skis", status: "draft", published: false, seoTitle: "t", seoDescription: "d", lookupStatus: "NONE", lookupSource: "", matchCandidates: [], matchDecided: false,
       option1Name: "Length", option2Name: "Colour", option3Name: null, metafields: { flex: "Medium", length_cm: "166, 172" },
       reconcileStatus: "NEW", shopifyProductId: null,
       images: [{ id: "i", url: "https://cdn.x.com/a.jpg", position: 1, variantId: null, source: "SUPPLIER", validated: true }],

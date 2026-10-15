@@ -11,7 +11,7 @@ const variant = (id: string, colour: string, size: string): ReviewVariant => ({
 
 const product = (images: ReviewProduct["images"], variants: ReviewVariant[]): ReviewProduct => ({
   id: "p1", handle: "freestyle", title: "Freestyle", bodyHtml: "", vendor: "Burton", productType: "Snowboard Bindings", category: "", tags: "", collections: "",
-  status: "draft", published: false, seoTitle: "", seoDescription: "", lookupStatus: "NONE", lookupSource: "",
+  status: "draft", published: false, seoTitle: "", seoDescription: "", lookupStatus: "NONE", lookupSource: "", matchCandidates: [], matchDecided: false,
   option1Name: "Colour", option2Name: "Size", option3Name: null, metafields: {}, reconcileStatus: "NEW", shopifyProductId: null,
   images, variants, flags: [],
 });

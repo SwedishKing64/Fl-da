@@ -13,6 +13,13 @@ asar: false
 npmRebuild: false
 directories:
   output: dist-desktop
+# Where an installed copy looks for a newer version (desktop/update.cjs): the releases of this
+# repository, which electron-builder describes in latest.yml / latest-mac.yml beside the
+# installers. The workflow attaches those files to the release with the installers.
+publish:
+  provider: github
+  owner: SwedishKing64
+  repo: Fl-da
 # Starts the packaged server once as a check, and ad-hoc signs the Mac app; see desktop/after-pack.cjs.
 afterPack: desktop/after-pack.cjs
 files:
@@ -46,6 +53,10 @@ nsis:
 mac:
   target:
     - target: dmg
+      arch: [arm64, x64]
+    # The zip is what an update installs from, and what latest-mac.yml is written for. Until the
+    # app is signed with an Apple Developer identity a Mac copy only says a newer version exists.
+    - target: zip
       arch: [arm64, x64]
   category: public.app-category.business
   artifactName: "Floda-${version}-${arch}.${ext}"

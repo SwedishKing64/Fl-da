@@ -71,6 +71,16 @@ standalone folder with an empty template database; `electron-builder.yml` wraps 
 `.github/workflows/desktop.yml` builds the Windows installer on a Windows runner and the Mac
 disk image on a Mac runner whenever a `v*` tag is pushed, and attaches them to the release.
 
+**Keeping a copy current.** `desktop/update.cjs` (electron-updater) asks this repository's
+releases for a newer version twenty seconds after the app starts and every four hours after
+that, reading the `latest.yml` / `latest-mac.yml` electron-builder writes beside the installers
+(`publish` in `electron-builder.yml`; the workflow attaches the yml, zip and blockmap files to the
+release with the installers). On Windows the new installer is downloaded in the background and
+the person is asked to restart now or later; it installs on quit either way. On a Mac an unsigned
+app cannot install over itself, so until there is an Apple Developer identity the copy only says
+a newer version exists and opens the releases page. Nothing is checked in development. The Help
+menu shows the version the copy is.
+
 **Gone from Flöda:** Bills for QuickBooks, the copy-from-the-old-site migration, and every seed
 that belonged to one shop.
 
@@ -113,8 +123,8 @@ that belonged to one shop.
    What breaks first decides the next step.
 2. Learned conventions shown and editable on Settings (which menu a kind sits under, a spelling),
    rather than only re-taught from a newer export.
-3. Signing certificates for the installers; an auto-update channel (electron-updater) once a
-   release is worth updating to.
+3. Signing certificates for the installers: a Windows code-signing certificate, and an Apple
+   Developer identity, which also lets a Mac copy install an update itself.
 4. Billing. The Clients page records the plan; nothing yet charges for it.
 
 ## Working on Flöda

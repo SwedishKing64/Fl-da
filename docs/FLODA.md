@@ -127,6 +127,12 @@ fourteen are kept; each can be downloaded from Settings (admins) and the desktop
 the folder. Restore puts a copy in place after backing up what is there, and asks for a restart.
 A hosted copy on Postgres has none of this: its host keeps the backups.
 
+**A delivery applied twice.** On Prices and stock, adding a delivery's stock twice makes six of
+three. The page asked before doing that, but only within one page load and only by filename. A
+delivery is now remembered by what is on it (`applied-memory.ts`: a fingerprint of the lines),
+in the browser's storage, so the question is asked after a reload or a re-saved file too, with
+when it was applied; undoing the delivery forgets it.
+
 **Gone from Flöda:** Bills for QuickBooks, the copy-from-the-old-site migration, and every seed
 that belonged to one shop.
 

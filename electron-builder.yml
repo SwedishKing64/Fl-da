@@ -13,17 +13,20 @@ asar: false
 npmRebuild: false
 directories:
   output: dist-desktop
-# Ad-hoc signs the Mac app; see desktop/after-pack.cjs.
+# Starts the packaged server once as a check, and ad-hoc signs the Mac app; see desktop/after-pack.cjs.
 afterPack: desktop/after-pack.cjs
 files:
   - desktop/**
   - package.json
   - "!**/*.map"
+# The server is copied from one level above its folder, with a pattern that reaches into it:
+# electron-builder silently leaves out the top-level node_modules of whatever folder an entry
+# starts from (src/util/filter.ts), and the server's node_modules is the server.
 extraResources:
-  - from: .next/standalone
-    to: standalone
+  - from: .next
+    to: .
     filter:
-      - "**/*"
+      - "standalone/**/*"
       - "!**/*.map"
   - from: prisma/template.db
     to: template.db

@@ -99,6 +99,10 @@ Everything in `HANDOVER.md` under "Working on it" applies. In addition:
 - Alpsport's Rubin and Flöda share history up to the split. A fix to a supplier reader or to the
   document reading is worth carrying to both; a change to a convention is Flöda's alone.
 - `npm run desktop:build` then `npm run desktop:check` runs the built server under plain Node
-  against a throwaway data folder and hits three pages; it is what CI does before packaging.
+  against a throwaway data folder and hits three pages. Packaging runs the same check against
+  the packaged copy (`desktop/after-pack.cjs`), because electron-builder leaves out the top-level
+  `node_modules` of any folder it copies as an extra resource — the server is therefore copied
+  from `.next` with a `standalone/**` pattern, not from `.next/standalone`. A build that ships
+  without its `next` package fails there, not on a customer's machine (as v0.1.3 did).
 - Leads from the landing page are kept in `AppSetting` under `floda.leads` until they become
   clients.

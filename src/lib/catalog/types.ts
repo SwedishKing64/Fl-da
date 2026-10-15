@@ -267,7 +267,8 @@ export interface RowFlag {
     | "INVALID_BARCODE"
     | "ODD_BARCODE"
     | "SWAPPED_CODES"
-    | "HIGH_MARGIN";
+    | "HIGH_MARGIN"
+    | "AMBIGUOUS_MATCH";
   severity: FlagSeverity;
   message: string;
 }
@@ -292,7 +293,7 @@ export const WARNING_CODES: RowFlag["code"][] = [
  * export applies itself (see repair.ts); these are a number or a code that is wrong in a way
  * only a person can settle, and a file with one in it would put that wrong number on the shop.
  */
-export const HARD_CODES: RowFlag["code"][] = ["INVALID_BARCODE", "SWAPPED_CODES", "NEGATIVE_PROFIT", "HIGH_MARGIN"];
+export const HARD_CODES: RowFlag["code"][] = ["INVALID_BARCODE", "SWAPPED_CODES", "NEGATIVE_PROFIT", "HIGH_MARGIN", "AMBIGUOUS_MATCH"];
 
 /**
  * A column holding one of the supplier's own feature bullets: "Bullet 3", "Feature 1", "Tech Spec 2".

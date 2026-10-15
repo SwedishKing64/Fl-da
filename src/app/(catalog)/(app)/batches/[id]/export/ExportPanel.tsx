@@ -8,7 +8,7 @@ import { csvFilename } from "@/lib/catalog/csv";
 
 interface ExportFileRow { id: string; filename: string; rowCount: number; sizeBytes: number; partIndex: number; partCount: number; createdAt: string }
 
-export function ExportPanel(props: { batchId: string; status: string; hard: string[]; errors: string[]; warnings: string[]; productCount: number; shopifyConfigured: boolean; reconciled: number; counts: { new: number; variantAdd: number; update: number }; isAdmin: boolean; files: ExportFileRow[] }) {
+export function ExportPanel(props: { batchId: string; status: string; hard: string[]; errors: string[]; warnings: string[]; productCount: number; shopifyConfigured: boolean; reconciled: number; counts: { new: number; variantAdd: number; update: number; ambiguous: number }; isAdmin: boolean; files: ExportFileRow[] }) {
   const { batchId, hard, errors, warnings } = props;
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -141,8 +141,8 @@ export function ExportPanel(props: { batchId: string; status: string; hard: stri
           <p className="text-sm text-[var(--ink-soft)]">No store is connected, so products leave here as a CSV to import in Shopify admin.</p>
         ) : (
           <div className="space-y-3 text-sm">
-            <p>Reconciled against the live catalog: <strong>{props.reconciled}</strong> of {props.productCount} products — {props.counts.new} new, {props.counts.variantAdd} add variants, {props.counts.update} update existing.</p>
-            {props.reconciled < props.productCount && <Alert tone="warning">Run the Shopify check first so existing products are updated instead of duplicated. <Button size="sm" className="ml-2" disabled={pending} onClick={() => start(async () => { const r = await reconcileAction(batchId); setResult(r.ok ? { tone: "info", text: `Shopify check: ${r.data!.new} new, ${r.data!.variantAdd} add variants, ${r.data!.update} update.` } : { tone: "danger", text: r.error }); router.refresh(); })}>Check now</Button></Alert>}
+            <p>Reconciled against the live catalog: <strong>{props.reconciled}</strong> of {props.productCount} products — {props.counts.new} new, {props.counts.variantAdd} add variants, {props.counts.update} update existing{props.counts.ambiguous > 0 ? `, ${props.counts.ambiguous} could be one of several (decide in the review grid)` : ""}.</p>
+            {props.reconciled < props.productCount && <Alert tone="warning">Run the Shopify check first so existing products are updated instead of duplicated. <Button size="sm" className="ml-2" disabled={pending} onClick={() => start(async () => { const r = await reconcileAction(batchId); setResult(r.ok ? { tone: "info", text: `Checked against the shop: ${r.data!.new} new, ${r.data!.variantAdd} add variants, ${r.data!.update} update${r.data!.ambiguous ? `, ${r.data!.ambiguous} could be one of several` : ""}.` } : { tone: "danger", text: r.error }); router.refresh(); })}>Check now</Button></Alert>}
             {(props.counts.update > 0 || props.counts.variantAdd > 0) && <Alert tone="warning">{props.counts.update + props.counts.variantAdd} products already exist in Shopify. Pushing replaces their variants, prices and details with what is in this batch.</Alert>}
             {warnings.length > 0 && <label className="flex items-center gap-2 font-medium"><input type="checkbox" checked={override} onChange={(e) => setOverride(e.target.checked)} /> I have reviewed the {warnings.length} warning{warnings.length === 1 ? "" : "s"} above</label>}
             <label className="flex items-center gap-2 font-medium"><input type="checkbox" checked={confirmPush} onChange={(e) => setConfirmPush(e.target.checked)} disabled={blocked || pushNeedsOverride} /> I understand this writes to the live store</label>

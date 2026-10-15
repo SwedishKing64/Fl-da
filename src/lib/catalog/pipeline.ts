@@ -37,6 +37,7 @@ export { toCsvProducts };
 import { SKI_METAFIELDS, metafieldColumn, type AppSettings, type CanonicalLineItem, type GstTreatment } from "./types";
 import type { ReviewProduct, ReviewSummary, ReviewVariant } from "./review-types";
 import { hardErrors, summarise, validateReview, warningList } from "./validate";
+import type { MatchCandidate } from "./match-candidates";
 import { filePath, publicFileUrl, readFile, saveFile, usingBlob } from "./storage";
 import { logAudit } from "./audit";
 import { AI_HEADERS } from "./extract/ai";
@@ -1135,7 +1136,7 @@ export interface ReviewData {
   unassignedImages: Array<{ id: string; filename: string; url: string; hint: string }>;
   products: ReviewProduct[];
   summary: ReviewSummary;
-  settings: { gstRate: number; pricesIncludeGst: boolean; minMarginPct: number; maxMarginPct: number; shopifyConfigured: boolean; publicBaseUrl: string };
+  settings: { gstRate: number; pricesIncludeGst: boolean; minMarginPct: number; maxMarginPct: number; shopifyConfigured: boolean; catalogueKnown: boolean; publicBaseUrl: string };
   metafieldColumns: string[];
 }
 
@@ -1175,6 +1176,8 @@ export async function loadReview(batchId: string): Promise<ReviewData> {
     metafields: parseJson<Record<string, string>>(p.metafields, {}),
     reconcileStatus: p.reconcileStatus,
     shopifyProductId: p.shopifyProductId,
+    matchCandidates: parseJson<MatchCandidate[]>(p.matchCandidates, []),
+    matchDecided: p.matchDecided,
     images: p.images.map((i) => ({ id: i.id, url: i.url, position: i.position, variantId: i.variantId, source: i.source, validated: i.validated })),
     variants: p.variants.map<ReviewVariant>((v) => {
       return {
@@ -1240,6 +1243,8 @@ export async function loadReview(batchId: string): Promise<ReviewData> {
       minMarginPct: settings.minMarginPct,
       maxMarginPct: settings.maxMarginPct,
       shopifyConfigured: Boolean(settings.shopify.storeDomain && settings.shopify.accessToken),
+      // Something to check the batch against: the store itself, or the shop's own export.
+      catalogueKnown: Boolean(settings.shopify.storeDomain && settings.shopify.accessToken) || (await prisma.shopListing.count()) > 0,
       publicBaseUrl: usingBlob() ? "blob" : settings.publicBaseUrl || process.env.APP_PUBLIC_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : ""),
     },
     metafieldColumns: SKI_METAFIELDS.map(metafieldColumn),

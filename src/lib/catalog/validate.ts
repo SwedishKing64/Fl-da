@@ -3,6 +3,7 @@
 
 import { isPublicHttpsUrl } from "./csv";
 import { gtinVerdict, isGtin } from "./gtin";
+import { describeCandidates } from "./match-candidates";
 import { houseConventions } from "./taxonomy";
 import { isValidHandle } from "./handle";
 import type { ReviewProduct, ReviewSummary, ReviewVariant } from "./review-types";
@@ -58,7 +59,9 @@ export function validateReview(products: ReviewProduct[], ctx: ValidationContext
         });
       }
     }
-    if (p.reconcileStatus === "UPDATE" || p.reconcileStatus === "VARIANT_ADD") {
+    if (p.reconcileStatus === "AMBIGUOUS") {
+      flags.push({ code: "AMBIGUOUS_MATCH", severity: "error", message: describeCandidates(p.matchCandidates) });
+    } else if (p.reconcileStatus === "UPDATE" || p.reconcileStatus === "VARIANT_ADD") {
       flags.push({ code: "UPDATE_EXISTING", severity: "warning", message: p.reconcileStatus === "UPDATE" ? "Exists in Shopify - export will update the live product" : "Adds variants to an existing Shopify product" });
     } else if (ctx.shopifyHandles?.has(p.handle) && p.reconcileStatus === "UNKNOWN") {
       flags.push({ code: "UPDATE_EXISTING", severity: "warning", message: "A product with this handle already exists in Shopify" });

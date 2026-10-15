@@ -1,6 +1,7 @@
 // Plain data shapes shared between the server (Prisma -> view) and the review grid (client).
 
 import type { RowFlag } from "./types";
+import type { MatchCandidate } from "./match-candidates";
 
 export interface ReviewImage {
   id: string;
@@ -66,6 +67,9 @@ export interface ReviewProduct {
   metafields: Record<string, string>;
   reconcileStatus: string;
   shopifyProductId: string | null;
+  /** The products in the shop this one could be, when the check found more than one. */
+  matchCandidates: MatchCandidate[];
+  matchDecided: boolean;
   images: ReviewImage[];
   variants: ReviewVariant[];
   flags: RowFlag[];

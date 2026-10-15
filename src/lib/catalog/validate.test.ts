@@ -5,7 +5,7 @@ import type { ReviewProduct } from "./review-types";
 function product(partial: Partial<ReviewProduct>): ReviewProduct {
   return {
     id: "p1", handle: "atomic-bent-90", title: "Atomic Bent 90", bodyHtml: "", vendor: "Atomic", productType: "Skis", category: "skis",
-    tags: "", collections: "", status: "draft", published: false, seoTitle: "", seoDescription: "", lookupStatus: "NONE", lookupSource: "", option1Name: "Length", option2Name: null, option3Name: null,
+    tags: "", collections: "", status: "draft", published: false, seoTitle: "", seoDescription: "", lookupStatus: "NONE", lookupSource: "", matchCandidates: [], matchDecided: false, option1Name: "Length", option2Name: null, option3Name: null,
     metafields: {}, reconcileStatus: "UNKNOWN", shopifyProductId: null, images: [{ id: "i", url: "https://cdn.x.com/a.jpg", position: 1, variantId: null, source: "SUPPLIER", validated: true }],
     variants: [], flags: [], ...partial,
   };
@@ -75,6 +75,14 @@ describe("review validation", () => {
     validateReview([product({ variants: [a, b] })], { minMarginPct: 20 });
     expect(a.flags.some((f) => f.code === "DUPLICATE_SKU_BATCH")).toBe(true);
     expect(b.flags.some((f) => f.code === "DUPLICATE_SKU_BATCH")).toBe(true);
+  });
+
+  it("stops the export while a product could be one of several the shop sells", () => {
+    const v = emptyVariantView({ id: "v", productId: "p1", sku: "A-166", option1Value: "166", retailPrice: 550, costPrice: 300, exGstRevenue: 500, landedCostAud: 300, profitPerUnit: 200, marginPct: 40 });
+    const p = product({ variants: [v], reconcileStatus: "AMBIGUOUS", matchCandidates: [{ id: "gid://1", handle: "bent-90-2026", title: "Bent 90 2026", on: ["barcode 874452900016"] }, { id: "gid://2", handle: "bent-90-2025", title: "Bent 90 2025", on: ["barcode 874452900016"] }] });
+    validateReview([p], { minMarginPct: 20 });
+    expect(p.flags.map((f) => `${f.code}:${f.severity}`)).toEqual(["FEW_IMAGES:warning", "AMBIGUOUS_MATCH:error"]);
+    expect(hardErrors([p])[0]).toContain("bent-90-2026");
   });
 
   it("flags SKUs and handles that exist in the Shopify catalog", () => {

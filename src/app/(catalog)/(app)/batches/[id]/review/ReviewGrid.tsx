@@ -16,6 +16,7 @@ import {
   enrichSeoAction,
   getReviewAction,
   moveImageAction,
+  decideMatchAction,
   reconcileAction,
   removeImageAction,
   saveImagesToLibraryAction,
@@ -85,7 +86,7 @@ const FLAG_LABELS: Record<string, string> = {
   INVALID_HANDLE: "Invalid handle", DUPLICATE_OPTIONS: "Duplicate option values", MISSING_OPTION_VALUE: "Missing option value",
   NO_IMAGE: "No image", INVALID_IMAGE_URL: "Bad image URL", LOW_MARGIN: "Low margin", NEGATIVE_PROFIT: "Negative profit",
   MISSING_VENDOR: "No vendor", MISSING_TYPE: "No product type", UPDATE_EXISTING: "Updates existing Shopify product",
-  INVALID_BARCODE: "Barcode fails its check digit", ODD_BARCODE: "Barcode of an odd length", SWAPPED_CODES: "SKU and barcode swapped", HIGH_MARGIN: "Margin too high to be right",
+  INVALID_BARCODE: "Barcode fails its check digit", ODD_BARCODE: "Barcode of an odd length", SWAPPED_CODES: "SKU and barcode swapped", HIGH_MARGIN: "Margin too high to be right", AMBIGUOUS_MATCH: "Fits several shop products",
 };
 
 function fmt(v: ReviewVariant, key: Col["key"]): string {
@@ -322,7 +323,7 @@ export function ReviewGrid({ initial, batchId }: { initial: ReviewData; batchId:
           {Object.entries(FLAG_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
         <select value={filter.reconcile} onChange={(e) => setFilter({ ...filter, reconcile: e.target.value })} className={`${INPUT_INLINE} w-44`}>
-          <option value="">Any Shopify status</option><option value="NEW">New product</option><option value="VARIANT_ADD">Adds variants</option><option value="UPDATE">Updates existing</option><option value="UNKNOWN">Not checked</option>
+          <option value="">Any Shopify status</option><option value="NEW">New product</option><option value="VARIANT_ADD">Adds variants</option><option value="UPDATE">Updates existing</option><option value="AMBIGUOUS">Could be several</option><option value="UNKNOWN">Not checked</option>
         </select>
         <select value={groupBy} onChange={(e) => setGroupBy(e.target.value as "none" | "brand" | "type")} className={`${INPUT_INLINE} w-44`} title="Group products">
           <option value="brand">Group by brand</option><option value="type">Group by product type</option><option value="none">No grouping</option>
@@ -335,7 +336,7 @@ export function ReviewGrid({ initial, batchId }: { initial: ReviewData; batchId:
           {data.unassignedImages.length > 0 && !locked && <Button size="sm" disabled={pending} onClick={() => start(async () => { const r = await autoAttachPhotosAction(batchId); setMessage(r.ok ? { tone: "info", text: `${r.data!.attached} photo${r.data!.attached === 1 ? "" : "s"} matched by name/SKU. Open a product's Details to attach the rest.` } : { tone: "danger", text: r.error }); await refresh(); })}>Match photos</Button>}
           <Button size="sm" disabled={pending} onClick={() => start(async () => { const r = await verifyImagesAction(batchId); setMessage(r.ok ? { tone: r.data!.failed ? "warning" : "success", text: `Checked ${r.data!.checked} image URLs, ${r.data!.failed} unreachable.` } : { tone: "danger", text: r.error }); await refresh(); })}>Check images</Button>
           <Button size="sm" disabled={pending || locked} onClick={() => start(async () => { const r = await enrichSeoAction(batchId, true); setMessage(r.ok ? { tone: "success", text: `SEO written for ${r.data!.updated} products (${r.data!.source === "AI" ? "AI" : r.data!.source === "TEMPLATE" ? "template - set ANTHROPIC_API_KEY for AI copy" : "AI + template"}).` } : { tone: "danger", text: r.error }); await refresh(); })}>Write SEO copy</Button>
-          <Button size="sm" disabled={pending || !data.settings.shopifyConfigured} title={data.settings.shopifyConfigured ? "" : "Configure Shopify in Settings first"} onClick={() => start(async () => { const r = await reconcileAction(batchId); setMessage(r.ok ? { tone: "info", text: `Shopify check: ${r.data!.new} new, ${r.data!.variantAdd} add variants, ${r.data!.update} update existing.` } : { tone: "danger", text: r.error }); await refresh(); })}>Check against Shopify</Button>
+          <Button size="sm" disabled={pending || !data.settings.catalogueKnown} title={!data.settings.catalogueKnown ? "Connect Shopify in Settings, or teach Flöda your catalogue from an export, first" : pending ? "Working…" : "Match this batch against what the shop already sells"} onClick={() => start(async () => { const r = await reconcileAction(batchId); setMessage(r.ok ? { tone: r.data!.ambiguous ? "warning" : "info", text: `Checked against the shop: ${r.data!.new} new, ${r.data!.variantAdd} add variants, ${r.data!.update} update existing${r.data!.ambiguous ? `, ${r.data!.ambiguous} could be one of several — open each and say which` : ""}.` } : { tone: "danger", text: r.error }); await refresh(); })}>Check against the shop</Button>
           <Link href={`/batches/${batchId}/export`} style={{ color: "#fff" }} className={cx("inline-flex items-center rounded-lg px-3 py-1.5 text-xs font-medium", summary.errors ? "bg-neutral-400" : "bg-[var(--ink)] hover:bg-black")}>{summary.errors ? `${summary.errors} errors block export` : "Export →"}</Link>
         </div>
       </div>
@@ -564,6 +565,8 @@ function ProductDrawer({ batchId, product, unassigned, locked, publicBaseUrl, on
   const [variantForUrl, setVariantForUrl] = useState("");
   const [dragging, setDragging] = useState(false);
   const [pending, start] = useTransition();
+  // Which of the shop's products this one was settled as, when that was settled.
+  const [match, setMatch] = useState<string>(() => (product.matchDecided ? (product.reconcileStatus === "NEW" ? "new" : product.matchCandidates.find((c) => c.handle === product.handle)?.id ?? "") : ""));
   const [details, setDetails] = useState({ seoTitle: product.seoTitle, seoDescription: product.seoDescription, bodyHtml: product.bodyHtml, option1Name: product.option1Name ?? "", option2Name: product.option2Name ?? "", option3Name: product.option3Name ?? "", metafields: { ...product.metafields } });
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -649,6 +652,18 @@ function ProductDrawer({ batchId, product, unassigned, locked, publicBaseUrl, on
           </div>
         ) : (
           <div className="space-y-3 text-sm">
+            {product.matchCandidates.length > 0 && (
+              <div className={cx("rounded-lg border p-3 text-xs", product.reconcileStatus === "AMBIGUOUS" ? "border-amber-300 bg-amber-50" : "border-[var(--line-soft)] bg-neutral-50")}>
+                <div className="font-semibold">{product.reconcileStatus === "AMBIGUOUS" ? `This fits ${product.matchCandidates.length} products the shop already sells — which is it?` : "In the shop, this is"}</div>
+                <div className="mt-2 space-y-1">
+                  {product.matchCandidates.map((c) => (
+                    <label key={c.id} className="flex items-start gap-2"><input type="radio" name="match" disabled={locked} checked={match === c.id} onChange={() => setMatch(c.id)} /><span><span className="font-medium">{c.title}</span> <span className="text-[var(--ink-soft)]">· {c.handle} · matched on {c.on.join(", ")}</span></span></label>
+                  ))}
+                  <label className="flex items-start gap-2"><input type="radio" name="match" disabled={locked} checked={match === "new"} onChange={() => setMatch("new")} /><span>None of these — a new product</span></label>
+                </div>
+                {!locked && <Button size="sm" variant="primary" className="mt-2" disabled={pending || !match} onClick={() => start(async () => { const r = await decideMatchAction(product.id, match); setMessage(r.ok ? { tone: "success", text: match === "new" ? "Kept as a new product." : "Attached to the product the shop already sells; the handle is now the shop's." } : { tone: "danger", text: r.error }); await refresh(); })}>That&rsquo;s the one</Button>}
+              </div>
+            )}
             <label className="block"><span className="text-xs font-medium text-[var(--ink-2)]">SEO title <span className="text-[var(--ink-soft)]">({details.seoTitle.length}/60)</span></span><input value={details.seoTitle} disabled={locked} onChange={(e) => setDetails({ ...details, seoTitle: e.target.value })} className={INPUT} /></label>
             <label className="block"><span className="text-xs font-medium text-[var(--ink-2)]">SEO description <span className="text-[var(--ink-soft)]">({details.seoDescription.length}/155)</span></span><textarea rows={3} value={details.seoDescription} disabled={locked} onChange={(e) => setDetails({ ...details, seoDescription: e.target.value })} className={INPUT} /></label>
             <label className="block"><span className="text-xs font-medium text-[var(--ink-2)]">Description (HTML)</span><textarea rows={6} value={details.bodyHtml} disabled={locked} onChange={(e) => setDetails({ ...details, bodyHtml: e.target.value })} className={`${INPUT} font-mono text-xs`} /></label>

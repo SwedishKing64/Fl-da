@@ -19,15 +19,35 @@
  * 414 of the 714 products that carry a body are exactly this with one paragraph, and another 143
  * are the same with two or three. Nothing follows the list.
  */
-export function houseBody(description: string, features: string[]): string {
+export function houseBody(description: string, features: string[], heading = "Tech Specs"): string {
   const paragraphs = description.split(/\n\s*\n/).map((p) => p.replace(/\s+/g, " ").trim()).filter(Boolean);
   const specs = features.map((f) => f.replace(/\s+/g, " ").trim()).filter(Boolean);
   if (paragraphs.length === 0 && specs.length === 0) return "";
   const lines = paragraphs.map((p) => `<p>${escapeHtml(p)}</p>`);
   if (specs.length > 0) {
-    lines.push("<h2>Tech Specs</h2>", "<ul>", ...specs.map((f) => `<li>${escapeHtml(f)}</li>`), "</ul>");
+    if (heading.trim()) lines.push(`<h2>${escapeHtml(heading.trim())}</h2>`);
+    lines.push("<ul>", ...specs.map((f) => `<li>${escapeHtml(f)}</li>`), "</ul>");
   }
   return lines.join("\n");
+}
+
+/** The tags a laid-out body may carry. Anything else is dropped, and every attribute with it. */
+const BODY_TAGS = new Set(["p", "h2", "h3", "ul", "ol", "li", "strong", "em", "br"]);
+
+/**
+ * A body the model laid out, made safe to keep: only the plain tags a description is made of, no
+ * attributes, nothing that runs. What is not allowed is removed as a tag and its text kept, except
+ * script and style, which go with their contents.
+ */
+export function sanitiseBody(html: string): string {
+  const stripped = html.replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, "").replace(/<!--[\s\S]*?-->/g, "");
+  const cleaned = stripped.replace(/<\/?([a-zA-Z][a-zA-Z0-9]*)\b[^>]*>/g, (tag, name: string) => {
+    const lower = name.toLowerCase();
+    if (!BODY_TAGS.has(lower)) return "";
+    if (lower === "br") return "<br>";
+    return tag.startsWith("</") ? `</${lower}>` : `<${lower}>`;
+  });
+  return cleaned.replace(/\n{3,}/g, "\n\n").trim();
 }
 
 /**

@@ -33,6 +33,14 @@ export interface HouseConventions {
     fixedGrams: number;
     byKind: Array<{ type: string; grams: number }>;
   };
+  descriptions: {
+    /** How a description is laid out and written, in the shop's words: what comes first, how long, what never to say. */
+    format: string;
+    /** The heading over the details list; empty for a list with no heading. */
+    specsHeading: string;
+    /** One real description from the shop, pasted, as the shape to match. */
+    example: string;
+  };
   /** Anything else, in the shop's own words. Fed to the reader on every product. */
   notes: string;
   /** When it was last saved; empty until the shop has been through it once. */
@@ -43,6 +51,7 @@ export const DEFAULT_HOUSE: HouseConventions = {
   naming: { brandInTitle: "never", season: "seasonal", casing: "shop", example: "" },
   identifiers: { sku: "supplier", barcode: "keep" },
   weights: { mode: "none", unit: "g", fixedGrams: 0, byKind: [] },
+  descriptions: { format: "", specsHeading: "Tech Specs", example: "" },
   notes: "",
   savedAt: "",
 };
@@ -106,6 +115,10 @@ export function houseGuidance(house: HouseConventions): string {
   if (house.identifiers.sku === "none") lines.push("The shop does not use SKUs.");
   if (house.identifiers.sku === "barcode") lines.push("The barcode is used as the SKU.");
   if (house.identifiers.barcode === "required") lines.push("Every variant needs a barcode.");
+  const d = house.descriptions;
+  if (d.format.trim()) lines.push(`How a description is written here:\n${d.format.trim()}`);
+  if (d.specsHeading.trim() && d.specsHeading.trim() !== "Tech Specs") lines.push(`The details list is headed "${d.specsHeading.trim()}".`);
+  if (d.example.trim()) lines.push(`A description from this shop, as the shape to match:\n${d.example.trim()}`);
   if (house.notes.trim()) lines.push(house.notes.trim());
   return lines.join("\n");
 }
@@ -119,6 +132,8 @@ export function describeHouse(house: HouseConventions): string[] {
   out.push(`SKU: ${id.sku === "supplier" ? "the supplier's code" : id.sku === "barcode" ? "the barcode" : "not used"}. Barcodes: ${id.barcode === "keep" ? "kept when the paperwork has them" : id.barcode === "required" ? "required on every variant" : "not used"}.`);
   const w = house.weights;
   out.push(w.mode === "none" ? "No shipping weight is written." : w.mode === "fixed" ? `Every variant weighs ${fromGrams(w.fixedGrams, w.unit)} ${w.unit}.` : `Weight by kind: ${w.byKind.filter((k) => k.type.trim()).map((k) => `${k.type} ${fromGrams(k.grams, w.unit)} ${w.unit}`).join(", ") || "none set yet"}.`);
+  const d = house.descriptions;
+  if (d.format.trim() || d.example.trim()) out.push(`Descriptions are laid out the shop's way${d.specsHeading.trim() ? `, details under "${d.specsHeading.trim()}"` : ", details with no heading"}.`);
   if (house.notes.trim()) out.push(`Notes: ${house.notes.trim()}`);
   return out;
 }
@@ -146,6 +161,11 @@ export function cleanHouse(input: Partial<HouseConventions> | null | undefined):
       unit: pick(w.unit, ["g", "kg"] as const, "g"),
       fixedGrams: Math.max(0, Math.min(1_000_000, Math.round(Number(w.fixedGrams) || 0))),
       byKind: (Array.isArray(w.byKind) ? w.byKind : []).slice(0, 200).map((k) => ({ type: String(k?.type ?? "").trim().slice(0, 120), grams: Math.max(0, Math.min(1_000_000, Math.round(Number(k?.grams) || 0))) })).filter((k) => k.type),
+    },
+    descriptions: {
+      format: String(i.descriptions?.format ?? "").trim().slice(0, 4000),
+      specsHeading: String(i.descriptions?.specsHeading ?? DEFAULT_HOUSE.descriptions.specsHeading).trim().slice(0, 60),
+      example: String(i.descriptions?.example ?? "").trim().slice(0, 6000),
     },
     notes: String(i.notes ?? "").trim().slice(0, 4000),
     savedAt: String(i.savedAt ?? ""),

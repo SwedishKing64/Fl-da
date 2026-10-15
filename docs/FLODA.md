@@ -37,8 +37,15 @@ the rest of the conventions): whether the brand leads the title, whether the yea
 name, whether a supplier's capitals are cased back; what goes in the SKU column and whether a
 barcode is kept, required or never written; weight as nothing, a band per kind, or one figure;
 tag rules the export cannot show ("when the brand says Burton, add snowboard"), kept as
-`TagRule` rows named `house: …`; and anything else in the shop's words, which goes to the reader
-with the house rules. `titles.ts`, the build in `pipeline.ts`, `validate.ts` and `seo.ts` read it.
+`TagRule` rows named `house: …`; how a description is laid out and written, with the heading over
+the details list and one real description as the shape to match; and anything else in the shop's
+words, which goes to the reader with the house rules. `titles.ts`, the build in `pipeline.ts`,
+`validate.ts` and `seo.ts` read it. A body taken from a brand page, the web lookup or the build
+goes through `description-style.ts`: the manufacturer's words and details, laid out by the model
+in the shop's format, which may not add a fact, and the plain layout (`houseBody`) whenever that
+cannot run. The first invoice from a supplier opens the review page with the five things a new
+layout gets wrong; after that the page says how the supplier's paperwork has read, from what
+people changed after the build (`supplier-record.ts`, `supplier-score.ts`).
 
 **Feedback.** A Feedback button on every page of the app. On the vendor's deployment the note
 lands on the Clients page; an installed copy sends it to `FLODA_LICENCE_SERVER/api/feedback`

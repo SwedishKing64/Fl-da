@@ -10,7 +10,8 @@
  */
 
 import { prisma } from "./db";
-import { lookupProduct, lookupAvailable, bodyHtmlFrom, isPlaceholderBody, type ProductLookup } from "./extract/lookup";
+import { shopBody } from "./description-style";
+import { lookupProduct, lookupAvailable, isPlaceholderBody, type ProductLookup } from "./extract/lookup";
 import { repriceBatch } from "./pipeline";
 import { logAudit } from "./audit";
 
@@ -180,7 +181,7 @@ async function lookupOne(p: Candidate): Promise<{ description: boolean; price: b
     return null;
   }
 
-  const body = bodyHtmlFrom(found);
+  const body = await shopBody(found.description, found.features);
   // The manufacturer's copy replaces the invoice's one-liner, but never a description someone has
   // actually written — see isPlaceholderBody for where the line is drawn.
   const writeBody = isPlaceholderBody(p.bodyHtml) && body.length > 0;

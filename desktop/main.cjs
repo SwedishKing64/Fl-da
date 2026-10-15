@@ -10,6 +10,11 @@ const path = require("node:path");
 const fs = require("node:fs");
 const { launch } = require("./launch.cjs");
 
+// The name in the app menu, in "About" and "Quit", and of the data folder in app-data — on every
+// platform, whatever the bundle or the executable is called on disk (Floda, ASCII, so that the
+// Mac bundle signs and Electron finds its helpers).
+app.setName("Flöda");
+
 let server = null;
 let win = null;
 const lines = [];

@@ -172,6 +172,8 @@ export interface HostedOfColour {
   otherColours: string[];
   /** The colour the kept pictures show, where the model named one. */
   shown: string;
+  /** Beside each kept picture: the ordered colour it shows, in the order's spelling, or "" when not known. */
+  colours: string[];
   /** False when the pictures were not looked at: no colour ordered, no model, or the look failed. */
   looked: boolean;
 }
@@ -182,7 +184,7 @@ export interface HostedOfColour {
  * as the address it was, unlooked at — the review page is where to catch it.
  */
 export async function hostPicturesOfColour(urls: string[], name: string, colours: string[], deps: { fetcher?: typeof fetch; publicBaseUrl?: string; until?: number; ask?: Looker } = {}): Promise<HostedOfColour> {
-  const none: HostedOfColour = { images: urls, leftOut: 0, otherColours: [], shown: "", looked: false };
+  const none: HostedOfColour = { images: urls, leftOut: 0, otherColours: [], shown: "", colours: urls.map(() => ""), looked: false };
   if (urls.length === 0) return none;
   const base = deps.publicBaseUrl ?? (await getSettings()).publicBaseUrl;
   const canHost = usingBlob() || publicFileUrl("images/x.jpg", base) !== null;
@@ -201,18 +203,22 @@ export async function hostPicturesOfColour(urls: string[], name: string, colours
 
   // Looked at, the ones that were fetched.
   const got = bytes.map((b, i) => ({ b, i })).filter((x): x is { b: Buffer; i: number } => x.b !== null);
-  let look: ColourLook = { keep: got.map((_, k) => k), otherColours: [], shown: "", looked: false };
+  let look: ColourLook = { keep: got.map((_, k) => k), otherColours: [], shown: "", which: {}, looked: false };
   if (got.length > 0 && colours.some((c) => c.trim())) look = await pickColour(got.map((x) => x.b), colours, name, { ask: deps.ask });
   const keepIndex = new Set(look.keep.map((k) => got[k].i));
+  const colourOf = new Map<number, string>();
+  for (const [k, c] of Object.entries(look.which)) colourOf.set(got[Number(k)].i, c);
 
   // Kept: framed and stored where they can be, as they were where not; the unfetched as they were.
   const images: string[] = [];
+  const pictureColours: string[] = [];
   for (let i = 0; i < urls.length; i++) {
     const b = bytes[i];
-    if (b === null) { images.push(urls[i]); continue; }
+    if (b === null) { images.push(urls[i]); pictureColours.push(""); continue; }
     if (!keepIndex.has(i)) continue;
     const hosted = canHost && Date.now() <= until ? await storePicture(b, `${name}-${i + 1}`, base).catch(() => null) : null;
     images.push(hosted ?? urls[i]);
+    pictureColours.push(colourOf.get(i) ?? "");
   }
-  return { images, leftOut: got.length - look.keep.length, otherColours: look.otherColours, shown: look.shown, looked: look.looked };
+  return { images, leftOut: got.length - look.keep.length, otherColours: look.otherColours, shown: look.shown, colours: pictureColours, looked: look.looked };
 }

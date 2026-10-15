@@ -26,6 +26,7 @@ describe("a page's pictures made right for the colour ordered", () => {
     expect(out.images).toHaveLength(1);
     expect(out.images[0]).toMatch(/freestyle-bindings-2\.jpg$/);
     expect(out.pictureColour).toBe("black");
+    expect(out.imageColours).toEqual(["Black"]);
     expect(out.pictureNote).toBe("2 pictures of other colours (red) left out; the 1 kept show the black.");
   });
 
@@ -37,6 +38,16 @@ describe("a page's pictures made right for the colour ordered", () => {
     expect(out.images).toEqual([]);
     expect(out.pictureNote).toContain("none of the Black ordered");
     expect(out.pictureNote).toContain("Open the page with Black selected");
+  });
+
+  it("matches each kept picture to one of several colours ordered and says which had none", async () => {
+    const out = await picturesForColour(details(urls), "Freestyle Bindings", ["Black", "Red", "Blue"], {
+      fetcher, publicBaseUrl: "https://tools.example.com",
+      ask: async () => JSON.stringify({ pictures: [{ number: 1, colour: "red", ordered: "yes", which: "Red" }, { number: 2, colour: "black", ordered: "yes", which: "Black" }, { number: 3, colour: "red", ordered: "yes", which: "Red" }], note: "" }),
+    });
+    expect(out.images).toHaveLength(3);
+    expect(out.imageColours).toEqual(["Red", "Black", "Red"]);
+    expect(out.pictureNote).toContain("Pictures matched for Black and Red; none for Blue");
   });
 
   it("keeps the brand's addresses and says nothing when there was no colour to go by", async () => {

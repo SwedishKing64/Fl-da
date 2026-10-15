@@ -43,7 +43,11 @@ words, which goes to the reader with the house rules. `titles.ts`, the build in 
 `validate.ts` and `seo.ts` read it. A body taken from a brand page, the web lookup or the build
 goes through `description-style.ts`: the manufacturer's words and details, laid out by the model
 in the shop's format, which may not add a fact, and the plain layout (`houseBody`) whenever that
-cannot run. The first invoice from a supplier opens the review page with the five things a new
+cannot run. A brand page's pictures are looked at against the colours ordered
+(`colour-match.ts`): the ones of another colour are left out, and where several colours were
+ordered each kept picture is matched to the colour it shows and put on that colour's first
+variant (`page-link.ts`); the CSV gives the other sizes of that colour the same picture
+(`pipeline-pure.ts`). The first invoice from a supplier opens the review page with the five things a new
 layout gets wrong; after that the page says how the supplier's paperwork has read, from what
 people changed after the build (`supplier-record.ts`, `supplier-score.ts`).
 

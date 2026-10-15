@@ -115,9 +115,21 @@ export async function readProductLink(productId: string, deps: { read?: typeof r
   return { ...out, said };
 }
 
+/** The first variant of each colour the product comes in, by the colour in lower case. */
+function variantByColour(p: { option1Name: string | null; option2Name: string | null; option3Name: string | null; variants: Array<{ id: string; option1Value: string | null; option2Value: string | null; option3Value: string | null }> }): Map<string, string> {
+  const at = [p.option1Name, p.option2Name, p.option3Name].findIndex((n) => /colou?r/i.test(n ?? ""));
+  const out = new Map<string, string>();
+  if (at < 0) return out;
+  for (const v of p.variants) {
+    const colour = ([v.option1Value, v.option2Value, v.option3Value][at] ?? "").trim().toLowerCase();
+    if (colour && !out.has(colour)) out.set(colour, v.id);
+  }
+  return out;
+}
+
 /** Write one page's details onto one product. Never touches prices, costs, quantities, barcodes or options. */
 async function applyDetails(productId: string, d: PageDetails): Promise<{ description: boolean; details: number; images: number; notes: string[] }> {
-  const p = await prisma.product.findUniqueOrThrow({ where: { id: productId }, select: { id: true, title: true, bodyHtml: true, lookupStatus: true, images: { select: { id: true, url: true, source: true, position: true } } } });
+  const p = await prisma.product.findUniqueOrThrow({ where: { id: productId }, select: { id: true, title: true, bodyHtml: true, lookupStatus: true, option1Name: true, option2Name: true, option3Name: true, variants: { select: { id: true, option1Value: true, option2Value: true, option3Value: true }, orderBy: { sortOrder: "asc" } }, images: { select: { id: true, url: true, source: true, position: true } } } });
   const notes: string[] = [];
   const body = await shopBody(d.description, d.features);
   // A body the invoice wrote, or an earlier lookup or page read wrote, may be replaced; one a person
@@ -132,8 +144,15 @@ async function applyDetails(productId: string, d: PageDetails): Promise<{ descri
   const earlier = p.images.filter((i) => i.source === "PAGE");
   if (fresh.length > 0 && earlier.length > 0) await prisma.productImage.deleteMany({ where: { id: { in: earlier.map((i) => i.id) } } });
   let position = Math.max(0, ...p.images.filter((i) => i.source !== "PAGE" || fresh.length === 0).map((i) => i.position)) + 1;
+  // A picture the look matched to one of the colours ordered goes on that colour's variant, so
+  // Shopify shows the black binding on the black variant; the first of each colour is the one.
+  const variantOfColour = variantByColour(p);
+  const given = new Set<string>();
   for (const url of fresh) {
-    await prisma.productImage.create({ data: { productId, url, position: position++, source: "PAGE", altText: p.title, validated: false } });
+    const colour = (d.imageColours?.[d.images.indexOf(url)] ?? "").trim().toLowerCase();
+    const variantId = colour && !given.has(colour) ? variantOfColour.get(colour) : undefined;
+    if (variantId) given.add(colour);
+    await prisma.productImage.create({ data: { productId, url, position: position++, source: "PAGE", altText: p.title, validated: false, ...(variantId ? { variantId } : {}) } });
   }
 
   await prisma.product.update({

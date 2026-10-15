@@ -18,13 +18,16 @@ export async function picturesForColour(details: PageDetails, name: string, colo
   let pictureNote = "";
   if (r.looked && wanted.length > 0) {
     const others = r.otherColours.length > 0 ? ` (${list(r.otherColours)})` : "";
+    const found = wanted.filter((c) => r.colours.some((x) => x.toLowerCase() === c.toLowerCase()));
+    const missing = wanted.filter((c) => !found.includes(c));
+    const perColour = wanted.length > 1 ? ` Pictures matched for ${found.length ? list(found) : "none of the colours"}${missing.length ? `; none for ${list(missing)}, so those variants have no picture of their own` : ", each colour's variants given its own"}.` : "";
     if (r.images.length === 0 && r.leftOut > 0) {
       pictureNote = `The page's ${r.leftOut === 1 ? "picture is" : `${r.leftOut} pictures are all`} of another colour${others}, none of the ${list(wanted)} ordered, so none were taken. Open the page with ${list(wanted)} selected and paste that link, or add the pictures by hand.`;
     } else if (r.leftOut > 0) {
-      pictureNote = `${r.leftOut} picture${r.leftOut === 1 ? "" : "s"} of other colours${others} left out; the ${r.images.length} kept show the ${r.shown || list(wanted)}.`;
+      pictureNote = `${r.leftOut} picture${r.leftOut === 1 ? "" : "s"} of other colours${others} left out; the ${r.images.length} kept show the ${r.shown || list(wanted)}.${perColour}`;
     } else if (r.shown) {
-      pictureNote = `The pictures show the ${r.shown}.`;
+      pictureNote = `The pictures show the ${r.shown}.${perColour}`;
     }
   }
-  return { ...details, images: r.images, pictureColour: r.looked ? r.shown : details.pictureColour, pictureNote: pictureNote || undefined };
+  return { ...details, images: r.images, imageColours: r.colours, pictureColour: r.looked ? r.shown : details.pictureColour, pictureNote: pictureNote || undefined };
 }

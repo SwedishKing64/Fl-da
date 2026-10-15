@@ -101,6 +101,15 @@ the CSV updates by; none is a new product; more than one is never guessed at: th
 `AMBIGUOUS`, which is an error that stops the export, and the drawer on the review grid lists
 what it could be so a person says which, or that it is new. That decision is kept across checks.
 The check runs again right before a CSV is made, and from the "Check against the shop" button.
+**A supplier's layout changes.** A remembered mapping is keyed by the file's headings, and a
+file whose headings differ in any way (a column added, dropped, renamed or reordered) used to be
+read from scratch without a word, losing what the shop had chosen. Now `mappingState` finds the
+nearest remembered layout (`nearestTemplate` in `mapping.ts`: the most headings in common, at
+least two), carries its choices over for the columns that still exist (`trimToHeaders`), and
+reports the difference (`HeaderGroup.drift`). Such a file is not built unasked: the build says
+what changed, the mapping screen shows it, and applying it there remembers the new layout beside
+the old. A file that shares fewer than two headings with any remembered layout is a different
+document and is read as before.
 
 **Gone from Flöda:** Bills for QuickBooks, the copy-from-the-old-site migration, and every seed
 that belonged to one shop.

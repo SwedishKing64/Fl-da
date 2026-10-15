@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyMapping, headerHash, looksLikeReference, mappingProblems, suggestMapping, seasonFrom, repairTemplate, type Mapping } from "./mapping";
+import { applyMapping, headerHash, looksLikeReference, mappingProblems, nearestTemplate, suggestMapping, seasonFrom, repairTemplate, trimToHeaders, type Mapping } from "./mapping";
 import { DEFAULT_CATEGORY_RULES, chooseOptions, detectCategory, enrichFromTitle } from "./categorize";
 import { groupLineItems } from "./grouping";
 import { emptyLineItem } from "./types";
@@ -222,5 +222,26 @@ describe("a saved mapping, kept where it holds", () => {
     const oldList: Mapping = { "Long Description": "description", "Model #": "title", "Model name": "modelCode" };
     const list = repairTemplate(oldList, suggestMapping(["Model #", "Model name", "Long Description"], listRows), listRows);
     expect(list).toMatchObject({ "Model #": "modelCode", "Model name": "title", "Long Description": "description" });
+  });
+});
+
+describe("a supplier whose layout changed", () => {
+  const remembered = { name: "Northwind – CSV layout", mappings: JSON.stringify({ "Item": "title", "Code": "sku", "EAN": "barcode", "Whsl": "costPrice", "Qty": "quantity", "Notes": "" }) };
+  const other = { name: "Northwind – price list", mappings: JSON.stringify({ "Model": "title", "RRP": "rrp" }) };
+
+  it("finds the nearest remembered layout and says what was added and what is gone", () => {
+    const near = nearestTemplate(["item", "Code", "Barcode", "Whsl", "Qty", "Carton"], [other, remembered]);
+    expect(near?.template.name).toBe("Northwind – CSV layout");
+    expect(near?.drift).toEqual({ templateName: "Northwind – CSV layout", added: ["Barcode", "Carton"], missing: [{ header: "EAN", field: "barcode" }], shared: 4 });
+  });
+
+  it("does not take a layout that shares one heading for the same document", () => {
+    expect(nearestTemplate(["Model", "Colour", "Size"], [remembered, other])).toBeNull();
+  });
+
+  it("carries a remembered mapping over only where the columns still exist, spelt the file's way", () => {
+    const saved: Mapping = { "Item": "title", "EAN": "barcode", "Whsl": "costPrice" };
+    expect(trimToHeaders(saved, ["ITEM", "Barcode", "whsl"])).toEqual({ "ITEM": "title", "whsl": "costPrice" });
+    expect(trimToHeaders(undefined, ["x"])).toBeUndefined();
   });
 });

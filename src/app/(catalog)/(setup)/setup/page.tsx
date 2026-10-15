@@ -11,6 +11,9 @@ import { AiStep } from "./AiStep";
 import { HouseStep } from "./HouseStep";
 import { DoneStep } from "./DoneStep";
 import { SuppliersStep } from "./SuppliersStep";
+import { TrialStep } from "./TrialStep";
+import { licenceServer } from "@/lib/catalog/licence";
+import { currentLicence } from "@/lib/catalog/licence-store";
 import { prisma } from "@/lib/catalog/db";
 import { CANONICAL_FIELDS } from "@/lib/catalog/types";
 import { Stepper, type SetupStep } from "./Stepper";
@@ -35,13 +38,16 @@ export default async function SetupPage({ searchParams }: { searchParams: Promis
 
   const { step: asked } = await searchParams;
   const [profile, learned, storedKey, house, tagRules, templates, batches] = await Promise.all([getShopProfile(), getLearnedVocabulary(), getStoredApiKey(), getHouseConventions(), houseTagRules(), prisma.mappingTemplate.count(), prisma.importBatch.count()]);
-  const wanted = (["shop", "learn", "house", "ai", "suppliers", "done"] as const).find((s) => s === asked);
+  // A copy that checks a licence picks its plan before anything else; the vendor and development do not.
+  const needsPlan = Boolean(licenceServer()) && (await currentLicence()).kind === "none";
+  const wanted = (["plan", "shop", "learn", "house", "ai", "suppliers", "done"] as const).find((s) => s === asked && (s !== "plan" || licenceServer()));
   const suppliersDone = templates > 0 || batches > 0 || Boolean(profile.skipped.suppliers);
-  const step: SetupStep = wanted ?? (!profile.name ? "shop" : !learned && !profile.skipped.learn ? "learn" : !house.savedAt && !profile.skipped.house ? "house" : apiKeySource() === "none" && !profile.skipped.ai ? "ai" : !suppliersDone ? "suppliers" : "done");
+  const step: SetupStep = wanted ?? (needsPlan ? "plan" : !profile.name ? "shop" : !learned && !profile.skipped.learn ? "learn" : !house.savedAt && !profile.skipped.house ? "house" : apiKeySource() === "none" && !profile.skipped.ai ? "ai" : !suppliersDone ? "suppliers" : "done");
 
   return (
     <>
-      <Stepper current={step} />
+      <Stepper current={step} hidePlan={!licenceServer()} />
+      {step === "plan" && <TrialStep email={user.email} next="/setup?step=shop" />}
       {step === "shop" && <ShopStep profile={profile} />}
       {step === "learn" && <LearnStep learned={learned} />}
       {step === "house" && <HouseStep house={house} tagRules={tagRules} kinds={productTypes()} />}

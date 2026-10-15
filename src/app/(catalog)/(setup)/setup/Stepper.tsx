@@ -1,7 +1,8 @@
-export type SetupStep = "account" | "shop" | "learn" | "house" | "ai" | "suppliers" | "done";
+export type SetupStep = "account" | "plan" | "shop" | "learn" | "house" | "ai" | "suppliers" | "done";
 
 export const STEPS: Array<{ key: SetupStep; label: string }> = [
   { key: "account", label: "Your account" },
+  { key: "plan", label: "Your plan" },
   { key: "shop", label: "Your shop" },
   { key: "learn", label: "Your catalogue" },
   { key: "house", label: "How you list" },
@@ -15,11 +16,12 @@ export const STEPS: Array<{ key: SetupStep; label: string }> = [
  * is pulled up over the header's wave, the way the sign-in card is, and the steps were being
  * drawn across the graphic.
  */
-export function Stepper({ current }: { current: SetupStep }) {
-  const at = STEPS.findIndex((s) => s.key === current);
+export function Stepper({ current, hidePlan = false }: { current: SetupStep; hidePlan?: boolean }) {
+  const steps = hidePlan ? STEPS.filter((s) => s.key !== "plan") : STEPS;
+  const at = steps.findIndex((s) => s.key === current);
   return (
     <ol className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-[var(--line)] bg-white px-4 py-3 text-[13px] shadow-[var(--shadow-sm)]" aria-label="Setup steps">
-      {STEPS.map((s, i) => {
+      {steps.map((s, i) => {
         const state = i < at ? "done" : i === at ? "now" : "later";
         return (
           <li key={s.key} className="flex items-center gap-2">

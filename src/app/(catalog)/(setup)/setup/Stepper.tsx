@@ -8,11 +8,15 @@ export const STEPS: Array<{ key: SetupStep; label: string }> = [
   { key: "done", label: "Ready" },
 ];
 
-/** Where you are in setup, as a row of numbered steps. */
+/**
+ * Where you are in setup, as a row of numbered steps. It sits on its own white panel: the page
+ * is pulled up over the header's wave, the way the sign-in card is, and the steps were being
+ * drawn across the graphic.
+ */
 export function Stepper({ current }: { current: SetupStep }) {
   const at = STEPS.findIndex((s) => s.key === current);
   return (
-    <ol className="mb-5 flex flex-wrap items-center gap-x-4 gap-y-2 text-[13px]" aria-label="Setup steps">
+    <ol className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-[var(--line)] bg-white px-4 py-3 text-[13px] shadow-[var(--shadow-sm)]" aria-label="Setup steps">
       {STEPS.map((s, i) => {
         const state = i < at ? "done" : i === at ? "now" : "later";
         return (

@@ -15,6 +15,7 @@
  * the first call. Flöda runs one shop per install, so process-wide state is the right scope.
  */
 
+import { planOf } from "./plans";
 import { prisma, parseJson } from "./db";
 import { setRelay, setStoredApiKey } from "./anthropic";
 import { LICENCE_KEY_SETTING, licenceServer, licenceState, type Licence } from "./licence";
@@ -111,7 +112,9 @@ async function load(): Promise<void> {
   setStoredApiKey(key);
   // A copy in good standing with its vendor reads through Flöda when it has no key of its own.
   const standing = licenceState(parseJson<Licence | null>(licenceRow?.value, null));
-  setRelay(standing.kind === "ok" ? { server: licenceServer(), key: standing.licence.key } : null);
+  // A copy in good standing with its vendor reads through Flöda when it has no key of its own,
+  // unless its plan is the one that reads with the shop's own key.
+  setRelay(standing.kind === "ok" && planOf(standing.licence.plan).reading === "included" ? { server: licenceServer(), key: standing.licence.key } : null);
   loadedAt = Date.now();
 }
 

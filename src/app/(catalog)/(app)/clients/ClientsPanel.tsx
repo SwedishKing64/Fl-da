@@ -2,7 +2,7 @@
 
 import { useActionState, useState, useTransition } from "react";
 import { clientFromLeadAction, createClientAction, deleteClientAction, dismissFeedbackAction, dismissLeadAction, regenerateClientKeyAction, updateClientAction } from "@/app/(catalog)/actions";
-import { PLANS, planOf } from "@/lib/catalog/plans";
+import { PLANS, per, planOf } from "@/lib/catalog/plans";
 import type { FeedbackRow } from "@/lib/catalog/feedback-box";
 import { Alert, Badge, Button, Empty, Field, INPUT, fmtDate } from "@/app/(catalog)/ui";
 import { ActionForm } from "@/app/(catalog)/ActionForm";
@@ -67,7 +67,7 @@ function Row({ c }: { c: ClientRow }) {
                 <Field label="Shop"><input name="name" defaultValue={c.name} className={INPUT} /></Field>
                 <Field label="Contact"><input name="contact" defaultValue={c.contact} className={INPUT} /></Field>
                 <Field label="Email"><input name="email" defaultValue={c.email} className={INPUT} /></Field>
-                <Field label="Plan"><select name="plan" defaultValue={planOf(c.plan).id} className={INPUT}>{PLANS.map((p) => <option key={p.id} value={p.id}>{p.name} · ${p.price} a fortnight</option>)}</select></Field>
+                <Field label="Plan"><select name="plan" defaultValue={planOf(c.plan).id} className={INPUT}>{PLANS.map((p) => <option key={p.id} value={p.id}>{p.name} · ${p.price} {per(p)}</option>)}</select></Field>
                 <Field label="Standing"><select name="status" defaultValue={c.status} className={INPUT}><option value="TRIAL">on trial</option><option value="ACTIVE">active</option><option value="PAUSED">paused</option><option value="ENDED">ended</option></select></Field>
                 <Field label="Until" hint="Empty for no end date."><input name="expiresAt" type="date" defaultValue={dateInput(c.expiresAt)} className={INPUT} /></Field>
                 <Field label="Reading allowance a fortnight ($)" hint="What their reading through Flöda may cost before it is turned away until the next fortnight. Empty takes the plan's own; 0 is no limit."><input name="aiCap" inputMode="decimal" defaultValue={c.aiCap} className={INPUT} /></Field>
@@ -94,7 +94,7 @@ function NewClient() {
       <Field label="Shop"><input name="name" required className={INPUT} /></Field>
       <Field label="Contact"><input name="contact" className={INPUT} /></Field>
       <Field label="Email"><input name="email" type="email" className={INPUT} /></Field>
-      <Field label="Plan" hint="Sets the reading allowance to the plan's own."><select name="plan" defaultValue="shop" className={INPUT}>{PLANS.map((p) => <option key={p.id} value={p.id}>{p.name} · ${p.price} a fortnight</option>)}</select></Field>
+      <Field label="Plan" hint="Sets the reading allowance to the plan's own."><select name="plan" defaultValue="shop" className={INPUT}>{PLANS.map((p) => <option key={p.id} value={p.id}>{p.name} · ${p.price} {per(p)}</option>)}</select></Field>
       <Field label="Standing"><select name="status" defaultValue="ACTIVE" className={INPUT}><option value="TRIAL">on trial</option><option value="ACTIVE">active</option><option value="PAUSED">paused</option></select></Field>
       <Field label="Until" hint="Empty for no end date."><input name="expiresAt" type="date" className={INPUT} /></Field>
       {state && <div className="sm:col-span-3">{state.ok ? <Alert tone="success">{state.message}</Alert> : <Alert tone="danger">{state.error}</Alert>}</div>}

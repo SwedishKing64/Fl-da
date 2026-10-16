@@ -14,7 +14,8 @@
  * subscription — is pure and tested.
  *
  * On the vendor: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, and a Stripe price id per plan in
- * STRIPE_PRICE_STARTER, STRIPE_PRICE_SHOP, STRIPE_PRICE_UNLIMITED. With none set, billing is
+ * STRIPE_PRICE_OWNKEY (monthly), STRIPE_PRICE_STARTER, STRIPE_PRICE_SHOP, STRIPE_PRICE_UNLIMITED
+ * (every two weeks). With none set, billing is
  * "not set up" and the copy falls back to asking a person.
  */
 
@@ -30,17 +31,18 @@ function secretKey(): string {
   return (process.env.STRIPE_SECRET_KEY ?? "").trim();
 }
 
+/** The environment variable holding each plan's Stripe price id. The own-key price recurs monthly, the rest every two weeks. */
+export const PRICE_ENV: Record<PlanId, string> = { ownkey: "STRIPE_PRICE_OWNKEY", starter: "STRIPE_PRICE_STARTER", shop: "STRIPE_PRICE_SHOP", unlimited: "STRIPE_PRICE_UNLIMITED" };
+
 export function priceFor(plan: PlanId): string {
-  const name = { starter: "STRIPE_PRICE_STARTER", shop: "STRIPE_PRICE_SHOP", unlimited: "STRIPE_PRICE_UNLIMITED" }[plan];
-  return (process.env[name] ?? "").trim();
+  return (process.env[PRICE_ENV[plan]] ?? "").trim();
 }
 
 /** Which plan a Stripe price stands for, by the ids in the environment. */
 export function planForPrice(priceId: string, env: Record<string, string | undefined> = process.env): PlanId | undefined {
   if (!priceId) return undefined;
   for (const p of PLANS) {
-    const name = { starter: "STRIPE_PRICE_STARTER", shop: "STRIPE_PRICE_SHOP", unlimited: "STRIPE_PRICE_UNLIMITED" }[p.id];
-    if ((env[name] ?? "").trim() === priceId) return p.id;
+    if ((env[PRICE_ENV[p.id]] ?? "").trim() === priceId) return p.id;
   }
   return undefined;
 }

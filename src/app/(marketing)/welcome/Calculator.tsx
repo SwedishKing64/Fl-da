@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { PLANS, planOf, type PlanId } from "@/lib/catalog/plans";
+import { INCLUDED_PLANS, planOf, type PlanId, per } from "@/lib/catalog/plans";
 
 /**
  * What Flöda saves a shop, in its own numbers. Three things the shop knows (what an hour costs,
@@ -22,8 +22,8 @@ function flodaMinutes(products: number): number {
 }
 
 function suggest(products: number): PlanId {
-  const fit = PLANS.find((p) => p.products === null || products <= p.products);
-  return (fit ?? PLANS[PLANS.length - 1]).id;
+  const fit = INCLUDED_PLANS.find((p) => p.products === null || products <= p.products);
+  return (fit ?? INCLUDED_PLANS[INCLUDED_PLANS.length - 1]).id;
 }
 
 const money = (n: number) => `$${Math.round(n).toLocaleString("en-AU")}`;
@@ -82,10 +82,10 @@ export function Calculator() {
         <div className="rows">
           <div><span>By hand</span><b>{hours(byHandHours)} · {money(byHandCost)}</b></div>
           <div><span>Through Flöda</span><b>{hours(flodaHours)} · {money(flodaStaffCost)}</b></div>
-          <div><span>Suggested plan</span><b>{plan.name} · ${plan.price} a fortnight</b></div>
+          <div><span>Suggested plan</span><b>{plan.name} · ${plan.price} {per(plan)}</b></div>
           <div><span>Pays for itself</span><b>{times >= 1 ? `${times >= 10 ? Math.round(times) : Math.round(times * 10) / 10} times over` : "not at this volume"}</b></div>
         </div>
-        <p className="fine">Flöda reads, matches, prices and illustrates about 100 products/variants in {FLODA_MIN_PER_100} minutes, never under {FLODA_FLOOR_MIN} for an order of any size, and less per product/variant on a big order, because the reading and the brand pages run side by side. The checking is yours and the slider is how long you give it. The plan is suggested from the products/variants a month: {PLANS.map((p) => `${p.name} up to ${p.products ?? "any number"}`).join(", ")}.</p>
+        <p className="fine">Flöda reads, matches, prices and illustrates about 100 products/variants in {FLODA_MIN_PER_100} minutes, never under {FLODA_FLOOR_MIN} for an order of any size, and less per product/variant on a big order, because the reading and the brand pages run side by side. The checking is yours and the slider is how long you give it. The plan is suggested from the products/variants a fortnight: {INCLUDED_PLANS.map((p) => `${p.name} up to ${p.products ?? "any number"}`).join(", ")}; the Own key plan is the software alone, with reading on your own key.</p>
       </div>
     </div>
   );

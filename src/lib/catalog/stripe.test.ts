@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseSignature, planForPrice, signPayload, standingFromSubscription, verifyWebhook, type StripeSubscription } from "./stripe";
 
-const env = { STRIPE_PRICE_STARTER: "price_s", STRIPE_PRICE_SHOP: "price_m", STRIPE_PRICE_UNLIMITED: "price_u" };
+const env = { STRIPE_PRICE_OWNKEY: "price_o", STRIPE_PRICE_STARTER: "price_s", STRIPE_PRICE_SHOP: "price_m", STRIPE_PRICE_UNLIMITED: "price_u" };
 
 describe("a Stripe webhook signature", () => {
   const secret = "whsec_test";
@@ -33,6 +33,7 @@ describe("what a subscription means for a client", () => {
   it("is active on the plan the price names", () => {
     expect(standingFromSubscription(base, env, now)).toEqual({ status: "ACTIVE", billing: "active", expiresAt: null, plan: "shop" });
     expect(planForPrice("price_u", env)).toBe("unlimited");
+    expect(planForPrice("price_o", env)).toBe("ownkey");
     expect(planForPrice("price_x", env)).toBeUndefined();
   });
 

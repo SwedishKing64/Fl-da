@@ -30,20 +30,24 @@ export function invoicesFor(readingCapCents: number): number {
   return Math.floor(readingCapCents / (READING_CENTS_PER_PRODUCT * TYPICAL_INVOICE_PRODUCTS));
 }
 
-export type PlanId = "starter" | "shop" | "unlimited";
+export type PlanId = "ownkey" | "starter" | "shop" | "unlimited";
 
 export interface Plan {
   id: PlanId;
   name: string;
-  /** A fortnight, in dollars. */
+  /** One period, in dollars. */
   price: number;
+  /** How often it is billed and what it is sized by. The own-key plan is the one monthly plan. */
+  period: "month" | "fortnight";
+  /** Whether reading documents comes through Flöda's relay, capped, or the shop's own Anthropic key. */
+  reading: "included" | "own-key";
   /** Invoices a fortnight the plan is sized for; null is no count. */
   invoices: number | null;
   /** Products a fortnight the plan is sized for; null is no count. */
   products: number | null;
   /** Who may use it, in words. */
   people: string;
-  /** Reading through Flöda a fortnight, in cents. */
+  /** Reading through Flöda a fortnight, in cents. 0 on a plan that reads with the shop's own key. */
   readingCapCents: number;
   /** One line under the name. */
   blurb: string;
@@ -52,24 +56,38 @@ export interface Plan {
 }
 
 export const PLANS: readonly Plan[] = [
-  { id: "starter", name: "Starter", price: 49, invoices: null, products: null, people: "One person", readingCapCents: 2000, blurb: "A shop that gets a delivery now and then. No invoice count; sized by its reading." },
-  { id: "shop", name: "Shop", price: 149, invoices: 10, products: 500, people: "Everyone on staff", readingCapCents: 6000, blurb: "A specialty shop through a full buying season.", founding: true },
-  { id: "unlimited", name: "Unlimited", price: 299, invoices: null, products: null, people: "Everyone on staff", readingCapCents: 15000, blurb: "A big catalogue, many suppliers, no counting." },
+  { id: "ownkey", name: "Own key", price: 20, period: "month", reading: "own-key", invoices: null, products: null, people: "Everyone on staff", readingCapCents: 0, blurb: "Just the software. Reading is billed by Anthropic to a key of your own, which you paste in once." },
+  { id: "starter", name: "Starter", price: 49, period: "fortnight", reading: "included", invoices: null, products: null, people: "One person", readingCapCents: 2000, blurb: "A shop that gets a delivery now and then. No invoice count; sized by its reading." },
+  { id: "shop", name: "Shop", price: 149, period: "fortnight", reading: "included", invoices: 10, products: 500, people: "Everyone on staff", readingCapCents: 6000, blurb: "A specialty shop through a full buying season.", founding: true },
+  { id: "unlimited", name: "Unlimited", price: 299, period: "fortnight", reading: "included", invoices: null, products: null, people: "Everyone on staff", readingCapCents: 15000, blurb: "A big catalogue, many suppliers, no counting." },
 ];
+
+/** The plans with reading through Flöda: what the calculator picks between. */
+export const INCLUDED_PLANS: readonly Plan[] = PLANS.filter((p) => p.reading === "included");
+
+/** "a month" or "a fortnight", for after a price. */
+export function per(p: Plan): string {
+  return `a ${p.period}`;
+}
+/** "/mo" or "/fortnight", for a price tag. */
+export function perShort(p: Plan): string {
+  return p.period === "month" ? "/mo" : "/fortnight";
+}
 
 export const PLAN_IDS = PLANS.map((p) => p.id) as [PlanId, ...PlanId[]];
 
 /** The plan a stored id means. The ids used before there were tiers all meant the Shop plan. */
 export function planOf(id: string | null | undefined): Plan {
-  return PLANS.find((p) => p.id === id) ?? PLANS[1];
+  return PLANS.find((p) => p.id === id) ?? PLANS.find((p) => p.id === "shop")!;
 }
 
 export function isPlanId(id: string): id is PlanId {
   return PLANS.some((p) => p.id === id);
 }
 
-/** "$20 of reading a fortnight, about 40 invoices of 5 products". */
+/** "$20 of reading a fortnight, about 40 invoices of 5 products"; on the own-key plan, whose key it is. */
 export function describeReading(p: Plan): string {
+  if (p.reading === "own-key") return "Reading with your own Anthropic key, billed by Anthropic to you";
   return `$${Math.round(p.readingCapCents / 100)} of reading a ${PERIOD}, about ${invoicesFor(p.readingCapCents)} invoices of ${TYPICAL_INVOICE_PRODUCTS} products`;
 }
 
@@ -78,6 +96,7 @@ export function describeReading(p: Plan): string {
  * reading buys: "No invoice count; $20 of reading a fortnight, about 40 invoices of 5 products".
  */
 export function describePlanSize(p: Plan): string {
+  if (p.reading === "own-key") return "Unlimited invoices and products; reading with your own key";
   if (p.invoices === null) return p.id === "unlimited" ? "Unlimited invoices and products" : `No invoice count; ${describeReading(p)}`;
   return `Up to ${p.invoices} invoices and about ${p.products} products a ${PERIOD}`;
 }

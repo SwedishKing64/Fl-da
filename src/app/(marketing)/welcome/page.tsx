@@ -8,7 +8,7 @@ import { Faq } from "../Story";
 import { Site } from "../Shell";
 import { Story } from "../Story";
 import { Screens } from "../Screens";
-import { describePlanSize, PLANS } from "@/lib/catalog/plans";
+import { describePlanSize, PLANS, per } from "@/lib/catalog/plans";
 import "./welcome.css";
 
 export const metadata: Metadata = {
@@ -219,11 +219,11 @@ export default function WelcomePage() {
                   {p.founding && <span className="tier-tag">Founding price, held for you</span>}
                   <h3>{p.name}</h3>
                   <p className="tier-blurb">{p.blurb}</p>
-                  <div className="tier-price"><span className="cur" aria-hidden>$</span><span className="amt">{p.price}</span><span className="per">a fortnight</span></div>
+                  <div className="tier-price"><span className="cur" aria-hidden>$</span><span className="amt">{p.price}</span><span className="per">{per(p)}</span></div>
                   <ul className="ticks">
                     <li>{describePlanSize(p)}</li>
                     <li>{p.people}</li>
-                    <li>AI reading included, nothing else to buy</li>
+                    <li>{p.reading === "included" ? "AI reading included, nothing else to buy" : "Reading on your own Anthropic key, at Anthropic's rates"}</li>
                     <li>Set up for you by a Flöda engineer</li>
                     {p.id === "unlimited" && <li>An engineer on call through your season</li>}
                   </ul>
@@ -258,7 +258,7 @@ export default function WelcomePage() {
           <div className="wrap">
             <Reveal>
               <h2>Your next season&rsquo;s paperwork, read for you.</h2>
-              <p className="lede">Two weeks free on any plan, then from $49 a fortnight. A Flöda engineer sets it up with you on one of your own supplier invoices.</p>
+              <p className="lede">Two weeks free on any plan, then $20 a month with your own key or from $49 a fortnight with reading included. A Flöda engineer sets it up with you on one of your own supplier invoices.</p>
               <a href="#register" className="btn btn-meta btn-lg">Start free trial<span aria-hidden>→</span></a>
             </Reveal>
           </div>

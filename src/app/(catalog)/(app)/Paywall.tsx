@@ -4,7 +4,7 @@ import { logoutAction } from "@/app/(catalog)/actions";
 import { LicenceForm } from "./settings/LicenceForm";
 import { BillingButtons } from "./settings/BillingButtons";
 import type { LicenceState } from "@/lib/catalog/licence";
-import { describePlanSize, PLANS, planOf, TRIAL_DAYS } from "@/lib/catalog/plans";
+import { describePlanSize, PLANS, perShort, planOf, TRIAL_DAYS } from "@/lib/catalog/plans";
 
 /**
  * What a copy shows instead of the app when it may not run: the trial has ended, the licence
@@ -42,10 +42,10 @@ export function Paywall({ state, isAdmin, name, servers = [], override = "" }: {
               )}
               {lapsed && (
                 <>
-                  <div className="mt-6 grid gap-3 md:grid-cols-3">
+                  <div className="mt-6 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
                     {PLANS.map((p) => (
                       <div key={p.id} className={`rounded-[14px] border p-4 ${p.id === was?.id ? "border-[var(--meta)] bg-[var(--meta-tint)]" : "border-[var(--line-soft)] bg-white"}`}>
-                        <div className="flex items-baseline justify-between"><span className="text-[15px] font-bold">{p.name}</span><span className="text-[13px] font-semibold">${p.price}<span className="font-normal text-[var(--ink-soft)]">/fortnight</span></span></div>
+                        <div className="flex items-baseline justify-between"><span className="text-[15px] font-bold">{p.name}</span><span className="text-[13px] font-semibold">${p.price}<span className="font-normal text-[var(--ink-soft)]">{perShort(p)}</span></span></div>
                         <div className="mt-1 text-[12.5px] text-[var(--ink-soft)]">{describePlanSize(p)}. {p.people}.</div>
                         {p.id === was?.id && <div className="mt-1 text-[11.5px] font-semibold text-[var(--meta)]">What you were on</div>}
                       </div>

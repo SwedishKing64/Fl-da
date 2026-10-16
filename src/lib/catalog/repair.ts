@@ -16,7 +16,7 @@
  */
 
 import { isValidHandle, slugify } from "./handle";
-import type { CsvProduct, CsvVariant } from "./csv";
+import { isPublicHttpsUrl, type CsvProduct, type CsvVariant } from "./csv";
 
 export interface Repair {
   handle: string;
@@ -172,6 +172,26 @@ export function repairForExport(products: CsvProduct[]): { products: CsvProduct[
       repairs.push({ handle: p.handle, what: `"${sku}" was on more than one variant — this one became "${candidate}"` });
       usedSkus.add(candidate.toLowerCase());
       v.sku = candidate;
+    }
+  }
+
+  // --- pictures -----------------------------------------------------------
+  //
+  // Shopify fetches each picture from the address in the file, so one it cannot reach — a copy's
+  // own 127.0.0.1, a path with no host — is no picture at all. It is left off and said, rather
+  // than left in to fail the import; the listing goes up and the picture is added in Shopify.
+  for (const p of out) {
+    const kept = p.images.filter((img) => isPublicHttpsUrl(img.url));
+    if (kept.length < p.images.length) {
+      const gone = p.images.filter((img) => !isPublicHttpsUrl(img.url)).map((img) => img.url);
+      repairs.push({ handle: p.handle, what: `${gone.length === 1 ? "a picture was" : `${gone.length} pictures were`} at an address Shopify cannot fetch (${gone[0]}${gone.length > 1 ? ", …" : ""}) — left off; add ${gone.length === 1 ? "it" : "them"} in Shopify` });
+      p.images = kept.map((img, i) => ({ ...img, position: i + 1 }));
+    }
+    for (const v of p.variants) {
+      if (v.imageUrl && !isPublicHttpsUrl(v.imageUrl)) {
+        repairs.push({ handle: p.handle, what: `${v.sku || "a variant"}'s picture was at an address Shopify cannot fetch — left off` });
+        v.imageUrl = null;
+      }
     }
   }
 

@@ -1,5 +1,5 @@
 // Row-level validation for the review grid. Pure: takes the review view + settings and
-// returns flags per product / variant. Errors block export; warnings can be overridden.
+// returns flags per product / variant. Errors are repaired or named on the way out; nothing stops the export.
 
 import { isPublicHttpsUrl } from "./csv";
 import { gtinVerdict, isGtin } from "./gtin";

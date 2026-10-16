@@ -5,6 +5,7 @@ import { Badge, Card, Details, Empty, LinkButton, PageHeader, fmtDate, statusTon
 import { getSettings } from "@/lib/catalog/settings";
 import { describeDirectives, parseDirectives } from "@/lib/catalog/instructions";
 import { Steps } from "./Steps";
+import { NextStep } from "./NextStep";
 import { UploadPanel } from "./UploadPanel";
 import { InstructionChat } from "./InstructionChat";
 import { BuildCheck } from "./BuildCheck";
@@ -130,6 +131,7 @@ async function renderBatchPage(props: PageProps<"/batches/[id]">) {
             />
           )}
         </div>
+        <NextStep href={`/batches/${id}/review`} label="Next: Review & price" disabledWhy={products.length === 0 ? "Build the products first; then the review grid is next." : undefined} />
         <div className="space-y-6">
           <Details summary="Currency, GST and freight" hint="Set once per batch. Only open it if this invoice is not in plain AUD.">
             <BatchSettingsForm

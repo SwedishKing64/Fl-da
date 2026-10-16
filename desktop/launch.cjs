@@ -92,6 +92,8 @@ async function launch(opts) {
     // An open build: no sign-in, no licence, and its own key for reading documents.
     ...(config.open ? { FLODA_OPEN: "1" } : {}),
     ...(config.anthropicApiKey ? { ANTHROPIC_API_KEY: config.anthropicApiKey } : {}),
+    // …and its own picture store, since its address on this machine is no use to Shopify.
+    ...(config.blobToken ? { BLOB_READ_WRITE_TOKEN: config.blobToken } : {}),
     ...(opts.env ?? {}),
   };
   const log = opts.log ?? (() => {});

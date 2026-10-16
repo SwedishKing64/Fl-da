@@ -18,7 +18,7 @@
 
 import sharp from "sharp";
 import { getSettings } from "./settings";
-import { publicFileUrl, saveFile, usingBlob } from "./storage";
+import { pictureHosting, publicFileUrl, saveFile } from "./storage";
 import { pickColour, type ColourLook, type Looker } from "./colour-match";
 
 /** The square's side: big enough for Shopify's zoom, small enough to be quick. */
@@ -145,8 +145,8 @@ export async function hostPictures(urls: string[], name: string, deps: { fetcher
   if (urls.length === 0) return urls;
   const base = deps.publicBaseUrl ?? (await getSettings()).publicBaseUrl;
   // With nowhere public to serve them from, framed copies would be addresses the shop cannot
-  // reach; the brand's own are better than that. Blob storage serves its own.
-  if (!usingBlob() && !publicFileUrl("images/x.jpg", base)) return urls;
+  // reach; the brand's own are better than that. Blob storage and the vendor's store serve their own.
+  if (!pictureHosting() && !publicFileUrl("images/x.jpg", base)) return urls;
   const out = [...urls];
   const until = Math.min(deps.until ?? Infinity, Date.now() + SET_MS);
   let next = 0;
@@ -187,7 +187,7 @@ export async function hostPicturesOfColour(urls: string[], name: string, colours
   const none: HostedOfColour = { images: urls, leftOut: 0, otherColours: [], shown: "", colours: urls.map(() => ""), looked: false };
   if (urls.length === 0) return none;
   const base = deps.publicBaseUrl ?? (await getSettings()).publicBaseUrl;
-  const canHost = usingBlob() || publicFileUrl("images/x.jpg", base) !== null;
+  const canHost = pictureHosting() || publicFileUrl("images/x.jpg", base) !== null;
   const until = Math.min(deps.until ?? Infinity, Date.now() + SET_MS);
 
   // Fetched, a few at a time.

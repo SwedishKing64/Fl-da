@@ -106,6 +106,17 @@ describe("repairing a batch instead of refusing it", () => {
     expect(repairs.length).toBeGreaterThan(0);
   });
 
+  it("leaves off a picture at an address Shopify cannot fetch, and says so, rather than failing the file", () => {
+    const p: CsvProduct = { ...leaderJacket(["L"]), images: [{ url: "http://127.0.0.1:51299/api/catalog/files/images/2026-10/a-1.jpg", position: 1 }, { url: "https://cdn.example.com/a-2.jpg", position: 2 }] };
+    p.variants[0].imageUrl = "http://127.0.0.1:51299/api/catalog/files/images/2026-10/a-1.jpg";
+    const { products, repairs } = repairForExport([p]);
+    expect(products[0].images.map((i) => i.url)).toEqual(["https://cdn.example.com/a-2.jpg"]);
+    expect(products[0].images[0].position).toBe(1);
+    expect(products[0].variants[0].imageUrl).toBeNull();
+    expect(repairs.filter((r) => r.what.includes("cannot fetch"))).toHaveLength(2);
+    expect(validateProducts(products).filter((i) => i.level === "error")).toEqual([]);
+  });
+
   it("is deterministic, so a download can rebuild the same file", () => {
     const build = () => repairForExport([leaderJacket(["M", "L", "XL"]), { ...leaderJacket(["S"]), title: "Other" }]);
     expect(JSON.stringify(build().products)).toBe(JSON.stringify(build().products));

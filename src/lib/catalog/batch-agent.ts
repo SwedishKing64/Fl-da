@@ -16,7 +16,7 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
-import { anthropicClient, EXTRACTION_MODEL, aiAvailable } from "./anthropic";
+import { anthropicClient, cachedSystem, READING_MODEL, aiAvailable } from "./anthropic";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { prisma } from "./db";
@@ -71,9 +71,10 @@ const getClient = (): Anthropic => anthropicClient(6);
 type Ask = (system: string, content: string) => Promise<string | undefined>;
 const askModel: Ask = async (system, content) => {
   const response = await retrying(() => getClient().messages.stream({
-    model: EXTRACTION_MODEL,
+    model: READING_MODEL,
     max_tokens: 6000,
-    system,
+    // Both prompts are fixed text, so the service keeps them between batches.
+    system: cachedSystem(system),
     thinking: { type: "adaptive" },
     output_config: { format: zodOutputFormat(Review), effort: "medium" },
     messages: [{ role: "user", content }],

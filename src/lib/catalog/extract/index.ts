@@ -2,7 +2,7 @@ import { extractCsv, extractXlsx } from "./tabular";
 import { extractPdfText } from "./pdf";
 import { extractHeuristic } from "./heuristic";
 import { aiAvailable } from "../anthropic";
-import { aiDocumentMeta, aiExtractionToTable, extractFromImage, extractFromPdf, extractFromText, type DocumentType } from "./ai";
+import { aiDocumentMeta, aiExtractionToTable, extractFromImage, extractFromPdf, extractFromText, type DocumentType, type ReadOptions } from "./ai";
 import type { ExtractedTable } from "./types";
 
 export type { ExtractedTable } from "./types";
@@ -32,7 +32,7 @@ const NEEDS_AI = "This file type needs ANTHROPIC_API_KEY to be read by AI. Sprea
  * sheet, product photo…). Without an API key a conservative pattern-matching fallback keeps
  * text-based invoices usable.
  */
-export async function extractFile(buffer: Buffer, filename: string, mimeType: string, kind: UploadKind = "AUTO"): Promise<ExtractionOutcome> {
+export async function extractFile(buffer: Buffer, filename: string, mimeType: string, kind: UploadKind = "AUTO", read: ReadOptions = {}): Promise<ExtractionOutcome> {
   const fileType = detectKind(filename, mimeType);
   const hint = kind === "AUTO" ? undefined : kind;
   switch (fileType) {
@@ -41,12 +41,12 @@ export async function extractFile(buffer: Buffer, filename: string, mimeType: st
     case "xlsx":
       return { table: await extractXlsx(buffer), meta: tabularMeta(kind) };
     case "text":
-      return fromText(buffer.toString("utf8"), "AI_TEXT", hint);
+      return fromText(buffer.toString("utf8"), "AI_TEXT", hint, read);
     case "pdf": {
       const pdf = await extractPdfText(buffer);
-      if (!pdf.looksScanned && kind !== "PRODUCT_PHOTO") return fromText(pdf.text, "PDF_TEXT", hint);
+      if (!pdf.looksScanned && kind !== "PRODUCT_PHOTO") return fromText(pdf.text, "PDF_TEXT", hint, read);
       if (aiAvailable()) {
-        const result = await extractFromPdf(buffer, hint);
+        const result = await extractFromPdf(buffer, hint, read);
         return { table: aiExtractionToTable(result, "PDF_AI", pdf.text), meta: aiDocumentMeta(result) };
       }
       const table = extractHeuristic(pdf.text);
@@ -57,7 +57,7 @@ export async function extractFile(buffer: Buffer, filename: string, mimeType: st
       if (!aiAvailable()) {
         return { table: { headers: [], rows: [], method: "IMAGE_AI", warnings: [NEEDS_AI] }, meta: kind === "PRODUCT_PHOTO" ? { documentType: "PRODUCT_PHOTO", supplier: "", invoiceNumber: "", currency: "", gstTreatment: "UNKNOWN" } : undefined };
       }
-      const result = await extractFromImage(buffer, mimeType, hint);
+      const result = await extractFromImage(buffer, mimeType, hint, read);
       return { table: aiExtractionToTable(result, "IMAGE_AI"), meta: aiDocumentMeta(result) };
     }
     default:
@@ -70,10 +70,10 @@ function tabularMeta(kind: UploadKind): ExtractionOutcome["meta"] {
   return undefined;
 }
 
-async function fromText(text: string, method: "PDF_TEXT" | "AI_TEXT", hint?: string): Promise<ExtractionOutcome> {
+async function fromText(text: string, method: "PDF_TEXT" | "AI_TEXT", hint?: string, read: ReadOptions = {}): Promise<ExtractionOutcome> {
   if (aiAvailable()) {
     try {
-      const result = await extractFromText(text, hint);
+      const result = await extractFromText(text, hint, read);
       return { table: aiExtractionToTable(result, method === "PDF_TEXT" ? "PDF_AI" : "AI_TEXT", text), meta: aiDocumentMeta(result) };
     } catch (err) {
       const table = extractHeuristic(text);

@@ -10,7 +10,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { retailer } from "./shop-profile";
-import { anthropicClient, EXTRACTION_MODEL, aiAvailable } from "./anthropic";
+import { anthropicClient, cachedSystem, LIGHT_MODEL, WORKING_MODEL, aiAvailable } from "./anthropic";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 
@@ -61,7 +61,10 @@ export interface PlannedChange {
   category: string;
 }
 
-const SYSTEM = () => `You turn an instruction from the staff of ${retailer()} into edits to a Shopify product export.
+/** What differs by shop, after each fixed prompt so the fixed prompt is the same bytes for every shop. */
+const SHOP = () => `The shop is ${retailer()}.`;
+
+const SYSTEM = `You turn an instruction from a shop's staff into edits to a Shopify product export.
 
 The shop's rules, which you follow without being told:
 - The recommended retail price lives in the Compare At column. Putting something "on sale", "on clearance" or "X% off" means the discount comes off the RECOMMENDED RETAIL, not off whatever the price happens to be today, so a product marked down twice does not compound. Use from: "rrp" unless the instruction plainly says otherwise.
@@ -378,9 +381,9 @@ export async function planAdjustment(
   ].join("\n");
 
   const response = await retrying(() => getClient().messages.stream({
-    model: EXTRACTION_MODEL,
+    model: WORKING_MODEL,
     max_tokens: 2000,
-    system: SYSTEM(),
+    system: cachedSystem(SYSTEM, SHOP()),
     output_config: { format: zodOutputFormat(PlanSchema), effort: "low" },
     messages: [{ role: "user", content: context }],
   }).finalMessage());
@@ -483,7 +486,7 @@ export interface SplitInstructions {
   unclear: string;
 }
 
-const SPLIT_SYSTEM = () => `You are reading a sheet of instructions from the buyer at ${retailer()}. It lists the changes to make to products the shop already sells — what moves into clearance, what goes on sale and by how much, what comes off the site, what gets retagged.
+const SPLIT_SYSTEM = `You are reading a sheet of instructions from the shop's buyer. It lists the changes to make to products the shop already sells — what moves into clearance, what goes on sale and by how much, what comes off the site, what gets retagged.
 
 Break it into the separate changes it asks for. One entry per change.
 
@@ -531,9 +534,9 @@ export async function splitInstructions(input: string | { pdf: Buffer } | { imag
   }
 
   const response = await retrying(() => getClient().messages.stream({
-    model: EXTRACTION_MODEL,
+    model: WORKING_MODEL,
     max_tokens: 8000,
-    system: SPLIT_SYSTEM(),
+    system: cachedSystem(SPLIT_SYSTEM, SHOP()),
     output_config: { format: zodOutputFormat(SplitSchema), effort: "low" },
     messages: [{ role: "user", content }],
   }).finalMessage());
@@ -561,8 +564,9 @@ export async function readInstructionImage(buffer: Buffer, mimeType: string): Pr
   if (!planningAvailable()) return "";
   const isPdf = mimeType === "application/pdf";
   const response = await retrying(() => getClient().messages.stream({
-    model: EXTRACTION_MODEL,
+    model: WORKING_MODEL,
     max_tokens: 4000,
+    output_config: { effort: "low" },
     system: "Transcribe this document. Write out the text on it, in order, keeping every brand, product name, tag, year, percentage and price exactly as printed. Keep the line and list structure. Do not summarise, explain or reorder, and do not add anything that is not on the page. If part of it is handwritten, transcribe that too and mark it (handwritten).",
     messages: [{
       role: "user",
@@ -606,7 +610,7 @@ export interface Screened {
   why: string;
 }
 
-const SCREEN_SYSTEM = () => `You are matching a sheet of seasonal changes from ${retailer()} against the Shopify exports they have actually loaded.
+const SCREEN_SYSTEM = `You are matching a sheet of seasonal changes from a shop against the Shopify exports they have actually loaded.
 
 For each numbered instruction, say whether any product in those exports could possibly match it.
 
@@ -648,9 +652,9 @@ export async function screenInstructions(
   let response: Anthropic.Message;
   try {
     response = await retrying(() => getClient().messages.stream({
-      model: EXTRACTION_MODEL,
+      model: LIGHT_MODEL,
       max_tokens: 8000,
-      system: SCREEN_SYSTEM(),
+      system: cachedSystem(SCREEN_SYSTEM, SHOP()),
       output_config: { format: zodOutputFormat(ScreenSchema), effort: "low" },
       messages: [{ role: "user", content: context }],
     }).finalMessage());

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allowanceOf, costCents, describeAllowance, limitReachedMessage, periodEnd, periodKey, periodStart, StreamMeter, usageOf } from "./ai-usage";
+import { allowanceOf, costCents, describeAllowance, limitReachedMessage, periodEnd, periodKey, periodStart, rateFor, requestedModel, StreamMeter, usageOf } from "./ai-usage";
 
 describe("what a reading used", () => {
   it("reads the service's usage object and ignores what is not a count", () => {
@@ -9,6 +9,17 @@ describe("what a reading used", () => {
   it("prices a reading at the Opus rates", () => {
     expect(costCents({ input: 1_000_000, cacheWrite: 0, cacheRead: 0, output: 0 })).toBe(500);
     expect(costCents({ input: 20_000, cacheWrite: 0, cacheRead: 0, output: 4_000 })).toBe(20);
+  });
+  it("prices a call by the model it asked for, the dearest when the model is unknown", () => {
+    const million = { input: 1_000_000, cacheWrite: 0, cacheRead: 0, output: 0 };
+    expect(costCents(million, rateFor("claude-opus-5-5"))).toBe(400);
+    expect(costCents(million, rateFor("claude-sonnet-5-5"))).toBe(200);
+    expect(costCents(million, rateFor("claude-haiku-5-5"))).toBe(10);
+    expect(costCents(million, rateFor("claude-opus-5-5", true))).toBe(800);
+    expect(costCents(million, rateFor("something-new"))).toBe(500);
+    expect(costCents({ input: 0, cacheWrite: 0, cacheRead: 1_000_000, output: 0 }, rateFor("claude-opus-5-5"))).toBe(20);
+    expect(requestedModel(JSON.stringify({ model: "claude-haiku-5-5", speed: "fast" }))).toEqual({ model: "claude-haiku-5-5", fast: true });
+    expect(requestedModel("not json")).toEqual({ model: "", fast: false });
   });
   it("meters a streamed answer from message_start and the last message_delta", () => {
     const m = new StreamMeter();
@@ -33,6 +44,11 @@ describe("a client's month", () => {
     expect(a.spentCents).toBe(1250);
     expect(a.exhausted).toBe(false);
     expect(describeAllowance(a)).toBe("$12.50 of $60.00 this fortnight, 12 readings");
+  });
+  it("prefers what each call was priced at over the tokens at one rate", () => {
+    expect(allowanceOf({ ...row, aiCents: 300 }).spentCents).toBe(300);
+    expect(allowanceOf({ ...row, aiCents: 0 }).spentCents).toBe(1250);
+    expect(allowanceOf({ ...row, aiCents: 300, aiMonth: "2001-01" }).spentCents).toBe(0);
   });
   it("starts a new month from nothing", () => {
     const a = allowanceOf({ ...row, aiMonth: "2001-01" });

@@ -15,8 +15,39 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 
-/** The model every reader uses. Overridable per deployment. */
-export const EXTRACTION_MODEL = process.env.CATALOG_AI_MODEL || "claude-opus-5";
+/**
+ * Three models, by how hard the work is. Each overridable per deployment.
+ *
+ *  - READING: a supplier's document — a photographed invoice, a PDF, a season's workbook — and
+ *    the check of a whole batch. The hardest reading there is here, and the most damaging to get
+ *    wrong, so it has the strongest model.
+ *  - WORKING: research on the web, a brand's page, an instruction, a plan over an export, copy.
+ *    Judgement over a page or two of text, where the model a tier down does as well at half the
+ *    price.
+ *  - LIGHT: turning notes into fields, screening a list for what is relevant. Copying and sorting,
+ *    at a fraction of the price.
+ *
+ * A document from a supplier whose paperwork reads clean (see `supplier-record.ts`) is read on the
+ * WORKING model: its layout is known and its record says so, and the record keeps watching.
+ */
+export const READING_MODEL = process.env.CATALOG_AI_MODEL || "claude-opus-5-5";
+export const WORKING_MODEL = process.env.CATALOG_AI_WORKING_MODEL || "claude-sonnet-5-5";
+export const LIGHT_MODEL = process.env.CATALOG_AI_LIGHT_MODEL || "claude-haiku-5-5";
+/** The old name for the reading model. */
+export const EXTRACTION_MODEL = READING_MODEL;
+
+/**
+ * A system prompt the service may keep between calls. The fixed part — the same bytes on every
+ * call, from every shop — is marked for caching, so a read pays for it once in five minutes and a
+ * twentieth of the price after; anything that differs by shop goes in a second block after it, so
+ * it never breaks the match. Under about 500 tokens the service keeps nothing, and the mark costs
+ * nothing.
+ */
+export function cachedSystem(fixed: string, varying = ""): Anthropic.TextBlockParam[] {
+  const blocks: Anthropic.TextBlockParam[] = [{ type: "text", text: fixed, cache_control: { type: "ephemeral" } }];
+  if (varying.trim()) blocks.push({ type: "text", text: varying.trim() });
+  return blocks;
+}
 
 let storedKey = "";
 let relay: { server: string; key: string } | null = null;

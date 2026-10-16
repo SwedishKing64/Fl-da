@@ -12,7 +12,7 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
-import { anthropicClient, EXTRACTION_MODEL } from "./anthropic";
+import { anthropicClient, WORKING_MODEL } from "./anthropic";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 
@@ -44,7 +44,7 @@ type Ask = (content: string) => Promise<string | undefined>;
 
 const askModel: Ask = async (content) => {
   const response = await retrying(() => getClient().messages.stream({
-    model: EXTRACTION_MODEL,
+    model: WORKING_MODEL,
     max_tokens: 4000,
     system: SYSTEM,
     output_config: { format: zodOutputFormat(Answer), effort: "low" },

@@ -37,6 +37,8 @@ export { toCsvProducts };
 import { SKI_METAFIELDS, metafieldColumn, type AppSettings, type CanonicalLineItem, type GstTreatment, CANONICAL_FIELDS } from "./types";
 import type { ReviewProduct, ReviewSummary, ReviewVariant } from "./review-types";
 import { hardErrors, summarise, validateReview, warningList } from "./validate";
+import { readsKnown } from "./supplier-record";
+import { supplierRecordFor } from "./supplier-score";
 import type { MatchCandidate } from "./match-candidates";
 import { filePath, pictureHosting, publicFileUrl, readFile, saveFile, usingBlob } from "./storage";
 import { logAudit } from "./audit";
@@ -174,6 +176,17 @@ export async function storeFile(batchId: string, given: { filename: string; mime
   return { id: record.id };
 }
 
+/** Whether the batch's supplier has a record clean enough for its paperwork to be read on the lighter model. */
+async function supplierReadsKnown(batchId: string): Promise<boolean> {
+  try {
+    const batch = await prisma.importBatch.findUnique({ where: { id: batchId }, select: { supplierId: true } });
+    if (!batch?.supplierId) return false;
+    return readsKnown(await supplierRecordFor(batch.supplierId, batchId));
+  } catch {
+    return false;
+  }
+}
+
 /** Read a file that is already stored, and record what came of it. */
 export async function extractStoredFile(fileId: string, origin?: string): Promise<IngestResult> {
   const record = await prisma.sourceFile.findUniqueOrThrow({ where: { id: fileId } });
@@ -208,13 +221,16 @@ export async function ingestFile(batchId: string, given: { filename: string; mim
         return { id: record.id, rows: 0, method: "CSV", kind: requested, warnings: [note] };
       }
     }
+    // A supplier whose paperwork reads clean on its record is read on the lighter model, at about
+    // half the price; the record keeps watching, so one that starts reading badly goes back.
+    const known = await supplierReadsKnown(batchId);
     const started = Date.now();
-    const { table, meta } = await extractFile(file.buffer, file.filename, file.mimeType, requested);
+    const { table, meta } = await extractFile(file.buffer, file.filename, file.mimeType, requested, { known });
     // How long the read took is the number behind "this is slow", so it is kept where it can be
     // seen: the server log, and the History page.
     const tookMs = Date.now() - started;
-    console.log(`[read] ${file.filename}: ${table.method} in ${(tookMs / 1000).toFixed(1)}s, ${table.rows.length} rows`);
-    await logAudit("file.read", { batchId, details: { fileId: record.id, filename: file.filename, method: table.method, rows: table.rows.length, tookMs } }).catch(() => undefined);
+    console.log(`[read] ${file.filename}: ${table.method} in ${(tookMs / 1000).toFixed(1)}s, ${table.rows.length} rows${known ? ", lighter model" : ""}`);
+    await logAudit("file.read", { batchId, details: { fileId: record.id, filename: file.filename, method: table.method, rows: table.rows.length, tookMs, reader: known ? "lighter" : "full" } }).catch(() => undefined);
     const detected = meta?.documentType ?? null;
     // A spreadsheet never reached the model, so nothing classified it and everything came through
     // as a delivery. Its columns say what it is: see looksLikeReference.

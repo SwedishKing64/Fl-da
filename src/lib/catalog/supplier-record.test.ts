@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeRecord, recordFrom, recordWord } from "./supplier-record";
+import { describeRecord, readsKnown, recordFrom, recordWord } from "./supplier-record";
 
 describe("a supplier's record", () => {
   it("has none until an import has finished", () => {
@@ -20,7 +20,8 @@ describe("a supplier's record", () => {
     expect(r.touched).toBe(1);
     expect(r.share).toBeCloseTo(0.025);
     expect(recordWord(r)).toEqual({ word: "reads clean", tone: "success" });
-    expect(describeRecord(r)).toBe("Burton reads clean: over 2 finished imports, 3% of products needed a change after reading.");
+    expect(describeRecord(r)).toBe("Burton reads clean: over 2 finished imports, 3% of products needed a change after reading. Its paperwork is read on the lighter model, at about half the reading cost.");
+    expect(readsKnown(r)).toBe(true);
   });
   it("never counts more touched than built", () => {
     const r = recordFrom("s1", "X", [{ products: 4, touched: 9, finished: true }]);

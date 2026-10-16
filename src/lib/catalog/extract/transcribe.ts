@@ -14,7 +14,7 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
-import { anthropicClient, EXTRACTION_MODEL, aiAvailable } from "../anthropic";
+import { anthropicClient, READING_MODEL, aiAvailable } from "../anthropic";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 
@@ -68,7 +68,7 @@ export type Transcriber = (system: string, content: Anthropic.MessageParam["cont
 
 const askModel: Transcriber = async (system, content) => {
   const response = await retrying(() => getClient().messages.stream({
-    model: EXTRACTION_MODEL,
+    model: READING_MODEL,
     max_tokens: 16_000,
     system,
     output_config: { format: zodOutputFormat(TranscriptSchema), effort: "medium" },

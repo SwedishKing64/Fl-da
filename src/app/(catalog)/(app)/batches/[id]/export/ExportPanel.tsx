@@ -23,9 +23,11 @@ export function ExportPanel(props: { batchId: string; status: string; hard: stri
   // is having nothing to export, or a number the export cannot repair: a barcode that fails its
   // check digit, swapped code columns, a price below cost, a margin no shop earns. The shop
   // imports the file as it is, so a wrong number in it is a wrong number on the shop.
-  const blocked = props.productCount === 0 || hard.length > 0;
+  // The shop asked that nothing else stops it: what the export cannot repair is named above the button instead.
+  const blocked = props.productCount === 0;
+  const toReview = warnings.length + hard.length;
   // Warnings do not gate the CSV. They still gate the push, which writes to the live store.
-  const pushNeedsOverride = warnings.length > 0 && !override;
+  const pushNeedsOverride = toReview > 0 && !override;
 
   /**
    * Save the CSV from the page rather than by following a link.
@@ -86,11 +88,11 @@ export function ExportPanel(props: { batchId: string; status: string; hard: stri
     <div className="space-y-6">
       <Card title="Export gate">
         {props.productCount === 0 && <Alert tone="warning">Nothing to export yet.</Alert>}
-        {props.productCount > 0 && hard.length === 0 && <Alert tone="success">Ready to export. Products are exported as DRAFT, so each one can be checked before it goes live.</Alert>}
+        {props.productCount > 0 && <Alert tone="success">Ready to export. Products are exported as DRAFT, so each one can be checked before it goes live.</Alert>}
         {hard.length > 0 && (
-          <Alert tone="danger">
-            <div className="font-semibold">{hard.length} thing{hard.length === 1 ? "" : "s"} stop{hard.length === 1 ? "s" : ""} the export</div>
-            <p className="mt-1 text-xs">A wrong number in the file is a wrong number on the shop, and nothing on the way out can tell which number was meant. Fix these in the review grid, or dismiss nothing — errors cannot be dismissed.</p>
+          <Alert tone="warning">
+            <div className="font-semibold">{hard.length} thing{hard.length === 1 ? "" : "s"} to check before you import the file</div>
+            <p className="mt-1 text-xs">A wrong number in the file is a wrong number on the shop, and nothing on the way out can tell which number was meant. The export goes ahead regardless; fix these on the review grid first, or in Shopify after.</p>
             <ul className="mt-2 max-h-40 list-disc space-y-0.5 overflow-auto pl-5 text-xs">{hard.slice(0, 40).map((e, i) => <li key={i}>{e}</li>)}{hard.length > 40 && <li>…and {hard.length - 40} more</li>}</ul>
             <a href={`/batches/${batchId}/review`} className="mt-2 inline-block text-xs font-semibold underline">Back to the review grid →</a>
           </Alert>
@@ -144,7 +146,7 @@ export function ExportPanel(props: { batchId: string; status: string; hard: stri
             <p>Reconciled against the live catalog: <strong>{props.reconciled}</strong> of {props.productCount} products — {props.counts.new} new, {props.counts.variantAdd} add variants, {props.counts.update} update existing{props.counts.ambiguous > 0 ? `, ${props.counts.ambiguous} could be one of several (decide in the review grid)` : ""}.</p>
             {props.reconciled < props.productCount && <Alert tone="warning">Run the Shopify check first so existing products are updated instead of duplicated. <Button size="sm" className="ml-2" disabled={pending} onClick={() => start(async () => { const r = await reconcileAction(batchId); setResult(r.ok ? { tone: "info", text: `Checked against the shop: ${r.data!.new} new, ${r.data!.variantAdd} add variants, ${r.data!.update} update${r.data!.ambiguous ? `, ${r.data!.ambiguous} could be one of several` : ""}.` } : { tone: "danger", text: r.error }); router.refresh(); })}>Check now</Button></Alert>}
             {(props.counts.update > 0 || props.counts.variantAdd > 0) && <Alert tone="warning">{props.counts.update + props.counts.variantAdd} products already exist in Shopify. Pushing replaces their variants, prices and details with what is in this batch.</Alert>}
-            {warnings.length > 0 && <label className="flex items-center gap-2 font-medium"><input type="checkbox" checked={override} onChange={(e) => setOverride(e.target.checked)} /> I have reviewed the {warnings.length} warning{warnings.length === 1 ? "" : "s"} above</label>}
+            {toReview > 0 && <label className="flex items-center gap-2 font-medium"><input type="checkbox" checked={override} onChange={(e) => setOverride(e.target.checked)} /> I have reviewed the {toReview} warning{toReview === 1 ? "" : "s"} above</label>}
             <label className="flex items-center gap-2 font-medium"><input type="checkbox" checked={confirmPush} onChange={(e) => setConfirmPush(e.target.checked)} disabled={blocked || pushNeedsOverride} /> I understand this writes to the live store</label>
             <div className="flex flex-wrap gap-2">
               <Button variant="danger" disabled={pending || blocked || pushNeedsOverride || !confirmPush || props.status === "PUSHED"} onClick={doPush}>{pending ? "Pushing…" : "Push to Shopify"}</Button>

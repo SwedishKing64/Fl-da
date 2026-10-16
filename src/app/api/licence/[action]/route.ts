@@ -7,6 +7,7 @@ import { createCheckout, createPortal, stripeConfigured } from "@/lib/catalog/st
 import { checkAccount } from "@/lib/catalog/account";
 import { allowanceOf, periodEnd } from "@/lib/catalog/ai-usage";
 import { SUPPORT_EMAIL } from "@/lib/catalog/support";
+import { findBlobToken } from "@/lib/catalog/blob-token";
 
 export const runtime = "nodejs";
 
@@ -25,6 +26,7 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/licence/[ac
   if (action === "usage") return usage(req);
   if (action === "checkout") return checkout(req);
   if (action === "portal") return portal(req);
+  if (action === "picture") return picture(req);
   if (action !== "activate" && action !== "check") return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const body = (await req.json().catch(() => null)) as Partial<{ key: string; install: string; shop: string; version: string; platform: string; monthBatches: number; monthProducts: number }> | null;
@@ -144,3 +146,32 @@ async function usage(req: NextRequest) {
 }
 
 type UsageAnswer = { ok: true; spentCents: number; capCents: number; exhausted: boolean; calls: number; resetsAt: string; ownKey: boolean } | { ok: false; why: string };
+
+/** The most a picture may weigh on its way here: a framed JPEG is well under a megabyte. */
+const PICTURE_MAX = 6 * 1024 * 1024;
+const PICTURE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+
+/**
+ * A picture from a copy that has nowhere public to keep one: a desktop copy's own address is
+ * 127.0.0.1, and Shopify cannot fetch from that. It is kept in Flöda's Blob store under the
+ * client's name and the public address goes back, to be written on the listing in place of the
+ * brand's. Only a key in good standing may add to the store.
+ */
+async function picture(req: NextRequest) {
+  const key = normaliseKey((req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, ""));
+  if (!key) return NextResponse.json({ ok: false, why: "This copy sent no licence key, so its pictures cannot be kept by Flöda." }, { status: 401 });
+  const client = await prisma.client.findUnique({ where: { licenceKey: key } });
+  const verdict = verdictFor(client);
+  if (!client || !verdict.ok) return NextResponse.json({ ok: false, why: `${verdict.ok ? "" : verdict.why} Pictures are kept for copies in good standing.`.trim() }, { status: 403 });
+  const type = (req.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
+  if (!PICTURE_TYPES.has(type)) return NextResponse.json({ ok: false, why: "Only a JPEG, PNG, WebP or GIF picture is kept." }, { status: 415 });
+  const blob = findBlobToken();
+  if (!blob) return NextResponse.json({ ok: false, why: "Flöda has no picture store attached, so the picture stays on your copy." }, { status: 503 });
+  const bytes = Buffer.from(await req.arrayBuffer());
+  if (bytes.length === 0 || bytes.length > PICTURE_MAX) return NextResponse.json({ ok: false, why: `A picture must be under ${PICTURE_MAX / 1024 / 1024}MB.` }, { status: 413 });
+  const name = (req.headers.get("x-floda-name") ?? "picture").replace(/[^A-Za-z0-9._-]+/g, "_").slice(0, 120) || "picture";
+  const { put } = await import("@vercel/blob");
+  const month = new Date().toISOString().slice(0, 7);
+  const stored = await put(`catalog/pictures/${client.id}/${month}/${crypto.randomUUID().slice(0, 8)}-${name}`, bytes, { access: "public", contentType: type, addRandomSuffix: false, token: blob.token });
+  return NextResponse.json({ ok: true, url: stored.url });
+}

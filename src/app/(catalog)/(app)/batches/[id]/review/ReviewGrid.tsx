@@ -361,7 +361,7 @@ export function ReviewGrid({ initial, batchId, kinds = [] }: { initial: ReviewDa
       </div>
 
       <div className="flag-legend mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-[var(--ink-soft)]" aria-label="What the dots mean">
-        <span><span className="flag error" /> stops the export until it is fixed</span>
+        <span><span className="flag error" /> wrong on the shop if it goes out as it is</span>
         <span><span className="flag warning" /> worth a look; the file goes out regardless</span>
         <span>Hover a row&rsquo;s dots to read them. The first columns stay put as the grid scrolls.</span>
       </div>

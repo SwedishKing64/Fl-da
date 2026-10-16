@@ -227,7 +227,7 @@ export default function WelcomePage() {
                     <li>Set up for you by a Flöda engineer</li>
                     {p.id === "unlimited" && <li>An engineer on call through your season</li>}
                   </ul>
-                  <a href="#register" className={`btn ${p.founding ? "btn-meta" : "btn-grey"}`}>Start free trial</a>
+                  <Link href={`/account/signup?plan=${p.id}`} className={`btn ${p.founding ? "btn-meta" : "btn-grey"}`}>Start free trial</Link>
                 </Reveal>
               ))}
             </div>

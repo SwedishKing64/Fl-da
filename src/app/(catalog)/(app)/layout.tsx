@@ -14,7 +14,8 @@ import { Kbd } from "@/app/(catalog)/ui";
 import { Logo } from "@/app/Logo";
 import { vendorMode } from "@/lib/catalog/licence";
 import { openMode } from "@/lib/catalog/open";
-import { currentLicence, monthUse, getServerOverride, servers } from "@/lib/catalog/licence-store";
+import { currentLicence, monthUse, getServerOverride, readingUsage, servers } from "@/lib/catalog/licence-store";
+import { AllowanceBar } from "@/app/(catalog)/AllowanceBar";
 import { describePeriodUse, overPlan, planOf } from "@/lib/catalog/plans";
 import "../catalog.css";
 import { SUPPORT_EMAIL } from "@/lib/catalog/support";
@@ -47,6 +48,7 @@ export default async function CatalogLayout({ children }: { children: React.Reac
   // The plan, and how far through it the fortnight is, sits in the sidebar for everyone: a trial that
   // ends on Thursday or a fortnight past its plan should never be a surprise on the way to the paywall.
   const standing = licence.kind === "ok" ? await monthUse().then((use) => ({ plan: planOf(licence.licence.plan), use, trial: licence.licence.status === "TRIAL", daysLeft: licence.daysLeft, over: overPlan(planOf(licence.licence.plan), use) })).catch(() => null) : null;
+  const reading = standing ? await readingUsage() : null;
   const pastPlan = standing && standing.over && user.role === "ADMIN" ? standing : null;
   const endingSoon = standing && standing.trial && standing.daysLeft !== null && standing.daysLeft <= 3;
 
@@ -85,6 +87,7 @@ export default async function CatalogLayout({ children }: { children: React.Reac
                 {standing.daysLeft !== null && <span className={`text-[11px] ${endingSoon ? "font-semibold text-[#ffd591]" : "text-white/60"}`}>{standing.daysLeft} day{standing.daysLeft === 1 ? "" : "s"} left</span>}
               </div>
               <div className={`mt-0.5 text-[11px] ${standing.over ? "font-semibold text-[#ffd591]" : "text-white/55"}`}>{describePeriodUse(standing.plan, standing.use)}{standing.over ? " — past the plan" : ""}</div>
+              {reading && <AllowanceBar spentCents={reading.spentCents} capCents={reading.capCents} resetsAt={reading.resetsAt} tone="dark" compact />}
             </Link>
           )}
           <div className="mb-3 flex items-center gap-1.5 px-1 text-[11px] text-white/55">

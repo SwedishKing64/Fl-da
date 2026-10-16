@@ -1,0 +1,25 @@
+/* The account pages: a narrow form, and a grid of plain cards on the account itself. */
+.floda .acct-narrow { max-width: 520px; }
+.floda .acct-narrow form { background: var(--f-white); border: 1px solid var(--f-line); border-radius: 18px; padding: 24px; }
+.floda .acct-grid { display: grid; gap: 18px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.floda .acct-card { background: var(--f-white); border: 1px solid var(--f-line); border-radius: 18px; padding: 22px 24px; min-width: 0; }
+.floda .acct-card h2 { font-size: 15px; margin: 0 0 10px; letter-spacing: 0.01em; }
+.floda .acct-card p { margin: 0 0 8px; font-size: 14.5px; line-height: 1.5; }
+.floda .acct-wide { grid-column: 1 / -1; }
+.floda .acct-big { font-size: 24px; font-weight: 800; letter-spacing: -0.02em; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.floda .acct-pill { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 4px 9px; border-radius: 999px; background: var(--f-grey-2); color: var(--f-ink-2); }
+.floda .acct-pill.active { background: #e3f5e9; color: #1d6b3a; }
+.floda .acct-pill.trial { background: var(--f-tint); color: var(--f-meta-deep); }
+.floda .acct-pill.paused, .floda .acct-pill.ended { background: #fdecea; color: #a52a21; }
+.floda .acct-key code { font-family: var(--f-mono); font-size: 15px; background: var(--f-grey); padding: 8px 12px; border-radius: 10px; display: inline-block; letter-spacing: 0.04em; }
+.floda .acct-plans { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-bottom: 12px; }
+.floda .acct-plan { border: 1.5px solid var(--f-line); border-radius: 14px; padding: 16px; }
+.floda .acct-plan.on { border-color: var(--f-meta); background: var(--f-tint); }
+.floda .acct-plan-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+.floda .acct-plan-head b { font-size: 16px; }
+.floda .acct-plan-head small { color: var(--f-ink-2); font-weight: 400; }
+.floda .acct-plan p { font-size: 13px; color: var(--f-ink-2); }
+.floda .acct-plan-actions { display: grid; gap: 8px; margin-top: 10px; }
+.floda .acct-plan-actions .btn { justify-self: stretch; font-size: 14px; padding: 10px 14px; }
+.floda .err { color: #cf3126; font-size: 14px; }
+@media (max-width: 860px) { .floda .acct-grid { grid-template-columns: 1fr; } }

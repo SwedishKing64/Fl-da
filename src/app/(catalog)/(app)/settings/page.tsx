@@ -13,7 +13,7 @@ import { LicenceForm } from "./LicenceForm";
 import { Backups } from "./Backups";
 import { backupDir, listBackups, sqliteFile } from "@/lib/catalog/backup";
 import { licenceServer } from "@/lib/catalog/licence";
-import { currentLicence, getServerOverride, monthUse, servers } from "@/lib/catalog/licence-store";
+import { currentLicence, getServerOverride, monthUse, readingUsage, servers } from "@/lib/catalog/licence-store";
 
 /**
  * The shop, the people who can sign in, what Flöda has learned, the key it reads with, and
@@ -51,7 +51,7 @@ export default async function SettingsPage() {
           </Card>
           {licenceServer() && (
             <Card title="Licence">
-              <LicenceForm state={await currentLicence()} use={await monthUse()} servers={await servers()} override={await getServerOverride()} />
+              <LicenceForm state={await currentLicence()} use={await monthUse()} reading={await readingUsage()} servers={await servers()} override={await getServerOverride()} />
             </Card>
           )}
         </div>

@@ -95,8 +95,21 @@ export function periodKey(now = new Date()): string {
 export function periodStart(now = new Date()): Date {
   return new Date(PERIOD_EPOCH + Math.floor((now.getTime() - PERIOD_EPOCH) / PERIOD_MS) * PERIOD_MS);
 }
+/** When the current fortnight ends and the allowance starts again. */
+export function periodEnd(now = new Date()): Date {
+  return new Date(periodStart(now).getTime() + PERIOD_MS);
+}
 /** The old name. */
 export const monthKey = periodKey;
+
+/**
+ * What a shop reads when its fortnight's reading is spent. It names the limit and when it
+ * lifts, never a key or a balance: the shop has no key in this, and the limit is the plan's.
+ */
+export function limitReachedMessage(now = new Date()): string {
+  const again = periodEnd(now).toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "long" });
+  return `You have reached your fortnightly limit for reading documents through Flöda. It starts again on ${again}. To carry on before then, move up a plan on your account page, or put a key of your own under Reading documents in Settings.`;
+}
 
 /** What a Client row keeps about its reading. */
 export interface MeteredClient {

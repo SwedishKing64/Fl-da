@@ -36,7 +36,8 @@ const MENUS: Array<{ label: string; items: Array<{ href: string; label: string; 
     items: [
       { href: "/welcome#pricing", label: "Plans", hint: "Starter, Shop and Unlimited, billed by the fortnight" },
       { href: "/welcome#pricing", label: "What it saves", hint: "A 50-product order by hand against through Flöda" },
-      { href: "/welcome#register", label: "Start the free trial", hint: "14 days on any plan, no card" },
+      { href: "/account/signup", label: "Start the free trial", hint: "Make your account: 14 days on any plan, no card" },
+      { href: "/account", label: "Your account", hint: "Your plan, key, reading this fortnight and billing" },
     ],
   },
   {
@@ -100,8 +101,8 @@ export function SiteBar() {
           {MENUS.map((m) => <Menu key={m.label} label={m.label} items={m.items} open={open === m.label} onOpen={() => openMenu(m.label)} onClose={closeMenu} />)}
         </nav>
         <div className="bar-ctas">
-          <Link href="/login" className="btn btn-grey">Sign in</Link>
-          <Link href="/welcome#register" className="btn btn-meta">Start free trial</Link>
+          <Link href="/account/login" className="btn btn-grey">Sign in</Link>
+          <Link href="/account/signup" className="btn btn-meta">Start free trial</Link>
           <button type="button" className="burger" aria-label={mobile ? "Close the menu" : "Open the menu"} aria-expanded={mobile} onClick={() => setMobile((m) => !m)}><i /><i /><i /></button>
         </div>
       </div>
@@ -115,7 +116,7 @@ export function SiteBar() {
           ))}
           <div className="group">
             <div className="gl">Account</div>
-            <Link href="/login" onClick={() => setMobile(false)}>Sign in</Link>
+            <Link href="/account/login" onClick={() => setMobile(false)}>Sign in</Link>
           </div>
         </div>
       )}

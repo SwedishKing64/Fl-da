@@ -11,7 +11,7 @@ import { AiStep } from "./AiStep";
 import { HouseStep } from "./HouseStep";
 import { DoneStep } from "./DoneStep";
 import { SuppliersStep } from "./SuppliersStep";
-import { TrialStep } from "./TrialStep";
+import { SignInStep } from "./SignInStep";
 import { licenceServer } from "@/lib/catalog/licence";
 import { openMode } from "@/lib/catalog/open";
 import { currentLicence, getServerOverride, servers } from "@/lib/catalog/licence-store";
@@ -50,7 +50,7 @@ export default async function SetupPage({ searchParams }: { searchParams: Promis
   return (
     <>
       <Stepper current={step} hidePlan={!licenceServer()} />
-      {step === "plan" && <TrialStep email={user.email} next="/setup?step=shop" servers={await servers()} override={await getServerOverride()} />}
+      {step === "plan" && <SignInStep email={user.email} next="/setup?step=shop" site={licenceServer()} servers={await servers()} override={await getServerOverride()} />}
       {step === "shop" && <ShopStep profile={profile} />}
       {step === "learn" && <LearnStep learned={learned} kinds={house.kinds} />}
       {step === "house" && <HouseStep house={house} tagRules={tagRules} kinds={productTypes()} />}

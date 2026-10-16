@@ -74,6 +74,23 @@ error says why for each (no DNS record, nothing answering, certificate refused, 
 seconds) rather than "fetch failed". The trial step shows the address form when the trial could
 not be started for that reason.
 
+**Accounts on the website.** A shop makes its account at `/account/signup` on the vendor
+(`account.ts`: the `Client` row gets a password, sessions in `ClientSession` under the
+`floda_account` cookie, separate from the vendor's own staff login). Making one starts the
+14-day trial and mints the key; an email that already has a licence but no password claims it.
+`/account` shows the plan and standing, the licence key, the fortnight's reading against the
+allowance (`AllowanceBar`), and the billing buttons (checkout and portal, direct from the site).
+A copy is licensed by signing in with the same email and password (`SignInStep` in setup, the
+paywall's "none" state; `POST /api/licence/signin` hands over the key), or by typing the key;
+starting a trial from inside the app is refused and names the signup page. **The allowance
+bar**: the copy asks the vendor for its fortnight's reading (`/api/licence/usage`,
+`readingUsage()` cached two minutes and forgotten after each reading through the relay) and
+shows the bar under the plan in the sidebar and on the Licence card; the account page shows the
+same from the row itself. When the fortnight's reading is spent the relay refuses with
+`limitReachedMessage`: "You have reached your fortnightly limit…" and the date it starts again,
+never a key or a balance; a money refusal from the reading service itself is worded as Flöda
+being unavailable on a plan, and as the shop's own Anthropic credit on the Own key plan.
+
 **Paying for a plan.** Stripe, on the vendor (`stripe.ts`): the copy's paywall and the Licence
 card on Settings carry a button per plan that asks the vendor for a checkout page
 (`POST /api/licence/checkout`, the licence key and the plan) and opens it in the browser; a copy

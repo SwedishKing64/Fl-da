@@ -9,9 +9,11 @@ import { BillingButtons } from "./BillingButtons";
 import type { LicenceState } from "@/lib/catalog/licence";
 import { describePeriodUse, describePlanSize, overPlan, planOf, type PeriodUse } from "@/lib/catalog/plans";
 import { SUPPORT_EMAIL } from "@/lib/catalog/support";
+import { AllowanceBar } from "@/app/(catalog)/AllowanceBar";
+import type { ReadingUsage } from "@/lib/catalog/licence-store";
 
 /** The key Flöda sent the shop, and what Flöda last said about it. */
-export function LicenceForm({ state, use, gated = false, servers = [], override = "" }: { state: LicenceState; use: PeriodUse; gated?: boolean; servers?: string[]; override?: string }) {
+export function LicenceForm({ state, use, reading = null, gated = false, servers = [], override = "" }: { state: LicenceState; use: PeriodUse; reading?: ReadingUsage | null; gated?: boolean; servers?: string[]; override?: string }) {
   const [result, action, pending] = useActionState(activateLicenceAction, null);
   const plan = state.kind === "ok" ? planOf(state.licence.plan) : null;
   return (
@@ -22,6 +24,7 @@ export function LicenceForm({ state, use, gated = false, servers = [], override 
           Licensed to <strong>{state.licence.client}</strong> on the <strong>{plan.name}</strong> plan{state.licence.status === "TRIAL" ? " (trial)" : ""}{state.daysLeft !== null ? `, ${state.daysLeft} day${state.daysLeft === 1 ? "" : "s"} left` : ""}. {describePlanSize(plan)}; {describePeriodUse(plan, use)}.
           {overPlan(plan, use) ? ` This fortnight has gone past the plan. Nothing stops; write to ${SUPPORT_EMAIL} to move up.` : ""}
           {state.stale ? " Flöda has not been reached lately; it will be asked again." : ""}
+          {reading && <AllowanceBar spentCents={reading.spentCents} capCents={reading.capCents} resetsAt={reading.resetsAt} />}
         </Alert>
       )}
       {state.kind === "lapsed" && <Alert tone="warning">{state.why}{gated ? " A new key, or the plan above, opens Flöda again." : " Everything keeps working while it is sorted out."}</Alert>}

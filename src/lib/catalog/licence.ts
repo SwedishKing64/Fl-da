@@ -243,6 +243,34 @@ export async function askForTrial(server: string, body: TrialRequest): Promise<T
   return data;
 }
 
+/** Sign in to the vendor with the shop's website account; the answer is the key, as for a trial. */
+export async function askToSignIn(server: string, body: { email: string; password: string; install: string; version: string; platform: string }): Promise<TrialAnswer> {
+  const res = await fetch(`${server}/api/licence/signin`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(15_000),
+  });
+  const data = (await res.json().catch(() => null)) as TrialAnswer | null;
+  if (!data || typeof data !== "object" || !("ok" in data)) throw new Error(`Flöda answered ${res.status} without a verdict`);
+  return data;
+}
+
+/** The fortnight's reading against the plan's allowance, as the vendor counts it. */
+export type UsageAnswer = { ok: true; spentCents: number; capCents: number; exhausted: boolean; calls: number; resetsAt: string; ownKey: boolean } | { ok: false; why: string };
+
+export async function askUsage(server: string, key: string): Promise<UsageAnswer> {
+  const res = await fetch(`${server}/api/licence/usage`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ key }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  const data = (await res.json().catch(() => null)) as UsageAnswer | null;
+  if (!data || typeof data !== "object" || !("ok" in data)) throw new Error(`Flöda answered ${res.status} without a count`);
+  return data;
+}
+
 /** What the vendor answers when a copy asks to pay, or for its billing page: a link, or why not. */
 export type BillingAnswer = { ok: true; url: string } | { ok: false; why: string };
 

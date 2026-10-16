@@ -8,6 +8,7 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
+import { apiKeySource } from "./anthropic";
 import type { APIError } from "@anthropic-ai/sdk/core/error";
 
 /**
@@ -74,6 +75,14 @@ export function describeApiError(err: unknown): string | null {
   }
   if (!(err instanceof Anthropic.APIError)) return null;
   const status = err.status ?? 0;
+  // The reading service refusing for money: on a plan that reads through Flöda that is the
+  // vendor's account and the shop's problem only in that nothing was read; on the shop's own
+  // key it is their Anthropic account. Neither sentence mentions a balance on a plan.
+  if (/credit balance|insufficient (credit|funds|balance)|billing/i.test(relayMessage(err) ?? "") || typeOf(err) === "billing_error") {
+    return apiKeySource() === "floda"
+      ? "Flöda's reading service is not available right now; nothing was changed. Try again in a little while, and if it keeps happening, write to Flöda."
+      : "The Anthropic account behind your key has run out of credit, so nothing was read. Top it up at console.anthropic.com, or move to a plan with reading included.";
+  }
   switch (typeOf(err)) {
     // Flöda's own relay turning a reading away: a lapsed licence or a month's allowance spent. Its sentence is written for the page.
     case "floda_error": return relayMessage(err) ?? "Flöda turned this reading away. Check the licence under Settings.";
@@ -83,7 +92,6 @@ export function describeApiError(err: unknown): string | null {
     case "api_error": return "The reading service had a fault of its own and this was not read. Nothing was changed. Try again in a minute.";
     case "authentication_error":
     case "permission_error": return "The reading service refused the API key. Check the key under Reading documents in Settings.";
-    case "billing_error": return "The reading service refused this for a billing reason on the API account. Nothing was changed.";
   }
   if (status === 401 || status === 403) return "The reading service refused the API key. Check the key under Reading documents in Settings.";
   // Anything else from the API still never reaches the page as its JSON body.

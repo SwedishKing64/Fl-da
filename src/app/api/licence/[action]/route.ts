@@ -4,6 +4,8 @@ import { newLicenceKey, normaliseKey, vendorMode, verdictFor, type CheckAnswer, 
 import { planOf, TRIAL_DAYS } from "@/lib/catalog/plans";
 import { periodKey } from "@/lib/catalog/ai-usage";
 import { createCheckout, createPortal, stripeConfigured } from "@/lib/catalog/stripe";
+import { checkAccount } from "@/lib/catalog/account";
+import { allowanceOf, periodEnd } from "@/lib/catalog/ai-usage";
 import { SUPPORT_EMAIL } from "@/lib/catalog/support";
 
 export const runtime = "nodejs";
@@ -19,6 +21,8 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/licence/[ac
   if (!vendorMode()) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const { action } = await ctx.params;
   if (action === "trial") return trial(req);
+  if (action === "signin") return signin(req);
+  if (action === "usage") return usage(req);
   if (action === "checkout") return checkout(req);
   if (action === "portal") return portal(req);
   if (action !== "activate" && action !== "check") return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -53,6 +57,8 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/licence/[ac
  * email address; a second request for the same address is told to enter the key it has.
  */
 async function trial(req: NextRequest) {
+  // Accounts are made on the website now; a copy that still asks here is sent there.
+  if (!process.env.FLODA_TRIAL_FROM_APP) return NextResponse.json({ ok: false, status: "UNKNOWN", why: `Make your account at ${originOf(req)}/account/signup first, then sign in here with the same email and password.` } satisfies TrialAnswer);
   const body = (await req.json().catch(() => null)) as Partial<TrialRequest> | null;
   const shop = String(body?.shop ?? "").trim().slice(0, 120);
   const email = String(body?.email ?? "").trim().toLowerCase().slice(0, 200);
@@ -112,3 +118,29 @@ async function portal(req: NextRequest) {
 }
 
 type BillingAnswer = { ok: true; url: string } | { ok: false; why: string };
+
+/**
+ * A copy signing in with the shop's website account: the email and password made on the
+ * website hand the copy its licence key, and the copy keeps it as if it had been typed. The
+ * copy is also counted as heard from, as a check-in is.
+ */
+async function signin(req: NextRequest) {
+  const body = (await req.json().catch(() => null)) as Partial<{ email: string; password: string; install: string; version: string; platform: string }> | null;
+  const client = await checkAccount(String(body?.email ?? ""), String(body?.password ?? ""));
+  if (!client) return NextResponse.json({ ok: false, status: "UNKNOWN", why: `That email and password do not match a Flöda account. Make one at ${originOf(req)}/account/signup, or check the password on the website first.` } satisfies TrialAnswer);
+  await prisma.client.update({ where: { id: client.id }, data: { lastSeenAt: new Date(), lastVersion: String(body?.version ?? "").slice(0, 40), lastInstall: String(body?.install ?? "").slice(0, 80), checkIns: { increment: 1 } } });
+  const verdict = verdictFor(client);
+  return NextResponse.json({ ok: true, key: client.licenceKey, client: client.name, plan: client.plan, status: client.status, expiresAt: verdict.ok ? verdict.expiresAt : (client.expiresAt?.toISOString() ?? null) } satisfies TrialAnswer);
+}
+
+/** How much of the fortnight's reading a copy has used, for the bar in its sidebar. */
+async function usage(req: NextRequest) {
+  const body = (await req.json().catch(() => null)) as Partial<{ key: string }> | null;
+  const key = normaliseKey(String(body?.key ?? ""));
+  const client = key ? await prisma.client.findUnique({ where: { licenceKey: key } }) : null;
+  if (!client) return NextResponse.json({ ok: false, why: "That is not a Flöda licence key." } satisfies UsageAnswer);
+  const a = allowanceOf(client);
+  return NextResponse.json({ ok: true, spentCents: a.spentCents, capCents: a.capCents, exhausted: a.exhausted, calls: a.calls, resetsAt: periodEnd().toISOString(), ownKey: planOf(client.plan).reading === "own-key" } satisfies UsageAnswer);
+}
+
+type UsageAnswer = { ok: true; spentCents: number; capCents: number; exhausted: boolean; calls: number; resetsAt: string; ownKey: boolean } | { ok: false; why: string };

@@ -2123,28 +2123,29 @@ export async function setLicenceServerAction(_prev: ActionResult | null, formDat
   });
 }
 
-export async function startTrialAction(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+/** Sign this copy in with the shop's Flöda account: the vendor hands over the key and it is kept. */
+export async function signInLicenceAction(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
   return safely(async () => {
     const user = await requireUser("ADMIN");
     const { licenceServer } = await import("@/lib/catalog/licence");
     if (!licenceServer()) return { ok: false, error: "This copy is not set up to check a licence." };
-    const parsed = z.object({ shop: z.string().trim().min(1, "The shop's name is needed").max(120), email: z.string().trim().email("That email address does not look right").max(200), plan: z.enum(PLAN_IDS).catch("shop") })
-      .safeParse({ shop: formData.get("shop") ?? "", email: formData.get("email") ?? "", plan: formData.get("plan") ?? "shop" });
+    const parsed = z.object({ email: z.string().trim().email("That email address does not look right").max(200), password: z.string().min(1, "The password is needed").max(200) })
+      .safeParse({ email: formData.get("email") ?? "", password: formData.get("password") ?? "" });
     if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Check the form." };
-    const { beginTrial } = await import("@/lib/catalog/licence-store");
+    const { signInWithAccount } = await import("@/lib/catalog/licence-store");
     let outcome;
     try {
-      outcome = await beginTrial(parsed.data);
+      outcome = await signInWithAccount(parsed.data);
     } catch (err) {
-      return { ok: false, error: `Flöda could not be reached to start the trial: ${said(err)}` };
+      return { ok: false, error: `Flöda could not be reached to sign in: ${said(err)}` };
     }
     if ("refused" in outcome) return { ok: false, error: outcome.refused };
     const { saveShopProfile, getShopProfile } = await import("@/lib/catalog/shop-profile");
     const profile = await getShopProfile();
-    if (!profile.name) await saveShopProfile({ name: parsed.data.shop });
-    await logAudit("licence.trial", { userId: user.id, details: { client: outcome.licence.client, plan: outcome.licence.plan } });
+    if (!profile.name && outcome.licence.client) await saveShopProfile({ name: outcome.licence.client });
+    await logAudit("licence.signed_in", { userId: user.id, details: { client: outcome.licence.client, plan: outcome.licence.plan, status: outcome.licence.status } });
     revalidatePath("", "layout");
-    return { ok: true, message: `Your ${TRIAL_DAYS}-day trial has started. The key ${outcome.licence.key} is kept in this copy and was made for ${parsed.data.email}.` };
+    return { ok: true, message: `Signed in. This copy is licensed to ${outcome.licence.client} on the ${outcome.licence.plan} plan.` };
   });
 }
 

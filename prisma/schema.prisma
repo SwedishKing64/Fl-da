@@ -540,6 +540,20 @@ model Client {
   stripeCustomerId     String @default("")
   stripeSubscriptionId String @default("")
   billing              String @default("")
+  /// The account on the website: a password (scrypt), empty until the shop makes one.
+  passwordHash String @default("")
+  sessions     ClientSession[]
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+}
+
+/// A shop signed in to its account on the website.
+model ClientSession {
+  id        String   @id
+  clientId  String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanHouse, conventionGrams, conventionIdentifiers, DEFAULT_HOUSE, describeHouse, houseGuidance, type HouseConventions } from "./house";
+import { cleanHouse, cleanKinds, conventionGrams, conventionIdentifiers, DEFAULT_HOUSE, describeHouse, houseGuidance, type HouseConventions } from "./house";
 
 const withWeights = (weights: Partial<HouseConventions["weights"]>): HouseConventions => ({ ...DEFAULT_HOUSE, weights: { ...DEFAULT_HOUSE.weights, ...weights } });
 const withIds = (identifiers: Partial<HouseConventions["identifiers"]>): HouseConventions => ({ ...DEFAULT_HOUSE, identifiers: { ...DEFAULT_HOUSE.identifiers, ...identifiers } });
@@ -61,5 +61,33 @@ describe("what the reader is told", () => {
     const lines = describeHouse(withWeights({ mode: "byKind", unit: "kg", byKind: [{ type: "Skis", grams: 2000 }] }));
     expect(lines.join(" ")).toContain("Skis 2 kg");
     expect(lines.join(" ")).toContain("the supplier's code");
+  });
+});
+
+describe("the kinds of product the shop names", () => {
+  it("keeps one row per export Type, the name defaulting to the Type, tags split and trimmed", () => {
+    const kinds = cleanKinds([
+      { type: " Skis ", calledAs: "", tags: "ski, ski-gear, , ski", titleFormat: " Völkl Mantra 88 2026 ", count: 12.4 },
+      { type: "skis", calledAs: "Alpine Skis", tags: ["x"], titleFormat: "", count: 1 },
+      { type: "Jackets", calledAs: "Outerwear", tags: ["clothing"], titleFormat: "", count: -3 },
+      { type: "", calledAs: "Nothing", tags: [], titleFormat: "", count: 0 },
+    ]);
+    expect(kinds).toEqual([
+      { type: "Skis", calledAs: "Skis", tags: ["ski", "ski-gear"], titleFormat: "Völkl Mantra 88 2026", count: 12 },
+      { type: "Jackets", calledAs: "Outerwear", tags: ["clothing"], titleFormat: "", count: 0 },
+    ]);
+    expect(cleanKinds(undefined)).toEqual([]);
+  });
+  it("tells the reader what each kind is called, its tags and how its titles read", () => {
+    const text = houseGuidance({ ...DEFAULT_HOUSE, kinds: [
+      { type: "Jackets", calledAs: "Outerwear", tags: ["clothing", "outerwear"], titleFormat: "Patagonia Nano Puff Jacket", count: 40 },
+      { type: "Pumps", calledAs: "Pumps", tags: [], titleFormat: "", count: 3 },
+    ] });
+    expect(text).toContain('Outerwear: the shop files what an export calls "Jackets" as "Outerwear"; every one is tagged clothing, outerwear; its titles read like "Patagonia Nano Puff Jacket".');
+    expect(text).not.toContain("Pumps");
+  });
+  it("keeps the kinds through a clean", () => {
+    expect(cleanHouse({ kinds: [{ type: "Skis", calledAs: "Skis", tags: ["ski"], titleFormat: "", count: 2 }] }).kinds).toHaveLength(1);
+    expect(cleanHouse(null).kinds).toEqual([]);
   });
 });

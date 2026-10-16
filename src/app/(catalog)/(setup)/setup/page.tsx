@@ -52,7 +52,7 @@ export default async function SetupPage({ searchParams }: { searchParams: Promis
       <Stepper current={step} hidePlan={!licenceServer()} />
       {step === "plan" && <TrialStep email={user.email} next="/setup?step=shop" servers={await servers()} override={await getServerOverride()} />}
       {step === "shop" && <ShopStep profile={profile} />}
-      {step === "learn" && <LearnStep learned={learned} />}
+      {step === "learn" && <LearnStep learned={learned} kinds={house.kinds} />}
       {step === "house" && <HouseStep house={house} tagRules={tagRules} kinds={productTypes()} />}
       {step === "ai" && <AiStep source={apiKeySource()} tail={keyTail(storedKey)} />}
       {step === "suppliers" && <SuppliersStep fields={CANONICAL_FIELDS.map((f) => ({ key: f.key, label: f.label, required: Boolean(f.required) }))} templates={templates} next="/setup?step=done" />}

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { describeLearned, learnVocabulary } from "./learn";
+import { describeLearned, kindsFromListings, learnVocabulary, mergeVocabulary } from "./learn";
 import { ALPSPORT_CONVENTIONS, activateConventions, isValidType, productTypes, resolveType, typeSections } from "./taxonomy";
 import { generalTags, isRuleGenerated, tagsFor } from "./tagging";
 import type { Listing } from "./shop-memory";
@@ -88,5 +88,40 @@ describe("the learned vocabulary in force", () => {
     activateConventions({ pack: "general", learned: null, marker: "" });
     expect(productTypes()).toEqual([]);
     expect(isValidType("Skis")).toBe(false);
+  });
+});
+
+describe("one export at a time", () => {
+  it("joins two exports' readings: counts kept at the larger, sections united, files named together", () => {
+    const bikes = learnVocabulary(bikeShop().filter((l) => l.productType.endsWith("Bikes")), "bikes.csv");
+    const rest = learnVocabulary(bikeShop().filter((l) => !l.productType.endsWith("Bikes")), "accessories.csv");
+    const both = mergeVocabulary(bikes, rest);
+    expect(both.types.map((t) => t.type).sort()).toEqual(["Helmets", "Kids Bikes", "Mountain Bikes", "Pumps", "Road Bikes"]);
+    expect(both.file).toBe("bikes.csv + accessories.csv");
+    expect(both.products).toBe(bikes.products + rest.products);
+    expect(both.vendors.find((v) => v.name === "Trek")?.count).toBe(18);
+  });
+  it("reads the same file again in place of its earlier self, not on top of it", () => {
+    const once = learnVocabulary(bikeShop(), "products_export.csv");
+    const again = mergeVocabulary(once, learnVocabulary(bikeShop(), "products_export.csv"));
+    expect(again.products).toBe(once.products);
+    expect(again.file).toBe("products_export.csv");
+    expect(again.types.find((t) => t.type === "Road Bikes")?.count).toBe(12);
+  });
+});
+
+describe("the kinds an export shows", () => {
+  it("lists each kind biggest first with the tags most of its rows carry, vendors and years left out", () => {
+    const kinds = kindsFromListings(bikeShop());
+    expect(kinds.map((k) => k.type)).toEqual(["Road Bikes", "Mountain Bikes", "Helmets", "Pumps", "Kids Bikes"]);
+    const road = kinds[0];
+    expect(road.count).toBe(12);
+    expect(road.commonTags).toEqual(["bikes", "road bikes"]); // not 2026, mens, sale or trek
+    expect(road.vendors).toEqual(["Trek"]);
+    expect(road.exampleTitle).toMatch(/^road bike \d+$/);
+    expect(kinds[2].commonTags).toEqual(["accessories", "helmets", "Size_M"]);
+  });
+  it("skips rows with no Type", () => {
+    expect(kindsFromListings([listing("a", "", ["x"]), listing("b", "Pumps", ["pumps"])]).map((k) => k.type)).toEqual(["Pumps"]);
   });
 });

@@ -137,3 +137,73 @@ export function describeLearned(v: LearnedVocabulary): string[] {
   if (spelled) lines.push(`How ${spelled} shelf tag${spelled === 1 ? " is" : "s are"} spelled.`);
   return lines;
 }
+
+/**
+ * Two exports' readings as one, for a shop that exports a category at a time. A Type in both
+ * keeps the larger count and the union of its sections; the file names are joined; a file read
+ * again replaces its own earlier contribution to the names, not the counts, which are the
+ * best guess either way.
+ */
+export function mergeVocabulary(before: LearnedVocabulary, next: LearnedVocabulary): LearnedVocabulary {
+  const types = new Map<string, LearnedType>();
+  for (const t of [...before.types, ...next.types]) {
+    const key = norm(t.type);
+    const have = types.get(key);
+    if (!have) types.set(key, { ...t, sections: [...t.sections] });
+    else types.set(key, { type: have.type, count: Math.max(have.count, t.count), sections: [...new Set([...have.sections, ...t.sections])], ...(t.spelling ?? have.spelling ? { spelling: t.spelling ?? have.spelling } : {}) });
+  }
+  const vendors = new Map<string, number>();
+  for (const v of [...before.vendors, ...next.vendors]) vendors.set(v.name, Math.max(vendors.get(v.name) ?? 0, v.count));
+  const files = [...new Set([...before.file.split(" + "), ...next.file.split(" + ")].map((f) => f.trim()).filter(Boolean))];
+  const sameFile = before.file.split(" + ").map((f) => f.trim()).includes(next.file.trim());
+  return {
+    types: [...types.values()],
+    sections: [...new Set([...before.sections, ...next.sections])],
+    spelling: { ...before.spelling, ...next.spelling },
+    vendors: [...vendors.entries()].map(([name, count]) => ({ name, count })),
+    products: sameFile ? Math.max(before.products, next.products) : before.products + next.products,
+    file: files.join(" + "),
+    learnedAt: next.learnedAt,
+  };
+}
+
+/** One kind of product as an export shows it, for the shop to say what it is called, its tags and its titles. */
+export interface KindSummary {
+  type: string;
+  count: number;
+  /** Tags on most of the kind's products, the vendor's own name and Shopify's own tags left out. */
+  commonTags: string[];
+  /** One real title of the kind, as the shape its titles take. */
+  exampleTitle: string;
+  vendors: string[];
+}
+
+/** How much of a kind's products a tag must sit on to be offered as "every one gets it". */
+const KIND_TAG_SHARE = 0.6;
+
+/** The kinds of product in an export's rows, biggest first, with what their rows have in common. */
+export function kindsFromListings(listings: Listing[]): KindSummary[] {
+  const vendorSlugs = new Set(listings.map((l) => slug(l.vendor)).filter(Boolean));
+  const byType = new Map<string, Listing[]>();
+  for (const l of listings) {
+    const type = l.productType.trim();
+    if (!type) continue;
+    const key = norm(type);
+    const have = byType.get(key);
+    if (have) have.push(l);
+    else byType.set(key, [l]);
+  }
+  const out: KindSummary[] = [];
+  for (const rows of byType.values()) {
+    const counts = new Map<string, number>();
+    for (const l of rows) for (const tag of new Set(l.tags.map((t) => t.trim()).filter(Boolean))) {
+      if (ignorable(tag, vendorSlugs)) continue;
+      counts.set(tag, (counts.get(tag) ?? 0) + 1);
+    }
+    const commonTags = [...counts.entries()].filter(([, n]) => n / rows.length >= KIND_TAG_SHARE).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([tag]) => tag);
+    // The example is a title of middling length: the shortest is often a one-word oddity, the longest a package.
+    const titles = rows.map((l) => l.title.trim()).filter(Boolean).sort((a, b) => a.length - b.length);
+    out.push({ type: rows[0].productType.trim(), count: rows.length, commonTags, exampleTitle: titles[Math.floor(titles.length / 2)] ?? "", vendors: [...new Set(rows.map((l) => l.vendor.trim()).filter(Boolean))] });
+  }
+  return out.sort((a, b) => b.count - a.count || a.type.localeCompare(b.type));
+}

@@ -1691,11 +1691,17 @@ export async function saveShopAction(_prev: ActionResult | null, formData: FormD
   });
 }
 
-/** What the shop's own export showed about how it files and tags products. Replaces what was learned before. */
+/**
+ * What the shop's own export showed about how it files and tags products. Joined to what earlier
+ * exports showed, since a shop exports a category at a time: a Type seen before keeps the larger
+ * count, sections and spellings are unioned, and an export of the same file name replaces its
+ * own earlier reading.
+ */
 export async function learnVocabularyAction(learned: import("@/lib/catalog/taxonomy").LearnedVocabulary): Promise<ActionResult<{ types: number }>> {
   const user = await requireUser("ADMIN");
   return safely(async () => {
-    const { saveLearnedVocabulary, saveShopProfile } = await import("@/lib/catalog/shop-profile");
+    const { saveLearnedVocabulary, saveShopProfile, getLearnedVocabulary } = await import("@/lib/catalog/shop-profile");
+    const { mergeVocabulary } = await import("@/lib/catalog/learn");
     const clean: import("@/lib/catalog/taxonomy").LearnedVocabulary = {
       types: learned.types.slice(0, 2000).map((t) => ({ type: String(t.type).trim().slice(0, 120), count: Number(t.count) || 0, sections: (t.sections ?? []).map(String).slice(0, 12), ...(t.spelling ? { spelling: String(t.spelling).slice(0, 120) } : {}) })).filter((t) => t.type),
       sections: (learned.sections ?? []).map(String).slice(0, 40),
@@ -1705,7 +1711,9 @@ export async function learnVocabularyAction(learned: import("@/lib/catalog/taxon
       file: String(learned.file ?? "").slice(0, 200),
       learnedAt: new Date().toISOString(),
     };
-    await saveLearnedVocabulary(clean);
+    const before = await getLearnedVocabulary();
+    const merged = before ? mergeVocabulary(before, clean) : clean;
+    await saveLearnedVocabulary(merged);
     await saveShopProfile({ skipped: { learn: false } });
     await logAudit("shop.learned", { userId: user.id, details: { file: clean.file, products: clean.products, types: clean.types.length, sections: clean.sections } });
     revalidatePath("", "layout");
@@ -1722,7 +1730,8 @@ export async function learnTemplatesAction(input: { file: string; groups: import
   const user = await requireUser("ADMIN");
   return safely(async () => {
     const groups = input.groups.filter((g) => g.analysis && g.analysis.productCount > 0).slice(0, 1500);
-    await prisma.productTemplate.deleteMany({ where: { sourceFileName: { startsWith: "export:" } } });
+    // This file's earlier reading goes; what other exports taught stays, since a shop exports a category at a time.
+    await prisma.productTemplate.deleteMany({ where: { sourceFileName: `export:${String(input.file ?? "").slice(0, 150)}` } });
     let made = 0;
     for (const g of groups) {
       const a = g.analysis;
@@ -2014,14 +2023,71 @@ export async function houseTagRules(): Promise<import("@/lib/catalog/house").Tag
   return rows.map((r) => ({ id: r.id, field: (["any", "title", "brand", "productType"].includes(r.matchField) ? r.matchField : "any") as import("@/lib/catalog/house").TagRuleInput["field"], pattern: r.pattern, addTags: r.addTags }));
 }
 
+const KIND_RULE_PREFIX = "kind: ";
+
+/**
+ * The kinds the shop told Flöda about, as tag rules the build applies: every product of the kind
+ * gets its tags, and its Type is written as what the shop calls it. The kind rules replace the
+ * kind rules; rules made anywhere else are left alone.
+ */
+async function materialiseKindRules(kinds: import("@/lib/catalog/house").KindRule[]): Promise<void> {
+  const { escapeRegExp } = await import("@/lib/catalog/rules");
+  await prisma.tagRule.deleteMany({ where: { name: { startsWith: KIND_RULE_PREFIX } } });
+  for (const k of kinds) {
+    const rename = k.calledAs && k.calledAs !== k.type ? k.calledAs : "";
+    if (!k.tags.length && !rename) continue;
+    const pattern = `^${escapeRegExp(k.type)}$`;
+    await prisma.tagRule.create({ data: { name: `${KIND_RULE_PREFIX}${k.type}`.slice(0, 160), matchField: "productType", pattern, addTags: k.tags.join(", "), setProductType: rename, priority: 50 } });
+    if (rename) await prisma.tagRule.create({ data: { name: `${KIND_RULE_PREFIX}${k.calledAs} (as called)`.slice(0, 160), matchField: "productType", pattern: `^${escapeRegExp(k.calledAs)}$`, addTags: k.tags.join(", "), priority: 50 } });
+  }
+}
+
+/**
+ * What the shop says about the kinds of product in an export: what each is called, the tags every
+ * one gets, how its titles read. Merged by Type into what was said before, so an export a
+ * category at a time builds the list up. A kind called something new is added to the vocabulary
+ * so the name is a Type the shop has.
+ */
+export async function saveKindsAction(input: { kinds: import("@/lib/catalog/house").KindRule[] }): Promise<ActionResult<{ kinds: number }>> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const { cleanKinds } = await import("@/lib/catalog/house");
+    const { getHouseConventions, saveHouseConventions, getLearnedVocabulary, saveLearnedVocabulary } = await import("@/lib/catalog/shop-profile");
+    const told = cleanKinds(input.kinds);
+    const house = await getHouseConventions();
+    const byType = new Map(house.kinds.map((k) => [k.type.toLowerCase(), k]));
+    for (const k of told) byType.set(k.type.toLowerCase(), k);
+    const kinds = [...byType.values()];
+    await saveHouseConventions({ ...house, kinds });
+    await materialiseKindRules(kinds);
+    // A name the shop gives a kind is a Type of the shop's: it joins the vocabulary beside the export's own.
+    const learned = await getLearnedVocabulary();
+    if (learned) {
+      const have = new Set(learned.types.map((t) => t.type.toLowerCase()));
+      const added = kinds.filter((k) => k.calledAs && !have.has(k.calledAs.toLowerCase())).map((k) => {
+        const from = learned.types.find((t) => t.type.toLowerCase() === k.type.toLowerCase());
+        return { type: k.calledAs, count: from?.count ?? k.count, sections: from?.sections ?? [], ...(from?.spelling ? { spelling: from.spelling } : {}) };
+      });
+      if (added.length) await saveLearnedVocabulary({ ...learned, types: [...learned.types, ...added] });
+    }
+    await logAudit("shop.kinds", { userId: user.id, details: { told: told.length, kinds: kinds.length } });
+    revalidatePath("", "layout");
+    return { ok: true, data: { kinds: kinds.length } };
+  });
+}
+
 /** How the shop writes a listing, and the tag rules it told us, from the "How you list" form. */
 export async function saveHouseAction(input: { house: import("@/lib/catalog/house").HouseConventions; tagRules: import("@/lib/catalog/house").TagRuleInput[] }): Promise<ActionResult> {
   const user = await requireUser("ADMIN");
   return safely(async () => {
     const { cleanHouse, TAG_RULE_FIELDS } = await import("@/lib/catalog/house");
     const { saveHouseConventions, saveShopProfile } = await import("@/lib/catalog/shop-profile");
-    const house = { ...cleanHouse(input.house), savedAt: new Date().toISOString() };
+    const { getHouseConventions } = await import("@/lib/catalog/shop-profile");
+    const kept = await getHouseConventions();
+    // The form has no say over the kinds; they are told on the catalogue step and kept here.
+    const house = { ...cleanHouse({ ...input.house, kinds: kept.kinds }), savedAt: new Date().toISOString() };
     await saveHouseConventions(house);
+    await materialiseKindRules(house.kinds);
     const fields = new Set(TAG_RULE_FIELDS.map((f) => f.key));
     const rules = (Array.isArray(input.tagRules) ? input.tagRules : []).slice(0, 200)
       .map((r) => ({ field: fields.has(r.field) ? r.field : "any", pattern: String(r.pattern ?? "").trim().slice(0, 200), addTags: String(r.addTags ?? "").split(",").map((t) => t.trim()).filter(Boolean).slice(0, 40).join(", ") }))

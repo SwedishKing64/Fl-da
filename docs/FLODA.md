@@ -134,6 +134,18 @@ Type. Once the shop has any kinds of product at all (`typesAreKnown`), a Type ou
 action pick from the list rather than take typing. Nothing a reader proposes is ever written as
 a Type the site does not have.
 
+**One file at a time, and the kinds named.** Setup's suppliers step and the export step both take
+one file at a time. A supplier's file is read as soon as the supplier is named (`SuppliersStep`:
+choose, name, read, check the columns, "That's right, remember it", "Add another supplier's
+file"). A Shopify export is read one product group at a time (`LearnPanel`): each file's
+vocabulary is merged into what earlier files taught (`mergeVocabulary`), its templates replace
+only its own earlier ones, and the kinds its rows showed (`kindsFromListings`: the Type, the
+tags on most of its rows, a middling title) are laid out in `KindsEditor` for the shop to say
+what each is called, the tags every one gets and how its titles read. Those are kept as
+`house.kinds` (`KindRule`, `cleanKinds`), told to the reader in `houseGuidance`, and
+materialised as tag rules named `kind: …` (`materialiseKindRules` in actions.ts) so the build
+writes the shop's name for the kind and its tags on every product of it.
+
 **The open copy.** A desktop build made with `FLODA_OPEN=1` (`electron-builder.open.yml`, the
 "open" box on the Desktop app workflow) has no sign-in and no licence: `/open` signs whoever opens
 the window in as the copy's owner, an admin called "Shop owner" made the first time

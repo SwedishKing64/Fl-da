@@ -43,8 +43,29 @@ export interface HouseConventions {
   };
   /** Anything else, in the shop's own words. Fed to the reader on every product. */
   notes: string;
+  /** Each kind of product the shop told Flöda about from its exports: what it is called, its tags, how its titles read. */
+  kinds: KindRule[];
   /** When it was last saved; empty until the shop has been through it once. */
   savedAt: string;
+}
+
+/**
+ * What the shop says about one kind of product, told from an export's own rows: the Type as the
+ * export writes it, what the shop calls it (the Type written from now on), the tags every one of
+ * them gets, and the shape its titles take. Kept here so the reader and the build see them with
+ * the rest of the conventions; the tags and the name also stand as tag rules for the build.
+ */
+export interface KindRule {
+  /** The Type as the export writes it. */
+  type: string;
+  /** What the shop calls it; the Type written on every listing of this kind. Same as `type` when unchanged. */
+  calledAs: string;
+  /** Tags every product of this kind gets. */
+  tags: string[];
+  /** How a title of this kind reads, as one real example or a pattern: "Völkl Mantra 88 2026". */
+  titleFormat: string;
+  /** How many products the export had of it, for the person's bearings. */
+  count: number;
 }
 
 export const DEFAULT_HOUSE: HouseConventions = {
@@ -53,6 +74,7 @@ export const DEFAULT_HOUSE: HouseConventions = {
   weights: { mode: "none", unit: "g", fixedGrams: 0, byKind: [] },
   descriptions: { format: "", specsHeading: "Tech Specs", example: "" },
   notes: "",
+  kinds: [],
   savedAt: "",
 };
 
@@ -119,6 +141,14 @@ export function houseGuidance(house: HouseConventions): string {
   if (d.format.trim()) lines.push(`How a description is written here:\n${d.format.trim()}`);
   if (d.specsHeading.trim() && d.specsHeading.trim() !== "Tech Specs") lines.push(`The details list is headed "${d.specsHeading.trim()}".`);
   if (d.example.trim()) lines.push(`A description from this shop, as the shape to match:\n${d.example.trim()}`);
+  for (const k of house.kinds) {
+    const name = k.calledAs || k.type;
+    const parts: string[] = [];
+    if (k.calledAs && k.calledAs !== k.type) parts.push(`the shop files what an export calls "${k.type}" as "${k.calledAs}"`);
+    if (k.tags.length) parts.push(`every one is tagged ${k.tags.join(", ")}`);
+    if (k.titleFormat.trim()) parts.push(`its titles read like "${k.titleFormat.trim()}"`);
+    if (parts.length) lines.push(`${name}: ${parts.join("; ")}.`);
+  }
   if (house.notes.trim()) lines.push(house.notes.trim());
   return lines.join("\n");
 }
@@ -139,6 +169,20 @@ export function describeHouse(house: HouseConventions): string[] {
 }
 
 /** The form's reading of what came back from the browser, made safe to keep. */
+/** The kinds as kept: one per export Type, trimmed, with the name defaulting to the Type itself. */
+export function cleanKinds(input: unknown): KindRule[] {
+  const seen = new Set<string>();
+  const out: KindRule[] = [];
+  for (const k of (Array.isArray(input) ? input : []).slice(0, 500) as Array<Partial<KindRule>>) {
+    const type = String(k?.type ?? "").trim().slice(0, 120);
+    if (!type || seen.has(type.toLowerCase())) continue;
+    seen.add(type.toLowerCase());
+    const tags = (Array.isArray(k?.tags) ? k.tags : String(k?.tags ?? "").split(",")).map((t) => String(t).trim().slice(0, 80)).filter(Boolean).slice(0, 40);
+    out.push({ type, calledAs: String(k?.calledAs ?? "").trim().slice(0, 120) || type, tags: [...new Set(tags)], titleFormat: String(k?.titleFormat ?? "").trim().slice(0, 200), count: Math.max(0, Math.round(Number(k?.count) || 0)) });
+  }
+  return out;
+}
+
 export function cleanHouse(input: Partial<HouseConventions> | null | undefined): HouseConventions {
   const i = input ?? {};
   const pick = <T extends string>(value: unknown, allowed: readonly T[], fallback: T): T => (allowed.includes(value as T) ? (value as T) : fallback);
@@ -168,6 +212,7 @@ export function cleanHouse(input: Partial<HouseConventions> | null | undefined):
       example: String(i.descriptions?.example ?? "").trim().slice(0, 6000),
     },
     notes: String(i.notes ?? "").trim().slice(0, 4000),
+    kinds: cleanKinds(i.kinds),
     savedAt: String(i.savedAt ?? ""),
   };
 }

@@ -76,7 +76,7 @@ export default async function TrainingPage() {
         ) : (
           <p className="mb-4 text-[14px] text-[var(--ink-soft)]">Nothing yet. Your export shows which tags go with each kind of product and how each brand is listed. With the website read above, it is the tags that matter here; the kinds of product come from the site.</p>
         )}
-        <LearnPanel learned={learned} />
+        <LearnPanel learned={learned} kinds={house.kinds} />
       </Card>
 
       <Card title="Rules: how you list" className="mb-6">

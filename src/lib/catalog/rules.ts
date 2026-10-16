@@ -47,7 +47,7 @@ function splitList(s: string): string[] {
   return s.split(",").map((t) => t.trim()).filter(Boolean);
 }
 
-function escapeRegExp(s: string): string {
+export function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 

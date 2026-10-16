@@ -5,11 +5,13 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { learnTemplatesAction, learnVocabularyAction, rememberListingsAction, skipSetupStepAction } from "@/app/(catalog)/actions";
 import { Alert, Button, Card } from "@/app/(catalog)/ui";
-import { describeLearned, learnVocabulary } from "@/lib/catalog/learn";
-import { listingsFromCsv, type Listing } from "@/lib/catalog/shop-memory";
-import { analyseShopifyCsvGroups, type TemplateGroup } from "@/lib/catalog/templates";
+import { describeLearned, kindsFromListings, learnVocabulary } from "@/lib/catalog/learn";
+import { listingsFromCsv } from "@/lib/catalog/shop-memory";
+import { analyseShopifyCsvGroups } from "@/lib/catalog/templates";
 import { parseCsv } from "@/lib/catalog/csv";
 import type { LearnedVocabulary } from "@/lib/catalog/taxonomy";
+import type { KindRule } from "@/lib/catalog/house";
+import { KindsEditor } from "./KindsEditor";
 
 /** A Shopify product export, as against a supplier's file: it has the importer's own columns. */
 function isShopifyExport(header: string[]): boolean {
@@ -17,75 +19,49 @@ function isShopifyExport(header: string[]): boolean {
   return h.has("Handle") && h.has("Title") && (h.has("Variant Price") || h.has("Option1 Name"));
 }
 
-type Outcome = { learned: LearnedVocabulary; lines: string[]; templates: number; remembered: number; warnings: string[] };
-
-/** What one chosen export looks like before it is read in full. */
-type Chosen = { file: File; problem?: string };
+type Outcome = { file: string; lines: string[]; templates: number; remembered: number; warnings: string[]; kinds: KindRule[] };
 
 const fmtSize = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`);
 
-/** The same brand and kind from two exports count once, the bigger group winning. */
-function mergeGroups(all: TemplateGroup[]): TemplateGroup[] {
-  const byKey = new Map<string, TemplateGroup>();
-  for (const g of all) {
-    const key = `${g.vendor.trim().toLowerCase()}\u0000${g.productType.trim().toLowerCase()}`;
-    const have = byKey.get(key);
-    if (!have || g.analysis.productCount > have.analysis.productCount) byKey.set(key, g);
-  }
-  return [...byKey.values()];
-}
-
 /**
- * Teach Flöda the shop from its own Shopify export — one file, or several when the shop exports
- * a category at a time. The files are read here in the browser — they can be tens of megabytes —
- * and three small things go to the server: the vocabulary, the templates per brand and kind, and
- * the listings in chunks. A product in two files counts once.
+ * Teach Flöda the shop from its own Shopify export, one file at a time: a shop exports a
+ * category at a time, and each file is read here in the browser (they can be tens of megabytes)
+ * with three small things going to the server: the vocabulary, the templates per brand and kind,
+ * and the listings in chunks, each joined to what earlier files taught. Then the kinds the file
+ * showed are laid out for the shop to say what each is called, its tags and how its titles read.
  */
-export function LearnPanel({ learned: before, next, onDone }: { learned: LearnedVocabulary | null; next?: string; onDone?: () => void }) {
+export function LearnPanel({ learned: before, kinds: saved = [], next, onDone }: { learned: LearnedVocabulary | null; kinds?: KindRule[]; next?: string; onDone?: () => void }) {
   const [pending, start] = useTransition();
-  const [chosen, setChosen] = useState<Chosen[]>([]);
+  const [chosen, setChosen] = useState<{ file: File; problem?: string } | null>(null);
   const [progress, setProgress] = useState("");
   const [error, setError] = useState("");
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const router = useRouter();
-  const usable = chosen.filter((c) => !c.problem);
 
-  const add = async (files: File[]) => {
+  const choose = async (file: File) => {
     setError(""); setOutcome(null);
-    const checked = await Promise.all(files.map(async (file): Promise<Chosen> => {
-      const header = parseCsv(await file.slice(0, 20000).text())[0] ?? [];
-      return isShopifyExport(header) ? { file } : { file, problem: "Not a Shopify product export: it needs Handle, Title and Variant Price columns." };
-    }));
-    setChosen((was) => [...was.filter((c) => !checked.some((n) => n.file.name === c.file.name)), ...checked]);
+    const header = parseCsv(await file.slice(0, 20000).text())[0] ?? [];
+    setChosen(isShopifyExport(header) ? { file } : { file, problem: "Not a Shopify product export: it needs Handle, Title and Variant Price columns." });
   };
 
   const teach = () => {
-    const files = usable.map((c) => c.file);
-    if (files.length === 0) return;
+    const file = chosen?.file;
+    if (!file || chosen?.problem) return;
     setError(""); setOutcome(null);
     start(async () => {
       try {
-        const byHandle = new Map<string, Listing>();
-        const groups: TemplateGroup[] = [];
-        const warnings: string[] = [];
-        for (const [i, file] of files.entries()) {
-          setProgress(files.length > 1 ? `Reading ${file.name} (${i + 1} of ${files.length})…` : "Reading the file…");
-          const text = await file.text();
-          for (const l of listingsFromCsv(text)) byHandle.set(l.handle, l);
-          const found = analyseShopifyCsvGroups(text);
-          groups.push(...found.groups);
-          warnings.push(...found.warnings.map((w) => (files.length > 1 ? `${file.name}: ${w}` : w)));
-        }
-        const listings = [...byHandle.values()];
-        if (listings.length === 0) { setError(files.length > 1 ? "No products were found in the files." : "No products were found in the file."); setProgress(""); return; }
-        const label = files.map((f) => f.name).join(" + ");
+        setProgress("Reading the file…");
+        const text = await file.text();
+        const listings = listingsFromCsv(text);
+        if (listings.length === 0) { setError("No products were found in the file."); setProgress(""); return; }
+        const found = analyseShopifyCsvGroups(text);
         setProgress(`Working out how ${listings.length.toLocaleString("en-AU")} products are filed and tagged…`);
-        const learned = learnVocabulary(listings, label);
+        const learned = learnVocabulary(listings, file.name);
 
         setProgress("Keeping what was learned…");
         const v = await learnVocabularyAction(learned);
         if (!v.ok) throw new Error(v.error);
-        const t = await learnTemplatesAction({ file: label, groups: mergeGroups(groups) });
+        const t = await learnTemplatesAction({ file: file.name, groups: found.groups });
         if (!t.ok) throw new Error(t.error);
 
         let remembered = 0;
@@ -95,8 +71,14 @@ export function LearnPanel({ learned: before, next, onDone }: { learned: Learned
           if (!r.ok) throw new Error(r.error);
           remembered += r.data!.remembered;
         }
-        setOutcome({ learned, lines: describeLearned(learned), templates: t.data!.templates, remembered, warnings });
-        setChosen([]);
+        // The kinds this file showed, pre-filled from its rows and from what the shop said before.
+        const known = new Map(saved.map((k) => [k.type.toLowerCase(), k]));
+        const kinds: KindRule[] = kindsFromListings(listings).map((k) => {
+          const was = known.get(k.type.toLowerCase());
+          return { type: k.type, calledAs: was?.calledAs ?? k.type, tags: was?.tags ?? k.commonTags, titleFormat: was?.titleFormat ?? k.exampleTitle, count: k.count };
+        });
+        setOutcome({ file: file.name, lines: describeLearned(learned), templates: t.data!.templates, remembered, warnings: found.warnings, kinds });
+        setChosen(null);
         setProgress("");
         onDone?.();
         router.refresh();
@@ -111,59 +93,58 @@ export function LearnPanel({ learned: before, next, onDone }: { learned: Learned
     <div className="space-y-4">
       {before && !outcome && (
         <Alert tone="info">
-          Last taught from <strong>{before.file || "an export"}</strong>: {before.products.toLocaleString("en-AU")} products, {before.types.length} kinds. A newer export replaces it.
+          Taught so far from <strong>{before.file || "an export"}</strong>: {before.products.toLocaleString("en-AU")} products, {before.types.length} kinds. Another export adds to it; the same file again replaces its own earlier reading.
         </Alert>
       )}
       <label className={`block cursor-pointer rounded-[12px] border-2 border-dashed p-6 text-center ${pending ? "border-[var(--line)] bg-neutral-50" : "border-[var(--meta)] bg-[var(--meta-tint)] hover:bg-[var(--meta-tint-2)]"}`}>
-        <input type="file" accept=".csv,text/csv" multiple className="sr-only" disabled={pending} onChange={(e) => { const files = Array.from(e.target.files ?? []); if (files.length) void add(files); e.target.value = ""; }} />
-        <span className="block text-[15px] font-semibold">{pending ? progress || "Working…" : chosen.length ? "Add another export" : "Choose your Shopify product export (CSV)"}</span>
-        {!pending && <span className="mt-1 block text-[13px] text-[var(--ink-soft)]">In Shopify: Products → Export → All products → CSV for Excel, Numbers or other. One file, or several if you export a category at a time. The whole file is read here on your computer; only what was learned is kept.</span>}
+        <input type="file" accept=".csv,text/csv" className="sr-only" disabled={pending} onChange={(e) => { const file = e.target.files?.[0]; if (file) void choose(file); e.target.value = ""; }} />
+        <span className="block text-[15px] font-semibold">{pending ? progress || "Working…" : outcome || before ? "Choose another export (one product group at a time)" : "Choose a Shopify product export (CSV)"}</span>
+        {!pending && <span className="mt-1 block text-[13px] text-[var(--ink-soft)]">In Shopify: Products → filter to one product group → Export → CSV for Excel, Numbers or other. One file at a time; each adds to what the last one taught. The whole file is read here on your computer; only what was learned is kept.</span>}
       </label>
-      {chosen.length > 0 && !pending && (
-        <div className="rounded-[12px] border border-[var(--line)] bg-white">
-          <ul className="divide-y divide-[var(--line-soft)] text-[14px]">
-            {chosen.map((c) => (
-              <li key={c.file.name} className="flex items-center justify-between gap-3 px-4 py-2.5">
-                <span className="min-w-0">
-                  <span className="block truncate font-medium">{c.file.name}</span>
-                  <span className={`block text-[12px] ${c.problem ? "text-[var(--danger)]" : "text-[var(--ink-soft)]"}`}>{c.problem ?? fmtSize(c.file.size)}</span>
-                </span>
-                <button type="button" className="shrink-0 text-[13px] text-[var(--ink-soft)] hover:text-[var(--ink)]" onClick={() => setChosen((was) => was.filter((x) => x !== c))}>Remove</button>
-              </li>
-            ))}
-          </ul>
-          <div className="flex items-center justify-between gap-3 border-t border-[var(--line-soft)] px-4 py-3">
-            <span className="text-[13px] text-[var(--ink-soft)]">{usable.length === 1 ? "1 export" : `${usable.length} exports`} to learn from{usable.length > 1 ? "; a product in two of them counts once" : ""}.</span>
-            <Button size="sm" disabled={usable.length === 0} onClick={teach}>Teach Flöda</Button>
-          </div>
+      {chosen && !pending && (
+        <div className="flex items-center justify-between gap-3 rounded-[12px] border border-[var(--line)] bg-white px-4 py-3 text-[14px]">
+          <span className="min-w-0">
+            <span className="block truncate font-medium">{chosen.file.name}</span>
+            <span className={`block text-[12px] ${chosen.problem ? "text-[var(--danger)]" : "text-[var(--ink-soft)]"}`}>{chosen.problem ?? fmtSize(chosen.file.size)}</span>
+          </span>
+          <span className="flex shrink-0 items-center gap-3">
+            <button type="button" className="text-[13px] text-[var(--ink-soft)] hover:text-[var(--ink)]" onClick={() => setChosen(null)}>Remove</button>
+            <Button size="sm" disabled={Boolean(chosen.problem)} onClick={teach}>Read it</Button>
+          </span>
         </div>
       )}
       {error && <Alert tone="danger">{error}</Alert>}
       {outcome && (
-        <Alert tone="success">
-          <div className="font-semibold">Learned.</div>
-          <ul className="mt-1 list-disc pl-5 text-[14px]">
-            {outcome.lines.map((l) => <li key={l}>{l}</li>)}
-            <li>{outcome.templates} convention{outcome.templates === 1 ? "" : "s"} per brand and kind of product, kept as templates.</li>
-            <li>{outcome.remembered.toLocaleString("en-AU")} listings remembered, so next season&rsquo;s product of the same model keeps its shelves, name and price.</li>
-          </ul>
-          {outcome.warnings.length > 0 && <div className="mt-2 text-[13px] text-[var(--ink-soft)]">{outcome.warnings.join(" ")}</div>}
-          {next && <div className="mt-3"><Link href={next} className="inline-flex items-center gap-1.5 rounded-[10px] bg-[var(--meta)] px-4 py-2.5 text-[15px] font-semibold text-white">Continue →</Link></div>}
-        </Alert>
+        <>
+          <Alert tone="success">
+            <div className="font-semibold">Read {outcome.file}.</div>
+            <ul className="mt-1 list-disc pl-5 text-[14px]">
+              {outcome.lines.map((l) => <li key={l}>{l}</li>)}
+              <li>{outcome.templates} convention{outcome.templates === 1 ? "" : "s"} per brand and kind of product, kept as templates.</li>
+              <li>{outcome.remembered.toLocaleString("en-AU")} listings remembered, so next season&rsquo;s product of the same model keeps its shelves, name and price.</li>
+            </ul>
+            {outcome.warnings.length > 0 && <div className="mt-2 text-[13px] text-[var(--ink-soft)]">{outcome.warnings.join(" ")}</div>}
+          </Alert>
+          <KindsEditor key={outcome.file} kinds={outcome.kinds} />
+          {next && <div><Link href={next} className="inline-flex items-center gap-1.5 rounded-[10px] bg-[var(--meta)] px-4 py-2.5 text-[15px] font-semibold text-white">Continue →</Link></div>}
+        </>
+      )}
+      {!outcome && saved.length > 0 && (
+        <KindsEditor kinds={saved} title="The kinds of product you have told Flöda about" blurb="From the exports read so far. Change what is wrong; the next export's kinds join this list." />
       )}
     </div>
   );
 }
 
-export function LearnStep({ learned }: { learned: LearnedVocabulary | null }) {
+export function LearnStep({ learned, kinds }: { learned: LearnedVocabulary | null; kinds: KindRule[] }) {
   const [pending, start] = useTransition();
   const router = useRouter();
   return (
     <Card title="Teach Flöda your catalogue">
       <p className="mb-4 text-[14px] text-[var(--ink-soft)]">
-        Flöda learns how your shop files and tags products from the products you already sell: which kinds of product you have, which menu tags go with each, how each shelf tag is spelled, and the conventions each brand follows. New listings are then built to match. You can do this again whenever your catalogue changes.
+        Flöda learns how your shop files and tags products from the products you already sell, one export at a time: which kinds of product you have, which tags go with each, how each shelf tag is spelled, and the conventions each brand follows. After each file, say what each kind is called, the tags every one gets, and how its titles read. New listings are then built to match.
       </p>
-      <LearnPanel learned={learned} next="/setup?step=house" />
+      <LearnPanel learned={learned} kinds={kinds} next="/setup?step=house" />
       <div className="mt-5 flex items-center justify-between border-t border-[var(--line-soft)] pt-4 text-[13px] text-[var(--ink-soft)]">
         <span>No export to hand? Flöda works without one; it just has less to go on.</span>
         <Button size="sm" variant="ghost" disabled={pending} onClick={() => start(async () => { await skipSetupStepAction("learn"); router.push("/setup?step=house"); })}>Skip for now</Button>

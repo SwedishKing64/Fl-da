@@ -12,7 +12,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { retailer } from "../shop-profile";
-import { anthropicClient, EXTRACTION_MODEL, aiAvailable } from "../anthropic";
+import { anthropicClient, LIGHT_MODEL, WORKING_MODEL, aiAvailable } from "../anthropic";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 
@@ -75,7 +75,7 @@ export async function lookupProduct(request: LookupRequest): Promise<ProductLook
   if (!lookupAvailable() || !request.title.trim()) return null;
 
   const research = await retrying(() => getClient().messages.stream({
-    model: EXTRACTION_MODEL,
+    model: WORKING_MODEL,
     max_tokens: 8000,
     system: RESEARCH_SYSTEM(),
     thinking: { type: "adaptive" },
@@ -92,7 +92,7 @@ export async function lookupProduct(request: LookupRequest): Promise<ProductLook
   if (!notes) return null;
 
   const shaped = await retrying(() => getClient().messages.stream({
-    model: EXTRACTION_MODEL,
+    model: LIGHT_MODEL,
     max_tokens: 4000,
     system: SHAPE_SYSTEM,
     output_config: { format: zodOutputFormat(FoundSchema), effort: "low" },

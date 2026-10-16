@@ -36,6 +36,18 @@ export function recordFrom(supplierId: string, name: string, batches: BatchRecor
   return { supplierId, name, imports: finished.length, products, touched, share: products > 0 ? touched / products : null };
 }
 
+/** The share of products touched under which a supplier's paperwork counts as reading clean. */
+export const READS_CLEAN_SHARE = 0.2;
+
+/**
+ * Whether the supplier's paperwork is known well enough to read on the lighter model: at least one
+ * finished import, and no more than a fifth of its products changed after reading. The record keeps
+ * watching, so a supplier whose paperwork starts reading badly goes back to the full model by itself.
+ */
+export function readsKnown(r: SupplierRecord | null | undefined): boolean {
+  return Boolean(r && r.share !== null && r.imports >= 1 && r.share <= READS_CLEAN_SHARE);
+}
+
 /** The record in a word, for a badge: how much a person usually has to change. */
 export function recordWord(r: SupplierRecord): { word: string; tone: "success" | "info" | "warning" | "neutral" } {
   if (r.share === null) return { word: "no record yet", tone: "neutral" };
@@ -49,8 +61,9 @@ export function describeRecord(r: SupplierRecord): string {
   if (r.share === null) return `${r.name}: no finished import yet, so there is no record of how its paperwork reads.`;
   const pct = Math.round(r.share * 100);
   const imports = `${r.imports} finished import${r.imports === 1 ? "" : "s"}`;
-  if (r.share <= 0.05) return `${r.name} reads clean: over ${imports}, ${pct}% of products needed a change after reading.`;
-  if (r.share <= 0.2) return `${r.name} reads mostly clean: over ${imports}, ${pct}% of products needed a change after reading.`;
+  const lighter = " Its paperwork is read on the lighter model, at about half the reading cost.";
+  if (r.share <= 0.05) return `${r.name} reads clean: over ${imports}, ${pct}% of products needed a change after reading.${lighter}`;
+  if (r.share <= READS_CLEAN_SHARE) return `${r.name} reads mostly clean: over ${imports}, ${pct}% of products needed a change after reading.${lighter}`;
   return `${r.name} needs a look: over ${imports}, ${pct}% of products needed a change after reading. Check the columns below more closely than usual.`;
 }
 

@@ -11,7 +11,7 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
-import { anthropicClient, EXTRACTION_MODEL, aiAvailable } from "./anthropic";
+import { anthropicClient, WORKING_MODEL, aiAvailable } from "./anthropic";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { houseBody, isPlaceholderBody, sanitiseBody } from "./body";
@@ -36,7 +36,7 @@ const SYSTEM = (format: string, heading: string, example: string) => [
 export type Shaper = (system: string, content: string) => Promise<string | undefined>;
 const askModel: Shaper = async (system, content) => {
   const response = await (anthropicClient(1) as Anthropic).messages.stream({
-    model: EXTRACTION_MODEL,
+    model: WORKING_MODEL,
     max_tokens: 3000,
     system,
     output_config: { format: zodOutputFormat(Shaped), effort: "low" },

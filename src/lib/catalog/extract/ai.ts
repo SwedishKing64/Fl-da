@@ -5,7 +5,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { retailer, taxName } from "../shop-profile";
-import { anthropicClient, EXTRACTION_MODEL } from "../anthropic";
+import { anthropicClient, cachedSystem, READING_MODEL, WORKING_MODEL } from "../anthropic";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import type { ExtractedTable } from "./types";
@@ -54,7 +54,7 @@ const ExtractionSchema = z.object({
 
 export type AiExtraction = z.infer<typeof ExtractionSchema>;
 
-const SYSTEM = () => `You read documents uploaded by ${retailer()} who is building Shopify products. Work out what each document is, then extract only what is relevant.
+const SYSTEM = `You read documents uploaded by a retailer who is building Shopify products. Work out what each document is, then extract only what is relevant.
 
 Document types:
 - INVOICE / order confirmation: one item per purchasable variant line (each length/size/colour is its own item) with unit cost and quantity.
@@ -103,7 +103,10 @@ Rules:
 - Never invent values. Leave a string empty or a number null when the document does not state it.
 - Ignore freight, deposit, discount, subtotal and tax summary lines - they are not products.
 - On an INVOICE or PRICE_LIST, leave description, flex, abilityLevel, dinRange, terrain, tags and imageUrls empty on every item and keep summary to one short sentence: the shop fills those in from the brand's own pages, and a photographed invoice has to be read quickly.
-- gstTreatment: EXCLUSIVE when prices are marked ex ${taxName()} / plus ${taxName()}, INCLUSIVE when marked inc ${taxName()}, NONE when the supplier is overseas and no ${taxName()} applies, otherwise UNKNOWN.`;
+- gstTreatment: EXCLUSIVE when prices are marked ex tax / plus tax (GST, VAT or whatever the shop's sales tax is called), INCLUSIVE when marked inc tax, NONE when the supplier is overseas and no local sales tax applies, otherwise UNKNOWN.`;
+
+/** What differs by shop, after the fixed prompt so the fixed prompt is the same bytes for every shop. */
+const SHOP = () => `The retailer is ${retailer()}; its sales tax is called ${taxName()}.`;
 
 const getClient = (): Anthropic => anthropicClient(6);
 
@@ -138,13 +141,20 @@ export function ranOutOfTime(message: string | null | undefined): boolean {
  * own rate limit and not every model has it, so a refusal of it falls back to standard speed with
  * whatever time is left; a read that cannot finish in the time says so rather than being killed.
  */
-async function runExtraction(content: ContentBlocks, options: { visual?: boolean } = {}): Promise<AiExtraction> {
+/** How a document is read: a photograph at the service's fast speed, a known supplier's on the lighter model. */
+export interface ReadOptions {
+  visual?: boolean;
+  /** The supplier's paperwork reads clean on its record, so the lighter model reads it at half the price. */
+  known?: boolean;
+}
+
+async function runExtraction(content: ContentBlocks, options: ReadOptions = {}): Promise<AiExtraction> {
   const deadline = Date.now() + READ_BUDGET_MS;
   const left = () => Math.max(5_000, deadline - Date.now());
   const params = {
-    model: EXTRACTION_MODEL,
+    model: options.known ? WORKING_MODEL : READING_MODEL,
     max_tokens: 16000,
-    system: SYSTEM(),
+    system: cachedSystem(SYSTEM, SHOP()),
     thinking: { type: "adaptive" as const },
     output_config: { format: zodOutputFormat(ExtractionSchema), effort: "medium" as const },
     messages: [{ role: "user" as const, content }],
@@ -155,7 +165,8 @@ async function runExtraction(content: ContentBlocks, options: { visual?: boolean
   let message: Anthropic.Message | Anthropic.Beta.BetaMessage;
   try {
     message = await retrying(async () => {
-      if (!options.visual) return standard();
+      // Fast speed is the reading model's alone; the lighter model is quick as it is.
+      if (!options.visual || options.known) return standard();
       try {
         return await fast();
       } catch (err) {
@@ -184,25 +195,25 @@ function hintFor(kind?: string): string {
   }
 }
 
-export async function extractFromText(text: string, kind?: string): Promise<AiExtraction> {
-  return runExtraction([{ type: "text", text: `${hintFor(kind)} Extract what is relevant from this document:\n\n<document>\n${text}\n</document>` }]);
+export async function extractFromText(text: string, kind?: string, options: ReadOptions = {}): Promise<AiExtraction> {
+  return runExtraction([{ type: "text", text: `${hintFor(kind)} Extract what is relevant from this document:\n\n<document>\n${text}\n</document>` }], { known: options.known });
 }
 
-export async function extractFromPdf(buffer: Buffer, kind?: string): Promise<AiExtraction> {
+export async function extractFromPdf(buffer: Buffer, kind?: string, options: ReadOptions = {}): Promise<AiExtraction> {
   return runExtraction([
     { type: "document", source: { type: "base64", media_type: "application/pdf", data: buffer.toString("base64") } },
     { type: "text", text: `${hintFor(kind)} Extract what is relevant from this document.` },
-  ], { visual: true });
+  ], { visual: true, known: options.known });
 }
 
 const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
 
-export async function extractFromImage(buffer: Buffer, mimeType: string, kind?: string): Promise<AiExtraction> {
+export async function extractFromImage(buffer: Buffer, mimeType: string, kind?: string, options: ReadOptions = {}): Promise<AiExtraction> {
   if (!IMAGE_TYPES.has(mimeType)) throw new Error(`Unsupported image type ${mimeType}`);
   return runExtraction([
     { type: "image", source: { type: "base64", media_type: mimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: buffer.toString("base64") } },
     { type: "text", text: `${hintFor(kind)} This is an uploaded image: it may be a photo or scan of an invoice, a catalogue page, or a photo of a product.` },
-  ], { visual: true });
+  ], { visual: true, known: options.known });
 }
 
 /** Canonical headers used when AI output is turned into a table (identity mapping downstream). */

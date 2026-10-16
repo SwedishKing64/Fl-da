@@ -2,7 +2,7 @@ import { after, NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/catalog/db";
 import { normaliseKey, vendorMode, verdictFor } from "@/lib/catalog/licence";
 import { planOf } from "@/lib/catalog/plans";
-import { allowanceOf, limitReachedMessage, periodKey, noUsage, StreamMeter, usageOf, type Usage } from "@/lib/catalog/ai-usage";
+import { allowanceOf, costCents, limitReachedMessage, periodKey, noUsage, rateFor, requestedModel, StreamMeter, usageOf, type Usage } from "@/lib/catalog/ai-usage";
 
 export const runtime = "nodejs";
 /** A season's sheet can take minutes to read; the copy's own timeout is shorter than this. */
@@ -47,9 +47,15 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/ai/[...path
   const beta = req.headers.get("anthropic-beta");
   if (beta) headers.set("anthropic-beta", beta);
 
+  // Each call is priced at the rate of the model it asks for, so a shop's allowance goes as far
+  // as the lighter models let it, rather than every call counting as the dearest.
+  const body = await req.text();
+  const asked = requestedModel(body);
+  const rate = rateFor(asked.model, asked.fast);
+
   let upstream: Response;
   try {
-    upstream = await fetch(`${UPSTREAM}/${route}`, { method: "POST", headers, body: await req.text(), signal: AbortSignal.timeout((maxDuration - 10) * 1000) });
+    upstream = await fetch(`${UPSTREAM}/${route}`, { method: "POST", headers, body, signal: AbortSignal.timeout((maxDuration - 10) * 1000) });
   } catch (err) {
     console.error("[ai relay] could not reach the reading service:", err instanceof Error ? err.message : err);
     return refuse(502, "api_error", "The reading service could not be reached from Flöda.");
@@ -76,7 +82,7 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/ai/[...path
       } catch (err) {
         console.warn("[ai relay] stream ended early:", err instanceof Error ? err.message : err);
       }
-      await record(client.id, meter.end());
+      await record(client.id, meter.end(), rate);
     });
     return new Response(toCopy, { status: upstream.status, headers: out });
   }
@@ -85,7 +91,7 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/ai/[...path
   if (upstream.ok) {
     let usage: Usage | null = null;
     try { usage = usageOf((JSON.parse(text) as { usage?: unknown }).usage); } catch { /* not a message */ }
-    if (usage && !noUsage(usage)) { const u = usage; after(() => record(client.id, u)); }
+    if (usage && !noUsage(usage)) { const u = usage; after(() => record(client.id, u, rate)); }
   }
   return new Response(text, { status: upstream.status, headers: out });
 }
@@ -95,14 +101,14 @@ function refuse(status: number, type: string, message: string) {
   return NextResponse.json({ type: "error", error: { type, message } }, { status });
 }
 
-/** Add a reading to the client's fortnight, starting over when a new one has begun. */
-async function record(clientId: string, usage: Usage): Promise<void> {
+/** Add a reading to the client's fortnight, priced at its model's rate, starting over when a new fortnight has begun. */
+async function record(clientId: string, usage: Usage, rate: Usage): Promise<void> {
   if (noUsage(usage)) return;
   const month = periodKey();
   try {
     const current = await prisma.client.findUnique({ where: { id: clientId }, select: { aiMonth: true } });
     if (!current) return;
-    const counts = { aiInput: usage.input, aiCacheWrite: usage.cacheWrite, aiCacheRead: usage.cacheRead, aiOutput: usage.output, aiCalls: 1 };
+    const counts = { aiInput: usage.input, aiCacheWrite: usage.cacheWrite, aiCacheRead: usage.cacheRead, aiOutput: usage.output, aiCalls: 1, aiCents: costCents(usage, rate) };
     if (current.aiMonth !== month) {
       await prisma.client.update({ where: { id: clientId }, data: { aiMonth: month, ...counts } });
     } else {

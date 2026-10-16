@@ -16,12 +16,43 @@ export interface Usage {
 
 export const NO_USAGE: Usage = { input: 0, cacheWrite: 0, cacheRead: 0, output: 0 };
 
-/** Cents per million tokens, at the Opus rates the relay's model is billed on. */
+/** Cents per million tokens, at the Opus 5 rates the relay once billed everything on. Kept for rows metered before each call was priced. */
 export const RATES: Usage = { input: 500, cacheWrite: 625, cacheRead: 50, output: 2500 };
 
-/** What the reading service charges for this much, to the cent. */
-export function costCents(u: Usage): number {
-  return Math.round((u.input * RATES.input + u.cacheWrite * RATES.cacheWrite + u.cacheRead * RATES.cacheRead + u.output * RATES.output) / 1_000_000);
+/**
+ * Cents per million tokens by model, as the reading service prices them: the standard card for
+ * the Opus and Sonnet lines, the lighter model's small-prompt card (its prompts here are far
+ * under the hundred thousand tokens where the other card starts), and the fast card for a read
+ * at the service's fast speed. A model not named here is priced as Opus, the dearest, so a new
+ * one can never be under-counted.
+ */
+const CARDS: Array<{ match: RegExp; rate: Usage }> = [
+  { match: /^claude-opus-5-5/, rate: { input: 400, cacheWrite: 500, cacheRead: 20, output: 2000 } },
+  { match: /^claude-opus-5/, rate: { input: 500, cacheWrite: 625, cacheRead: 50, output: 2500 } },
+  { match: /^claude-sonnet-5/, rate: { input: 200, cacheWrite: 250, cacheRead: 20, output: 1000 } },
+  { match: /^claude-haiku-5/, rate: { input: 10, cacheWrite: 12.5, cacheRead: 1, output: 50 } },
+];
+const FAST_RATE: Usage = { input: 800, cacheWrite: 1000, cacheRead: 40, output: 4000 };
+
+/** The rate a call is priced at: by the model named in it, and the speed it asked for. */
+export function rateFor(model: string, fast = false): Usage {
+  if (fast) return FAST_RATE;
+  return CARDS.find((c) => c.match.test(model.trim().toLowerCase()))?.rate ?? RATES;
+}
+
+/** What the reading service charges for this much at the given rate, to the cent. */
+export function costCents(u: Usage, rate: Usage = RATES): number {
+  return Math.round((u.input * rate.input + u.cacheWrite * rate.cacheWrite + u.cacheRead * rate.cacheRead + u.output * rate.output) / 1_000_000);
+}
+
+/** The model and speed a request to the service asked for, read off its body. Empty when it is not a message. */
+export function requestedModel(body: string): { model: string; fast: boolean } {
+  try {
+    const b = JSON.parse(body) as { model?: unknown; speed?: unknown };
+    return { model: typeof b.model === "string" ? b.model : "", fast: b.speed === "fast" };
+  } catch {
+    return { model: "", fast: false };
+  }
 }
 
 export function addUsage(a: Usage, b: Usage): Usage {
@@ -119,6 +150,8 @@ export interface MeteredClient {
   aiCacheRead: number;
   aiOutput: number;
   aiCalls: number;
+  /** What the fortnight's calls cost, each priced at its own model's rate as it was made. */
+  aiCents?: number;
   /** The fortnight's allowance in cents; 0 means no limit. */
   aiCapCents: number;
 }
@@ -138,7 +171,9 @@ export function allowanceOf(c: MeteredClient, now = new Date()): Allowance {
   const month = periodKey(now);
   const current = c.aiMonth === month;
   const usage: Usage = current ? { input: c.aiInput, cacheWrite: c.aiCacheWrite, cacheRead: c.aiCacheRead, output: c.aiOutput } : { ...NO_USAGE };
-  const spentCents = costCents(usage);
+  // Priced call by call where the relay has done that; a row metered only in tokens, from before
+  // it did, is priced at the old single rate.
+  const spentCents = current && (c.aiCents ?? 0) > 0 ? c.aiCents! : costCents(usage);
   return { month, usage, calls: current ? c.aiCalls : 0, spentCents, capCents: c.aiCapCents, exhausted: c.aiCapCents > 0 && spentCents >= c.aiCapCents };
 }
 

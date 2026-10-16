@@ -12,7 +12,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { retailer } from "../shop-profile";
-import { anthropicClient, EXTRACTION_MODEL, aiAvailable } from "../anthropic";
+import { anthropicClient, LIGHT_MODEL, WORKING_MODEL, aiAvailable } from "../anthropic";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 
@@ -291,7 +291,7 @@ const within = (d: Deadline) => ({ timeout: left(d), maxRetries: MODEL_RETRIES, 
 export type AskPage = (system: string, content: string, deadline?: Deadline) => Promise<string | undefined>;
 const askModel: AskPage = async (system, content, d = deadline()) => {
   const response = await retrying(() => getClient().messages.stream({
-    model: EXTRACTION_MODEL,
+    model: WORKING_MODEL,
     max_tokens: 5000,
     system,
     output_config: { format: zodOutputFormat(ReadSchema), effort: "low" },
@@ -393,7 +393,7 @@ const FetchedSchema = ReadSchema.omit({ imageNumbers: true });
 export async function readViaModelFetch(link: string, hint: PageHint, by: Deadline = deadline()): Promise<PageDetails | null> {
   if (!aiAvailable() || outOfTime(by)) return null;
   const research = await retrying(() => getClient().messages.stream({
-    model: EXTRACTION_MODEL,
+    model: WORKING_MODEL,
     max_tokens: 8000,
     system: FETCH_SYSTEM(),
     thinking: { type: "adaptive" },
@@ -404,7 +404,7 @@ export async function readViaModelFetch(link: string, hint: PageHint, by: Deadli
   const notes = research.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("\n").trim();
   if (!notes || outOfTime(by)) return null;
   const shaped = await retrying(() => getClient().messages.stream({
-    model: EXTRACTION_MODEL,
+    model: LIGHT_MODEL,
     max_tokens: 4000,
     system: "Turn the notes into fields. Copy what the notes establish and leave everything else empty — never fill a gap with something plausible. Keep the manufacturer's wording.",
     output_config: { format: zodOutputFormat(FetchedSchema), effort: "low" },

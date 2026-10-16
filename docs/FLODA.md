@@ -146,6 +146,28 @@ what each is called, the tags every one gets and how its titles read. Those are 
 materialised as tag rules named `kind: …` (`materialiseKindRules` in actions.ts) so the build
 writes the shop's name for the kind and its tags on every product of it.
 
+**What reading costs, and how it is kept down.** Three models, by how hard the work is
+(`anthropic.ts`): the reading model (`CATALOG_AI_MODEL`, Opus) for a supplier's document and the
+check of a whole batch; the working model (`CATALOG_AI_WORKING_MODEL`, Sonnet, half the price)
+for web research, a brand's page, an instruction, a plan over an export, product copy, colour
+verdicts and joining order lines to a reference sheet; the light model
+(`CATALOG_AI_LIGHT_MODEL`, Haiku, a fortieth) for turning research notes into fields and screening
+a sheet of instructions. The long fixed prompts (reading a document, planning an adjustment,
+splitting an instruction sheet, reading instructions, checking a batch) are marked for the
+service's prompt cache through `cachedSystem`, with what differs by shop (its name, what it calls
+its tax) in a second block after the fixed one, so every shop reading through the relay shares
+one cached prefix and pays a twentieth for it. **A supplier whose paperwork reads clean** —
+`readsKnown` in `supplier-record.ts`: at least one finished import and no more than a fifth of
+its products changed after reading — has its documents read on the working model
+(`ReadOptions.known`, decided per file in `ingestFile` from the batch's supplier); the record keeps
+watching, so a supplier that starts reading badly goes back to the reading model by itself, and
+the review page says which rate a supplier is on. Spreadsheets with a remembered layout never
+reach a model at all. **The relay prices each call at the rate of the model it asked for**
+(`rateFor`, `requestedModel` in `ai-usage.ts`; `Client.aiCents` adds up what the fortnight's
+calls cost), so the allowance goes as far as the lighter models let it; a model it does not know
+is priced as the dearest. A row metered only in tokens, from before calls were priced, is still
+priced at the old single Opus rate.
+
 **The open copy.** A desktop build made with `FLODA_OPEN=1` (`electron-builder.open.yml`, the
 "open" box on the Desktop app workflow) has no sign-in and no licence: `/open` signs whoever opens
 the window in as the copy's owner, an admin called "Shop owner" made the first time

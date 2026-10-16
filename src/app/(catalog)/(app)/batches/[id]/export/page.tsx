@@ -7,6 +7,7 @@ import { getSettings } from "@/lib/catalog/settings";
 import { requireUser } from "@/lib/catalog/auth";
 import { Badge, Card, LinkButton, PageHeader, cx, fmtDate, money, pct, statusTone } from "@/app/(catalog)/ui";
 import { Steps } from "../Steps";
+import { NextStep } from "../NextStep";
 import { ExportPanel } from "./ExportPanel";
 import { FeedbackChat } from "./FeedbackChat";
 
@@ -17,7 +18,7 @@ export default async function ExportPage(props: PageProps<"/batches/[id]/export"
   if (!batch) notFound();
   const [review, settings] = await Promise.all([loadReview(id), getSettings()]);
   const hard = hardErrors(review.products);
-  // The repairable ones, listed as what the export will do; the hard ones are listed as what stops it.
+  // The repairable ones, listed as what the export will do; the hard ones as what to check before importing.
   const errors = blockingErrors(review.products).filter((e) => !hard.includes(e));
   const warnings = warningList(review.products);
   const s = review.summary;
@@ -27,6 +28,7 @@ export default async function ExportPage(props: PageProps<"/batches/[id]/export"
     <>
       <PageHeader title={<>{batch.name} <Badge tone={statusTone(batch.status)} className="align-middle">{batch.status.replace("_", " ")}</Badge></>} subtitle="Generate the Shopify CSV, or push straight to the store." actions={<LinkButton href={`/batches/${id}/review`}>← Back to review</LinkButton>} />
       <Steps batchId={id} current="export" status={batch.status} />
+      <NextStep href="/batches/new" label="Next: Start the next batch" />
       <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <div className="min-w-0 space-y-6">
           <ExportPanel

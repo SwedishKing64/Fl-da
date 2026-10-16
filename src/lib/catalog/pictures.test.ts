@@ -90,6 +90,14 @@ describe("keeping a page's pictures here", () => {
     expect(out[3]).toMatch(/freestyle-bindings-4\.jpg$/);
   });
 
+  it("keeps the brand's own addresses when the only place to serve a copy from is the copy's own machine", async () => {
+    let asked = 0;
+    const fetcher = (async () => { asked++; return new Response(new Uint8Array(await picture()), { status: 200 }); }) as unknown as typeof fetch;
+    const urls = ["https://a.example.com/1.png"];
+    expect(await hostPictures(urls, "x", { fetcher, publicBaseUrl: "http://127.0.0.1:51299" })).toEqual(urls);
+    expect(asked).toBe(0);
+  });
+
   it("keeps the brand's own addresses when there is nowhere public to serve a copy from", async () => {
     let asked = 0;
     const fetcher = (async () => { asked++; return new Response(new Uint8Array(await picture()), { status: 200 }); }) as unknown as typeof fetch;

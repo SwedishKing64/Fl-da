@@ -21,6 +21,9 @@ const pkg = JSON.parse(readFileSync("package.json", "utf8"));
 const licenceServer = (process.env.FLODA_LICENCE_SERVER ?? "https://fl-da.vercel.app").replace(/\/+$/, "");
 const open = process.env.FLODA_OPEN === "1";
 const anthropicApiKey = open ? (process.env.FLODA_ANTHROPIC_API_KEY ?? "").trim() : "";
+// An open copy has no licence to send pictures through, so it keeps them in Flöda's own picture
+// store with a token of its own (the store's read-write token, as the website holds it).
+const blobToken = open ? (process.env.FLODA_BLOB_TOKEN ?? "").trim() : "";
 
 // 1. The schema stays on SQLite (the checked-in default). Make the empty template database.
 const template = path.resolve("prisma/template.db");
@@ -73,7 +76,7 @@ function solidify(dir) {
 mkdirSync("desktop", { recursive: true });
 writeFileSync(
   "desktop/floda.json",
-  JSON.stringify({ version: pkg.version, licenceServer, builtAt: new Date().toISOString(), ...(open ? { open: true } : {}), ...(anthropicApiKey ? { anthropicApiKey } : {}) }, null, 2),
+  JSON.stringify({ version: pkg.version, licenceServer, builtAt: new Date().toISOString(), ...(open ? { open: true } : {}), ...(anthropicApiKey ? { anthropicApiKey } : {}), ...(blobToken ? { blobToken } : {}) }, null, 2),
 );
 console.log(`[desktop-build] done: standalone at ${standalone}, template at ${template}, licence server ${licenceServer}${open ? `, open copy${anthropicApiKey ? ` with a key ending …${anthropicApiKey.slice(-4)}` : " without a key"}` : ""}`);
 console.log("[desktop-build] check it under plain Node with: node desktop/launch.cjs --check");

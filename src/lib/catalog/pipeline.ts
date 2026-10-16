@@ -38,7 +38,7 @@ import { SKI_METAFIELDS, metafieldColumn, type AppSettings, type CanonicalLineIt
 import type { ReviewProduct, ReviewSummary, ReviewVariant } from "./review-types";
 import { hardErrors, summarise, validateReview, warningList } from "./validate";
 import type { MatchCandidate } from "./match-candidates";
-import { filePath, publicFileUrl, readFile, saveFile, usingBlob } from "./storage";
+import { filePath, pictureHosting, publicFileUrl, readFile, saveFile, usingBlob } from "./storage";
 import { logAudit } from "./audit";
 import { AI_HEADERS } from "./extract/ai";
 
@@ -1269,7 +1269,9 @@ export async function loadReview(batchId: string): Promise<ReviewData> {
       shopifyConfigured: Boolean(settings.shopify.storeDomain && settings.shopify.accessToken),
       // Something to check the batch against: the store itself, or the shop's own export.
       catalogueKnown: Boolean(settings.shopify.storeDomain && settings.shopify.accessToken) || (await prisma.shopListing.count()) > 0,
-      publicBaseUrl: usingBlob() ? "blob" : settings.publicBaseUrl || process.env.APP_PUBLIC_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : ""),
+      // Where a picture kept here is served from: Blob, the vendor's store, a public address of
+      // this deployment's own, or nowhere (a desktop copy's own address is not public).
+      publicBaseUrl: usingBlob() ? "blob" : pictureHosting() ? "floda" : publicFileUrl("images/x.jpg", settings.publicBaseUrl) ? (settings.publicBaseUrl || process.env.APP_PUBLIC_URL || `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`) : "",
     },
     metafieldColumns: SKI_METAFIELDS.map(metafieldColumn),
   };
@@ -1355,10 +1357,11 @@ export async function exportBatch(batchId: string, userId: string): Promise<Expo
   const warnings = warningList(review.products);
   if (review.products.length === 0) return { ok: false, errors: ["Nothing to export - map the files first."], warnings, files: [], repairs: [] };
 
-  // What cannot be repaired is refused, by name: a wrong number in a file is a wrong number on
-  // the shop, and the shop imports the file as it is.
-  const hard = hardErrors(review.products);
-  if (hard.length) return { ok: false, errors: hard, warnings, files: [], repairs: [] };
+  // What cannot be repaired — a barcode that fails its check digit, swapped code columns, a price
+  // below cost, a Type the shop does not have — is said, by name, at the top of the warnings. It
+  // never stops the export: the shop asked that nothing does, and a draft in Shopify can be fixed
+  // there as easily as here.
+  for (const h of hardErrors(review.products).reverse()) warnings.unshift(`Check before importing: ${h}`);
 
   const plan = planExport(review);
   if (!plan.ok) return { ok: false, errors: plan.errors, warnings, files: [], repairs: [] };

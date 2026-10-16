@@ -56,6 +56,8 @@ jobs:
           NEXT_PUBLIC_FLODA_SUPPORT_EMAIL: ${{ vars.FLODA_SUPPORT_EMAIL || '' }}
           # Only an open build takes the key; the ordinary app reads through its licence.
           FLODA_ANTHROPIC_API_KEY: ${{ env.OPEN == '1' && (secrets.FLODA_ANTHROPIC_API_KEY || secrets.ANTHROPIC_API_KEY) || '' }}
+          # An open copy keeps its pictures in Flöda's picture store, where Shopify can fetch them: the store's token, as the website holds it.
+          FLODA_BLOB_TOKEN: ${{ env.OPEN == '1' && (secrets.FLODA_BLOB_TOKEN || secrets.BLOB_READ_WRITE_TOKEN) || '' }}
       - name: Make the installer
         run: npx electron-builder ${{ matrix.target }} --publish never ${{ env.OPEN == '1' && '--config electron-builder.open.yml' || '' }}
         env:

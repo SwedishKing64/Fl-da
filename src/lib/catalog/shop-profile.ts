@@ -18,6 +18,7 @@
 import { planOf } from "./plans";
 import { prisma, parseJson } from "./db";
 import { setRelay, setStoredApiKey } from "./anthropic";
+import { setPictureHost, usingBlob } from "./storage";
 import { LICENCE_KEY_SETTING, licenceServer, licenceState, type Licence } from "./licence";
 import { activateConventions, type LearnedVocabulary } from "./taxonomy";
 import type { WebsiteCategories } from "./website";
@@ -115,6 +116,8 @@ async function load(): Promise<void> {
   // A copy in good standing with its vendor reads through Flöda when it has no key of its own,
   // unless its plan is the one that reads with the shop's own key.
   setRelay(standing.kind === "ok" && planOf(standing.licence.plan).reading === "included" ? { server: licenceServer(), key: standing.licence.key } : null);
+  // And sends its pictures to the vendor's store on any plan, since its own address is no use to Shopify.
+  setPictureHost(standing.kind === "ok" && !usingBlob() ? { server: licenceServer(), key: standing.licence.key } : null);
   loadedAt = Date.now();
 }
 

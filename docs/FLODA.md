@@ -130,7 +130,7 @@ brands, gift cards and pages about the shop are left out (`isKindOfProduct`). Th
 what to keep, can add a category the reader missed, and the list is kept under `shop.website`
 and folded into the vocabulary (`Conventions.website` in `taxonomy.ts`): every category is a
 Type. Once the shop has any kinds of product at all (`typesAreKnown`), a Type outside them is
-`UNKNOWN_TYPE`, a hard error that stops the export, and the review grid's Type cell and bulk
+`UNKNOWN_TYPE`, an error named at the export, and the review grid's Type cell and bulk
 action pick from the list rather than take typing. Nothing a reader proposes is ever written as
 a Type the site does not have.
 
@@ -156,15 +156,32 @@ app cannot install over itself, so until there is an Apple Developer identity th
 a newer version exists and opens the releases page. Nothing is checked in development. The Help
 menu shows the version the copy is.
 
-**What stops an export.** The shop imports the CSV as it is, so a wrong number in the file is a
-wrong number on the shop. Most of what Shopify would reject has one right answer and is repaired
-on the way out (`repair.ts`); three things have no right answer a program can pick, and they stop
-the export by name (`hardErrors` in `validate.ts`, `HARD_CODES` in `types.ts`): a barcode that
+**Nothing stops an export.** The shop asked that nothing does, so nothing does: the only thing
+that disables the button is a batch with no products. Most of what Shopify would reject has one
+right answer and is repaired on the way out (`repair.ts`); a picture at an address Shopify cannot
+fetch (a desktop copy's own 127.0.0.1) is left off and said, never a reason to fail the file.
+What has no right answer a program can pick is named, by name, above the button and at the top
+of the warnings (`hardErrors` in `validate.ts`, `HARD_CODES` in `types.ts`): a barcode that
 fails its own check digit (`gtin.ts`: EAN-8, UPC-A, EAN-13, GTIN-14), a SKU column holding good
-barcodes while the barcode column does not (the two columns swapped), and a price under the landed
-cost. A margin under the floor (20% to start, on the Pricing page) is a warning; there is no
-ceiling, since a shop's margins are its own business. Errors cannot be dismissed; warnings can.
-A barcode of an odd length is a warning. The sample invoices carry barcodes with real check digits.
+barcodes while the barcode column does not (the two columns swapped), a price under the landed
+cost, a product that could be one of several, a Type the shop does not have. The CSV goes out
+regardless, as drafts; those and the warnings still need the "I have reviewed" tick before a push
+to the live store. A margin under the floor (20% to start, on the Pricing page) is a warning;
+there is no ceiling, since a shop's margins are its own business. A barcode of an odd length is a
+warning. The sample invoices carry barcodes with real check digits. Every batch page has a Next
+button fixed bottom right (`NextStep.tsx`): upload → review and price → export → the next batch.
+
+**Where a copy's pictures live.** Every picture on a listing is framed on a square and kept in
+this app's storage (`pictures.ts`), and Shopify fetches it from there, so it needs a public
+address. The website keeps pictures in Vercel Blob. A desktop copy's own address is 127.0.0.1,
+which `publicFileUrl` now treats as no address at all, so framed copies are never written with it;
+instead a licensed copy on any plan sends each picture to its vendor (`POST /api/licence/picture`,
+the licence key as bearer, the bytes as the body), which keeps it in Flöda's Blob store under the
+client's id and answers with the public address (`setPictureHost` in `storage.ts`, set from the
+licence standing in `shop-profile.ts`). The open copy has no licence, so it carries the store's
+token itself (`FLODA_BLOB_TOKEN` at build time, the repository secret of the same name or
+`BLOB_READ_WRITE_TOKEN`), written to `floda.json` like its reading key. A copy with neither keeps
+the brand's own addresses on the listing, unframed, rather than an address Shopify cannot reach.
 
 **A product that could be one of several.** A batch is checked against what the shop already
 sells (`reconcileBatch` in `shopify.ts`): the store's own catalogue when one is connected, read
@@ -172,7 +189,7 @@ again when the copy of it is a day old, otherwise the listings learned from the 
 (handles and barcodes). Each built product is placed by barcode, SKU and handle
 (`match-candidates.ts`). One match is taken and the handle becomes the shop's, since that is what
 the CSV updates by; none is a new product; more than one is never guessed at: the product is
-`AMBIGUOUS`, which is an error that stops the export, and the drawer on the review grid lists
+`AMBIGUOUS`, an error named at the export, and the drawer on the review grid lists
 what it could be so a person says which, or that it is new. That decision is kept across checks.
 The check runs again right before a CSV is made, and from the "Check against the shop" button.
 **A supplier's layout changes.** A remembered mapping is keyed by the file's headings, and a

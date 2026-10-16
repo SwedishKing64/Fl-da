@@ -5,8 +5,9 @@
 
 import { randomUUID } from "node:crypto";
 import { periodStart } from "./ai-usage";
+import { onRelayCall } from "./anthropic";
 import { prisma, parseJson } from "./db";
-import { CHECK_EVERY_MS, LICENCE_KEY_SETTING, askForBilling, askForTrial, askVendor, isServerUrl, licenceFromAnswer, licenceServer, licenceServers, licenceState, reachVendor, type CheckIn, type Licence, type LicenceState } from "./licence";
+import { CHECK_EVERY_MS, LICENCE_KEY_SETTING, askForBilling, askForTrial, askToSignIn, askUsage, askVendor, isServerUrl, licenceFromAnswer, licenceServer, licenceServers, licenceState, reachVendor, type CheckIn, type Licence, type LicenceState } from "./licence";
 import { refreshConventions, shopProfile } from "./shop-profile";
 import type { MonthUse } from "./plans";
 
@@ -98,6 +99,59 @@ export async function beginTrial(input: { shop: string; email: string; plan: str
   await refreshConventions();
   return { licence };
 }
+
+/** Sign in with the shop's website account: the vendor hands over the key and the copy keeps it. */
+export async function signInWithAccount(input: { email: string; password: string }): Promise<{ licence: Licence } | { refused: string }> {
+  if (!licenceServer()) throw new Error("This copy is not set up to check a licence.");
+  const base = await checkIn("");
+  const body = { email: input.email, password: input.password, install: base.install, version: base.version, platform: base.platform };
+  const answer = await reachVendor(await servers(), (server) => askToSignIn(server, body));
+  if (!answer.ok) return { refused: answer.why };
+  const licence = licenceFromAnswer(answer.key, { ok: true, client: answer.client, plan: answer.plan, status: answer.status, expiresAt: answer.expiresAt }, null);
+  await saveLicence(licence);
+  await refreshConventions();
+  usageCache = null;
+  return { licence };
+}
+
+export interface ReadingUsage {
+  spentCents: number;
+  capCents: number;
+  exhausted: boolean;
+  resetsAt: string;
+  ownKey: boolean;
+}
+
+let usageCache: { at: number; use: ReadingUsage | null } | null = null;
+const USAGE_TRUST_MS = 2 * 60_000;
+
+/**
+ * The fortnight's reading against the allowance, for the bar in the sidebar and on Settings.
+ * Asked of the vendor at most every couple of minutes; null when there is no licence, the
+ * vendor cannot be reached, or the plan reads on the shop's own key.
+ */
+export async function readingUsage(): Promise<ReadingUsage | null> {
+  if (!licenceServer()) return null;
+  if (usageCache && Date.now() - usageCache.at < USAGE_TRUST_MS) return usageCache.use;
+  const licence = await getLicence();
+  let use: ReadingUsage | null = null;
+  if (licence) {
+    try {
+      const answer = await reachVendor(await servers(), (server) => askUsage(server, licence.key));
+      if (answer.ok && !answer.ownKey) use = { spentCents: answer.spentCents, capCents: answer.capCents, exhausted: answer.exhausted, resetsAt: answer.resetsAt, ownKey: answer.ownKey };
+    } catch (err) {
+      console.warn("[licence] could not ask about reading:", err instanceof Error ? err.message : err);
+    }
+  }
+  usageCache = { at: Date.now(), use };
+  return use;
+}
+
+/** After a reading: the count has moved, so the next look asks again. */
+export function forgetReadingUsage(): void {
+  usageCache = null;
+}
+onRelayCall(forgetReadingUsage);
 
 let lastAsked = 0;
 

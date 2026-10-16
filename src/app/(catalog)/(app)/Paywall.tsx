@@ -15,7 +15,7 @@ export function Paywall({ state, isAdmin, name, servers = [], override = "" }: {
   const lapsed = state.kind === "lapsed" ? state : null;
   const trialOver = lapsed?.licence.status === "TRIAL";
   const was = lapsed ? planOf(lapsed.licence.plan) : null;
-  const title = state.kind === "none" ? "Start your free trial" : trialOver ? "Your free trial has ended" : "This copy's licence needs attention";
+  const title = state.kind === "none" ? "Sign in with your Flöda account" : trialOver ? "Your free trial has ended" : "This copy's licence needs attention";
   return (
     <main className="min-h-screen bg-[var(--canvas)]">
       <header className="aurora relative overflow-hidden pb-24 pt-14 text-center">
@@ -28,7 +28,7 @@ export function Paywall({ state, isAdmin, name, servers = [], override = "" }: {
         <div className="card p-6 md:p-8">
           <h1 className="text-[24px] font-bold tracking-[-0.02em]">{title}</h1>
           <p className="mt-2 text-[14.5px] text-[var(--ink-2)]">
-            {state.kind === "none" && <>Hello {name}. Every plan starts with {TRIAL_DAYS} days free, no card. Everything the shop does in Flöda stays on this machine.</>}
+            {state.kind === "none" && <>Hello {name}. Flöda is used with an account made on its website, which starts {TRIAL_DAYS} days free with no card. Signing in here licenses this copy; everything the shop does in Flöda stays on this machine.</>}
             {lapsed && trialOver && <>Thanks for trying Flöda, {name}. Everything you set up and every invoice you read is still here, untouched. Pick a plan to carry on.</>}
             {lapsed && !trialOver && <>{lapsed.why} Everything is still here, untouched.</>}
           </p>
@@ -37,7 +37,7 @@ export function Paywall({ state, isAdmin, name, servers = [], override = "" }: {
             <>
               {state.kind === "none" && (
                 <div className="mt-5">
-                  <Link href="/setup?step=plan" className="btn btn-primary inline-flex items-center gap-2">Choose a plan and start the trial →</Link>
+                  <Link href="/setup?step=plan" className="btn btn-primary inline-flex items-center gap-2">Sign in with your account →</Link>
                 </div>
               )}
               {lapsed && (

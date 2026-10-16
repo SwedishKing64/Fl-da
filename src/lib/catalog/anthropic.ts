@@ -54,6 +54,12 @@ export function aiAvailable(): boolean {
   return apiKeySource() !== "none";
 }
 
+/** Told after each reading through Flöda, so the allowance bar asks again rather than trusting a stale count. */
+let afterRelayCall: (() => void) | null = null;
+export function onRelayCall(fn: (() => void) | null): void {
+  afterRelayCall = fn;
+}
+
 /** A client for the key in force. `maxRetries` is per caller: a season's sheet needs more patience than a colour check. */
 export function anthropicClient(maxRetries: number): Anthropic {
   const key = hostKey() || storedKey;
@@ -62,7 +68,7 @@ export function anthropicClient(maxRetries: number): Anthropic {
   let client = clients.get(id);
   if (!client) {
     client = viaFloda
-      ? new Anthropic({ apiKey: null, authToken: viaFloda.key, baseURL: `${viaFloda.server}/api/ai`, maxRetries })
+      ? new Anthropic({ apiKey: null, authToken: viaFloda.key, baseURL: `${viaFloda.server}/api/ai`, maxRetries, fetch: async (url, init) => { const res = await fetch(url, init); afterRelayCall?.(); return res; } })
       : key ? new Anthropic({ apiKey: key, maxRetries }) : new Anthropic({ maxRetries });
     clients.set(id, client);
   }

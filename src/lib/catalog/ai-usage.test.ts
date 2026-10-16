@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allowanceOf, costCents, describeAllowance, periodKey, periodStart, StreamMeter, usageOf } from "./ai-usage";
+import { allowanceOf, costCents, describeAllowance, limitReachedMessage, periodEnd, periodKey, periodStart, StreamMeter, usageOf } from "./ai-usage";
 
 describe("what a reading used", () => {
   it("reads the service's usage object and ignores what is not a count", () => {
@@ -53,5 +53,13 @@ describe("the billing fortnight", () => {
     expect(periodKey(new Date("2026-10-15T09:00:00Z"))).toBe(periodKey(new Date("2026-10-25T23:59:59Z")));
     expect(periodKey(new Date("2026-10-26T00:00:00Z"))).not.toBe(periodKey(new Date("2026-10-25T23:59:59Z")));
     expect(periodKey(new Date("2026-10-15T09:00:00Z"))).toMatch(/^F\d+$/);
+    expect(periodEnd(new Date("2026-10-15T09:00:00Z")).toISOString()).toBe("2026-10-26T00:00:00.000Z");
+  });
+
+  it("says the limit is reached and when it lifts, never a word about a key or a balance", () => {
+    const said = limitReachedMessage(new Date("2026-10-15T09:00:00Z"));
+    expect(said).toMatch(/^You have reached your fortnightly limit/);
+    expect(said).toContain("26 October");
+    expect(said).not.toMatch(/balance|credit|API key/i);
   });
 });

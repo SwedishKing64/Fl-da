@@ -153,6 +153,11 @@ export interface Change {
   column: string;
   before: string;
   after: string;
+  /**
+   * The variant's price and compare-at, before and after the whole run, whichever column this
+   * change is to — so the preview shows both side by side on every line, as the shop asked.
+   */
+  prices?: { price: { before: string; after: string }; compareAt: { before: string; after: string } };
 }
 
 export interface AdjustResult {
@@ -430,13 +435,20 @@ export function applyPlan(text: string, plan: Plan): AdjustResult {
 
   // Mounted variants the mounting charge moved by more than the charge itself.
   const bigMoves = new Set<string>();
+  // Every row's price and compare-at as the file came, and the row each change is to, so every
+  // change can carry both prices before and after (Change.prices).
+  const startPrices = new Map(rows.map((r) => [r, { price: at(r, "Variant Price"), compareAt: at(r, "Variant Compare At Price") }]));
+  const changedRow = new Map<Change, string[]>();
   for (const row of rows) {
     const handle = at(row, "Handle").trim();
     if (!handle || !inScope.has(handle)) continue;
     const isFirst = firstRowOf.get(handle) === row;
     const title = at(firstRowOf.get(handle) ?? row, "Title");
-    const record = (column: string, before: string, after: string, variant?: string) => {
-      if (before !== after) changes.push({ handle, title, ...(variant ? { variant } : {}), column, before, after });
+    const record = (column: string, before: string, after: string, variant?: string, of: string[] = row) => {
+      if (before === after) return;
+      const change: Change = { handle, title, ...(variant ? { variant } : {}), column, before, after };
+      changes.push(change);
+      changedRow.set(change, of);
     };
 
     for (const op of plan.operations) {
@@ -520,13 +532,13 @@ export function applyPlan(text: string, plan: Plan): AdjustResult {
             const mounted = pair.mounted;
             const variant = ["Option1 Value", "Option2 Value", "Option3 Value"].map((c) => at(mounted, c).trim()).filter(Boolean).join(" · ");
             const beforePrice = at(pair.mounted, "Variant Price");
-            if (set(pair.mounted, "Variant Price", nextPrice)) record("Variant Price", beforePrice, nextPrice, variant);
+            if (set(pair.mounted, "Variant Price", nextPrice)) record("Variant Price", beforePrice, nextPrice, variant, pair.mounted);
             if (index.has("Variant Compare At Price")) {
               // The twin's sale, or the twin's no sale: a mounted variant left with a recommended
               // retail its twin does not have would show a retail below its own price.
               const nextCompare = unmountedCompare !== null ? fmt(money(unmountedCompare + op.amount)) : "";
               const beforeCompare = at(pair.mounted, "Variant Compare At Price");
-              if (set(pair.mounted, "Variant Compare At Price", nextCompare)) record("Variant Compare At Price", beforeCompare, nextCompare, variant);
+              if (set(pair.mounted, "Variant Compare At Price", nextCompare)) record("Variant Compare At Price", beforeCompare, nextCompare, variant, pair.mounted);
             }
             // A mounted variant that was on a different sale from its twin moves by more than the
             // charge: right by the rule, and worth a look.
@@ -642,6 +654,13 @@ export function applyPlan(text: string, plan: Plan): AdjustResult {
   // Handle to match would not rename the product — it would import a second copy of it.
   if (changes.some((c) => c.column === "Title")) {
     warnings.push("The product URLs are unchanged. Shopify matches an import on Handle, so a title can be edited here but the handle cannot — changing it would create a second copy of the product rather than renaming the one you have. A URL has to be changed in Shopify itself, which leaves a redirect behind.");
+  }
+
+  if (index.has("Variant Price")) {
+    for (const [change, row] of changedRow) {
+      const start = startPrices.get(row);
+      if (start) change.prices = { price: { before: start.price, after: at(row, "Variant Price") }, compareAt: { before: start.compareAt, after: at(row, "Variant Compare At Price") } };
+    }
   }
 
   const csv = [header, ...rows].map((row) => header.map((_, i) => quote(row[i] ?? "")).join(",")).join("\r\n") + "\r\n";

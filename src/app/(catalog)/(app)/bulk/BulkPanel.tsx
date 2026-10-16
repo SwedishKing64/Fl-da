@@ -1012,8 +1012,8 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
 
   /** The whole list of changes as a sheet, to be gone through at leisure or kept with the run. */
   function downloadChanges() {
-    const head = ["File", "Product", "Handle", "Variant", "Column", "Now", "After"];
-    const lines = [head, ...allChanges.map((r) => [r.file, r.c.title, r.c.handle, r.c.variant ?? "", r.c.column, r.c.before, r.c.after])]
+    const head = ["File", "Product", "Handle", "Variant", "Column", "Now", "After", "Price now", "Price after", "Compare at now", "Compare at after"];
+    const lines = [head, ...allChanges.map((r) => [r.file, r.c.title, r.c.handle, r.c.variant ?? "", r.c.column, r.c.before, r.c.after, r.c.prices?.price.before ?? "", r.c.prices?.price.after ?? "", r.c.prices?.compareAt.before ?? "", r.c.prices?.compareAt.after ?? ""])]
       .map((cells) => cells.map(escapeCsvField).join(","));
     const url = URL.createObjectURL(new Blob([lines.join("\n") + "\n"], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a");
@@ -1804,6 +1804,8 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
                           <th className="px-2.5 py-1.5 font-medium">Column</th>
                           <th className="px-2.5 py-1.5 font-medium">Now</th>
                           <th className="px-2.5 py-1.5 font-medium">After</th>
+                          <th className="px-2.5 py-1.5 font-medium">Price</th>
+                          <th className="px-2.5 py-1.5 font-medium">Compare at</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1814,6 +1816,8 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
                             <td className="whitespace-nowrap px-2.5 py-1.5 text-[var(--ink-soft)]">{row.c.column}</td>
                             <td className="px-2.5 py-1.5"><span className="line-clamp-2 text-[var(--ink-soft)]">{row.c.before || "—"}</span></td>
                             <td className={cx("px-2.5 py-1.5 font-medium", row.c.column === "Variant Price" && "text-[var(--violet)]")}><span className="line-clamp-2">{row.c.after || "—"}</span></td>
+                            <td className="whitespace-nowrap px-2.5 py-1.5 tabular-nums"><PriceMove move={row.c.prices?.price} /></td>
+                            <td className="whitespace-nowrap px-2.5 py-1.5 tabular-nums"><PriceMove move={row.c.prices?.compareAt} /></td>
                           </tr>
                         ))}
                       </tbody>
@@ -1831,5 +1835,17 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
         </Card>
       )}
     </div>
+  );
+}
+
+/** One price on a preview line: as it is, or as it was and as it becomes, the new figure marked. */
+function PriceMove({ move }: { move?: { before: string; after: string } }) {
+  if (!move) return <span className="text-[var(--ink-soft)]">—</span>;
+  if (move.before === move.after) return <span>{move.after || <span className="text-[var(--ink-soft)]">—</span>}</span>;
+  return (
+    <span>
+      <span className="text-[var(--ink-soft)] line-through">{move.before || "—"}</span>{" "}
+      <span aria-hidden>→</span> <span className="font-semibold text-[var(--meta)]">{move.after || "none"}</span>
+    </span>
   );
 }

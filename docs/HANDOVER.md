@@ -44,6 +44,11 @@ as "No API key is set, so the build cannot be checked" though a key was set. Eve
 streams with 32,000 (the bill reader 64,000), and the build check says when an answer came back
 unreadable rather than blaming the key.
 
+**The Prices and stock preview shows both prices (asked 2026-10-16).** Every line of the change
+preview carries the variant's price and compare-at, each as it was → as it becomes
+(`Change.prices`, filled in at the end of `applyPlan`), whatever column the line itself is about.
+The downloaded change list has the same four columns.
+
 **Which Claude model (chosen 2026-10-15, for cost).** `EXTRACTION_MODEL` is Claude Opus 5.5
 ($4/$20 per million tokens in/out, cheaper than the Opus 5 it replaced) for everything that reads:
 invoices, scans, handwriting, product pages, bills, the Prices and stock chat, the build check.

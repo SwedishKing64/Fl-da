@@ -21,9 +21,14 @@ import { shopBody } from "./description-style";
 import { cleanProductUrl, fitlessOf, flatHandleOf, type PageDetails } from "./page-types";
 import { readProductPage, PageError } from "./extract/page";
 import { picturesForColour } from "./picture-colour";
+import { pageProductTitle } from "./page-title";
+import { seoTitle, titleYear, titledForShop } from "./titles";
 
 /** A package is read from its ski's page: "… inc Marker Griffon Binding Package" is the ski's name with a binding added. */
 export const flatTitleOf = (title: string): string => title.replace(/\s+inc\s+.*binding package$/i, "").replace(/\s+inc\s+.*$/i, "").trim();
+
+/** Whether a product's title is its own model's, not a package or a fit of a model whose page it shares. */
+const ownPage = (title: string): boolean => flatTitleOf(title) === title.trim() && fitlessOf(title) === title.replace(/\s+/g, " ").trim().toLowerCase();
 
 const WAITING = ["LINKED", "RELINKED", "LINK_FAILED"];
 const MACHINE_FILLED = ["FOUND", "UNSURE", "PAGE", "PAGE_UNSURE", "RELINKED"];
@@ -168,8 +173,16 @@ function variantByColour(p: { option1Name: string | null; option2Name: string | 
 
 /** Write one page's details onto one product. Never touches prices, costs, quantities, barcodes or options. */
 async function applyDetails(productId: string, d: PageDetails): Promise<{ description: boolean; details: number; images: number; notes: string[] }> {
-  const p = await prisma.product.findUniqueOrThrow({ where: { id: productId }, select: { id: true, title: true, bodyHtml: true, lookupStatus: true, option1Name: true, option2Name: true, option3Name: true, variants: { select: { id: true, option1Value: true, option2Value: true, option3Value: true }, orderBy: { sortOrder: "asc" } }, images: { select: { id: true, url: true, source: true, position: true } } } });
+  const p = await prisma.product.findUniqueOrThrow({ where: { id: productId }, select: { id: true, title: true, vendor: true, tags: true, productType: true, reconcileStatus: true, bodyHtml: true, lookupStatus: true, option1Name: true, option2Name: true, option3Name: true, variants: { select: { id: true, option1Value: true, option2Value: true, option3Value: true }, orderBy: { sortOrder: "asc" } }, images: { select: { id: true, url: true, source: true, position: true } } } });
   const notes: string[] = [];
+  // Titled as the page titles it, when the page is surely this product and the product is the
+  // page's own model — a binding package or a wide fit sharing the ski's page keeps its own name.
+  // Only a new product: one the shop already lists keeps the name it is listed under.
+  const isNew = !["UPDATE", "VARIANT_ADD"].includes(p.reconcileStatus);
+  const season = titleYear(p.tags.split(",").map((x) => x.trim()), p.productType);
+  const named = d.confident && isNew && ownPage(p.title) ? titledForShop(p.vendor, pageProductTitle(d.pageTitle, p.vendor, season)) : "";
+  const retitle = named !== "" && named !== p.title;
+  if (retitle) notes.push(`Titled "${named}", as the page names it.`);
   const body = await shopBody(d.description, d.features);
   // A body the invoice wrote, or an earlier lookup or page read wrote, may be replaced; one a person
   // or a description list supplied is theirs, and the page's words are not laid over the top of it.
@@ -196,7 +209,7 @@ async function applyDetails(productId: string, d: PageDetails): Promise<{ descri
 
   await prisma.product.update({
     where: { id: productId },
-    data: { ...(writeBody ? { bodyHtml: body } : {}), lookupStatus: d.confident ? "PAGE" : "PAGE_UNSURE", lookupSource: d.sourceUrl, lookupAt: new Date() },
+    data: { ...(writeBody ? { bodyHtml: body } : {}), ...(retitle ? { title: named, seoTitle: seoTitle(p.vendor, named) } : {}), lookupStatus: d.confident ? "PAGE" : "PAGE_UNSURE", lookupSource: d.sourceUrl, lookupAt: new Date() },
   });
   return { description: writeBody && d.description.trim() !== "", details: writeBody ? d.features.length : 0, images: fresh.length, notes };
 }

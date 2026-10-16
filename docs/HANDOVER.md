@@ -33,6 +33,20 @@ and buttons. The owner asked for "extremely easy UI" and buttons "mimicking Meta
 
 ## How the shop works (rules it told us)
 
+**A new product is titled as the supplier's page titles it (asked 2026-10-16), for search.** When
+a product link is read and the page is surely that product, the title becomes the page's own name
+(`page-title.ts`): the site's name after a bar or dash dropped, no brand in front (the SEO title
+carries it), no gender anywhere in it, and the season year after it as always. Only new products —
+one the shop already lists keeps its listed name — and only a model's own product: a binding
+package or a wide/low-bridge fit sharing the ski's page keeps its own name. The handle (the URL) is
+not changed.
+
+**A rebuild keeps what the products gathered (fixed 2026-10-16).** Column mapping and the chatbox
+rebuild every product from the order lines. The link, the description and pictures its page gave,
+a web lookup's copy, the page's title and pictures added by hand are noted first and given back to
+the product rebuilt in its place, matched by handle or else by name (`rebuild-keep.ts`). The shop
+had pasted links, gone back to Column mapping, exported, and lost them all.
+
 **The batch chatbox rebuilds at once (asked 2026-10-15).** An instruction typed on a batch is read
 and the products are built again with it in the same request — whether or not they had been
 built, and even where they were edited by hand on the review page (the reply says the edits were

@@ -31,6 +31,7 @@ import { allocateFreight, exGstCostHome, priceVariant } from "./pricing";
 import { getSettings } from "./settings";
 import { checkImageUrl, findLibraryImages, recordLibraryImages } from "./images";
 import { framePicture, hostPictures } from "./pictures";
+import { keeper } from "./rebuild-keep";
 import { generateCsvParts, validateCsvFile, validateProducts } from "./csv";
 import { toCsvProducts } from "./pipeline-pure";
 import { repairForExport, type Repair } from "./repair";
@@ -943,6 +944,12 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
 
   // Rebuild the batch's products from scratch (mapping is re-runnable until export).
   phase("placed against the shop");
+  // What the products had gathered since they were built — a link, its page's description and
+  // pictures, pictures added by hand — goes back onto the products made in their place.
+  const keep = keeper(await prisma.product.findMany({
+    where: { batchId },
+    select: { handle: true, title: true, tags: true, bodyHtml: true, lookupStatus: true, lookupSource: true, lookupAt: true, images: { select: { url: true, source: true, altText: true, position: true, validated: true } } },
+  }));
   await prisma.$transaction([
     prisma.extractedLineItem.deleteMany({ where: { batchId } }),
     prisma.product.deleteMany({ where: { batchId } }),
@@ -956,8 +963,10 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
   for (const g of grouped) {
     // A seasonal product carries its year after the name — the same products that carry a year tag,
     // or only those the shop chose (see titleYear). The SEO title is that title with the brand in
-    // front of it, which is the one place it appears.
-    const title = titledForShop(g.brand, productTitle(g.title, titleYear(g.tags, g.productType)));
+    // front of it, which is the one place it appears. A rebuild gives back the title a page gave it.
+    const built = titledForShop(g.brand, productTitle(g.title, titleYear(g.tags, g.productType)));
+    const kept = keep({ handle: g.handle, title: built, tags: g.tags.join(", ") });
+    const title = kept?.title ?? built;
     // Everything the product owns goes in with it: its variants, each with the order line it came
     // from, and its pictures. One round trip per product instead of one per row — a build on a
     // database in another region was waiting on the network a dozen times per product.
@@ -984,6 +993,11 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
         }
       }
     }
+    for (const img of kept?.images ?? []) {
+      if (urls.has(img.url)) continue;
+      urls.add(img.url);
+      images.push(img);
+    }
     let vsort = 0;
     await prisma.product.create({
       data: {
@@ -993,7 +1007,8 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
         seoTitle: seoTitle(g.brand, title),
         // A body the spec sheet already laid out in the house format is used as it is. Wrapping it
         // again — in a <p>, escaped — turned its <h2> and <li> into text a customer would read.
-        bodyHtml: /^\s*</.test(g.description) ? g.description : await shopBody(g.description, []),
+        bodyHtml: kept?.bodyHtml ?? (/^\s*</.test(g.description) ? g.description : await shopBody(g.description, [])),
+        ...(kept ? { lookupStatus: kept.lookupStatus, lookupSource: kept.lookupSource, lookupAt: kept.lookupAt } : {}),
         vendor: g.brand,
         productType: g.productType,
         category: g.category,
@@ -1034,7 +1049,7 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
             };
           }),
         },
-        // Supplier URLs first, then the library.
+        // Supplier URLs first, then the library, then what the product had gathered before this build.
         images: { create: images.map((img, i) => ({ ...img, position: i + 1 })) },
       },
     });

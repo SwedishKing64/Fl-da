@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { billingLinkAction } from "@/app/(catalog)/actions";
 import { Alert, Button } from "@/app/(catalog)/ui";
-import { PLANS, planOf, type PlanId } from "@/lib/catalog/plans";
+import { PLANS, per, planOf, type PlanId } from "@/lib/catalog/plans";
 import { SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/catalog/support";
 
 /**
@@ -47,11 +47,11 @@ export function BillingButtons({ mode, current, clientName, licenceKey }: { mode
       <div className="flex flex-wrap items-center gap-2">
         {PLANS.map((p) => (
           <Button key={p.id} variant={p.id === current ? "primary" : "secondary"} disabled={pending} onClick={() => open("checkout", p.id)}>
-            {busy === p.id ? "Opening…" : `Pay for ${p.name} · $${p.price} a fortnight`}
+            {busy === p.id ? "Opening…" : `Pay for ${p.name} · $${p.price} ${per(p)}`}
           </Button>
         ))}
       </div>
-      <p className="text-[12.5px] text-[var(--ink-soft)]">Paid on Stripe every two weeks, cancel any time; the fortnight you paid for runs out before anything stops. Would rather talk to a person? Write to <a className="underline" href={mailto}>{SUPPORT_EMAIL}</a>.</p>
+      <p className="text-[12.5px] text-[var(--ink-soft)]">Paid on Stripe in advance (Own key monthly, the rest every two weeks), cancel any time; the period you paid for runs out before anything stops. Would rather talk to a person? Write to <a className="underline" href={mailto}>{SUPPORT_EMAIL}</a>.</p>
       {note && <Alert tone={note.tone}>{note.text}</Alert>}
     </div>
   );

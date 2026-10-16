@@ -6,7 +6,7 @@ import { activateLicenceAction, startTrialAction } from "@/app/(catalog)/actions
 import { Alert, Button, Card, Field, INPUT } from "@/app/(catalog)/ui";
 import { ActionForm } from "@/app/(catalog)/ActionForm";
 import { LicenceServerForm } from "@/app/(catalog)/(app)/settings/LicenceServerForm";
-import { describePlanSize, PLANS, TRIAL_DAYS, type PlanId } from "@/lib/catalog/plans";
+import { describePlanSize, PLANS, TRIAL_DAYS, type PlanId, per, perShort } from "@/lib/catalog/plans";
 
 /**
  * The copy's plan: a free trial started from right here, or the key a shop already has. The
@@ -37,7 +37,7 @@ export function TrialStep({ email, next, servers, override }: { email: string; n
                 <input type="radio" name="plan" value={p.id} checked={plan === p.id} onChange={() => setPlan(p.id)} className="sr-only" />
                 <div className="flex items-baseline justify-between gap-2">
                   <span className="text-[15px] font-bold">{p.name}</span>
-                  <span className="text-[13px] font-semibold text-[var(--ink-2)]">${p.price}<span className="font-normal text-[var(--ink-soft)]">/fortnight</span></span>
+                  <span className="text-[13px] font-semibold text-[var(--ink-2)]">${p.price}<span className="font-normal text-[var(--ink-soft)]">{perShort(p)}</span></span>
                 </div>
                 <div className="mt-1 text-[12.5px] text-[var(--ink-soft)]">{describePlanSize(p)}. {p.people}.</div>
                 {p.founding && <div className="mt-1 text-[11.5px] font-semibold text-[var(--meta)]">Founding price, held for you</div>}
@@ -51,7 +51,7 @@ export function TrialStep({ email, next, servers, override }: { email: string; n
           {trial && (trial.ok ? <Alert tone="success">{trial.message}</Alert> : <Alert tone="danger">{trial.error}</Alert>)}
           <Button type="submit" variant="primary" icon="🚀" disabled={starting}>{starting ? "Starting…" : `Start the ${TRIAL_DAYS}-day trial`}</Button>
           {trial && !trial.ok && /could not be reached/.test(trial.error) && <LicenceServerForm servers={servers} override={override} />}
-          <p className="text-[12.5px] text-[var(--ink-soft)]">After the trial, {PLANS.find((p) => p.id === plan)!.name} is ${PLANS.find((p) => p.id === plan)!.price} a fortnight. Nothing is charged without you saying so; a person from Flöda gets in touch before it ends.</p>
+          <p className="text-[12.5px] text-[var(--ink-soft)]">After the trial, {PLANS.find((p) => p.id === plan)!.name} is ${PLANS.find((p) => p.id === plan)!.price} ${per(PLANS.find((p) => p.id === plan)!)}. Nothing is charged without you saying so; a person from Flöda gets in touch before it ends.</p>
         </ActionForm>
       )}
 

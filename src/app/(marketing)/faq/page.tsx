@@ -3,14 +3,14 @@ import Link from "next/link";
 import { Site } from "../Shell";
 import { Faq } from "../Story";
 import { Reveal } from "../welcome/Motion";
-import { PLANS, TRIAL_DAYS, describeReading } from "@/lib/catalog/plans";
+import { TRIAL_DAYS, describeReading, planOf } from "@/lib/catalog/plans";
 import "../welcome/welcome.css";
 import { SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/catalog/support";
 
 export const metadata: Metadata = { title: "Questions about Flöda", description: "Data, security, suppliers, Shopify, plans and the trial: the questions retailers ask before they start." };
 
-const shop = PLANS[1];
-  const starter = PLANS[0];
+const shop = planOf("shop");
+  const starter = planOf("starter");
 
 export default function FaqPage() {
   const items = [
@@ -25,6 +25,7 @@ export default function FaqPage() {
     { q: "Windows or Mac?", a: <p>Both, as an app you install, with everything on your machine. A hosted copy is available if you would rather not install anything. <Link href="/download">The downloads are here.</Link> The app keeps itself current on Windows; on a Mac it tells you when a newer version is out.</p> },
     { q: "Can my staff use it?", a: <p>On the Shop and Unlimited plans, everyone. Each person signs in as themselves, and the marker tag on a listing says who built it. The Starter plan is one person.</p> },
     { q: "How do I get help?", a: <p>The Feedback button inside the app reaches us directly, or write to {SUPPORT_EMAIL}. The same engineer who set you up answers. There is no ticket queue.</p> },
+    { q: "What is the Own key plan?", a: <p>The software alone, ${planOf("ownkey").price} a month, with reading billed by Anthropic to a key of your own. Make an account at console.anthropic.com, add a card and a monthly spending limit, make a key, and paste it once under Settings → Reading documents in Flöda. Reading a typical invoice costs cents. Everything else is the same as the other plans; the difference is who Anthropic bills.</p> },
     { q: "How do I cancel?", a: <p>From the billing page inside Flöda, or write to us; the plan ends at the end of the fortnight you have paid for. Your data stays on your machine either way, and you can keep every file Flöda made.</p> },
   ];
   return (

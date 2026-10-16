@@ -273,7 +273,11 @@ Everything in `HANDOVER.md` under "Working on it" applies. In addition:
   happened, the plans, a Subscribe button that writes to hello@floda.ai with the key, and a field
   for a new key. Nothing is charged by the app; a person turns the key back on. Staff see who to
   ask. The vendor's own deployment and development (no `FLODA_LICENCE_SERVER`) have no gate.
-- Plans (`src/lib/catalog/plans.ts`) are billed and sized by the fortnight (`PERIOD`): Starter
+- Plans (`src/lib/catalog/plans.ts`): the **Own key** plan is $20 a month, the software alone,
+  with reading on the shop's own Anthropic key (`reading: "own-key"`: the relay refuses its
+  clients, the copy never points its reader at the relay, so the key under Settings → Reading
+  documents is the only way it reads; its Stripe price recurs monthly, `STRIPE_PRICE_OWNKEY`).
+  The other three are billed and sized by the fortnight (`PERIOD`): Starter
   $49 (no invoice count, one person, $20 of reading, described as "about 40 invoices of 5
   products" from `READING_CENTS_PER_PRODUCT`, a deliberately high 10c a product), Shop $149 (10
   invoices, about 500 products, everyone, $60 of reading; the founding price, held), Unlimited

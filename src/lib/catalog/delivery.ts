@@ -98,6 +98,13 @@ export interface DeliveryOptions {
    * has no page of its own, the first colour's page gives the description as well.
    */
   colourPages?: Record<number, PageDetails>;
+  /** The shop's binding list (Settings), which prices a package's bindings. See binding-list.ts. */
+  bindingList?: Array<{ name: string; rrp: number; cost: number | null }>;
+  /**
+   * The bindings picked for each new ski, by the first line of the ski: names off the binding
+   * list. An empty pick is no package; a ski with none picked takes the defaults.
+   */
+  packagePicks?: Record<number, string[]>;
   /**
    * What the person said about each line matched on its NAME rather than a barcode: the same
    * product (its stock goes up), a new year's model of it (built as a new product), or not that
@@ -712,7 +719,13 @@ function appendFresh(
   }
   // Each new flat ski is also built as its binding package, priced from the order form's own
   // binding rows. A package the file already has is left alone, like any other product.
-  const { packages, skipped } = packageProducts(build, options.priceList ?? [], [...(options.listings ?? []), ...listingsFromCsv(csv)]);
+  const shopBindings = options.bindingList ?? [];
+  const picked = (g: GroupedProduct) => {
+    const names = options.packagePicks?.[placeOf(lines[g.variants[0]?.sourceIndex ?? -1])];
+    if (!names) return undefined;
+    return names.map((n) => shopBindings.find((e) => e.name.toLowerCase() === n.toLowerCase())).filter((e): e is NonNullable<typeof e> => Boolean(e)).map((e) => ({ label: e.name, shortName: e.name, rrp: e.rrp, cost: e.cost }));
+  };
+  const { packages, skipped } = packageProducts(build, options.priceList ?? [], [...(options.listings ?? []), ...listingsFromCsv(csv)], {}, picked, shopBindings);
   for (const pack of packages) if (!taken.has(pack.handle)) build.push(pack);
   for (const k of skipped) warnings.push(`No binding package was built for ${k.title}: ${k.reason}.`);
   if (build.length === 0) return { csv, fresh: [], appended: 0, heldBack, warnings };

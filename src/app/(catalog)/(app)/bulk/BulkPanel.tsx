@@ -157,7 +157,10 @@ const byName = (r: Reconciliation) => r.matched.filter((m) => m.key === "name");
 const countChanges = (results: Array<{ result: AdjustResult }>) => results.reduce((n, r) => n + r.result.changes.length, 0);
 const countMatched = (results: Array<{ result: AdjustResult }>) => results.reduce((n, r) => n + r.result.matched, 0);
 
-export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; builtBy?: string }) {
+export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnabled: boolean; builtBy?: string; bindings?: Array<{ name: string; rrp: number; cost: number | null }> }) {
+  // The bindings picked for each new ski's package, by the ski's first line (asked 2026-10-20).
+  // A ski nobody has ticked for takes the usual binding. See binding-list.ts.
+  const [packagePicks, setPackagePicks] = useState<Record<number, string[]>>({});
   const csvRef = useRef<HTMLInputElement>(null);
   const sheetRef = useRef<HTMLInputElement>(null);
   const [sheets, setSheets] = useState<Sheet[]>([]);
@@ -723,6 +726,7 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
         // A colour's own page is kept under its own key; see colourKey.
         pages: Object.fromEntries(Object.entries(pages).filter(([k]) => Number(k) >= 0)),
         colourPages: Object.fromEntries(Object.entries(pages).filter(([k]) => Number(k) < 0).map(([k, page]) => [lineOfColourKey(Number(k)), page])),
+        bindingList: bindings, packagePicks,
       }),
     }));
     if (results.every((r) => r.result.refused)) {
@@ -1127,6 +1131,7 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
         season, vendor, specs: loadedSpecs, sourceOf: specSources(references),
         listings: sheets.flatMap((x) => listingsFromCsv(x.csv)), priceList: order.priceList ?? [],
         fields: { ...fields, stock, draft: toDraft }, reorderOnly: s.name !== homeSheet.name, builtBy,
+        bindingList: bindings, packagePicks,
       }))
     : [];
   const seenLines = new Set<number>();
@@ -1705,6 +1710,41 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
                   notes={linkNotes}
                   disabled={busy !== null}
                 />
+              )}
+
+              {buildNew && newProducts.some((p) => /^skis?$/i.test(p.type.trim())) && (
+                <fieldset className="rounded-xl border border-[var(--line-soft)] px-3 py-2.5">
+                  <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-[var(--ink-soft)]">Bindings for each ski&rsquo;s package</legend>
+                  {bindings.length === 0
+                    ? <p className="py-1 text-xs text-[var(--ink-soft)]">Load the binding list in Settings to pick each ski&rsquo;s bindings. Until then a men&rsquo;s ski is packaged with the Griffon and a women&rsquo;s with the Squire.</p>
+                    : <p className="py-1 text-xs text-[var(--ink-soft)]">Tick the bindings each package offers, one or several. A ski with nothing ticked takes the usual binding (men&rsquo;s Griffon, women&rsquo;s Squire); untick all of them by choosing &ldquo;No package&rdquo;.</p>}
+                  {bindings.length > 0 && (
+                    <ul className="mt-1 space-y-2">
+                      {newProducts.filter((p) => /^skis?$/i.test(p.type.trim())).map((p) => {
+                        const key = p.lines[0];
+                        const picked = packagePicks[key];
+                        const set = (next: string[] | undefined) => setPackagePicks((all) => { const { [key]: _gone, ...rest } = all; void _gone; return next ? { ...rest, [key]: next } : rest; });
+                        return (
+                          <li key={key}>
+                            <div className="text-sm font-medium">{p.title}</div>
+                            <div className="mt-0.5 flex flex-wrap gap-x-4 gap-y-1">
+                              {bindings.map((b) => (
+                                <label key={b.name} className="flex items-center gap-1.5 text-sm">
+                                  <input type="checkbox" disabled={busy !== null} checked={(picked ?? []).includes(b.name)} onChange={() => { const now = picked ?? []; const next = now.includes(b.name) ? now.filter((n) => n !== b.name) : [...now, b.name]; set(next.length > 0 ? next : undefined); }} />
+                                  {b.name}
+                                </label>
+                              ))}
+                              <label className="flex items-center gap-1.5 text-sm text-[var(--ink-soft)]">
+                                <input type="checkbox" disabled={busy !== null} checked={picked !== undefined && picked.length === 0} onChange={(e) => set(e.target.checked ? [] : undefined)} />
+                                No package
+                              </label>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </fieldset>
               )}
 
               <div className="flex flex-wrap items-center gap-2">

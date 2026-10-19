@@ -164,6 +164,16 @@ products apart. The order-form reader, the flat invoice reader and the mapping s
 use it, and a heading is only evidence. Do not add "the name is the column beside the code" or any
 rule that only holds for one supplier's form; make the deduction better instead.
 
+**Mounting charge and the binding list (2026-10-20).** A drill mount is $59 and a system binding
+$49 (`DRILL_MOUNT_FEE`, `SYSTEM_MOUNT_FEE` in packages.ts; mount.ts says which kind). The shop's
+binding list — name, RRP, wholesale — is built in (`SHOP_BINDINGS` in binding-list.ts, at the shop's
+request) and shown in Settings → Bindings for ski packages, where a newer sheet replaces it. Each new ski's package bindings
+are ticked under the ski: on the review page (Ski packages panel, saved per batch and rebuilt) and
+on Prices and stock. A package offers every ticked binding as its Binding Option, priced ski RRP +
+binding RRP and costed ski cost + binding wholesale; several bindings make "… inc Binding Package",
+one names it. Nothing ticked = no package; untouched = the usual Griffon / Squire, priced from the
+list where it has them.
+
 **Bindings.** A ski package has a "Please Mount My Bindings" variant priced over its "Do Not
 Mount" twin. The mounting charge differs by binding kind, and the classifier in
 `src/lib/catalog/mount.ts` decides. Told by the shop, in this order, and the latest word wins:

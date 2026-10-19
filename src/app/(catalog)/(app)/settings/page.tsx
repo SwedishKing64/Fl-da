@@ -3,6 +3,10 @@ import { prisma, databaseLatency } from "@/lib/catalog/db";
 import { requireUser } from "@/lib/catalog/auth";
 import { Card, PageHeader, fmtDate } from "@/app/(catalog)/ui";
 import { UserForm, DeleteUserButton, Status } from "./SettingsForms";
+import { BindingListCard } from "./BindingListCard";
+import { getBindingList } from "@/lib/catalog/trades/snow/binding-store";
+import { DRILL_MOUNT_FEE, SYSTEM_MOUNT_FEE } from "@/lib/catalog/trades/snow/packages";
+import { snowTrade } from "@/lib/catalog/taxonomy";
 import { usingBlob, blobTokenSource } from "@/lib/catalog/storage";
 import { blobEnvNamesPresent } from "@/lib/catalog/blob-token";
 import { apiKeySource, keyTail } from "@/lib/catalog/anthropic";
@@ -33,13 +37,14 @@ export const maxDuration = 300;
 
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ shopify?: string }> }) {
   const me = await requireUser("ADMIN");
-  const [users, latency, profile, storedKey, settings, asked] = await Promise.all([
+  const [users, latency, profile, storedKey, settings, asked, bindingList] = await Promise.all([
     prisma.user.findMany({ orderBy: { createdAt: "asc" } }),
     databaseLatency(),
     getShopProfile(),
     getStoredApiKey(),
     getSettings(),
     searchParams,
+    getBindingList().catch(() => null),
   ]);
   const store = settings.shopify.storeDomain && settings.shopify.accessToken ? { domain: settings.shopify.storeDomain, by: settings.shopify.connectedBy ?? "token" } : null;
   return (
@@ -95,6 +100,11 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           />
         </Card>
       </div>
+      {snowTrade() && (
+        <Card title="Bindings for ski packages" className="mt-6">
+          <BindingListCard initial={bindingList} fees={{ drill: DRILL_MOUNT_FEE, system: SYSTEM_MOUNT_FEE }} />
+        </Card>
+      )}
     </>
   );
 }

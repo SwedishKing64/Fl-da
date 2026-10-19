@@ -1369,6 +1369,43 @@ export async function transcribeDocumentAction(input: { files: Array<{ name: str
   });
 }
 
+/** A file sent from the page: its name, type and contents as base64. */
+type SentFile = { name: string; type: string; base64: string };
+
+/** The shop's binding list for ski packages — name, RRP, wholesale — loaded once and kept. See binding-list.ts. */
+export async function saveBindingListAction(file: SentFile): Promise<ActionResult<import("@/lib/catalog/trades/snow/binding-list").BindingList>> {
+  return safely(async () => {
+    const user = await requireUser("ADMIN");
+    const buffer = Buffer.from(file.base64, "base64");
+    const { parseBindingList } = await import("@/lib/catalog/trades/snow/binding-list");
+    const grids = /\.csv$/i.test(file.name)
+      ? [{ grid: (await import("@/lib/catalog/csv")).parseCsv(buffer.toString("utf8")) }]
+      : await (await import("@/lib/catalog/extract/tabular")).sheetGrids(buffer);
+    const entries = grids.map((g) => parseBindingList(g.grid)).find((e) => e.length > 0) ?? [];
+    if (entries.length === 0) return { ok: false, error: `${file.name} has no binding list in it: it needs a heading row with the binding's name and its RRP ("Binding Name", "RRP", "Wholesale"), then a binding a row.` };
+    const list = { entries, file: file.name, updatedAt: new Date().toISOString() };
+    await (await import("@/lib/catalog/trades/snow/binding-store")).saveBindingList(list);
+    await logAudit("packages.binding_list", { userId: user.id, details: { file: file.name, bindings: entries.length } }).catch(() => undefined);
+    revalidatePath("/settings");
+    return { ok: true, data: list };
+  });
+}
+
+/**
+ * The bindings picked for each ski of a batch, saved, and the products built again with them — a
+ * package is made at the build, so a pick only shows once the batch is rebuilt.
+ */
+export async function saveBatchPicksAction(batchId: string, picks: Record<string, string[]>): Promise<ActionResult<{ products: number }>> {
+  return safely(async () => {
+    const user = await requireUser();
+    const clean = Object.fromEntries(Object.entries(picks).filter(([k, v]) => typeof k === "string" && Array.isArray(v)).map(([k, v]) => [k, v.filter((n) => typeof n === "string").slice(0, 12)]));
+    await (await import("@/lib/catalog/trades/snow/binding-store")).saveBatchPicks(batchId, clean);
+    const rebuilt = await autoApplyMappings(batchId, user.id);
+    revalidatePath(`/batches/${batchId}/review`);
+    if (!rebuilt.applied) return { ok: false, error: `Saved, but the products could not be built again: ${rebuilt.unmapped.join(", ") || "a file"} still needs its columns mapped.` };
+    return { ok: true, data: { products: rebuilt.products } };
+  });
+}
 
 export async function readInvoiceAction(file: { name: string; type: string; base64: string }): Promise<ActionResult<InvoiceRead & { source: string }>> {
   return safely(async () => {

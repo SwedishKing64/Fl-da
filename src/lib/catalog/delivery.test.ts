@@ -51,7 +51,7 @@ describe("a delivery of carry-overs and new products", () => {
     expect(out.fresh[0].variants.map((v) => v.barcode)).toEqual(["4064264900011", "4064264900028"]);
     // Two rows for the ski, and two lengths × Do Not Mount / Please Mount for the package.
     expect(out.appended).toBe(6);
-    expect(out.fresh[1].variants.map((v) => v.price)).toEqual(["2099.00", "2154.00", "2099.00", "2154.00"]);
+    expect(out.fresh[1].variants.map((v) => v.price)).toEqual(["2099.00", "2158.00", "2099.00", "2158.00"]);
   });
 
   it("leaves every row that was already there exactly as it was, bar the cells it names", () => {

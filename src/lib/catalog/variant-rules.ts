@@ -33,14 +33,15 @@ export function defaultGrams(productType: string, describedAs = ""): number {
  * What the shop charges to mount a binding on a ski — the whole difference between the two answers
  * to the fitting question, since it is the same SKU and the same stock with a workshop job attached.
  *
- * There are two figures. A ski sold flat is mounted with bindings the customer brings or buys
- * separately, which is the full job at $55. A ski sold as a package is mounted with the binding it
- * came with, and that is $39.
+ * Set by the shop on 2026-10-20: a drill mount is $59 and a system binding (on its rail or plate)
+ * $49, whether the binding came with the ski or the customer brings it.
  */
-export const FLAT_SKI_MOUNTING_FEE = 55;
-export const PACKAGE_MOUNTING_FEE = 39;
+export const FLAT_SKI_MOUNTING_FEE = 59;
+export const PACKAGE_MOUNTING_FEE = 59;
+export const SYSTEM_MOUNTING_FEE = 49;
 
-export function mountingFee({ withBindings = false } = {}): number {
+export function mountingFee({ withBindings = false, system = false } = {}): number {
+  if (system) return SYSTEM_MOUNTING_FEE;
   return withBindings ? PACKAGE_MOUNTING_FEE : FLAT_SKI_MOUNTING_FEE;
 }
 

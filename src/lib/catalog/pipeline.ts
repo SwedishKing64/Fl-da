@@ -862,7 +862,12 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
     if (!spec) continue;
     for (const who of b.for === "all" ? (["mens", "womens", "kids"] as const) : [b.for]) chosen[who] = spec;
   }
-  const { packages, skipped } = directives.packages === "none" ? { packages: [], skipped: [] } : packageProducts(grouped, priceList, listings, chosen);
+  // The bindings picked for each ski on the review page, from the shop's binding list. See binding-list.ts.
+  const { getBindingList, getBatchPicks } = await import("./trades/snow/binding-store");
+  const { pickerFor } = await import("./trades/snow/binding-list");
+  const bindingList = (await getBindingList().catch(() => null))?.entries ?? [];
+  const picks = await getBatchPicks(batchId).catch(() => ({}));
+  const { packages, skipped } = directives.packages === "none" ? { packages: [], skipped: [] } : packageProducts(grouped, priceList, listings, chosen, pickerFor(bindingList, picks), bindingList);
   grouped.push(...(packages as typeof grouped));
   // A product the shop already sells keeps the handle it sells it under, so importing the file
   // updates it rather than listing it twice. See existingHandle.

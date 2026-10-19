@@ -14,6 +14,9 @@ import { offTotals } from "@/lib/catalog/totals";
 import { colourLinksOf, coloursOfProduct } from "@/lib/catalog/page-types";
 import { parseDirectives } from "@/lib/catalog/instructions";
 import { LookupPanel } from "./LookupPanel";
+import { PackagesPanel } from "./PackagesPanel";
+import { getBatchPicks, getBindingList } from "@/lib/catalog/trades/snow/binding-store";
+import { skiKey } from "@/lib/catalog/trades/snow/binding-list";
 import { lookupEnabled } from "@/lib/catalog/enrich";
 import { guarded } from "@/app/(catalog)/page-failed";
 import { SupplierNote } from "./SupplierNote";
@@ -67,6 +70,21 @@ async function renderReviewPage(props: PageProps<"/batches/[id]/review">) {
     ? new Set<string>()
     : new Set((await prisma.shopListing.findMany({ where: { handle: { in: review.products.map((p) => p.handle) } }, select: { handle: true } })).map((l) => l.handle));
   const categories = (await prisma.categoryRule.findMany({ select: { category: true }, distinct: ["category"] }).catch(() => [])).map((r) => r.category);
+  // The new flat skis, each with the bindings its package offers now: the picks saved for it, or else
+  // what the build gave its package by default. See PackagesPanel.
+  const [bindingList, picks] = await Promise.all([getBindingList().catch(() => null), getBatchPicks(id).catch(() => ({} as Record<string, string[]>))]);
+  const packages = review.products.filter((p) => /\binc\b.*\bpackage\b/i.test(p.title));
+  const skis = review.products
+    .filter((p) => /^skis?$/i.test(p.productType.trim()) && !/\binc\b|\bpackage\b/i.test(p.title) && !inShop.has(p.handle))
+    .map((p) => {
+      const key = skiKey(p.title);
+      const own = packages.find((k) => skiKey(k.title.replace(/\s+inc\b.*$/i, "")) === key);
+      const offered = [...new Set((own?.variants ?? []).map((v) => (v.option2Value ?? "").trim()).filter(Boolean))];
+      // "Marker Griffon - Black" on a default package is the list's "Marker Griffon".
+      const names = (bindingList?.entries ?? []).map((e) => e.name);
+      const asListed = offered.map((o) => names.find((n) => o.toLowerCase().startsWith(n.toLowerCase())) ?? "").filter(Boolean);
+      return { key, title: p.title, current: picks[key] ?? [...new Set(asListed)] };
+    });
   return (
     <>
       <PageHeader
@@ -101,6 +119,7 @@ async function renderReviewPage(props: PageProps<"/batches/[id]/review">) {
             locked={["EXPORTED", "PUSHED"].includes(batch.status)}
             products={review.products.map((p) => ({ id: p.id, title: p.title, handle: p.handle, url: ["LINKED", "RELINKED", "LINK_FAILED", "PAGE", "PAGE_UNSURE"].includes(p.lookupStatus) ? p.lookupSource : "", status: p.lookupStatus, inShop: inShop.has(p.handle), colours: coloursOfProduct(p), colourLinks: colourLinksOf(p.colourLinks) }))}
           />
+          <PackagesPanel batchId={id} locked={["EXPORTED", "PUSHED"].includes(batch.status)} skis={skis} bindings={(bindingList?.entries ?? []).map((e) => e.name)} />
           <LookupPanel batchId={id} outstanding={outstanding} enabled={lookupEnabled()} states={states} />
           <ReviewGrid initial={review} batchId={id} kinds={typesAreKnown() ? productTypes() : []} categories={categories} />
         </>

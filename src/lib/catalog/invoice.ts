@@ -27,6 +27,7 @@ import { FIT_VALUE, KIND_VALUE, NOT_A_VALUE, PARTY } from "./mapping";
 import { terrainColumn } from "./shop-memory";
 import { brandIn, isBrand } from "./brands";
 import { colourName, writeOutColour } from "./colour";
+import { readGridForm } from "./grid-form";
 
 export interface InvoiceRead {
   lines: InvoiceLine[];
@@ -567,7 +568,21 @@ export function readInvoiceGrids(grids: Array<{ name: string; grid: string[][] }
    * of them, not the 375 models the form also happens to price. With nothing written in, it is a
    * price list and every row of it is a line, which is what a price update wants.
    */
-  const ordered = grids.map((g) => readOrder(g.name, g.grid)).filter((r): r is InvoiceRead => r !== null);
+  // Each tab read both ways — by its item codes, and as a size grid known by its names (grid-form.ts),
+  // for the distributors' forms that carry no codes at all — and the reading that finds more of
+  // what was written on it is the one taken.
+  // The name reading is only taken over the code reading when it found everything that did, and
+  // more: a form the codes read well (Volkl's, Osprey's) is never read a second, looser way.
+  const units = (r: InvoiceRead | null) => (r ? r.lines.reduce((n, l) => n + (l.quantity ?? 0), 0) : 0);
+  const covers = (wide: InvoiceRead, narrow: InvoiceRead) => narrow.lines.every((l) => wide.lines.some((w) => w.quantity === l.quantity && ((l.sku && w.sku === l.sku) || norm(w.title) === norm(l.title))));
+  const ordered = grids.map((g) => {
+    const byCode = readOrder(g.name, g.grid);
+    const byName = readGridForm(g.name, g.grid);
+    if (!byName) return byCode;
+    // A flat list with a QTY column is read as a list (readGrid below); only a size grid is taken here.
+    if (!byCode) return byName.sizeGrid ? byName : null;
+    return units(byName) > units(byCode) && covers(byName, byCode) ? byName : byCode;
+  }).filter((r): r is InvoiceRead => r !== null);
   if (ordered.length > 0) {
     const lines = ordered.flatMap((o) => o.lines);
     // The whole form's prices, not only the tabs something was ordered from: the bindings a package
@@ -579,7 +594,7 @@ export function readInvoiceGrids(grids: Array<{ name: string; grid: string[][] }
       shape: "grid",
       sheet: ordered.map((o) => o.sheet).join(", "),
       columns: ordered[0].columns,
-      warnings: [`Read as an order: ${lines.length} line${lines.length === 1 ? "" : "s"} from the quantities written on ${ordered.length === 1 ? `the "${ordered[0].sheet}" tab` : `${ordered.length} tabs`}. The rest of the form is the supplier's price list, not this delivery, so it was left alone.`],
+      warnings: [`Read as an order: ${lines.length} line${lines.length === 1 ? "" : "s"} from the quantities written on ${ordered.length === 1 ? `the "${ordered[0].sheet}" tab` : `${ordered.length} tabs`}. The rest of the form is the supplier's price list, not this delivery, so it was left alone.`, ...ordered.flatMap((o) => o.warnings)],
     };
   }
 

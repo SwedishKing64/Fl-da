@@ -930,6 +930,17 @@ export async function setProductLinkAction(productId: string, url: string): Prom
   }
 }
 
+/** One colour's own page beside a product: saved, or cleared when empty. Read with the product's. */
+export async function setColourLinkAction(productId: string, colour: string, url: string): Promise<ActionResult<{ url: string }>> {
+  await requireUser();
+  try {
+    const { setColourLink } = await import("@/lib/catalog/page-link");
+    return { ok: true, data: await setColourLink(productId, colour, url) };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
 /**
  * Read a product page that is not attached to any stored product — the Bulk page's, where the
  * products are only a preview until the file is built. One page per call. A page that cannot be

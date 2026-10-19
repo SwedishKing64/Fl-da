@@ -85,12 +85,37 @@ explicitly (both default to `medium`). Fast mode for photographed invoices (twic
 since 2026-10-15 at the shop's choice; `CATALOG_FAST_READS=1` turns it back on. The build check
 still runs by itself after every build, also the shop's choice.
 
+**Snow clothing is named by gender (asked 2026-10-19), the one exception to the rule below.** A
+snow garment — any Type under Snow Clothing: jackets, pants, midlayers, baselayers, headwear,
+socks, streetwear — is built as a men's and a women's product, each titled with it on the front:
+"Men's Cyclic GORE-TEX 2L Jacket 2027". Burton's jackets had come through with no gender in the
+title. A unisex garment still carries none, and Kids' is unchanged (`gender-title.ts`, used by the
+grouping and by a page read).
+
+**A page for each colour (asked 2026-10-19).** On the review page and on Prices and stock, a new
+product in more than one colour can be given a page per colour as well as, or instead of, its own.
+Each colour's page gives that colour its pictures, and the first of them becomes the Variant Image
+of every size in that colour; the description comes from the product's own page, or the first
+colour's when it has none. Kept on the product as `colourLinks`, and through a rebuild.
+
 **No gender in any title (asked 2026-10-15).** "Men's", "Women's", "Ladies", "Unisex" never go in a
 product's title, whether the supplier's name carries them or the shop's older listings do
 (`withoutGender` in `mapping.ts`, used by the import, the delivery builder and the grouping). The
 gender is kept on the line and goes into the tags; where men's and women's of one model share a
 name, the handle carries it ("womens-talon-22-2027") so Shopify keeps them as two products.
 Kids', Youth and Junior are an age, not a gender, and stay.
+
+**Size-grid order forms with no item codes (asked 2026-10-19).** A distributor's order workbook —
+the shop's Black Crows / ATK / Roxa / Mountain Flow / Out Of form — prices every model on a row and
+leaves a box per size. It is read by `grid-form.ts`, by what is in it: heading rows are the rows of
+sizes or price headings, a row of one repeated word is the section ("ALL TERRAIN SKIS", kept as the
+line's kind), a product is a row with a name and a price, a quantity is a small whole number in a
+size box. "Size 1" … "Size 6" are the model's own lengths in its name, in order: "SATO (167, 173,
+179, 185)" with a 1 under Size 2 is one Sato in 173. The name loses the lengths, NEW, UNI (kept as
+unisex) and a weight ("- 370 GR"); a colour after it goes in the colour. Pre-order is the cost where
+the form gives it, W/S otherwise; EX-STOCK is never read as a quantity. A tab is read this way only
+when the code reader found nothing there, or this finds everything it did and more. Known gap: ATK's
+spacer section is headed with pole lengths (120–145), so a spacer comes through with a length.
 
 **No reader written for one brand's layout (asked 2026-10-15).** A supplier's file is read by
 deducing what each column holds, not by where it sits or how one brand heads it:

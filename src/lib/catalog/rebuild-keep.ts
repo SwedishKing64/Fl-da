@@ -28,7 +28,10 @@ export interface Gathered {
   lookupStatus: string;
   lookupSource: string;
   lookupAt: Date | null;
-  images: Array<{ url: string; source: string; altText: string; position: number; validated: boolean }>;
+  /** Each colour's own page: JSON, as the product keeps it. */
+  colourLinks?: string;
+  /** A picture tied to a variant says which colour it is of, since the variant is rebuilt too. */
+  images: Array<{ url: string; source: string; altText: string; position: number; validated: boolean; colour?: string }>;
 }
 
 export interface Kept {
@@ -37,7 +40,8 @@ export interface Kept {
   lookupStatus: string;
   lookupSource: string;
   lookupAt: Date | null;
-  images: Array<{ url: string; source: string; altText: string; validated: boolean }>;
+  colourLinks?: string;
+  images: Array<{ url: string; source: string; altText: string; validated: boolean; colour?: string }>;
 }
 
 const yearOf = (tags: string): string | null => tags.split(",").map((t) => t.trim()).find((t) => /^20\d{2}$/.test(t)) ?? null;
@@ -50,7 +54,7 @@ const bareName = (title: string, tags: string): string => {
 
 /** Whether a product had gathered anything a rebuild would lose. */
 function hasGathered(p: Gathered): boolean {
-  return p.lookupStatus !== "NONE" || p.lookupSource.trim() !== "" || p.images.some((i) => GATHERED_PICTURES.includes(i.source));
+  return p.lookupStatus !== "NONE" || p.lookupSource.trim() !== "" || (p.colourLinks ?? "[]") !== "[]" || p.images.some((i) => GATHERED_PICTURES.includes(i.source));
 }
 
 /**
@@ -68,7 +72,8 @@ export function keeper(before: Gathered[]): (built: { handle: string; title: str
       lookupStatus: old.lookupStatus,
       lookupSource: old.lookupSource,
       lookupAt: old.lookupAt,
-      images: [...old.images].sort((a, b) => a.position - b.position).filter((i) => GATHERED_PICTURES.includes(i.source)).map(({ url, source, altText, validated }) => ({ url, source, altText, validated })),
+      ...(old.colourLinks && old.colourLinks !== "[]" ? { colourLinks: old.colourLinks } : {}),
+      images: [...old.images].sort((a, b) => a.position - b.position).filter((i) => GATHERED_PICTURES.includes(i.source)).map(({ url, source, altText, validated, colour }) => ({ url, source, altText, validated, ...(colour ? { colour } : {}) })),
     };
     // A description the page or a lookup wrote; the order's own, or one a person wrote, comes back from the order.
     if (MACHINE_FILLED.includes(old.lookupStatus) && !isPlaceholderBody(old.bodyHtml)) kept.bodyHtml = old.bodyHtml;

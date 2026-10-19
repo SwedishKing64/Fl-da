@@ -949,9 +949,22 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
   phase("placed against the shop");
   // What the products had gathered since they were built — a link, its page's description and
   // pictures, pictures added by hand — goes back onto the products made in their place.
-  const keep = keeper(await prisma.product.findMany({
+  const keep = keeper((await prisma.product.findMany({
     where: { batchId },
-    select: { handle: true, title: true, tags: true, bodyHtml: true, lookupStatus: true, lookupSource: true, lookupAt: true, images: { select: { url: true, source: true, altText: true, position: true, validated: true } } },
+    select: {
+      handle: true, title: true, tags: true, bodyHtml: true, lookupStatus: true, lookupSource: true, lookupAt: true, colourLinks: true,
+      option1Name: true, option2Name: true, option3Name: true,
+      variants: { select: { id: true, option1Value: true, option2Value: true, option3Value: true } },
+      images: { select: { url: true, source: true, altText: true, position: true, validated: true, variantId: true } },
+    },
+  })).map((p) => {
+    // A picture tied to a variant is kept as the colour that variant is, to be tied again after.
+    const at = [p.option1Name, p.option2Name, p.option3Name].findIndex((n) => /colou?r/i.test(n ?? ""));
+    const colourOf = (variantId: string | null) => {
+      const v = variantId && at >= 0 ? p.variants.find((x) => x.id === variantId) : undefined;
+      return v ? ([v.option1Value, v.option2Value, v.option3Value][at] ?? "").trim() : "";
+    };
+    return { ...p, images: p.images.map(({ variantId, ...i }) => ({ ...i, colour: colourOf(variantId) || undefined })) };
   }));
   await prisma.$transaction([
     prisma.extractedLineItem.deleteMany({ where: { batchId } }),
@@ -996,13 +1009,14 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
         }
       }
     }
-    for (const img of kept?.images ?? []) {
+    for (const { colour: _colour, ...img } of kept?.images ?? []) {
+      void _colour;
       if (urls.has(img.url)) continue;
       urls.add(img.url);
       images.push(img);
     }
     let vsort = 0;
-    await prisma.product.create({
+    const created = await prisma.product.create({
       data: {
         batchId,
         handle: g.handle,
@@ -1011,7 +1025,7 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
         // A body the spec sheet already laid out in the house format is used as it is. Wrapping it
         // again — in a <p>, escaped — turned its <h2> and <li> into text a customer would read.
         bodyHtml: kept?.bodyHtml ?? (/^\s*</.test(g.description) ? g.description : await shopBody(g.description, [])),
-        ...(kept ? { lookupStatus: kept.lookupStatus, lookupSource: kept.lookupSource, lookupAt: kept.lookupAt } : {}),
+        ...(kept ? { lookupStatus: kept.lookupStatus, lookupSource: kept.lookupSource, lookupAt: kept.lookupAt, ...(kept.colourLinks ? { colourLinks: kept.colourLinks } : {}) } : {}),
         vendor: g.brand,
         productType: g.productType,
         category: g.category,
@@ -1055,7 +1069,15 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
         // Supplier URLs first, then the library, then what the product had gathered before this build.
         images: { create: images.map((img, i) => ({ ...img, position: i + 1 })) },
       },
+      select: { id: true, variants: { select: { id: true, option1Value: true, option2Value: true, option3Value: true }, orderBy: { sortOrder: "asc" } }, images: { select: { id: true, url: true } } },
     });
+    // A colour's picture tied again to the first variant of that colour, as it was before the rebuild.
+    const colourAt = [g.option1Name, g.option2Name, g.option3Name].findIndex((n) => /colou?r/i.test(n ?? ""));
+    for (const img of colourAt >= 0 ? (kept?.images ?? []).filter((i) => i.colour) : []) {
+      const v = created.variants.find((x) => ([x.option1Value, x.option2Value, x.option3Value][colourAt] ?? "").trim().toLowerCase() === img.colour!.toLowerCase());
+      const row = created.images.find((x) => x.url === img.url);
+      if (v && row) await prisma.productImage.update({ where: { id: row.id }, data: { variantId: v.id } });
+    }
   }
 
   await attachUnassignedPhotos(batchId);
@@ -1321,6 +1343,7 @@ export async function loadReview(batchId: string): Promise<ReviewData> {
     seoDescription: p.seoDescription,
     lookupStatus: p.lookupStatus,
     lookupSource: p.lookupSource,
+    colourLinks: p.colourLinks,
     option1Name: p.option1Name,
     option2Name: p.option2Name,
     option3Name: p.option3Name,

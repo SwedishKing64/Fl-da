@@ -11,7 +11,7 @@ import { Alert } from "@/app/(catalog)/ui";
  * the products with what they say. A product with nothing pasted is built exactly as it would have
  * been — it is optional on every one.
  */
-export interface LinkProduct { key: number; title: string; /** Why this one is asked, when it is not a new product. */ note?: string }
+export interface LinkProduct { key: number; title: string; /** Why this one is asked, when it is not a new product. */ note?: string; /** A colour under its product. */ indent?: boolean }
 
 export function BulkLinks({ products, links, onChange, notes, disabled }: {
   products: LinkProduct[];
@@ -23,7 +23,10 @@ export function BulkLinks({ products, links, onChange, notes, disabled }: {
 }) {
   const [drafts, setDrafts] = useState<Record<number, string>>({});
   const [bad, setBad] = useState<Record<number, string>>({});
-  const given = products.filter((p) => (links[p.key] ?? "").trim() !== "").length;
+  // Counted by product: a colour's own page is part of its product's.
+  const groups: LinkProduct[][] = [];
+  for (const p of products) { if (p.indent && groups.length > 0) groups[groups.length - 1].push(p); else groups.push([p]); }
+  const given = groups.filter((g) => g.some((x) => (links[x.key] ?? "").trim() !== "")).length;
 
   const commit = (key: number) => {
     const text = (drafts[key] ?? links[key] ?? "").trim();
@@ -37,7 +40,7 @@ export function BulkLinks({ products, links, onChange, notes, disabled }: {
   if (products.length === 0) return null;
   return (
     <fieldset className="rounded-xl border border-[var(--line-soft)] px-3 py-2.5">
-      <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-[var(--ink-soft)]">Product pages · {given} of {products.length} have a link</legend>
+      <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-[var(--ink-soft)]">Product pages · {given} of {groups.length} have a link</legend>
       <p className="mb-3 text-xs text-[var(--ink-soft)]">
         Paste a product&rsquo;s own page under its name and its description, details and pictures are taken from it when you apply the delivery. A new colour of a listing you already have takes its pictures the same way. A product with no link is built as it is. <strong>Open the page with the colour you ordered selected before copying the link</strong>: the pictures are taken of that colour, and the read is told the colour on the order so it leaves the other colours&rsquo; pictures alone.
       </p>
@@ -45,7 +48,7 @@ export function BulkLinks({ products, links, onChange, notes, disabled }: {
         {products.map((p) => {
           const note = notes[p.key];
           return (
-            <li key={p.key}>
+            <li key={p.key} className={p.indent ? "ml-4 border-l-2 border-[var(--line-soft)] pl-3" : undefined}>
               <div className="text-sm font-medium">{p.title}{p.note && <span className="ml-2 text-xs font-normal text-[var(--ink-soft)]">{p.note}</span>}</div>
               <input
                 id={`bulk-link-${p.key}`}

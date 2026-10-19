@@ -62,6 +62,8 @@ export interface ReviewProduct {
   /** What the web lookup did about the columns the invoice left empty. */
   lookupStatus: string;
   lookupSource: string;
+  /** Each colour's own page, where one was given: JSON [{ colour, url, status }]. See page-link.ts. */
+  colourLinks?: string;
   option1Name: string | null;
   option2Name: string | null;
   option3Name: string | null;

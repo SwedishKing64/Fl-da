@@ -9,11 +9,13 @@ import { inSizeOrder } from "./size-order";
 import { correctedOptionName, correctedProductType } from "./corrections";
 import { withFit, withoutGender } from "./mapping";
 import { classifyAccessory } from "./trades/snow/accessories";
+import { genderedTitle } from "./gender-title";
 import { packShelf } from "./packs";
 import { integratedBinding } from "./trades/snow/packages";
 import { isSnowboardBrand } from "./brands";
 import { normaliseOptionName, optionNamesFor } from "./options";
 import { catalogTags } from "./product-tags";
+import { isSkin } from "./tagging";
 import { asShopWritesIt, productTitle, seasonTagFrom, withoutVendor } from "./titles";
 import type { CanonicalLineItem } from "./types";
 import { disciplinesFromTerrain, rememberedDisciplines, rememberedType, type Listing } from "./shop-memory";
@@ -24,6 +26,8 @@ export interface GroupedVariant {
   option1Value: string | null;
   option2Value: string | null;
   option3Value: string | null;
+  /** The variant's own picture — its colour's, where the colour had a page of its own. */
+  imageUrl?: string;
 }
 
 export interface GroupedProduct {
@@ -155,8 +159,10 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
       ? classifyAccessory(items.some((i) => isSnowboardBrand(i.brand) || /\bsnowboard/i.test(`${i.category} ${i.productType} ${i.title}`)) ? "Snowboard" : "Ski", title, first.description, first.category, first.productType).type
       : null;
     // A supplier's own kind word is a Type only when it is one the shop uses: "FREERIDE" is not.
+    // A skin no rule knows, said so by the supplier's own section: Black Crows' "PILUS SKINS".
+    const skin = snow && !group.rule && isSkin(`${title} ${first.category}`) ? "Skins" : null;
     // And as the shop corrected it: a Type changed on this brand's product before is changed here too.
-    const filedAs = correctedProductType(snowboard ?? pack ?? accessory ?? group.rule?.productType ?? resolveType(first.productType) ?? "", brand);
+    const filedAs = correctedProductType(snowboard ?? pack ?? accessory ?? skin ?? group.rule?.productType ?? resolveType(first.productType) ?? "", brand);
     // Filed under one of the shop's own types where one is close, rather than asked about.
     const productType = filedAs && typesAreKnown() && !isValidType(filedAs) ? closestType(filedAs) ?? filedAs : filedAs;
     // Who it is for. A shop that writes "Men's …" and "Women's …" on the front of a name (house
@@ -250,7 +256,8 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
     // last season's — with the fit and the year swapped. See nameLikeSibling.
     const likeSibling = mounted ? null : nameLikeSibling(asShopWritesIt(shown), season, opts.listings ?? [], brand);
     const unnamed = likeSibling ? likeSibling.replace(/\s+20\d\d$/, "") : kindSuffix ? `${asShopWritesIt(shown)} ${kindSuffix}` : shown;
-    const named = front ? unnamed : withoutGender(unnamed).title;
+    // The ski shop's snow clothing alone says who it is for, on the front (asked 2026-10-19). See gender-title.ts.
+    const named = front ? unnamed : snow ? genderedTitle(withoutGender(unnamed).title, { productType, tags, gender: who }) : withoutGender(unnamed).title;
     products.push({
       key,
       // Built from the name the product will actually carry, season and all. Shopify derives a

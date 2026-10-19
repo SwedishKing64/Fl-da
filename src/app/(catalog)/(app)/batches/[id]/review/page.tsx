@@ -11,6 +11,7 @@ import { ReviewGrid } from "./ReviewGrid";
 import { LinksPanel } from "./LinksPanel";
 import { TotalsQuestion } from "./TotalsQuestion";
 import { offTotals } from "@/lib/catalog/totals";
+import { colourLinksOf, coloursOfProduct } from "@/lib/catalog/page-types";
 import { parseDirectives } from "@/lib/catalog/instructions";
 import { LookupPanel } from "./LookupPanel";
 import { lookupEnabled } from "@/lib/catalog/enrich";
@@ -98,7 +99,7 @@ async function renderReviewPage(props: PageProps<"/batches/[id]/review">) {
           <LinksPanel
             batchId={id}
             locked={["EXPORTED", "PUSHED"].includes(batch.status)}
-            products={review.products.map((p) => ({ id: p.id, title: p.title, handle: p.handle, url: ["LINKED", "RELINKED", "LINK_FAILED", "PAGE", "PAGE_UNSURE"].includes(p.lookupStatus) ? p.lookupSource : "", status: p.lookupStatus, inShop: inShop.has(p.handle) }))}
+            products={review.products.map((p) => ({ id: p.id, title: p.title, handle: p.handle, url: ["LINKED", "RELINKED", "LINK_FAILED", "PAGE", "PAGE_UNSURE"].includes(p.lookupStatus) ? p.lookupSource : "", status: p.lookupStatus, inShop: inShop.has(p.handle), colours: coloursOfProduct(p), colourLinks: colourLinksOf(p.colourLinks) }))}
           />
           <LookupPanel batchId={id} outstanding={outstanding} enabled={lookupEnabled()} states={states} />
           <ReviewGrid initial={review} batchId={id} kinds={typesAreKnown() ? productTypes() : []} categories={categories} />

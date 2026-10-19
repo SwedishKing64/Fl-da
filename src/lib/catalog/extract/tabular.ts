@@ -65,7 +65,9 @@ export function orderToTable(order: { lines: InvoiceLine[]; sheet: string; warni
   // every row, and the Griffon with no colour to tell its black from its orange.
   // Barcode, gender and size too: the reader finds them on any supplier's form, and a form with a
   // line per size (Osprey's S/M and L/XL) has a size where a ski has a length.
-  const headers = ["Item No.", "SKU", "Barcode", "Brand", "Description", "Gender", "Colour", "Length", "Size", "RRP", "Cost", "Qty"];
+  // The kind of thing a line is, where the form's own section says ("ALL TERRAIN SKIS", "POLES").
+  const kinds = order.lines.some((l) => (l.kind ?? "").trim());
+  const headers = ["Item No.", "SKU", "Barcode", "Brand", "Description", ...(kinds ? ["Category"] : []), "Gender", "Colour", "Length", "Size", "RRP", "Cost", "Qty"];
   const rows = order.lines.map((line) => {
     const size = (line.size ?? "").trim();
     const length = /^\d{2,3}(\.\d)?$/.test(size) ? size : "";
@@ -76,6 +78,7 @@ export function orderToTable(order: { lines: InvoiceLine[]; sheet: string; warni
       Barcode: (line.barcode ?? "").trim(),
       Brand: (line.brand ?? "").trim(),
       Description: line.title,
+      ...(kinds ? { Category: (line.kind ?? "").trim() } : {}),
       Gender: (line.gender ?? "").trim(),
       Colour: (line.colour ?? "").trim(),
       Length: length,

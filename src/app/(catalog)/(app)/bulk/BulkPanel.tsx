@@ -90,6 +90,13 @@ type Against = Array<{ name: string; reconciliation: Reconciliation }>;
 interface Reference { filename: string; rows: CanonicalLineItem[]; columns: string[]; warnings: string[] }
 interface Preview { instruction: string; plan: Plan; understood: string; unclear: string; blocked: string[]; described: string[]; results: Array<{ name: string; result: AdjustResult }> }
 
+/**
+ * A colour's own link is kept beside the product links, under a key of its own: the first line of
+ * that colour, made negative so it never meets the product's key (which is often the same line).
+ */
+const colourKey = (line: number): number => -1 - line;
+const lineOfColourKey = (key: number): number => -1 - key;
+
 const read = (file: File | Blob, name = "that file") => new Promise<string>((resolve, reject) => {
   const r = new FileReader();
   r.onload = () => resolve(String(r.result).split(",", 2)[1] ?? "");
@@ -646,9 +653,11 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
       const from = newProducts.find((q) => q !== p && (links[q.lines[0]] ?? "").trim() && fitlessOf(q.title) === fitlessOf(p.title));
       if (from) implied[key] = links[from.lines[0]].trim();
     }
-    const asked = Object.entries({ ...implied, ...links }).map(([k, url]) => ({ key: Number(k), url: url.trim() })).filter((l) => l.url && (buildNew || colourwayKeys.has(l.key)));
+    const asked = Object.entries({ ...implied, ...links }).map(([k, url]) => ({ key: Number(k), url: url.trim() })).filter((l) => l.url && (buildNew || colourwayKeys.has(l.key)) && (l.key >= 0 || colourOfKey(l.key)));
     if (asked.length > 0) {
       const nameOf = (key: number) => {
+        const own = colourOfKey(key);
+        if (own) return `${own.product.title} in ${own.colour}`;
         const colourway = newColourways.find((c) => c.key === key);
         if (colourway) return `${colourway.title} in ${colourway.colour}`;
         return newProducts.find((p) => p.lines.includes(key))?.title ?? order.lines[key]?.title ?? "a product";
@@ -656,6 +665,8 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
       // The colours the order has for the product, so the page's pictures are of those and not of
       // whichever colour the page happens to open on.
       const coloursOf = (key: number): string[] => {
+        const own = colourOfKey(key);
+        if (own) return [own.colour];
         const colourway = newColourways.find((c) => c.key === key);
         if (colourway) return [colourway.colour];
         const lines = newProducts.find((p) => p.lines.includes(key))?.lines ?? [key];
@@ -709,7 +720,9 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
         season, vendor, specs, decided, sourceOf, listings, priceList: order.priceList ?? [],
         fields: { ...fields, stock, draft: toDraft },
         reorderOnly: s.name !== home, builtBy,
-        pages,
+        // A colour's own page is kept under its own key; see colourKey.
+        pages: Object.fromEntries(Object.entries(pages).filter(([k]) => Number(k) >= 0)),
+        colourPages: Object.fromEntries(Object.entries(pages).filter(([k]) => Number(k) < 0).map(([k, page]) => [lineOfColourKey(Number(k)), page])),
       }),
     }));
     if (results.every((r) => r.result.refused)) {
@@ -1120,6 +1133,16 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
   const newProducts: FreshProduct[] = buildNew && toBuild > 0
     ? previewed.flatMap((r) => r.fresh).filter((p) => { const k = p.lines[0]; if (k === undefined || seenLines.has(k)) return false; seenLines.add(k); return true; })
     : [];
+  /** The new product and colour a colour's own link belongs to. See colourKey. */
+  const colourOfKey = (key: number): { product: FreshProduct; colour: string } | null => {
+    if (key >= 0) return null;
+    const line = lineOfColourKey(key);
+    for (const product of newProducts) {
+      const c = (product.colours ?? []).find((x) => x.line === line);
+      if (c) return { product, colour: c.colour };
+    }
+    return null;
+  };
   /**
    * A colour a listing has not had before, arriving on this delivery. It goes on as a variant of
    * the listing, whose pictures are of its other colours — so, like a new product, it is asked for
@@ -1666,9 +1689,14 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
               {((buildNew && newProducts.length > 0) || newColourways.length > 0) && (
                 <BulkLinks
                   products={[
-                    ...(buildNew ? newProducts.map((p) => {
+                    ...(buildNew ? newProducts.flatMap((p) => {
                       const from = !(links[p.lines[0]] ?? "").trim() ? newProducts.find((q) => q !== p && (links[q.lines[0]] ?? "").trim() && fitlessOf(q.title) === fitlessOf(p.title)) : undefined;
-                      return { key: p.lines[0], title: p.title, ...(from ? { note: `takes the page under ${from.title}` } : {}) };
+                      const colours = p.colours ?? [];
+                      return [
+                        { key: p.lines[0], title: p.title, ...(from ? { note: `takes the page under ${from.title}` } : colours.length > 1 ? { note: "one page for every colour — or give a colour its own page below" } : {}) },
+                        // A page for each colour, where the brand's site has one (asked 2026-10-19).
+                        ...(colours.length > 1 ? colours.map((c) => ({ key: colourKey(c.line), title: `${p.title} — ${c.colour}`, note: "this colour's own page, for its pictures (optional)", indent: true })) : []),
+                      ];
                     }) : []),
                     ...newColourways.map((c) => ({ key: c.key, title: `${c.title} — ${c.colour}`, note: "a new colour on a listing you have; its pictures come from this page" })),
                   ]}

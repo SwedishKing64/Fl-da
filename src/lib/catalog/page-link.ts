@@ -18,10 +18,12 @@
 import { prisma } from "./db";
 import { isPlaceholderBody } from "./body";
 import { shopBody } from "./description-style";
-import { cleanProductUrl, fitlessOf, flatHandleOf, type PageDetails } from "./page-types";
+import { cleanProductUrl, colourLinksOf, fitlessOf, flatHandleOf, sameColour, type ColourLink, type PageDetails } from "./page-types";
 import { readProductPage, PageError } from "./extract/page";
 import { picturesForColour } from "./picture-colour";
 import { pageProductTitle } from "./page-title";
+import { genderOf, genderedTitle } from "./gender-title";
+import { withoutGender } from "./mapping";
 import { seoTitle, titleYear, titledForShop } from "./titles";
 
 /** A package is read from its ski's page: "… inc Marker Griffon Binding Package" is the ski's name with a binding added. */
@@ -78,14 +80,32 @@ function coloursOf(product: { option1Name: string | null; option2Name: string | 
   return [...new Set(values)].slice(0, 6);
 }
 
-/** Fetch a product's page and write what it says onto the product, and onto its package. */
+/** Fetch a product's page and write what it says onto the product, and onto its package; then each colour's own page. */
 export async function readProductLink(productId: string, deps: { read?: typeof readProductPage; pictures?: typeof picturesForColour } = {}): Promise<PageRead> {
+  const product = await prisma.product.findUniqueOrThrow({ where: { id: productId }, select: { lookupSource: true, colourLinks: true } });
+  const url = product.lookupSource.trim();
+  const perColour = colourLinksOf(product.colourLinks).filter((l) => l.url);
+  const empty = { productId, description: false, details: 0, images: 0, also: [] as string[] };
+  if (!url && perColour.length === 0) return { ...empty, ok: false, said: "There is no link beside this product." };
+  const main = url ? await readMainLink(productId, url, deps) : null;
+  if (perColour.length === 0) return main!;
+  const colours = await readColourLinks(productId, perColour, { describe: !main?.ok }, deps);
+  return {
+    productId,
+    ok: (main?.ok ?? false) || colours.ok,
+    said: [main?.said ?? "", colours.said].filter(Boolean).join(" "),
+    description: (main?.description ?? false) || colours.description,
+    details: Math.max(main?.details ?? 0, colours.details),
+    images: (main?.images ?? 0) + colours.images,
+    also: main?.also ?? [],
+  };
+}
+
+async function readMainLink(productId: string, url: string, deps: { read?: typeof readProductPage; pictures?: typeof picturesForColour }): Promise<PageRead> {
   const read = deps.read ?? readProductPage;
   const pictures = deps.pictures ?? picturesForColour;
   const product = await prisma.product.findUniqueOrThrow({ where: { id: productId }, include: { variants: { select: { sku: true, option1Value: true, option2Value: true, option3Value: true } } } });
-  const url = product.lookupSource.trim();
   const empty = { productId, description: false, details: 0, images: 0, also: [] as string[] };
-  if (!url) return { ...empty, ok: false, said: "There is no link beside this product." };
 
   let details: PageDetails;
   try {
@@ -109,16 +129,6 @@ export async function readProductLink(productId: string, deps: { read?: typeof r
     const r = await applyDetails(id, details);
     if (id === productId) { out.description = r.description; out.details = r.details; out.images = r.images; notes.push(...r.notes); }
   }
-  // A colour with a page of its own takes its pictures from that page, onto that colour's variant.
-  const colourPages = Object.entries(parseColourLinks(product.colourLinks)).filter(([, u]) => u && u !== url);
-  for (const [colour, colourUrl] of colourPages) {
-    try {
-      const page = await pictures(await read(colourUrl, { title: flatTitleOf(product.title), brand: product.vendor || undefined, colours: [colour] }), product.title, [colour]);
-      out.images += await addColourPictures(productId, colour, page.images);
-    } catch {
-      notes.push(`The ${colour} page could not be read, so its pictures were not taken.`);
-    }
-  }
   const got = [out.description ? "the description" : "", out.details > 0 ? `${out.details} detail${out.details === 1 ? "" : "s"}` : "", out.images > 0 ? `${out.images} picture${out.images === 1 ? "" : "s"}` : ""].filter(Boolean);
   const said = [
     got.length ? `Took ${got.join(", ")} from the page.` : "The page had nothing to take.",
@@ -130,33 +140,93 @@ export async function readProductLink(productId: string, deps: { read?: typeof r
   return { ...out, said };
 }
 
-function parseColourLinks(raw: string | null | undefined): Record<string, string> {
-  try {
-    const v = JSON.parse(raw || "{}");
-    return v && typeof v === "object" ? Object.fromEntries(Object.entries(v).filter(([, u]) => typeof u === "string")) as Record<string, string> : {};
-  } catch {
-    return {};
+/**
+ * A colour's own page (asked 2026-10-19): a jacket in three colours is often three pages on the
+ * brand's site, each with its own pictures. Each colour's page gives that colour its pictures — the
+ * first becomes the picture of that colour's variants — and, where the product has no page of its
+ * own, the first colour's page gives the description and the title as well.
+ */
+async function readColourLinks(productId: string, links: ColourLink[], opts: { describe: boolean }, deps: { read?: typeof readProductPage; pictures?: typeof picturesForColour }): Promise<{ ok: boolean; said: string; description: boolean; details: number; images: number }> {
+  const read = deps.read ?? readProductPage;
+  const pictures = deps.pictures ?? picturesForColour;
+  const product = await prisma.product.findUniqueOrThrow({ where: { id: productId }, include: { variants: { select: { sku: true } } } });
+  const out = { ok: false, said: "", description: false, details: 0, images: 0 };
+  const said: string[] = [];
+  let describe = opts.describe;
+  const done: ColourLink[] = [];
+  for (const link of links) {
+    try {
+      let d = await read(link.url, { title: flatTitleOf(product.title), brand: product.vendor || undefined, modelCode: product.variants.map((v) => v.sku).find(Boolean), colours: [link.colour] });
+      d = await pictures(d, product.title, [link.colour]);
+      if (describe) {
+        // Words and title from this page, but not its pictures: they are this colour's alone.
+        const r = await applyDetails(productId, { ...d, images: [] }, { source: false });
+        out.description = r.description; out.details = r.details;
+        said.push(...r.notes);
+        describe = false;
+      }
+      const n = await applyColourPictures(productId, link.colour, d.images);
+      out.images += n;
+      out.ok = true;
+      said.push(`${link.colour}: ${n > 0 ? `took ${n} picture${n === 1 ? "" : "s"} from its page` : "its page had no pictures to take"}.${d.confident ? "" : ` The page is titled "${d.pageTitle || "?"}", which does not clearly match — check it is the right one.`}`);
+      done.push({ ...link, status: d.confident ? "PAGE" : "PAGE_UNSURE" });
+    } catch (err) {
+      said.push(`${link.colour}: ${err instanceof PageError ? err.message : "the page could not be read."}`);
+      done.push({ ...link, status: "LINK_FAILED" });
+    }
   }
+  const all = colourLinksOf(product.colourLinks).map((l) => done.find((x) => sameColour(x.colour, l.colour)) ?? l);
+  // Read, as far as the panel is concerned, once a colour's page was. A product with a page of its
+  // own keeps the standing that page gave it; one only waiting on its colours' pages is now read.
+  const { lookupStatus } = await prisma.product.findUniqueOrThrow({ where: { id: productId }, select: { lookupStatus: true } });
+  const waited = WAITING.includes(lookupStatus) && !product.lookupSource.trim();
+  await prisma.product.update({
+    where: { id: productId },
+    data: { colourLinks: JSON.stringify(all), ...(waited ? { lookupStatus: out.ok ? "PAGE" : "LINK_FAILED", lookupAt: new Date() } : {}) },
+  });
+  out.said = said.join(" ");
+  return out;
 }
 
-/** One colour's pictures from its own page, after the product's: the first goes on that colour's variant. */
-async function addColourPictures(productId: string, colour: string, images: string[]): Promise<number> {
-  const p = await prisma.product.findUniqueOrThrow({ where: { id: productId }, select: { title: true, option1Name: true, option2Name: true, option3Name: true, variants: { select: { id: true, option1Value: true, option2Value: true, option3Value: true }, orderBy: { sortOrder: "asc" } }, images: { select: { url: true, position: true, variantId: true } } } });
-  const have = new Set(p.images.map((i) => i.url));
-  const fresh = images.filter((u) => !have.has(u)).slice(0, 8);
-  const variantId = variantByColour(p).get(colour.trim().toLowerCase());
-  // The variant's picture is this colour's own now, in place of one the main page matched to it.
-  let claimed = false;
-  let position = Math.max(0, ...p.images.map((i) => i.position)) + 1;
-  for (const url of fresh) {
-    const own = Boolean(variantId) && !claimed;
-    if (own) {
-      await prisma.productImage.updateMany({ where: { productId, variantId }, data: { variantId: null } });
-      claimed = true;
-    }
-    await prisma.productImage.create({ data: { productId, url, position: position++, source: "PAGE", altText: `${p.title} ${colour}`, validated: false, ...(own ? { variantId } : {}) } });
+/** The marker on a picture that came from one colour's page, so a later read of that page replaces it. */
+const colourMark = (colour: string): string => `Colour: ${colour.trim()}`;
+
+/** One colour's pictures onto the product: the gallery, and the first on that colour's variants. */
+async function applyColourPictures(productId: string, colour: string, urls: string[]): Promise<number> {
+  const p = await prisma.product.findUniqueOrThrow({
+    where: { id: productId },
+    select: { option1Name: true, option2Name: true, option3Name: true, images: { select: { id: true, url: true, source: true, position: true, altText: true } }, variants: { select: { id: true, option1Value: true, option2Value: true, option3Value: true }, orderBy: { sortOrder: "asc" } } },
+  });
+  const mark = colourMark(colour);
+  const earlier = p.images.filter((i) => i.source === "PAGE" && i.altText === mark);
+  const kept = p.images.filter((i) => !earlier.includes(i));
+  const have = new Set(kept.map((i) => i.url));
+  const fresh = urls.filter((u) => !have.has(u));
+  if (fresh.length === 0) return 0;
+  if (earlier.length > 0) await prisma.productImage.deleteMany({ where: { id: { in: earlier.map((i) => i.id) } } });
+  const at = [p.option1Name, p.option2Name, p.option3Name].findIndex((n) => /colou?r/i.test(n ?? ""));
+  const first = at < 0 ? undefined : p.variants.find((v) => sameColour([v.option1Value, v.option2Value, v.option3Value][at] ?? "", colour));
+  let position = Math.max(0, ...kept.map((i) => i.position)) + 1;
+  for (const [i, url] of fresh.entries()) {
+    await prisma.productImage.create({ data: { productId, url, position: position++, source: "PAGE", altText: mark, validated: false, ...(i === 0 && first ? { variantId: first.id } : {}) } });
   }
   return fresh.length;
+}
+
+/** Save, or clear, one colour's own page. */
+export async function setColourLink(productId: string, colour: string, raw: string): Promise<{ url: string }> {
+  const product = await prisma.product.findUniqueOrThrow({ where: { id: productId }, select: { colourLinks: true, lookupStatus: true } });
+  const cleaned = cleanProductUrl(raw);
+  if ("error" in cleaned && cleaned.error) throw new Error(cleaned.error);
+  const url = "error" in cleaned ? "" : cleaned.url;
+  const others = colourLinksOf(product.colourLinks).filter((l) => !sameColour(l.colour, colour));
+  const next = url ? [...others, { colour: colour.trim(), url, status: "LINKED" }] : others;
+  await prisma.product.update({
+    where: { id: productId },
+    // A new page waits to be read, as the product's own link does. See linkedFrom.
+    data: { colourLinks: JSON.stringify(next), ...(url ? { lookupStatus: linkedFrom(product.lookupStatus), lookupAt: null } : {}) },
+  });
+  return { url };
 }
 
 /** The first variant of each colour the product comes in, by the colour in lower case. */
@@ -172,15 +242,18 @@ function variantByColour(p: { option1Name: string | null; option2Name: string | 
 }
 
 /** Write one page's details onto one product. Never touches prices, costs, quantities, barcodes or options. */
-async function applyDetails(productId: string, d: PageDetails): Promise<{ description: boolean; details: number; images: number; notes: string[] }> {
-  const p = await prisma.product.findUniqueOrThrow({ where: { id: productId }, select: { id: true, title: true, vendor: true, tags: true, productType: true, reconcileStatus: true, bodyHtml: true, lookupStatus: true, option1Name: true, option2Name: true, option3Name: true, variants: { select: { id: true, option1Value: true, option2Value: true, option3Value: true }, orderBy: { sortOrder: "asc" } }, images: { select: { id: true, url: true, source: true, position: true } } } });
+async function applyDetails(productId: string, d: PageDetails, opts: { source?: boolean } = {}): Promise<{ description: boolean; details: number; images: number; notes: string[] }> {
+  const p = await prisma.product.findUniqueOrThrow({ where: { id: productId }, select: { id: true, title: true, vendor: true, productType: true, tags: true, reconcileStatus: true, bodyHtml: true, lookupStatus: true, option1Name: true, option2Name: true, option3Name: true, variants: { select: { id: true, option1Value: true, option2Value: true, option3Value: true }, orderBy: { sortOrder: "asc" } }, images: { select: { id: true, url: true, source: true, position: true, altText: true } } } });
   const notes: string[] = [];
   // Titled as the page titles it, when the page is surely this product and the product is the
   // page's own model — a binding package or a wide fit sharing the ski's page keeps its own name.
   // Only a new product: one the shop already lists keeps the name it is listed under.
   const isNew = !["UPDATE", "VARIANT_ADD"].includes(p.reconcileStatus);
-  const season = titleYear(p.tags.split(",").map((x) => x.trim()), p.productType);
-  const named = d.confident && isNew && ownPage(p.title) ? titledForShop(p.vendor, pageProductTitle(d.pageTitle, p.vendor, season)) : "";
+  const tagList = p.tags.split(",").map((t) => t.trim()).filter(Boolean);
+  const season = titleYear(tagList, p.productType);
+  const fromPage = d.confident && isNew && ownPage(withoutGender(p.title).title) ? titledForShop(p.vendor, pageProductTitle(d.pageTitle, p.vendor, season)) : "";
+  // Snow clothing keeps who it is for on the front of the page's name. See gender-title.ts.
+  const named = fromPage ? genderedTitle(fromPage, { productType: p.productType, tags: tagList, gender: genderOf(tagList) }) : "";
   const retitle = named !== "" && named !== p.title;
   if (retitle) notes.push(`Titled "${named}", as the page names it.`);
   const body = await shopBody(d.description, d.features);
@@ -193,7 +266,8 @@ async function applyDetails(productId: string, d: PageDetails): Promise<{ descri
   // Pictures from an earlier read of this page are replaced; the supplier's own stay.
   const have = new Set(p.images.map((i) => i.url));
   const fresh = d.images.filter((u) => !have.has(u));
-  const earlier = p.images.filter((i) => i.source === "PAGE");
+  // A colour's own page's pictures belong to that page, and stay. See applyColourPictures.
+  const earlier = p.images.filter((i) => i.source === "PAGE" && !i.altText.startsWith("Colour: "));
   if (fresh.length > 0 && earlier.length > 0) await prisma.productImage.deleteMany({ where: { id: { in: earlier.map((i) => i.id) } } });
   let position = Math.max(0, ...p.images.filter((i) => i.source !== "PAGE" || fresh.length === 0).map((i) => i.position)) + 1;
   // A picture the look matched to one of the colours ordered goes on that colour's variant, so
@@ -209,7 +283,7 @@ async function applyDetails(productId: string, d: PageDetails): Promise<{ descri
 
   await prisma.product.update({
     where: { id: productId },
-    data: { ...(writeBody ? { bodyHtml: body } : {}), ...(retitle ? { title: named, seoTitle: seoTitle(p.vendor, named) } : {}), lookupStatus: d.confident ? "PAGE" : "PAGE_UNSURE", lookupSource: d.sourceUrl, lookupAt: new Date() },
+    data: { ...(writeBody ? { bodyHtml: body } : {}), ...(retitle ? { title: named, seoTitle: seoTitle(p.vendor, named) } : {}), lookupStatus: d.confident ? "PAGE" : "PAGE_UNSURE", ...(opts.source === false ? {} : { lookupSource: d.sourceUrl }), lookupAt: new Date() },
   });
   return { description: writeBody && d.description.trim() !== "", details: writeBody ? d.features.length : 0, images: fresh.length, notes };
 }

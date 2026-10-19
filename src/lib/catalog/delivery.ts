@@ -91,6 +91,12 @@ export interface DeliveryOptions {
    */
   pages?: Record<number, PageDetails>;
   /**
+   * A colour's own page (asked 2026-10-19), keyed by the first line of that colour: its pictures go
+   * on the product and the first becomes the picture of that colour's variants. Where the product
+   * has no page of its own, the first colour's page gives the description as well.
+   */
+  colourPages?: Record<number, PageDetails>;
+  /**
    * What the person said about each line matched on its NAME rather than a barcode: the same
    * product (its stock goes up), a new year's model of it (built as a new product), or not that
    * product at all (left alone). Keyed by lineKey of the line as the invoice gave it. A name match
@@ -165,6 +171,8 @@ export interface FreshProduct {
   rows: number;
   /** Which lines of the invoice it was built from, for matching a link to it. */
   lines: number[];
+  /** Its colours, each with the first line of that colour, for a page per colour. */
+  colours: Array<{ colour: string; line: number }>;
 }
 
 export interface DeliveryResult {
@@ -713,12 +721,25 @@ function appendFresh(
     for (const v of g.variants) { const page = withPages[placeOf(lines[v.sourceIndex])]; if (page) return page; }
     return undefined;
   };
+  const withColourPages = options.colourPages ?? {};
   for (const g of build) {
     const page = pageOf(g);
-    if (!page) continue;
-    const body = houseBody(page.description, page.features, houseConventions().descriptions.specsHeading);
+    const byColour = new Map<string, PageDetails>();
+    for (const v of g.variants) {
+      const colour = (v.item.colour ?? "").trim().toLowerCase();
+      const cp = withColourPages[placeOf(lines[v.sourceIndex])];
+      if (cp && colour && !byColour.has(colour)) byColour.set(colour, cp);
+    }
+    const describe = page ?? [...byColour.values()][0];
+    if (!describe) continue;
+    const body = houseBody(describe.description, describe.features, houseConventions().descriptions.specsHeading);
     if (body) g.description = body;
-    if (page.images.length > 0) g.imageUrls = [...new Set([...g.imageUrls, ...page.images])];
+    const pictures = [...(page?.images ?? []), ...[...byColour.values()].flatMap((cp) => cp.images)];
+    if (pictures.length > 0) g.imageUrls = [...new Set([...g.imageUrls, ...pictures])];
+    for (const v of g.variants) {
+      const first = byColour.get((v.item.colour ?? "").trim().toLowerCase())?.images[0];
+      if (first) v.imageUrl = first;
+    }
   }
   const products = build.map((g) => toProduct(g, vendor));
   const rows = buildRows(products);
@@ -761,6 +782,11 @@ function appendFresh(
       described: (product.bodyHtml ?? "").trim() !== "",
       rows: counted.get(product.handle) ?? g.variants.length,
       lines: g.variants.map((v) => placeOf(lines[v.sourceIndex])),
+      colours: g.variants.reduce<Array<{ colour: string; line: number }>>((out, v) => {
+        const colour = (v.item.colour ?? "").trim();
+        if (colour && !out.some((c) => c.colour.toLowerCase() === colour.toLowerCase())) out.push({ colour, line: placeOf(lines[v.sourceIndex]) });
+        return out;
+      }, []),
     };
   });
 
@@ -973,6 +999,7 @@ function toProduct(g: GroupedProduct, vendor: string): CsvProduct {
       price: v.item.rrp ?? 0,
       compareAtPrice: null,
       costPerItem: v.item.costPrice,
+      imageUrl: v.imageUrl ?? null,
     })),
   };
 }

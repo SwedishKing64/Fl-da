@@ -293,3 +293,26 @@ describe("what a delivery does to the products it touches", () => {
     expect(rows.slice(1).map((r) => `${r[0]} ${r[8]}`)).toEqual(["blaze-94-2027 170", "blaze-94-2027 177", "blaze-94-2027 184", "other-2027 163"]);
   });
 });
+
+describe("a new product with a page for each colour", () => {
+  const HEADER = "Handle,Title,Vendor,Type,Tags,Option1 Name,Option1 Value,Option2 Name,Option2 Value,Variant SKU,Variant Inventory Qty,Variant Price,Variant Barcode,Image Src,Image Position,Image Alt Text,Variant Image";
+  const csv = [HEADER, `other-2026,Other Thing 2026,Burton,Snow Jackets,2026,Colour,Black,Size,M,,1,199.99,9020000000001,,,,`].join("\n");
+  const coat = (colour: string, size: string, barcode: string): InvoiceLine => ({ sku: "", barcode, title: "CYCLIC GORE-TEX 2L JACKET", costPrice: 300, rrp: 699.99, quantity: 1, gender: "MENS", kind: "JACKETS", colour, size });
+  const lines = [coat("True Black", "M", "9030000000001"), coat("True Black", "L", "9030000000002"), coat("Jade", "M", "9030000000003")];
+  const page = (colour: string) => ({ sourceUrl: `https://example.com/cyclic-${colour}`, description: `The Cyclic, in ${colour}.`, features: [], images: [`https://img/${colour}-1.jpg`, `https://img/${colour}-2.jpg`], confident: true, pageTitle: "Cyclic", via: "ai" as const, note: "" });
+
+  it("lists each colour with its first line, for a link of its own", () => {
+    const out = buildDelivery(csv, lines, { vendor: "Burton", fields: { rrp: true, quantity: true, stock: "add" } });
+    expect(out.fresh[0].colours).toEqual([{ colour: "True Black", line: 0 }, { colour: "Jade", line: 2 }]);
+  });
+
+  it("gives every size of a colour that colour's first picture, and takes the words from the first colour's page", () => {
+    const out = buildDelivery(csv, lines, { vendor: "Burton", fields: { rrp: true, quantity: true, stock: "add" }, colourPages: { 0: page("black"), 2: page("jade") } });
+    const grid = parseCsv(out.csv); const h = grid[0]; const at = (n: string) => h.indexOf(n);
+    const mine = grid.slice(1).filter((r) => r[at("Handle")] !== "other-2026");
+    expect(mine.map((r) => r[at("Image Src")]).filter(Boolean)).toEqual(["https://img/black-1.jpg", "https://img/black-2.jpg", "https://img/jade-1.jpg", "https://img/jade-2.jpg"]);
+    expect(mine.map((r) => r[at("Variant Image")]).filter(Boolean)).toEqual(["https://img/black-1.jpg", "https://img/black-1.jpg", "https://img/jade-1.jpg"]);
+    expect(out.fresh[0].described).toBe(true);
+    expect(out.fresh[0].title).toMatch(/^Men's Cyclic/);
+  });
+});

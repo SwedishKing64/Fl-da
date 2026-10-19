@@ -200,10 +200,9 @@ model Product {
   // What the web lookup did about the columns the invoice left empty.
   lookupStatus    String   @default("NONE") // NONE | FOUND | UNSURE | NOT_FOUND | FAILED
   lookupSource    String   @default("") // the manufacturer page the copy was taken from
-  // A page per colour, where the brand has one: JSON { colour: url }. Each colour's pictures come
-  // from its own page, so the red binding's pictures are the red binding's.
-  colourLinks     String   @default("{}")
   lookupAt        DateTime?
+  // A page for each colour, where a colour has its own: JSON [{ colour, url, status }]. See page-link.ts.
+  colourLinks     String   @default("[]")
   sortOrder       Int      @default(0)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt

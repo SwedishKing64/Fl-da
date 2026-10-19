@@ -547,6 +547,8 @@ export function applyMapping(row: Record<string, string>, mapping: Mapping, opti
   item.imageUrls = Array.from(new Set(item.imageUrls));
   item.season = seasonFrom(item.season);
   item.colour = colourName(item.colour);
+  // A half boot size printed "24X" is 24.5 (the shop's word, 2026-10-19). See pdf-grid.ts.
+  item.size = item.size.trim().replace(/^(\d{2})X$/i, "$1.5");
   // No gender in a title; what it said is kept as the line's gender, so men's and women's of one
   // model are still two products.
   const ungendered = withoutGender(item.title);

@@ -638,7 +638,9 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
   } else if (items.length > 0 && items.every((entry) => !/^20\d{2}$/.test(entry.item.season))) {
     // No season on any line: the file's own name says it, where it does — Burton's confirmation
     // sheet is "Alpsport_W27_Burton_Confirmed…" and its lines carry no season column at all.
-    const fromName = batch.files.flatMap((f) => f.filename.split(/[^A-Za-z0-9/]+/)).map(seasonFrom).find((y) => /^20[2-3]\d$/.test(y));
+    // The latest year the name gives: "…_NOV_2026_boot_pole_-2027-Retail" is the 2027 range,
+    // delivered in November 2026.
+    const fromName = batch.files.flatMap((f) => f.filename.split(/[^A-Za-z0-9/]+/)).map(seasonFrom).filter((y) => /^20[2-3]\d$/.test(y)).sort().at(-1);
     if (fromName) {
       for (const entry of items) entry.item = { ...entry.item, season: fromName };
       for (const fileId of [...new Set(items.map((i) => i.fileId))]) await noteOnFile(fileId, `No column on this sheet says the season, so it was taken from the file's name: ${fromName}. Say "year tags 2026" in the chat if that is wrong.`);

@@ -1,4 +1,5 @@
-import { extractCsv, extractXlsx } from "./tabular";
+import { extractCsv, extractXlsx, orderToTable } from "./tabular";
+import { readGridPdf } from "./pdf-grid";
 import { extractPdfText } from "./pdf";
 import { extractHeuristic } from "./heuristic";
 import { aiAvailable } from "../anthropic";
@@ -76,6 +77,10 @@ export async function extractFile(buffer: Buffer, filename: string, mimeType: st
     case "docx":
       return fromText(await docxText(buffer), "AI_TEXT", hint, read, history);
     case "pdf": {
+      // An order with a size grid under each product is read by position, with no model: the
+      // quantities only mean something under the size they sit beneath. See pdf-grid.ts.
+      const grid = kind === "PRODUCT_PHOTO" ? null : await readGridPdf(buffer).catch(() => null);
+      if (grid) return { table: orderToTable({ lines: grid.lines, sheet: filename, warnings: grid.warnings }, "PDF_TEXT"), meta: { documentType: "INVOICE", supplier: grid.brand, invoiceNumber: "", currency: "AUD", gstTreatment: "EXCLUSIVE" } };
       const pdf = await extractPdfText(buffer);
       if (!pdf.looksScanned && kind !== "PRODUCT_PHOTO") return fromText(pdf.text, "PDF_TEXT", hint, read, history);
       if (aiAvailable()) {

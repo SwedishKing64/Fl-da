@@ -117,6 +117,16 @@ gender is kept on the line and goes into the tags; where men's and women's of on
 name, the handle carries it ("womens-talon-22-2027") so Shopify keeps them as two products.
 Kids', Youth and Junior are an age, not a gender, and stay.
 
+**PDF orders with a size grid under each product (Atomic, asked 2026-10-19).** A buy-plan PDF
+(Brandscope's: name, SKU:, Style:, W/S:, R/R:, Qty:, then a row of sizes with quantities printed
+under them) is read by position with no model (`extract/pdf-grid.ts`): each size's place along its
+row comes from where the row starts and how wide it is, and each quantity goes to the size it sits
+under. The grid has to add up to the product's Qty: or it is named. "24X" is a half size, 24.5 —
+also taught to the AI reader and to every mapped size. Mondo sizes file as Ski Boots, lengths as Ski
+Poles when the order speaks of poles and not skis, a name ending " W" is women's, and the brand is
+the "Brand Name:" on the order. Used for new products and on Prices and stock. A filename with two
+years ("…NOV_2026…-2027-Retail") takes the later one as the season.
+
 **Boot order forms (Dalbello, asked 2026-10-19).** Dalbello's form has item codes but its Mondo
 sizes ("225" … "325") sit across the heading row before "Total Qty", and only the first section's
 heading says RRP. The code reader now takes a run of sizes wherever it sits, carries the RRP column

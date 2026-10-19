@@ -1407,6 +1407,12 @@ export async function readInvoiceAction(file: { name: string; type: string; base
       }
 
       if (!isPdf && !isImage) return { ok: false, error: `${file.name} is not a file this can read. Invoices come as a spreadsheet, a CSV, a PDF or a photograph.` };
+      // A PDF order with a size grid under each product is read by where its words sit, with no
+      // model — the quantities only mean something under the size they are printed beneath.
+      if (isPdf) {
+        const grid = await (await import("@/lib/catalog/extract/pdf-grid")).readGridPdf(buffer).catch(() => null);
+        if (grid) return { ok: true, data: { lines: grid.lines, sheet: file.name, columns: { barcode: "", sku: "SKU", rrp: "R/R", quantity: "the size grid", title: "the product's name", size: "the size row", colour: "Style" }, warnings: grid.warnings, shape: "grid" as const, sizeGrid: true, source: "read from the size grid under each product" } };
+      }
       if (!aiAvailable()) return { ok: false, error: `${file.name} has no columns to read, so it has to go to the API — set ANTHROPIC_API_KEY, or upload the order as a spreadsheet.` };
 
       const { extractFromPdf, extractFromImage } = await import("@/lib/catalog/extract/ai");

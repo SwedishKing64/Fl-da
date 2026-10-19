@@ -60,7 +60,7 @@ function uniqueHeaders(raw: string[]): string[] {
  * supplier writes it, and a per-length SKU — "V2610112.000.170" — which is exactly the spelling
  * the PIM export uses in its "SKU no. // LENGTH" column and what carries the barcode.
  */
-export function orderToTable(order: { lines: InvoiceLine[]; sheet: string; warnings: string[] }): ExtractedTable {
+export function orderToTable(order: { lines: InvoiceLine[]; sheet: string; warnings: string[] }, method: ExtractedTable["method"] = "XLSX"): ExtractedTable {
   // Cost and colour too: dropping them left every Volkl line with no cost, though the form prices
   // every row, and the Griffon with no colour to tell its black from its orange.
   // Barcode, gender and size too: the reader finds them on any supplier's form, and a form with a
@@ -92,7 +92,7 @@ export function orderToTable(order: { lines: InvoiceLine[]; sheet: string; warni
   return {
     headers,
     rows,
-    method: "XLSX",
+    method,
     warnings: [
       `Read as an order: ${rows.length} line${rows.length === 1 ? "" : "s"} from the quantities written on ${order.sheet}. The rest of the form is the supplier's price list, not this delivery, so it was left out.`,
       ...order.warnings.filter((w) => !w.startsWith("Read as an order")),

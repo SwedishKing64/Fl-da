@@ -168,6 +168,21 @@ calls cost), so the allowance goes as far as the lighter models let it; a model 
 is priced as the dearest. A row metered only in tokens, from before calls were priced, is still
 priced at the old single Opus rate.
 
+**The rulebook.** The top of Training and Rules is every rule in force, by stage, in plain words
+(`rulebook.ts`, pure: `buildRulebook` takes the house conventions, tag rules, templates, pricing
+rules, supplier layouts and defaults, supplier records, the website, the export's vocabulary and
+the settings, and gives eight stages — reading, naming, filing, pricing, copy, pictures, checks,
+export — each a list of `RuleEntry` sentences with where to change it). `describeTagRule`,
+`describePricingRule` and `describeLayout` are the sentences. A rule the shop set links to its
+form (anchors `#website`, `#suppliers`, `#export`, `#house` on the page, `/pricing`, `/settings`);
+Flöda's own rules are listed and badged as Flöda's so the shop knows them. A tag rule can be
+switched off, deleted or tried from the rulebook (`setTagRuleActiveAction`, `deleteTagRuleAction`,
+`ruleReachAction`: how many products of the latest open batch the rule touches, with a few by
+name, nothing changed). A kind's tag rules are said once, under the kind, not again as rules.
+This is the first step of opening how a shop's system runs to the shop; the next are turning a
+correction on the review grid into a rule, per-stage switches and notes, and a rulebook file that
+exports, imports and rolls back.
+
 **The open copy.** A desktop build made with `FLODA_OPEN=1` (`electron-builder.open.yml`, the
 "open" box on the Desktop app workflow) has no sign-in and no licence: `/open` signs whoever opens
 the window in as the copy's owner, an admin called "Shop owner" made the first time

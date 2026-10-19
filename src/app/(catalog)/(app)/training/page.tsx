@@ -11,6 +11,13 @@ import { LearnPanel } from "@/app/(catalog)/(setup)/setup/LearnStep";
 import { HouseForm } from "@/app/(catalog)/(setup)/setup/HouseStep";
 import { SuppliersStep } from "@/app/(catalog)/(setup)/setup/SuppliersStep";
 import { WebsiteForm } from "./WebsiteForm";
+import { Rulebook } from "./Rulebook";
+import { buildRulebook, countRules } from "@/lib/catalog/rulebook";
+import { getSettings } from "@/lib/catalog/settings";
+import { taxName } from "@/lib/catalog/shop-profile";
+import { supplierRecords } from "@/lib/catalog/supplier-score";
+import { pictureHosting, publicFileUrl } from "@/lib/catalog/storage";
+import { parseJson } from "@/lib/catalog/db";
 
 export const dynamic = "force-dynamic";
 /** Reading several supplier examples, or teaching from a large export, is several requests; each takes the page's limit. */
@@ -24,23 +31,52 @@ export const maxDuration = 300;
  */
 export default async function TrainingPage() {
   await requireUser("ADMIN");
-  const [website, learned, house, tagRules, templates, suppliers] = await Promise.all([
+  const [website, learned, house, tagRules, templates, suppliers, allRules, productTemplates, pricingRules, supplierRows, records, settings] = await Promise.all([
     getWebsiteCategories(),
     getLearnedVocabulary(),
     getHouseConventions(),
     houseTagRules(),
     prisma.mappingTemplate.findMany({ orderBy: { updatedAt: "desc" }, include: { supplier: { select: { name: true } } } }),
     prisma.supplier.count(),
+    prisma.tagRule.findMany({ orderBy: { priority: "desc" } }),
+    prisma.productTemplate.findMany({ orderBy: { priority: "asc" } }),
+    prisma.pricingRule.findMany({ orderBy: { priority: "desc" } }),
+    prisma.supplier.findMany({ orderBy: { name: "asc" } }),
+    supplierRecords().catch(() => []),
+    getSettings(),
   ]);
   const kinds = productTypes();
+  const rulebook = buildRulebook({
+    house,
+    tagRules: allRules,
+    templates: productTemplates.map((t) => ({ id: t.id, name: t.name, scope: t.scope as "BRAND" | "PRODUCT_TYPE" | "CATEGORY", matchValue: t.matchValue, matchProductType: t.matchProductType, notes: t.notes, productType: t.setProductType, tags: t.addTags.split(",").map((x) => x.trim()).filter(Boolean), collections: t.addCollections.split(",").map((x) => x.trim()).filter(Boolean), optionNames: t.optionNames.split(",").map((x) => x.trim()).filter(Boolean), metafields: parseJson<Record<string, string>>(t.setMetafields, {}), priority: t.priority, active: t.active })),
+    pricingRules,
+    layouts: templates.map((t) => ({ id: t.id, supplier: t.supplier.name, name: t.name, mappings: parseJson<Record<string, string>>(t.mappings, {}), options: parseJson(t.options, {}) })),
+    suppliers: supplierRows,
+    records,
+    website,
+    learned,
+    settings: { minMarginPct: settings.minMarginPct, defaultRoundTo: settings.defaultRoundTo, gstRate: settings.gstRate, pricesIncludeGst: settings.pricesIncludeGst, seoTone: settings.seoTone, houseRules: settings.houseRules, taxName: taxName() },
+    pictureHosting: pictureHosting() || publicFileUrl("images/x.jpg", settings.publicBaseUrl) !== null,
+    fieldLabels: Object.fromEntries(CANONICAL_FIELDS.map((f) => [f.key, f.label])),
+  });
   return (
     <>
       <PageHeader title="Training and Rules" subtitle="What Flöda has been taught about your shop, your suppliers and your listings, and where to teach it more." />
 
-      <Card title="Your website: the kinds of product" className="mb-6">
-        <WebsiteForm saved={website} />
-      </Card>
+      <div id="rulebook">
+        <Card title="Your rulebook" className="mb-6">
+          <Rulebook stages={rulebook} counts={countRules(rulebook)} />
+        </Card>
+      </div>
 
+      <div id="website">
+        <Card title="Your website: the kinds of product" className="mb-6">
+          <WebsiteForm saved={website} />
+        </Card>
+      </div>
+
+      <div id="suppliers">
       <Card title="Your suppliers: how their paperwork reads" className="mb-6">
         <p className="mb-4 text-[14px] text-[var(--ink-soft)]">
           Drop in an invoice, an order confirmation or an order form from a supplier and Flöda reads it now, shows what it took every column for, and remembers the corrected layout for that supplier. Their next invoice reads the way this one was left.
@@ -69,7 +105,9 @@ export default async function TrainingPage() {
         )}
         <SuppliersStep fields={CANONICAL_FIELDS.map((f) => ({ key: f.key, label: f.label, required: Boolean(f.required) }))} templates={templates.length} standalone />
       </Card>
+      </div>
 
+      <div id="export">
       <Card title="Your Shopify export: how products are filed and tagged" className="mb-6">
         {learned ? (
           <ul className="mb-4 list-disc pl-5 text-[14px]">{describeLearned(learned).map((l) => <li key={l}>{l}</li>)}</ul>
@@ -78,11 +116,14 @@ export default async function TrainingPage() {
         )}
         <LearnPanel learned={learned} kinds={house.kinds} />
       </Card>
+      </div>
 
+      <div id="house">
       <Card title="Rules: how you list" className="mb-6">
         <p className="mb-5 text-[14px] text-[var(--ink-soft)]">The choices a person makes on every listing, which no export can show: the brand in the title or not, SKUs and barcodes, what you write for weight, the tags certain products always get, and anything else the reader should always do.</p>
         <HouseForm house={house} tagRules={tagRules} kinds={kinds} />
       </Card>
+      </div>
 
       <p className="text-[13px] text-[var(--ink-soft)]">The shop&apos;s name, country and tax, the reading key and staff accounts are on <Link href="/settings" className="font-semibold text-[var(--meta)]">Settings</Link>.</p>
     </>

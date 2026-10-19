@@ -2263,3 +2263,59 @@ export async function exampleStateAction(batchId: string): Promise<ActionResult<
     };
   });
 }
+
+// ---------------------------------------------------------------------------------------------
+// The rulebook: a tag rule switched off, deleted, or tried on the latest batch
+// ---------------------------------------------------------------------------------------------
+
+/** Switch one tag rule on or off, leaving it in the rulebook. */
+export async function setTagRuleActiveAction(id: string, active: boolean): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    await prisma.tagRule.update({ where: { id }, data: { active } });
+    await logAudit("rule.toggled", { userId: user.id, details: { id, active } });
+    revalidatePath("/training");
+    return { ok: true };
+  });
+}
+
+/** Delete one tag rule. A kind's rule comes back the next time the kinds are kept; a house rule the next time the form is. */
+export async function deleteTagRuleAction(id: string): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const rule = await prisma.tagRule.findUnique({ where: { id } });
+    if (!rule) return { ok: false, error: "That rule is already gone." };
+    await prisma.tagRule.delete({ where: { id } });
+    await logAudit("rule.deleted", { userId: user.id, details: { id, name: rule.name } });
+    revalidatePath("/training");
+    return { ok: true };
+  });
+}
+
+export interface RuleReach {
+  batch: string;
+  matched: number;
+  of: number;
+  examples: string[];
+}
+
+/**
+ * What a tag rule would touch on the latest batch that is still being worked on (or the latest
+ * at all): how many of its products match, and a few by name. Nothing is changed; it is the
+ * "try it" beside a rule in the rulebook.
+ */
+export async function ruleReachAction(id: string): Promise<ActionResult<RuleReach>> {
+  await requireUser();
+  return safely(async () => {
+    const rule = await prisma.tagRule.findUnique({ where: { id } });
+    if (!rule) return { ok: false, error: "That rule is gone." };
+    const { ruleMatches } = await import("@/lib/catalog/rules");
+    const open = await prisma.importBatch.findFirst({ where: { status: { in: ["EXTRACTED", "MAPPED", "REVIEW"] } }, orderBy: { updatedAt: "desc" }, select: { id: true, name: true } });
+    const batch = open ?? (await prisma.importBatch.findFirst({ orderBy: { updatedAt: "desc" }, select: { id: true, name: true } }));
+    if (!batch) return { ok: false, error: "No batch to try it on yet. Upload a supplier's file first." };
+    const products = await prisma.product.findMany({ where: { batchId: batch.id }, select: { title: true, vendor: true, category: true, productType: true, tags: true, collections: true, metafields: true, variants: { select: { sku: true } } } });
+    const live = { ...rule, active: true };
+    const hits = products.filter((p) => ruleMatches(live, { title: p.title, vendor: p.vendor, category: p.category, productType: p.productType, skus: p.variants.map((v) => v.sku), tags: p.tags.split(",").map((t) => t.trim()).filter(Boolean), collections: p.collections.split(",").map((t) => t.trim()).filter(Boolean), metafields: parseJson<Record<string, string>>(p.metafields, {}) }));
+    return { ok: true, data: { batch: batch.name, matched: hits.length, of: products.length, examples: hits.slice(0, 5).map((p) => p.title) } };
+  });
+}

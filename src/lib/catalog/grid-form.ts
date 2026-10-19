@@ -69,6 +69,8 @@ const HEADING_WORD = /^(product code|item code|code|product|colou?r|release|weig
 const NOT_A_PRODUCT = /^(total|grand total|general|minimum|preorders?|reorders?|freight|note|delivery|address|city|zip|post ?code|country|contact|tel|email|client|order due|requested)\b/i;
 
 interface Layout {
+  /** A ski's waist width, where the form gives it: it says what kind of ski it is. */
+  waist?: number;
   sizes: Array<[number, string]>;
   /** Boxes with no size over them: a section headed without sizes keeps the grid's columns, each one quantity. */
   boxes: number[];
@@ -146,6 +148,13 @@ export function cleanName(raw: string, colourColumn = ""): { title: string; colo
   return { title: t, colour: colour ? colourName(colour) : "", unisex };
 }
 
+/** A ski's section and waist as the words its categories are read from: "ALL TERRAIN SKIS, 88mm waist". */
+function terrainOf(kind: string, waist: string): string {
+  if (!/\bskis?\b/i.test(kind)) return "";
+  const mm = /^\d{2,3}$/.test(waist.trim()) ? Number(waist) : null;
+  return [kind, mm !== null && mm >= 60 && mm <= 150 ? `${mm}mm waist` : ""].filter(Boolean).join(", ");
+}
+
 /** A row that names the kind of thing below it: one label, repeated or alone, and no numbers. */
 function sectionLabel(row: string[]): string {
   const filled = row.map(text).filter(Boolean);
@@ -186,7 +195,9 @@ export function readGridForm(name: string, grid: string[][]): InvoiceRead | null
       if (!prices) continue;
       const sized: Array<[number, string]> = sizes.length >= 1 && !(sizes.length === 1 && prices.qty >= 0) ? sizes.filter(([i]) => i !== prices.size) : [];
       const previous: number[] = layout ? (layout.sizes.length > 0 ? layout.sizes.map(([i]) => i) : layout.boxes) : [];
-      layout = { ...prices, sizes: sized, boxes: sized.length > 0 ? [] : previous };
+      const waistAt = headings.findIndex((h) => /^waist( width)?$/.test(h));
+      const waistBefore: number | undefined = (layout as Layout | null)?.waist;
+      layout = { ...prices, sizes: sized, boxes: sized.length > 0 ? [] : previous, ...(waistAt >= 0 ? { waist: waistAt } : waistBefore !== undefined ? { waist: waistBefore } : {}) };
       // A heading row often names the section too: "BIRDIE SKIS", or "ACCESSORIES | LEASES" beside "product code".
       const named = row.find((c) => /[a-z]{3,}/i.test(c) && !sizeHeading(c) && !HEADING_WORD.test(norm(c)));
       if (named) kind = named;
@@ -224,6 +235,9 @@ export function readGridForm(name: string, grid: string[][]): InvoiceRead | null
       ...(colour ? { colour } : {}),
       ...(unisex ? { gender: "Unisex" } : {}),
       ...(kindOf ? { kind: kindOf } : {}),
+      // What the ski is for, as far as the form says: its section ("ALL TERRAIN SKIS", "BIG MOUNTAIN
+      // SKIS") and its waist. The ski categories are worked out from it (disciplinesFromTerrain).
+      ...(terrainOf(kindOf, layout.waist !== undefined ? row[layout.waist] : "") ? { terrain: terrainOf(kindOf, layout.waist !== undefined ? row[layout.waist] : "") } : {}),
     };
     priceList.push({ sku, title, colour, rrp: base.rrp, costPrice: cost });
 

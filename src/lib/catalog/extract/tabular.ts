@@ -67,7 +67,9 @@ export function orderToTable(order: { lines: InvoiceLine[]; sheet: string; warni
   // line per size (Osprey's S/M and L/XL) has a size where a ski has a length.
   // The kind of thing a line is, where the form's own section says ("ALL TERRAIN SKIS", "POLES").
   const kinds = order.lines.some((l) => (l.kind ?? "").trim());
-  const headers = ["Item No.", "SKU", "Barcode", "Brand", "Description", ...(kinds ? ["Category"] : []), "Gender", "Colour", "Length", "Size", "RRP", "Cost", "Qty"];
+  // What a ski is for, where the form says — its section and waist (see grid-form.ts).
+  const terrains = order.lines.some((l) => (l.terrain ?? "").trim());
+  const headers = ["Item No.", "SKU", "Barcode", "Brand", "Description", ...(kinds ? ["Category"] : []), ...(terrains ? ["Terrain"] : []), "Gender", "Colour", "Length", "Size", "RRP", "Cost", "Qty"];
   const rows = order.lines.map((line) => {
     const size = (line.size ?? "").trim();
     // A ski or pole length is a whole number of centimetres, 60 and up; a boot's 24.5 is a size.
@@ -80,6 +82,7 @@ export function orderToTable(order: { lines: InvoiceLine[]; sheet: string; warni
       Brand: (line.brand ?? "").trim(),
       Description: line.title,
       ...(kinds ? { Category: (line.kind ?? "").trim() } : {}),
+      ...(terrains ? { Terrain: (line.terrain ?? "").trim() } : {}),
       Gender: (line.gender ?? "").trim(),
       Colour: (line.colour ?? "").trim(),
       Length: length,

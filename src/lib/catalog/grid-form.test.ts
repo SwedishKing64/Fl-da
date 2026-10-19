@@ -125,3 +125,19 @@ describe("a boot order form", () => {
     expect(["245", "260", "195", "120mm"].map(mondo)).toEqual(["24.5", "26", "19.5", "120mm"]);
   });
 });
+
+describe("what kind of ski it is, from the form", () => {
+  it("files a ski by its section, and by its waist where the section does not say", async () => {
+    const { disciplinesFromTerrain } = await import("./shop-memory");
+    const grid = [
+      ["HARDGOODS", "", "Waist Width", "RRP", "pre-order", "Size 1", "Size 2", "Total"],
+      ["ALL TERRAIN SKIS", "ALL TERRAIN SKIS", "ALL TERRAIN SKIS", "ALL TERRAIN SKIS", "ALL TERRAIN SKIS", "ALL TERRAIN SKIS", "ALL TERRAIN SKIS", "ALL TERRAIN SKIS"],
+      ["SATO (167, 173)", "", "88", "1000", "500", "1", "", "1"],
+      ["BIRDIE SKIS", "", "", "", "", "Size 1", "Size 2", "TOTAL"],
+      ["ANIMA BIRDIE (176, 182)", "", "115", "1100", "550", "", "1", "1"],
+    ];
+    const lines = readGridForm("1. W26 BLACK CROWS", grid)!.lines;
+    expect(lines.map((l) => l.terrain)).toEqual(["ALL TERRAIN SKIS, 88mm waist", "BIRDIE SKIS, 115mm waist"]);
+    expect(lines.map((l) => disciplinesFromTerrain("Skis", l.terrain ?? ""))).toEqual([["frontside and all-mountain skis"], ["freeride and powder skis"]]);
+  });
+});

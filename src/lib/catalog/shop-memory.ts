@@ -217,13 +217,18 @@ export function disciplinesFromTerrain(productType: string, text: string): strin
     if (/\bpark\b|\bjib|\bpipe\b/.test(t)) out.push("Park Boards");
     if (/freeride|powder|big[\s-]?mountain|backcountry/.test(t)) out.push("Freeride & Powder Boards");
   } else if (ski) {
-    if (/all[\s-]?mountain|frontside|all[\s-]?round/.test(t)) out.push("Frontside & All-Mountain Skis");
+    if (/all[\s-]?mountain|all[\s-]?terrain|frontside|all[\s-]?round/.test(t)) out.push("Frontside & All-Mountain Skis");
     if (/carv|on[\s-]?piste/.test(t)) out.push("Carving Skis");
     if (/freeride|powder|big[\s-]?mountain/.test(t)) out.push("Freeride & Powder Skis");
     if (/freestyle|\bpark\b|twin[\s-]?tip/.test(t)) out.push("Park & Twin Tip Skis");
     if (/\brac(e|ing)\b|world ?cup/.test(t)) out.push("Race Skis");
     if (/mogul/.test(t)) out.push("Mogul Skis");
     if (/touring|skitour|backcountry/.test(t)) out.push("Touring Skis");
+    // Nothing said in words: the waist does. The shop files a ski of 100mm and wider under
+    // Freeride & Powder and anything narrower under Frontside & All-Mountain (Black Crows'
+    // "BIRDIE SKIS" section says only that they are women's).
+    const waist = /(\d{2,3})\s*mm waist/.exec(t);
+    if (out.length === 0 && waist) out.push(Number(waist[1]) >= 100 ? "Freeride & Powder Skis" : "Frontside & All-Mountain Skis");
   }
   return out.flatMap((d) => tagsFor(d).slice(0, 1));
 }

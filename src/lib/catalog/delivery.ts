@@ -34,6 +34,8 @@ import { colourName } from "./colour";
 import { writeOutSize } from "./options";
 import { quote, verifyOnlyIntended, type Change } from "./adjust";
 import { csvType, productCategoryFor, spellType } from "./pipeline-pure";
+import { pageProductTitle } from "./page-title";
+import { genderedTitle } from "./gender-title";
 import { houseBody } from "./body";
 import { enrichFromSpecs } from "./specs";
 import { productTitle, seoTitle, titleYear } from "./titles";
@@ -45,7 +47,7 @@ import { brandIn, isDistributor, audienceByModel } from "./brands";
 import { isFlatSki, isPackageBinding, packageProducts } from "./trades/snow/packages";
 import type { PriceRow } from "./invoice";
 import type { CanonicalLineItem } from "./types";
-import type { PageDetails } from "./page-types";
+import { fitlessOf, type PageDetails } from "./page-types";
 
 export interface DeliveryOptions {
   /** The season the delivery is for, which an order form never says and the matcher needs. */
@@ -732,6 +734,11 @@ function appendFresh(
     }
     const describe = page ?? [...byColour.values()][0];
     if (!describe) continue;
+    // Titled as the page titles it, as on the review page (asked 2026-10-16, again 2026-10-20): the
+    // year goes after it when the product is written out. Not a package or a fit sharing the page.
+    const own = !/\binc\b/i.test(g.title) && fitlessOf(g.title) === g.title.replace(/\s+/g, " ").trim().toLowerCase();
+    const named = describe.confident && own ? pageProductTitle(describe.pageTitle, g.brand || vendor, null) : "";
+    if (named) g.title = genderedTitle(named, { productType: g.productType, tags: g.tags, gender: g.audience ?? "" });
     const body = houseBody(describe.description, describe.features, houseConventions().descriptions.specsHeading);
     if (body) g.description = body;
     const pictures = [...(page?.images ?? []), ...[...byColour.values()].flatMap((cp) => cp.images)];

@@ -299,7 +299,7 @@ describe("a new product with a page for each colour", () => {
   const csv = [HEADER, `other-2026,Other Thing 2026,Burton,Snow Jackets,2026,Colour,Black,Size,M,,1,199.99,9020000000001,,,,`].join("\n");
   const coat = (colour: string, size: string, barcode: string): InvoiceLine => ({ sku: "", barcode, title: "CYCLIC GORE-TEX 2L JACKET", costPrice: 300, rrp: 699.99, quantity: 1, gender: "MENS", kind: "JACKETS", colour, size });
   const lines = [coat("True Black", "M", "9030000000001"), coat("True Black", "L", "9030000000002"), coat("Jade", "M", "9030000000003")];
-  const page = (colour: string) => ({ sourceUrl: `https://example.com/cyclic-${colour}`, description: `The Cyclic, in ${colour}.`, features: [], images: [`https://img/${colour}-1.jpg`, `https://img/${colour}-2.jpg`], confident: true, pageTitle: "Cyclic", via: "ai" as const, note: "" });
+  const page = (colour: string) => ({ sourceUrl: `https://example.com/cyclic-${colour}`, description: `The Cyclic, in ${colour}.`, features: [], images: [`https://img/${colour}-1.jpg`, `https://img/${colour}-2.jpg`], confident: true, pageTitle: "Burton Men's Cyclic GORE-TEX 2L Jacket | Burton AU", via: "ai" as const, note: "" });
 
   it("lists each colour with its first line, for a link of its own", () => {
     const out = buildDelivery(csv, lines, { vendor: "Burton", fields: { rrp: true, quantity: true, stock: "add" } });
@@ -313,6 +313,7 @@ describe("a new product with a page for each colour", () => {
     expect(mine.map((r) => r[at("Image Src")]).filter(Boolean)).toEqual(["https://img/black-1.jpg", "https://img/black-2.jpg", "https://img/jade-1.jpg", "https://img/jade-2.jpg"]);
     expect(mine.map((r) => r[at("Variant Image")]).filter(Boolean)).toEqual(["https://img/black-1.jpg", "https://img/black-1.jpg", "https://img/jade-1.jpg"]);
     expect(out.fresh[0].described).toBe(true);
-    expect(out.fresh[0].title).toMatch(/^Men's Cyclic/);
+    // Titled as the page titles it, without the brand or the site, gender on the front, year after.
+    expect(out.fresh[0].title).toBe("Men's Cyclic GORE-TEX 2L Jacket 2026");
   });
 });

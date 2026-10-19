@@ -117,6 +117,14 @@ gender is kept on the line and goes into the tags; where men's and women's of on
 name, the handle carries it ("womens-talon-22-2027") so Shopify keeps them as two products.
 Kids', Youth and Junior are an age, not a gender, and stay.
 
+**Ski categories from an order form (asked 2026-10-20).** A new ski's riding-style shelf came only
+from a terrain column, which Black Crows' form has none of, so none showed. The grid reader now
+keeps each ski's section and waist as its terrain ("ALL TERRAIN SKIS, 88mm waist"); "all terrain"
+reads as Frontside & All-Mountain, "big mountain" as Freeride & Powder, "touring" as Touring, and
+where the words say nothing a waist of 100mm or more is Freeride & Powder, narrower Frontside &
+All-Mountain. On Prices and stock a new product given a page is now titled as the page titles it,
+with the year after, as on the review page.
+
 **PDF orders with a size grid under each product (Atomic, asked 2026-10-19).** A buy-plan PDF
 (Brandscope's: name, SKU:, Style:, W/S:, R/R:, Qty:, then a row of sizes with quantities printed
 under them) is read by position with no model (`extract/pdf-grid.ts`): each size's place along its

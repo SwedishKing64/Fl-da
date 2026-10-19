@@ -630,8 +630,11 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
 
   // A year said in the instruction chat wins over whatever the supplier's file calls the season:
   // Burton's "27WIN" is 2027, and an April order for the 2026 range is still tagged 2026.
-  if (/^20\d{2}$/.test(directives.season.trim())) {
-    for (const entry of items) entry.item = { ...entry.item, season: directives.season.trim() };
+  // A year given as a tag in the chat is the season too (asked 2026-10-19): it is the product's one
+  // year tag, not a second beside the file's, and the title and handle carry it.
+  const toldYear = /^20\d{2}$/.test(directives.season.trim()) ? directives.season.trim() : [...directives.addTags].reverse().map((t) => t.trim()).find((t) => /^20\d{2}$/.test(t)) ?? "";
+  if (toldYear) {
+    for (const entry of items) entry.item = { ...entry.item, season: toldYear };
   } else if (items.length > 0 && items.every((entry) => !/^20\d{2}$/.test(entry.item.season))) {
     // No season on any line: the file's own name says it, where it does — Burton's confirmation
     // sheet is "Alpsport_W27_Burton_Confirmed…" and its lines carry no season column at all.

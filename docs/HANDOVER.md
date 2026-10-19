@@ -33,6 +33,18 @@ and buttons. The owner asked for "extremely easy UI" and buttons "mimicking Meta
 
 ## How the shop works (rules it told us)
 
+**One year tag per product (asked 2026-10-19).** A product carries exactly one of its season
+(2026, 2027…) or the 2999/2998 markers. A year given in the batch chatbox — as the season or as a
+tag — replaces the file's year rather than sitting beside it, and the title and handle carry it
+too (`oneYearTag` in product-tags.ts; the chat's year is set as the lines' season in pipeline.ts).
+
+**Bills take the shop's terms with each supplier (asked 2026-10-16).** The QuickBooks supplier
+contact list's Terms column is kept with the names (still never phones, emails or addresses). A
+bill matched to a supplier on the list takes the list's terms over the invoice's, and its Due date
+is worked from them: "Net 30 EOM" (or "EOM 30") is the end of the bill's month plus 30 days — a
+bill of 13 October is due 30 November; "Net 7" is seven days; "Due on receipt" is the bill date.
+Loading a newer list keeps the names learned from bills since.
+
 **A new product is titled as the supplier's page titles it (asked 2026-10-16), for search.** When
 a product link is read and the page is surely that product, the title becomes the page's own name
 (`page-title.ts`): the site's name after a bar or dash dropped, no brand in front (the SEO title

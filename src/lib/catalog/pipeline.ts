@@ -645,6 +645,16 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
     }
   }
 
+  // No brand on any line, none said in the chat and no supplier to go by: the file's own name says
+  // it, where it does — Dalbello's order form never names Dalbello, "Dalbello_MAY_2027_Order_.xlsx" does.
+  if (!directives.vendor.trim() && !supplierBrand && items.length > 0 && items.every((entry) => !entry.item.brand.trim())) {
+    const fromName = brandIn(batch.files.map((f) => f.filename.replace(/\.[a-z0-9]+$/i, "").replace(/[_.\-]+/g, " ")).join(" "), knownVendors);
+    if (fromName) {
+      for (const entry of items) entry.item = { ...entry.item, brand: fromName };
+      for (const fileId of [...new Set(items.map((i) => i.fileId))]) await noteOnFile(fileId, `No column on this sheet says the brand, so it was taken from the file's name: ${fromName}. Say "the brand is …" in the chat if that is wrong.`);
+    }
+  }
+
   /**
    * "Only the December delivery": each line's quantity becomes what is due in that window, and a
    * line with nothing due then is not built. A sheet that never says when its lines are due cannot

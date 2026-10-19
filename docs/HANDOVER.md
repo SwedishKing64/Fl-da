@@ -105,6 +105,15 @@ gender is kept on the line and goes into the tags; where men's and women's of on
 name, the handle carries it ("womens-talon-22-2027") so Shopify keeps them as two products.
 Kids', Youth and Junior are an age, not a gender, and stay.
 
+**Boot order forms (Dalbello, asked 2026-10-19).** Dalbello's form has item codes but its Mondo
+sizes ("225" … "325") sit across the heading row before "Total Qty", and only the first section's
+heading says RRP. The code reader now takes a run of sizes wherever it sits, carries the RRP column
+down to sections that leave it unheaded, and on a form that says it is ski boots writes the sizes
+as the shop does (245 → 24.5) and files the lines as Ski Boots. The Sizes column ("MS 245-305")
+gives the gender: MS men's, LS women's, JR kids, UNI unisex. Cost is the Indent figure, as on
+Sportrade's other forms. A file whose lines name no brand takes it from the filename
+("Dalbello_MAY_2027_Order_.xlsx"), and a boot's 24.5 goes to Size, never a ski's Length.
+
 **Size-grid order forms with no item codes (asked 2026-10-19).** A distributor's order workbook —
 the shop's Black Crows / ATK / Roxa / Mountain Flow / Out Of form — prices every model on a row and
 leaves a box per size. It is read by `grid-form.ts`, by what is in it: heading rows are the rows of

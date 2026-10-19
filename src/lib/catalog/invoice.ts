@@ -185,7 +185,7 @@ function looksLikeItemCode(value: string): boolean {
   return value.length >= 3 && value.length <= 40 && (value.match(/\s/g) ?? []).length <= 1 && /^[A-Za-z0-9]/.test(value);
 }
 
-interface Section { at: number; end: number; sku: number; title: number; barcode: number; gender: number; rrp: number; cost: number; colour: number; qty: number; qtys: number[]; qtyTotal: number; size: number; sizes: Array<[number, string]> }
+interface Section { at: number; end: number; sku: number; title: number; barcode: number; gender: number; rrp: number; cost: number; colour: number; qty: number; qtys: number[]; qtyTotal: number; size: number; sizes: Array<[number, string]>; range: number }
 
 /** A barcode's heading: "UPC", "EAN", "Barcode", "GTIN". Never the product's name. */
 const BARCODE_HEADING = /^(upc|ean|barcode|bar code|gtin|ean13|upc code|ean code)( no)?$/;
@@ -201,9 +201,15 @@ function sectionsOf(grid: string[][]): Section[] {
     const qty = find(/^(total )?qty$|^quantity$/);
     // The lengths and sizes: numeric headings, and only past the quantity column so that a price
     // or an item number in the heading row cannot be mistaken for one.
-    const sizes = headings
+    let sizes = headings
       .map((c, i) => [i, c] as [number, string])
       .filter(([i, c]) => qty >= 0 && i > qty && /^\d{2,3}(\.\d)?$/.test(c.trim()));
+    // Dalbello's boot form has its Mondo sizes BEFORE the "Total Qty" column: a run of three or
+    // more sizes across the heading row, past the item code, is the size grid wherever it sits.
+    if (sizes.length === 0) {
+      const run = headings.map((c, i) => [i, c] as [number, string]).filter(([i, c]) => i > Math.max(0, headings.findIndex((h) => ITEM_HEADING.test(norm(h)))) && /^\d{2,3}(\.\d)?$/.test(c.trim()));
+      if (run.length >= 3) sizes = run;
+    }
     const sku = headings.findIndex((c) => ITEM_HEADING.test(norm(c)));
     // What the shop pays. Their Volkl form prices both W/S and INDENT, and the shop's own costs are
     // the INDENT figure to the cent — the M7 Mantra at 749.55, the Griffon at 208.64 — so INDENT
@@ -230,8 +236,33 @@ function sectionsOf(grid: string[][]): Section[] {
     const named = find(/^(description|product description|style description|item description|product name|style name|name|model)$/);
     const title = roles.name >= 0 ? roles.name : named >= 0 ? named : sku + 1;
     const colour = roles.colour >= 0 ? roles.colour : find(/^colou?r$/);
-    return { at, end, sku, title, barcode: roles.barcode >= 0 ? roles.barcode : find(BARCODE_HEADING), gender: roles.gender >= 0 ? roles.gender : find(/^gender$/), rrp, cost, colour, qty, qtys, qtyTotal, size: size >= 0 ? size : sizes.length === 0 ? roles.size : -1, sizes };
+    // The sizes a model comes in, "MS 245-305" — which say who it is for: MS men's, LS ladies', JR junior.
+    const range = sizes.length > 0 ? find(/^(sizes|size range)$/) : -1;
+    return { at, end, sku, title, barcode: roles.barcode >= 0 ? roles.barcode : find(BARCODE_HEADING), gender: roles.gender >= 0 ? roles.gender : find(/^gender$/), rrp, cost, colour, qty, qtys, qtyTotal, size: size >= 0 ? size : sizes.length === 0 ? roles.size : -1, sizes, range };
+  }).map((section, n, all) => {
+    // A section whose heading row leaves the RRP heading blank — every Dalbello section after the
+    // first — prices in the same column as the section above, where that column holds prices.
+    if (section.rrp >= 0) return section;
+    const above = all.slice(0, n).reverse().find((x) => x.rrp >= 0);
+    if (!above) return section;
+    const priced = grid.slice(section.at + 1, section.end).some((r) => (readNumber(text((r ?? [])[above.rrp])) ?? 0) > 0);
+    return priced ? { ...section, rrp: above.rrp } : section;
   });
+}
+
+/** "MS 245-305" is a men's boot, "LS 225-275" a ladies', "JR 195-265" a junior's; "UNI" is for anyone. */
+function genderOfRange(range: string): string {
+  const v = range.trim().toUpperCase();
+  return /^MS\b/.test(v) ? "Mens" : /^LS\b/.test(v) ? "Womens" : /^JR\b/.test(v) ? "Kids" : /^UNI\b/.test(v) ? "Unisex" : "";
+}
+
+/** A Mondo point in millimetres as the shop writes the size: 245 is 24.5, 260 is 26. */
+export function mondo(heading: string): string {
+  const v = heading.trim();
+  if (!/^\d{3}$/.test(v)) return v;
+  const n = Number(v);
+  if (n < 140 || n > 360) return v;
+  return n % 10 === 0 ? String(n / 10) : (n / 10).toFixed(1);
 }
 
 /** Read a sheet as an order form, or return null when nobody has written a quantity on it. */
@@ -245,6 +276,9 @@ function readOrder(name: string, grid: string[][]): InvoiceRead | null {
   // The tab says whose goods these are: "Volkl Ski", "Marker Inline 2025". The distributor's name
   // at the top of the form ("Sportrade Australia") is who sent them, not what they are.
   const tabBrand = brandIn(name);
+  // A boot form's sizes are Mondo points written in millimetres, "245", which the shop writes as
+  // the boot size, "24.5". Known by the form saying it is boots — its tab or its title rows.
+  const bootForm = /boot/i.test(name) || grid.slice(0, 20).some((r) => (r ?? []).some((c) => /\bski ?boots?\b/i.test(text(c))));
   for (const section of sections) {
     for (let r = section.at + 1; r < section.end; r++) {
       const row = grid[r] ?? [];
@@ -259,7 +293,7 @@ function readOrder(name: string, grid: string[][]): InvoiceRead | null {
       const form = kind === "flat" ? ("flat" as const) : kind === "system" ? ("package" as const) : undefined;
       const positive = (at: number) => (at >= 0 && (readNumber(text(row[at])) ?? 0) > 0 ? readNumber(text(row[at])) : null);
       const colour = section.colour >= 0 ? text(row[section.colour]) : "";
-      const gender = section.gender >= 0 ? text(row[section.gender]) : "";
+      const gender = section.gender >= 0 ? text(row[section.gender]) : section.range >= 0 ? genderOfRange(text(row[section.range])) : "";
       const base = {
         sku,
         barcode: section.barcode >= 0 ? text(row[section.barcode]) : "",
@@ -268,6 +302,8 @@ function readOrder(name: string, grid: string[][]): InvoiceRead | null {
         ...(form ? { form } : {}),
         ...(colour ? { colour } : {}),
         ...(tabBrand ? { brand: tabBrand } : {}),
+        // What a boot form's lines are: the form says so, its models' names do not ("DRS 75").
+        ...(bootForm ? { kind: "Ski Boots" } : {}),
         costPrice: positive(section.cost),
         rrp: positive(section.rrp),
       };
@@ -276,7 +312,7 @@ function readOrder(name: string, grid: string[][]): InvoiceRead | null {
       for (const [at, heading] of section.sizes) {
         const quantity = orderedQuantity(text(row[at]));
         if (quantity === null) continue;
-        lines.push({ ...base, quantity, size: heading.trim() });
+        lines.push({ ...base, quantity, size: bootForm ? mondo(heading) : heading.trim() });
         onThisRow++;
         sizeGrid = true;
       }

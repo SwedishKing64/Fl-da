@@ -70,7 +70,8 @@ export function orderToTable(order: { lines: InvoiceLine[]; sheet: string; warni
   const headers = ["Item No.", "SKU", "Barcode", "Brand", "Description", ...(kinds ? ["Category"] : []), "Gender", "Colour", "Length", "Size", "RRP", "Cost", "Qty"];
   const rows = order.lines.map((line) => {
     const size = (line.size ?? "").trim();
-    const length = /^\d{2,3}(\.\d)?$/.test(size) ? size : "";
+    // A ski or pole length is a whole number of centimetres, 60 and up; a boot's 24.5 is a size.
+    const length = /^\d{2,3}(\.\d)?$/.test(size) && Number(size) >= 60 && !(line.kind ?? "").match(/boot/i) ? size : "";
     return {
       "Item No.": line.sku,
       // The per-length SKU the spec sheets use — but a code that is already per size stands alone.

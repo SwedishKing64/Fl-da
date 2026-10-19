@@ -92,3 +92,36 @@ describe("a size box, and the model's name", () => {
     expect(cleanName("DORSA 22 olive green")).toEqual({ title: "DORSA 22", colour: "olive green", unisex: false });
   });
 });
+
+// A boot order form in the layout of the shop's Dalbello one (2026-10-19): an item code, the Mondo
+// sizes across the heading row BEFORE the total, the RRP heading only over the first section, and
+// the sizes a model comes in saying who it is for. The figures are made up.
+const BOOTS = [
+  ["", "2026/27 Ski Boots  ORDER FORM", "2026/27 Ski Boots  ORDER FORM"],
+  ["", "article no.", "WORLD CUP", "colour", "Sizes", "Liner", "RRP", "225", "235", "245", "255", "265", "Total Qty", "Indent", "W/S", "Ext W/S $"],
+  ["", "D0000001.00", "RACER WC", "GREEN/DEEP GREEN", "MP 225 - 265", "COMP", "1000", "", "", "", "", "", "", "425", "500", ""],
+  ["", "article no.", "ALL MOUNTAIN", "colour", "Sizes", "Liner", "", "225", "235", "245", "255", "265", "Total Qty", "Indent", "W/S", "Ext W/S $"],
+  ["x", "D0000002.10", "CRUISER 110 GW", "Black/Petrol", "MS 245-265", "IF", "800", "", "", "1", "2", "", "3", "340", "400", "1200"],
+  ["x", "D0000003.10", "CRUISER 85 W GW", "Black/Berry", "LS 225-265", "IF W", "700", "1", "", "", "", "", "1", "297.5", "350", "350"],
+  ["", "", "", "", "", "", "", "", "", "", "", "TOTAL", "4", "", "", ""],
+];
+
+describe("a boot order form", () => {
+  it("reads the Mondo sizes across the top as boot sizes, with each section's RRP and who it is for", async () => {
+    const read = readInvoiceGrids([{ name: "SkiBoots 26", grid: BOOTS }])!;
+    expect(read.lines.map((l) => [l.title, l.size, l.quantity, l.rrp, l.costPrice, l.gender, l.kind])).toEqual([
+      ["CRUISER 110 GW", "24.5", 1, 800, 340, "Mens", "Ski Boots"],
+      ["CRUISER 110 GW", "25.5", 2, 800, 340, "Mens", "Ski Boots"],
+      ["CRUISER 85 W GW", "22.5", 1, 700, 297.5, "Womens", "Ski Boots"],
+    ]);
+    // And into new products as a Size, not a ski's Length.
+    const { orderToTable } = await import("./extract/tabular");
+    const table = orderToTable(read);
+    expect(table.rows.map((r) => [r.Size, r.Length])).toEqual([["24.5", ""], ["25.5", ""], ["22.5", ""]]);
+  });
+
+  it("writes a Mondo point as the shop writes the size", async () => {
+    const { mondo } = await import("./invoice");
+    expect(["245", "260", "195", "120mm"].map(mondo)).toEqual(["24.5", "26", "19.5", "120mm"]);
+  });
+});

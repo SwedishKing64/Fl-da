@@ -567,7 +567,26 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
    * a file or is new to all of them — and a product is only built onto a file that the delivery
    * actually touched, so a Volkl order never appends skis to the goggles export.
    */
-  async function applyDeliveryNow() {
+  /**
+   * Whatever goes wrong while a delivery or a group of changes is applied is said, and the page is
+   * given back. An error part-way used to leave it marked busy for good: every button greyed out,
+   * nothing applied, so nothing to download either (2026-10-19).
+   */
+  async function guarded(what: string, run: () => void | Promise<void>) {
+    try {
+      await run();
+    } catch (err) {
+      console.error(err);
+      setError(`${what} stopped part-way with an error, and the page has been given back to you: ${err instanceof Error ? err.message : String(err)}. Check the changes listed before downloading.`);
+    } finally {
+      setBusy(null);
+      setProgress("");
+    }
+  }
+
+  const applyDeliveryNow = () => guarded("Applying the delivery", applyDelivery);
+
+  async function applyDelivery() {
     if (!order) return;
     // Asked by what is on the delivery, not by its name, and remembered across reloads: a file
     // saved again under another name, or dropped in after the page was reopened, is the same
@@ -805,7 +824,9 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
    * rather than quietly taking the rest down with it. What the group buys is one approval and one
    * undo, not a weaker check.
    */
-  function applyRows(ids: number[], title: string) {
+  const applyRows = (ids: number[], title: string) => guarded("Applying those changes", () => applyRowsNow(ids, title));
+
+  function applyRowsNow(ids: number[], title: string) {
     const wanted = rows.filter((r) => ids.includes(r.id) && r.state === "ready" && r.plan && r.blocked.length === 0
       && (!isWholeFile((r.plan as Plan).scope) || confirmedWhole.includes(r.id)));
     if (wanted.length === 0) {

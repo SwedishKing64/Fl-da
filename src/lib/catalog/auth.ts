@@ -91,3 +91,43 @@ export async function requireApiUser(role?: Role): Promise<CurrentUser | null> {
 export async function usersExist(): Promise<boolean> {
   return (await prisma.user.count()) > 0;
 }
+
+/**
+ * A way back in that does not depend on what the database holds (asked 2026-10-19).
+ *
+ * The shop could not sign in with its two long-standing accounts, and with nobody signed in there
+ * is no Settings page to put an account back from. So two values set in the Vercel project — never
+ * in the code, never in a chat — let the named emails sign in with the password they give:
+ *
+ *   FLODA_RECOVERY_EMAILS     owner@example.com, manager@example.com
+ *   FLODA_RECOVERY_PASSWORD   (a password of at least 12 characters)
+ * (RUBIN_RECOVERY_EMAILS and RUBIN_RECOVERY_PASSWORD, the ski shop's names for them, also work.)
+ *
+ * Signing in that way makes sure the account exists, as an admin, with that password, in the
+ * database the site is using. Remove the two values once the accounts work again.
+ */
+const recoveryPassword = (): string => process.env.FLODA_RECOVERY_PASSWORD ?? process.env.RUBIN_RECOVERY_PASSWORD ?? "";
+
+export function recoveryEnabled(): boolean {
+  return recoveryEmails().length > 0 && recoveryPassword().length >= 12;
+}
+
+function recoveryEmails(): string[] {
+  return (process.env.FLODA_RECOVERY_EMAILS ?? process.env.RUBIN_RECOVERY_EMAILS ?? "").split(/[,;\s]+/).map((e) => e.trim().toLowerCase()).filter((e) => e.includes("@"));
+}
+
+/** The account for a recovery sign-in, made or brought up to date; null when this is not one. */
+export async function recoveryUser(email: string, password: string): Promise<{ id: string } | null> {
+  if (!recoveryEnabled() || !recoveryEmails().includes(email.trim().toLowerCase())) return null;
+  const expected = Buffer.from(recoveryPassword());
+  const given = Buffer.from(password);
+  if (given.length !== expected.length || !timingSafeEqual(given, expected)) return null;
+  const address = email.trim().toLowerCase();
+  const name = address.split("@")[0].replace(/^./, (c) => c.toUpperCase());
+  return prisma.user.upsert({
+    where: { email: address },
+    create: { email: address, name, role: "ADMIN", passwordHash: hashPassword(password) },
+    update: { role: "ADMIN", passwordHash: hashPassword(password) },
+    select: { id: true },
+  });
+}

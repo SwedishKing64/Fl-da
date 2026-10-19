@@ -171,19 +171,23 @@ function isUnreachable(error: unknown): boolean {
  */
 async function reachableStore(insteadOf: string): Promise<{ url: string; key: string } | null> {
   const others = candidateDatabaseUrls().filter((c) => c.key !== insteadOf);
-  let best: { url: string; key: string; batches: number } | null = null;
+  let best: { url: string; key: string; batches: number; users: number } | null = null;
   for (const candidate of others) {
     const probe = new PrismaClient({ datasourceUrl: runtimeDatabaseUrl(candidate.url), log: ["error"] });
     try {
       await probe.$queryRaw`SELECT 1`;
       let batches = -1;
+      let users = 0;
       try {
         batches = await probe.importBatch.count();
+        users = await probe.user.count();
       } catch {
         // Reachable, but this app's tables are not there: a store nobody set up.
       }
-      console.warn(`[db] ${candidate.key} answers (${batches < 0 ? "no tables" : `${batches} batches`}); ${insteadOf} did not.`);
-      if (!best || batches > best.batches) best = { ...candidate, batches };
+      console.warn(`[db] ${candidate.key} answers (${batches < 0 ? "no tables" : `${batches} batches, ${users} accounts`}); ${insteadOf} did not.`);
+      // Only a store that holds the shop's accounts is worth moving to. An empty one answered too —
+      // and moving there left nobody able to sign in (2026-10-19), for as long as the process lived.
+      if (users > 0 && (!best || users > best.users || (users === best.users && batches > best.batches))) best = { ...candidate, batches, users };
     } catch (error) {
       console.warn(`[db] ${candidate.key} does not answer either: ${scrub(error)}`);
     } finally {
@@ -195,7 +199,7 @@ async function reachableStore(insteadOf: string): Promise<{ url: string; key: st
 
 let fellBack = false;
 
-export async function databaseStatus(): Promise<DatabaseStatus> {
+export async function databaseStatus(retried = false): Promise<DatabaseStatus> {
   const resolved = resolveDatabaseUrl();
   if (!resolved) return { state: "missing" };
   if (!resolved.ephemeral && Date.now() < healthyUntil) return { state: "ok", source: healthySource };
@@ -215,7 +219,11 @@ export async function databaseStatus(): Promise<DatabaseStatus> {
     const detail = scrub(error);
     try {
       await prisma.$queryRaw`SELECT 1`;
-    } catch (reachError) {
+    } catch (firstError) {
+      // A Neon database asleep takes a few seconds to wake, and its first answer is a timeout.
+      // Asked again before anything else is tried, it is nearly always there.
+      const reachError = retried ? firstError : await new Promise((r) => setTimeout(r, 2500)).then(() => prisma.$queryRaw`SELECT 1`).then(() => null, (e: unknown) => e);
+      if (reachError === null) return databaseStatus(true);
       // Nothing answered on the configured string. Before saying so, ask the other stores the
       // project carries — once per process — and carry on with the one that holds the data.
       if (!resolved.ephemeral && !fellBack && !globalForPrisma.dbOverride && isUnreachable(reachError)) {

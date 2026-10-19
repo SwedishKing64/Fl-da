@@ -7,7 +7,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { PLAN_IDS, planOf, TRIAL_DAYS } from "@/lib/catalog/plans";
 import { prisma, parseJson, createTables, databaseStatus } from "@/lib/catalog/db";
-import { createSession, destroySession, hashPassword, requireUser, usersExist, verifyPassword } from "@/lib/catalog/auth";
+import { createSession, destroySession, hashPassword, recoveryUser, requireUser, usersExist, verifyPassword } from "@/lib/catalog/auth";
 import { allocateBatchFreight, applyMappings, autoApplyMappings, applyRulesToBatch, attachUnassignedPhotos, extractStoredFile, loadReview, repriceBatch, repriceVariant, verifyBatchImages, exportBatch, exportFileText, type ApplyMappingInput, type ReviewData } from "@/lib/catalog/pipeline";
 import { logAudit } from "@/lib/catalog/audit";
 import { getSettings, saveSettings } from "@/lib/catalog/settings";
@@ -96,8 +96,15 @@ export async function loginAction(_prev: ActionResult | null, formData: FormData
   return safely(async () => {
     const email = String(formData.get("email") ?? "").trim().toLowerCase();
     const password = String(formData.get("password") ?? "");
-    const user = await prisma.user.findUnique({ where: { email } });
-    if (!user || !verifyPassword(password, user.passwordHash)) return { ok: false, error: "Email or password is incorrect." };
+    const found = await prisma.user.findUnique({ where: { email } });
+    const user = found && verifyPassword(password, found.passwordHash) ? found : await recoveryUser(email, password);
+    if (!user) {
+      // Which database the site is reading, so an account that "should be there" can be looked for
+      // in the right place. See databaseStatus.
+      const status = await databaseStatus();
+      const where = status.state === "ok" ? "" : ` The site is reading ${status.source ?? "no database"} (${status.state}).`;
+      return { ok: false, error: found ? `Email or password is incorrect.${where}` : `There is no account for ${email} in the database this site is using.${where}` };
+    }
     await createSession(user.id);
     redirect("/");
   });

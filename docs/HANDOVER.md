@@ -33,6 +33,18 @@ and buttons. The owner asked for "extremely easy UI" and buttons "mimicking Meta
 
 ## How the shop works (rules it told us)
 
+**Signing in when the accounts will not (2026-10-19).** The shop could not sign in with
+reception@ and contact@alpsport.com.au. Two changes:
+- The database fallback (db.ts `reachableStore`) only moves to another attached store when it
+  holds the shop's accounts, and asks the configured database twice first (a sleeping Neon
+  database times out on its first answer). It used to move to any store that answered, an empty
+  one included, and stay there.
+- A recovery sign-in, set in Vercel and nowhere else: `RUBIN_RECOVERY_EMAILS` (comma-separated)
+  and `RUBIN_RECOVERY_PASSWORD` (12+ characters). Signing in as a listed email with that password
+  makes sure the account exists as an admin with that password. Remove both once in.
+A failed sign-in now says when the email has no account, and which database the site is reading
+when it is not the configured one.
+
 **One year tag per product (asked 2026-10-19).** A product carries exactly one of its season
 (2026, 2027…) or the 2999/2998 markers. A year given in the batch chatbox — as the season or as a
 tag — replaces the file's year rather than sitting beside it, and the title and handle carry it

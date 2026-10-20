@@ -13,6 +13,7 @@ import { buildDelivery } from "./delivery";
 import { parseCsv } from "./csv";
 import { alignRows } from "./diff";
 import type { InvoiceLine } from "./reconcile";
+import { SHOP_BINDINGS } from "./binding-list";
 
 const line = (over: Partial<InvoiceLine> = {}): InvoiceLine =>
   ({ sku: "", barcode: "", title: "", costPrice: null, rrp: null, quantity: null, ...over });
@@ -28,7 +29,14 @@ describe("a delivery of carry-overs and new products", () => {
     line({ barcode: "821264800133", title: "BLAZE 94", size: "170", quantity: 3, rrp: 1499.99 }),
     line({ sku: "V2610112.000", barcode: "4064264900011", title: "M7 MANTRA", size: "170", quantity: 2, rrp: 1649 }),
     line({ sku: "V2610112.000", barcode: "4064264900028", title: "M7 MANTRA", size: "177", quantity: 1, rrp: 1649 }),
-  ], { season: "2027", vendor: "Volkl" });
+  ], { season: "2027", vendor: "Volkl", bindingList: SHOP_BINDINGS, packagePicks: { 1: ["Marker Griffon"] } });
+
+  it("builds no package for a ski nobody picked a binding for", () => {
+    const out = buildDelivery(EXPORT, [
+      line({ sku: "V2610112.000", barcode: "4064264900011", title: "M7 MANTRA", size: "170", quantity: 2, rrp: 1649 }),
+    ], { season: "2027", vendor: "Volkl", bindingList: SHOP_BINDINGS });
+    expect(out.fresh.map((f) => f.title)).toEqual(["M7 Mantra 2027"]);
+  });
 
   it("adds the arriving stock to the carry-over rather than replacing it", () => {
     const out = delivery();
@@ -41,7 +49,7 @@ describe("a delivery of carry-overs and new products", () => {
 
   it("puts the products the shop does not have on the end of the same file", () => {
     const out = delivery();
-    // The ski, and its package with the Marker Griffon: every flat ski is built both ways.
+    // The ski, and its package with the Marker Griffon picked for it.
     expect(out.fresh.map((f) => f.title)).toEqual(["M7 Mantra 2027", "M7 Mantra 2027 inc Marker Griffon Binding Package"]);
     expect(out.fresh[0].title).toBe("M7 Mantra 2027");
     expect(out.fresh[0].handle).toBe("m7-mantra-2027");
@@ -51,7 +59,7 @@ describe("a delivery of carry-overs and new products", () => {
     expect(out.fresh[0].variants.map((v) => v.barcode)).toEqual(["4064264900011", "4064264900028"]);
     // Two rows for the ski, and two lengths × Do Not Mount / Please Mount for the package.
     expect(out.appended).toBe(6);
-    expect(out.fresh[1].variants.map((v) => v.price)).toEqual(["2099.00", "2158.00", "2099.00", "2158.00"]);
+    expect(out.fresh[1].variants.map((v) => v.price)).toEqual(["2108.99", "2167.99", "2108.99", "2167.99"]);
   });
 
   it("leaves every row that was already there exactly as it was, bar the cells it names", () => {
@@ -94,7 +102,7 @@ describe("a delivery of carry-overs and new products", () => {
       line({ barcode: "821264800133", title: "BLAZE 94", size: "170", quantity: 3, rrp: 1499.99 }),
       line({ sku: "V2610112.000", barcode: "4064264900011", title: "M7 MANTRA", size: "170", quantity: 2, rrp: 1649 }),
       line({ sku: "V2610112.000", barcode: "4064264900028", title: "M7 MANTRA", size: "177", quantity: 1, rrp: 1649 }),
-    ], { season: "2027", vendor: "Volkl", pages });
+    ], { season: "2027", vendor: "Volkl", pages, bindingList: SHOP_BINDINGS, packagePicks: { 1: ["Marker Griffon"] } });
     const rows = parseCsv(out.csv).filter((r) => r.some((c) => c.trim()));
     const header = rows[0];
     const col = (name: string) => header.indexOf(name);

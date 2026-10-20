@@ -7,7 +7,8 @@ import { Alert, Button, Card } from "@/app/(catalog)/ui";
 
 /**
  * Which bindings each ski's package offers (asked 2026-10-20), ticked from the shop's binding list
- * (Settings). A package is made at the build, so saving builds the batch again with the picks.
+ * (Settings). Nothing is picked for a ski by itself. A package is made at the build, so saving builds
+ * the batch again with the picks.
  */
 export interface PackageSki { key: string; title: string; current: string[] }
 
@@ -48,13 +49,13 @@ export function PackagesPanel({ batchId, skis, bindings, locked }: { batchId: st
     >
       {bindings.length === 0
         ? <Alert tone="info">Load the binding list in Settings first; each ski can then be packaged with any binding on it.</Alert>
-        : <p className="mb-3 text-xs text-[var(--ink-soft)]">Tick the bindings each ski&rsquo;s package offers — one or several. A ski with none ticked gets no package. Untouched skis keep the usual binding (men&rsquo;s Griffon, women&rsquo;s Squire).</p>}
+        : <p className="mb-3 text-xs text-[var(--ink-soft)]">Pick which bindings each ski&rsquo;s package offers — one or several — from your binding list, then save. Nothing is picked for you: a ski with no binding ticked has no package.</p>}
       {said && <Alert tone={said.ok ? "success" : "danger"} className="mb-3">{said.text}</Alert>}
       {open && bindings.length > 0 && (
         <ul className="max-h-[28rem] space-y-3 overflow-auto pr-1">
           {skis.map((s) => (
             <li key={s.key}>
-              <div className="text-sm font-medium">{s.title}{touched.includes(s.key) && <span className="ml-2 text-xs font-normal text-amber-800">changed — not saved yet</span>}</div>
+              <div className="text-sm font-medium">{s.title}{(picks[s.key] ?? []).length === 0 && <span className="ml-2 text-xs font-normal text-[var(--ink-soft)]">no package yet</span>}{touched.includes(s.key) && <span className="ml-2 text-xs font-normal text-amber-800">changed — not saved yet</span>}</div>
               <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
                 {bindings.map((b) => (
                   <label key={b} className="flex items-center gap-1.5 text-sm">

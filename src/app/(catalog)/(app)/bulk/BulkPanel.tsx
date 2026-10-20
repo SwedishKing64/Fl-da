@@ -159,7 +159,7 @@ const countMatched = (results: Array<{ result: AdjustResult }>) => results.reduc
 
 export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnabled: boolean; builtBy?: string; bindings?: Array<{ name: string; rrp: number; cost: number | null }> }) {
   // The bindings picked for each new ski's package, by the ski's first line (asked 2026-10-20).
-  // A ski nobody has ticked for takes the usual binding. See binding-list.ts.
+  // A ski nobody has ticked a binding for has no package: nothing is picked for it. See binding-list.ts.
   const [packagePicks, setPackagePicks] = useState<Record<number, string[]>>({});
   const csvRef = useRef<HTMLInputElement>(null);
   const sheetRef = useRef<HTMLInputElement>(null);
@@ -1742,8 +1742,8 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
                 <fieldset className="rounded-xl border border-[var(--line-soft)] px-3 py-2.5">
                   <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-[var(--ink-soft)]">Bindings for each ski&rsquo;s package</legend>
                   {bindings.length === 0
-                    ? <p className="py-1 text-xs text-[var(--ink-soft)]">Load the binding list in Settings to pick each ski&rsquo;s bindings. Until then a men&rsquo;s ski is packaged with the Griffon and a women&rsquo;s with the Squire.</p>
-                    : <p className="py-1 text-xs text-[var(--ink-soft)]">Tick the bindings each package offers, one or several. A ski with nothing ticked takes the usual binding (men&rsquo;s Griffon, women&rsquo;s Squire); untick all of them by choosing &ldquo;No package&rdquo;.</p>}
+                    ? <p className="py-1 text-xs text-[var(--ink-soft)]">Load the binding list in Settings to pick each ski&rsquo;s bindings. No ski is packaged until a binding is picked for it.</p>
+                    : <p className="py-1 text-xs text-[var(--ink-soft)]">Pick which bindings each ski&rsquo;s package offers, one or several, from your binding list. Nothing is picked for you: a ski with no binding ticked is built on its own, with no package.</p>}
                   {bindings.length > 0 && (
                     <ul className="mt-1 space-y-2">
                       {newProducts.filter((p) => /^skis?$/i.test(p.type.trim())).map((p) => {
@@ -1760,10 +1760,7 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
                                   {b.name}
                                 </label>
                               ))}
-                              <label className="flex items-center gap-1.5 text-sm text-[var(--ink-soft)]">
-                                <input type="checkbox" disabled={busy !== null} checked={picked !== undefined && picked.length === 0} onChange={(e) => set(e.target.checked ? [] : undefined)} />
-                                No package
-                              </label>
+                              {(picked ?? []).length === 0 && <span className="text-xs text-[var(--ink-soft)]">no package yet</span>}
                             </div>
                           </li>
                         );

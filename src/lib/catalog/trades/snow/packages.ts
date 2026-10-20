@@ -295,11 +295,13 @@ export function packageProducts(
   chosen: ChosenBindings = {},
   /**
    * The bindings somebody picked for this ski from the shop's binding list (asked 2026-10-20): one
-   * Binding Option each. An empty pick is "no package"; undefined leaves the ski to the defaults.
+   * Binding Option each. An empty pick or none at all is no package.
    */
   picked?: (ski: GroupedProduct) => BindingChoice[] | undefined,
   /** The shop's own binding list: where a default binding is on it, its price and cost come from it. */
   shopList: Array<{ name: string; rrp: number; cost: number | null }> = [],
+  /** Package an unpicked ski with the usual binding. Off: the shop picks every ski's bindings. */
+  useDefaults = false,
 ): { packages: GroupedProduct[]; skipped: PackageSkip[] } {
   const packages: GroupedProduct[] = [];
   const skipped: PackageSkip[] = [];
@@ -313,6 +315,11 @@ export function packageProducts(
     const gender = g.tags.find((t) => /^(mens|womens|kids)$/.test(t)) ?? "";
     // A kids' ski takes the binding the shop packaged the model with last time, if it ever did.
     const who = gender === "womens" ? "womens" : gender === "kids" || !bindingSpecFor(gender, flatTitle) ? "kids" : "mens";
+    // No binding is chosen for a ski on its own (asked 2026-10-20): a ski is packaged only with the
+    // bindings somebody picked for it, or that an instruction named. Unpicked, it has no package
+    // until one is picked under it. The old defaults (men's Griffon, women's Squire) are kept only
+    // where a caller asks for them.
+    if (!chosen[who] && !useDefaults) continue;
     const spec = chosen[who] ?? bindingSpecFor(gender, flatTitle) ?? specFromLabel(rememberedBinding({ title: g.title, brand: g.brand }, listings));
     if (!spec) { skipped.push({ title: flatTitle, reason: "a kids' ski takes a junior binding, and neither the order nor the shop's earlier packages of it say which" }); continue; }
     const listed = shopList.find((e) => new RegExp(`^${spec.shortName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i").test(e.name.trim()));

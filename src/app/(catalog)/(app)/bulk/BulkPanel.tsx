@@ -690,7 +690,8 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
             const colourNote = r.data.pictureNote ? ` ${r.data.pictureNote}` : "";
             const noneOfColour = Boolean(r.data.pictureNote) && r.data.images.length === 0;
             const text = `${got.length ? `Took ${got.join(", ")} from the page.` : "The page had nothing to take."}${colourNote}${unsure}${r.data.via === "basic" ? ` ${r.data.note}` : ""}`;
-            notes[key] = { tone: r.data.confident && !noneOfColour ? "ok" : "warn", text };
+            const noPictures = r.data.images.length === 0 ? " No pictures came off the page — add them in Shopify, or try the brand's other site for this product." : "";
+            notes[key] = { tone: r.data.confident && !noneOfColour && !noPictures ? "ok" : "warn", text: text + (noneOfColour ? "" : noPictures) };
             linkFeed.push(`${nameOf(key)}: ${text}`);
           } else {
             const text = `${r.ok ? "The page could not be read." : r.error} Built without it.`;
@@ -1138,6 +1139,29 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
   const newProducts: FreshProduct[] = buildNew && toBuild > 0
     ? previewed.flatMap((r) => r.fresh).filter((p) => { const k = p.lines[0]; if (k === undefined || seenLines.has(k)) return false; seenLines.add(k); return true; })
     : [];
+  /**
+   * A line the delivery will build that no new product above covers — the preview could not be
+   * worked out for it, or put it under a name it has not settled. It is still asked for its page
+   * (asked 2026-10-20: a Prices and stock upload built a new product without asking for one), keyed
+   * by its place on the order like any other link, one per colour.
+   */
+  const coveredLines = new Set(newProducts.flatMap((p) => p.lines));
+  const unaskedNew = (() => {
+    if (!buildNew || toBuild === 0 || against.length === 0 || !order) return [] as Array<{ key: number; title: string; colour: string }>;
+    const out: Array<{ key: number; title: string; colour: string }> = [];
+    const seen = new Set<string>();
+    for (const line of against[0].reconciliation.unmatched) {
+      if (!against.every((a) => a.reconciliation.unmatched.includes(line))) continue;
+      const key = invoiceLines.indexOf(line);
+      if (key < 0 || coveredLines.has(key)) continue;
+      const colour = (line.colour ?? "").trim();
+      const id = `${line.title.trim().toLowerCase()}|${colour.toLowerCase()}`;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      out.push({ key, title: line.title.trim() || line.sku, colour });
+    }
+    return out;
+  })();
   /** The new product and colour a colour's own link belongs to. See colourKey. */
   const colourOfKey = (key: number): { product: FreshProduct; colour: string } | null => {
     if (key >= 0) return null;
@@ -1691,19 +1715,21 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
                 <span>Put every product this delivery touches into <strong>draft</strong>.<span className="block text-xs text-[var(--ink-soft)]">The carry-overs as well as the new products, so each is looked over before it is live for the new season. Any &ldquo;snow sale&rdquo; tag comes off them either way.</span></span>
               </label>
 
-              {((buildNew && newProducts.length > 0) || newColourways.length > 0) && (
+              {((buildNew && (newProducts.length > 0 || unaskedNew.length > 0)) || newColourways.length > 0) && (
                 <BulkLinks
                   products={[
                     ...(buildNew ? newProducts.flatMap((p) => {
                       const from = !(links[p.lines[0]] ?? "").trim() ? newProducts.find((q) => q !== p && (links[q.lines[0]] ?? "").trim() && fitlessOf(q.title) === fitlessOf(p.title)) : undefined;
                       const colours = p.colours ?? [];
                       return [
-                        { key: p.lines[0], title: p.title, ...(from ? { note: `takes the page under ${from.title}` } : colours.length > 1 ? { note: "one page for every colour — or give a colour its own page below" } : {}) },
-                        // A page for each colour, where the brand's site has one (asked 2026-10-19).
-                        ...(colours.length > 1 ? colours.map((c) => ({ key: colourKey(c.line), title: `${p.title} — ${c.colour}`, note: "this colour's own page, for its pictures (optional)", indent: true })) : []),
+                        { key: p.lines[0], title: p.title, ...(from ? { note: `takes the page under ${from.title}` } : colours.length > 1 ? { note: `${colours.length} colours — paste a separate page for each colour below, so each gets its own pictures. This box is for the description, if no colour's page has one.` } : colours.length === 1 ? { note: `the ${colours[0].colour} page` } : {}) },
+                        // A separate page for each colour, so its own pictures go with it (asked 2026-10-19, again 2026-10-20).
+                        ...(colours.length > 1 ? colours.map((c) => ({ key: colourKey(c.line), title: `${p.title} — ${c.colour}`, note: `paste the ${c.colour} page here, with ${c.colour} selected`, indent: true, colour: c.colour })) : []),
                       ];
                     }) : []),
-                    ...newColourways.map((c) => ({ key: c.key, title: `${c.title} — ${c.colour}`, note: "a new colour on a listing you have; its pictures come from this page" })),
+                    // New on the order, not yet shown above: asked for its page all the same.
+                    ...(buildNew ? unaskedNew.map((u) => ({ key: u.key, title: u.colour ? `${u.title} — ${u.colour}` : u.title, note: u.colour ? `new on this invoice — paste the ${u.colour} page` : "new on this invoice", ...(u.colour ? { colour: u.colour } : {}) })) : []),
+                    ...newColourways.map((c) => ({ key: c.key, title: `${c.title} — ${c.colour}`, note: `a new colour on a listing you have — paste the ${c.colour} page, so its pictures come from it`, colour: c.colour })),
                   ]}
                   links={links}
                   onChange={(key, url) => setLinks((l) => { const { [key]: _gone, ...rest } = l; void _gone; return url ? { ...rest, [key]: url } : rest; })}

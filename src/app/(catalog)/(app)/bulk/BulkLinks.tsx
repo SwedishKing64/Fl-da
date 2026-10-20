@@ -11,7 +11,7 @@ import { Alert } from "@/app/(catalog)/ui";
  * the products with what they say. A product with nothing pasted is built exactly as it would have
  * been — it is optional on every one.
  */
-export interface LinkProduct { key: number; title: string; /** Why this one is asked, when it is not a new product. */ note?: string; /** A colour under its product. */ indent?: boolean }
+export interface LinkProduct { key: number; title: string; /** Why this one is asked, when it is not a new product. */ note?: string; /** A colour under its product. */ indent?: boolean; /** The colour this box is for. */ colour?: string }
 
 export function BulkLinks({ products, links, onChange, notes, disabled }: {
   products: LinkProduct[];
@@ -40,9 +40,9 @@ export function BulkLinks({ products, links, onChange, notes, disabled }: {
   if (products.length === 0) return null;
   return (
     <fieldset className="rounded-xl border border-[var(--line-soft)] px-3 py-2.5">
-      <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-[var(--ink-soft)]">Product pages · {given} of {groups.length} have a link</legend>
+      <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-[var(--ink-soft)]">Links for the new products — one per colour · {given} of {groups.length} have a link</legend>
       <p className="mb-3 text-xs text-[var(--ink-soft)]">
-        Paste a product&rsquo;s own page under its name and its description, details and pictures are taken from it when you apply the delivery. A new colour of a listing you already have takes its pictures the same way. A product with no link is built as it is. <strong>Open the page with the colour you ordered selected before copying the link</strong>: the pictures are taken of that colour, and the read is told the colour on the order so it leaves the other colours&rsquo; pictures alone.
+        Paste each new product&rsquo;s own page under its name: its description, details and pictures are taken from it when you apply the delivery. <strong>Where a product comes in more than one colour, paste a separate page for each colour</strong> &mdash; open the brand&rsquo;s page with that colour selected, copy that link, and put it in that colour&rsquo;s box &mdash; so each colour gets its own pictures. A new colour of a listing you already have is asked for its page the same way. A product with no link is built as it is.
       </p>
       <ul className="max-h-[26rem] space-y-3 overflow-auto pr-1">
         {products.map((p) => {
@@ -56,7 +56,7 @@ export function BulkLinks({ products, links, onChange, notes, disabled }: {
                 inputMode="url"
                 value={drafts[p.key] ?? links[p.key] ?? ""}
                 disabled={disabled}
-                placeholder="Link to this product's page, with the ordered colour selected (optional)"
+                placeholder={p.colour ? `Link to the ${p.colour} page — opened with ${p.colour} selected` : "Link to this product's page"}
                 onChange={(e) => setDrafts((d) => ({ ...d, [p.key]: e.target.value }))}
                 onBlur={() => commit(p.key)}
                 onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}

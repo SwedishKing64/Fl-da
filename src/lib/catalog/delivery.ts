@@ -750,7 +750,7 @@ function appendFresh(
     // Titled as the page titles it, as on the review page (asked 2026-10-16, again 2026-10-20): the
     // year goes after it when the product is written out. Not a package or a fit sharing the page.
     const own = !/\binc\b/i.test(g.title) && fitlessOf(g.title) === g.title.replace(/\s+/g, " ").trim().toLowerCase();
-    const named = describe.confident && own ? pageProductTitle(describe.pageTitle, g.brand || vendor, null) : "";
+    const named = describe.confident && own ? pageProductTitle(describe.pageTitle, g.brand || vendor, null, g.variants.map((v) => v.item.colour)) : "";
     if (named) g.title = genderedTitle(named, { productType: g.productType, tags: g.tags, gender: g.audience ?? "" });
     const body = houseBody(describe.description, describe.features, houseConventions().descriptions.specsHeading);
     if (body) g.description = body;

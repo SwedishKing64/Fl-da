@@ -104,11 +104,38 @@ socks, streetwear — is built as a men's and a women's product, each titled wit
 title. A unisex garment still carries none, and Kids' is unchanged (`gender-title.ts`, used by the
 grouping and by a page read).
 
-**A page for each colour (asked 2026-10-19).** On the review page and on Prices and stock, a new
-product in more than one colour can be given a page per colour as well as, or instead of, its own.
-Each colour's page gives that colour its pictures, and the first of them becomes the Variant Image
+**A page for each colour (asked 2026-10-19, again 2026-10-20).** On the review page and on Prices
+and stock, a new product in more than one colour is asked for a separate page per colour: each
+colour's box is shown from the start, saying "paste the Black page here, with Black selected". It
+can have its own page as well, for the description. Each colour's page gives that colour its pictures, and the first of them becomes the Variant Image
 of every size in that colour; the description comes from the product's own page, or the first
-colour's when it has none. Kept on the product as `colourLinks`, and through a rebuild.
+colour's when it has none. Kept on the product as `colourLinks`, and through a rebuild. On Prices
+and stock, every line the delivery will build is asked for its page, even one the preview could
+not yet group into a product (a Dakine upload that also had quantity updates built a new product
+without asking).
+
+**No colour in any title, ever (asked 2026-10-20).** Not even when the brand's own page writes one.
+The order's colour for the line comes out of its name before grouping, so every colour of a model
+is one product; a page's title loses the product's colours, and a colour after a dash, bar, comma
+or in brackets on the end ("Boot Backpack 50L - Black"). A colour word inside a model's name
+("Black Pearl 88") stays (`title-colour.ts`).
+
+**One size is no size (asked 2026-10-20).** A line any invoice sizes "OS", "O/S", "OSFA" or "One
+Size" is not made a Size variant, and the product has no Size option at all (`isOneSize` in
+`grouping.ts`).
+
+**Dakine bags are ski accessories (asked 2026-10-20).** Dakine is a snowsport brand: every Dakine
+bag or pack, and a boot or ski backpack by anyone ("Boot Backpack 50L" had gone out as a hiking
+pack), is Type Ski Accessories with the ski and boot bag tags (`ski-and-boot-bags`, `snow-bags`,
+`snowboard-bags`, `ski-and-snowboard-bags`, `ski-accessories`), never on the Outdoor menu
+(`isSnowBag` in `packs.ts`).
+
+**Pictures from a page, at full size (asked 2026-10-20).** A page read takes each picture without
+the page's cut-down size ("_600x", "?width=533", Cloudinary "w_400", "?sw=500") — `image-url.ts`.
+A site that refuses this server is read through the API, which is now told to list the product's
+pictures, and given the Shopify store's product data address to fetch them from. When none of a
+page's pictures is the colour ordered they are all kept rather than none, with a note to give that
+colour its own page.
 
 **No gender in any title (asked 2026-10-15).** "Men's", "Women's", "Ladies", "Unisex" never go in a
 product's title, whether the supplier's name carries them or the shop's older listings do
@@ -225,7 +252,7 @@ hyphenated (`packs-and-bags`, `ski-accessories`), a sub-link is spaced (`hiking 
 `snow jackets`), with the exceptions listed in `src/lib/catalog/tag-spelling.ts`. The Type column
 spells the menu's ampersand out ("Packs and Bags", "Climbing and Abseiling"). Packs are filed on
 the Outdoor menu by what they are: hiking packs from 40 litres, daypacks under, travel packs,
-hydration packs, duffels; a ski, board or boot bag is an accessory. When a learned convention
+hydration packs, duffels; a ski, board or boot bag is an accessory, and so is every Dakine bag. When a learned convention
 changes a product's Type, the shelf tags move with it. Price bands, sizes and colours are
 Shopify's own tags and are never written. Daypacks, hiking packs and travel packs also carry
 `backpacks` (the shop asked for it on 2026-10-13); duffels and the hydration shelf, which holds

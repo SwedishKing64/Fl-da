@@ -18,7 +18,8 @@ import { z } from "zod";
 
 import { retrying } from "../api-errors";
 import { cleanProductUrl, type PageDetails } from "../page-types";
-import { fetchShopifyProduct, storeAsHtml, storePictures } from "./shopify-store";
+import { fetchShopifyProduct, shopifyProductAddress, storeAsHtml, storePictures } from "./shopify-store";
+import { fullSizePicture } from "../image-url";
 
 const MAX_BYTES = 3 * 1024 * 1024;
 /**
@@ -237,7 +238,9 @@ export function distillPage(html: string, url: string): Distilled {
   const found: Candidate[] = [];
   const seen = new Set<string>();
   const add = (raw: string, alt = "") => {
-    const u = resolve(raw, url);
+    // At its full size, not the cut the page shows. See image-url.ts.
+    const at = resolve(raw, url);
+    const u = at ? fullSizePicture(at) : null;
     if (!u) return;
     const key = u.replace(/\?.*$/, "");
     if (seen.has(key)) return;
@@ -427,9 +430,15 @@ const FETCH_SYSTEM = () => `You read one product's web page for ${retailer()} wh
 
 Quote the manufacturer's wording; do not paraphrase it and do not write marketing copy of your own. The details section is often headed "Details", "Specs", "Technical specifications", "Features" or "Product information": report its lines exactly as written, keeping each label with its value. Say plainly if the page could not be fetched, if it is not for this product, or if it is a different model year.
 
-Then, under the heading "Pictures:", list the addresses of this product's own photographs that the fetched page shows — links ending .jpg, .jpeg, .png or .webp, in the colour ordered first where the page says which is which — one per line, exactly as written. Leave the heading out when the page shows none.`;
+Then the pictures, which matter as much as the words: end with a line "Pictures:" and under it every picture of this product the page carries — its gallery, in the page's order, each colour's too — one full https address per line, the largest version the page offers. Not logos, icons, banners, size charts or other products. If the page's own text gives no picture addresses and a product data address is given, fetch that as well: its "images" (or "media") list is the product's pictures, in order. Never make an address up.`;
 
 const FetchedSchema = ReadSchema.omit({ imageNumbers: true });
+
+/** A Shopify store's own data for the product, which lists every picture: "<store>/products/<handle>.json". */
+function dataAddress(link: string): string {
+  const at = shopifyProductAddress(link);
+  return at ? `${at.origin}${at.prefix}/products/${at.handle}.json` : "";
+}
 
 export async function readViaModelFetch(link: string, hint: PageHint, by: Deadline = deadline()): Promise<PageDetails | null> {
   if (!aiAvailable() || outOfTime(by)) return null;
@@ -439,8 +448,8 @@ export async function readViaModelFetch(link: string, hint: PageHint, by: Deadli
     system: FETCH_SYSTEM(),
     thinking: { type: "adaptive" },
     output_config: { effort: "low" },
-    tools: [{ type: "web_fetch_20260209", name: "web_fetch", max_uses: 2 }],
-    messages: [{ role: "user", content: `${describeHint(hint)}\n\nThe product's page: ${link}` }],
+    tools: [{ type: "web_fetch_20260209", name: "web_fetch", max_uses: 3 }],
+    messages: [{ role: "user", content: `${describeHint(hint)}\n\nThe product's page: ${link}${dataAddress(link) ? `\nThe product's data, if the page is a Shopify store's (its pictures are listed there): ${dataAddress(link)}` : ""}` }],
   }, within(by)).finalMessage(), []);
   const notes = research.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("\n").trim();
   if (!notes || outOfTime(by)) return null;
@@ -458,7 +467,10 @@ export async function readViaModelFetch(link: string, hint: PageHint, by: Deadli
   const r = parsed.data;
   // Whatever picture addresses the fetched page showed: usually none, since the fetch returns the
   // page's words, but a page that lists them in its text gives the pictures too.
-  const pictures = [...new Set((notes.split(/\bPictures:\s*/i)[1] ?? "").match(/https?:\/\/[^\s)"'<>]+\.(?:jpe?g|png|webp)(?:\?[^\s)"'<>]*)?/gi) ?? [])].slice(0, 10);
+  const listed = notes.split(/\bPictures:\s*/i).slice(1).join("\n");
+  const pictures = [...new Set((listed.match(/https?:\/\/[^\s)"'<>\]]+\.(?:jpe?g|png|webp)(?:\?[^\s)"'<>\]]*)?/gi) ?? [])
+    .map((u) => fullSizePicture(u.replace(/[.,;]+$/, "")))
+    .filter((u) => !NOT_A_PRODUCT_PICTURE.test(u)))].slice(0, 16);
   return {
     description: r.description.trim(),
     features: r.features.map((f) => f.replace(/\s+/g, " ").trim()).filter(Boolean).slice(0, 30),
@@ -469,7 +481,7 @@ export async function readViaModelFetch(link: string, hint: PageHint, by: Deadli
     via: "ai",
     note: pictures.length > 0
       ? "The site would not show its page to this server, so it was read through the API instead."
-      : "The site would not show its page to this server, so it was read through the API instead; that gives the description and details but not the pictures.",
+      : "The site would not show its page to this server, so it was read through the API instead; that gave the description and details, but the page showed no picture addresses — add the pictures in the grid, or try the brand's other site for this product.",
   };
 }
 

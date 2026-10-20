@@ -18,7 +18,7 @@
 import { prisma } from "./db";
 import { isPlaceholderBody } from "./body";
 import { shopBody } from "./description-style";
-import { cleanProductUrl, colourLinksOf, fitlessOf, flatHandleOf, sameColour, type ColourLink, type PageDetails } from "./page-types";
+import { cleanProductUrl, colourLinksOf, coloursOfProduct, fitlessOf, flatHandleOf, sameColour, type ColourLink, type PageDetails } from "./page-types";
 import { readProductPage, PageError } from "./extract/page";
 import { picturesForColour } from "./picture-colour";
 import { pageProductTitle } from "./page-title";
@@ -251,7 +251,7 @@ async function applyDetails(productId: string, d: PageDetails, opts: { source?: 
   const isNew = !["UPDATE", "VARIANT_ADD"].includes(p.reconcileStatus);
   const tagList = p.tags.split(",").map((t) => t.trim()).filter(Boolean);
   const season = titleYear(tagList, p.productType);
-  const fromPage = d.confident && isNew && ownPage(withoutGender(p.title).title) ? titledForShop(p.vendor, pageProductTitle(d.pageTitle, p.vendor, season)) : "";
+  const fromPage = d.confident && isNew && ownPage(withoutGender(p.title).title) ? titledForShop(p.vendor, pageProductTitle(d.pageTitle, p.vendor, season, coloursOfProduct(p))) : "";
   // Snow clothing keeps who it is for on the front of the page's name. See gender-title.ts.
   const named = fromPage ? genderedTitle(fromPage, { productType: p.productType, tags: tagList, gender: genderOf(tagList) }) : "";
   const retitle = named !== "" && named !== p.title;

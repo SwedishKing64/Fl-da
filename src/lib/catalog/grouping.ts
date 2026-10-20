@@ -12,10 +12,12 @@ import { classifyAccessory } from "./trades/snow/accessories";
 import { genderedTitle } from "./gender-title";
 import { packShelf } from "./packs";
 import { integratedBinding } from "./trades/snow/packages";
+import { isSnowBag } from "./packs";
+import { withoutColour } from "./title-colour";
 import { isSnowboardBrand } from "./brands";
 import { normaliseOptionName, optionNamesFor } from "./options";
 import { catalogTags } from "./product-tags";
-import { isSkin } from "./tagging";
+import { BAG_TAGS, isSkin } from "./tagging";
 import { asShopWritesIt, productTitle, seasonTagFrom, withoutVendor } from "./titles";
 import type { CanonicalLineItem } from "./types";
 import { disciplinesFromTerrain, rememberedDisciplines, rememberedType, type Listing } from "./shop-memory";
@@ -106,6 +108,11 @@ function commonPrefix(values: string[]): string {
   return prefix;
 }
 
+/** "OS", "O/S", "OSFA", "One Size", "One Size Fits All", "1SZ": a size that is no size. */
+export function isOneSize(size: string | undefined): boolean {
+  return /^(os|o\/s|osfa|osfm|one ?size(\s*fits\s*(all|most))?|1 ?sz|1 ?size|one|uni|unisize|no size|n\/s)$/i.test((size ?? "").trim().replace(/\.$/, ""));
+}
+
 export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRuleLike[], opts: { builtBy?: string; listings?: Listing[] } = {}): GroupedProduct[] {
   const groups = new Map<string, { rule: CategoryRuleLike | null; entries: Array<{ item: CanonicalLineItem; index: number }> }>();
 
@@ -114,7 +121,14 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
     const remembered = rememberedType({ title: raw.title, brand: raw.brand }, opts.listings ?? []);
     const rule = detectCategory(raw, rules)
       ?? (remembered ? rules.find((r) => r.active && (r.productType === remembered || r.category === remembered.toLowerCase())) ?? null : null);
-    return { rule, item: withFit(enrichFromTitle(raw, rule?.category ?? "other")) };
+    const item = withFit(enrichFromTitle(raw, rule?.category ?? "other"));
+    // One size is no size (asked 2026-10-20): a product an order calls OS or One Size is not made a
+    // Size variant, and has no Size option at all. See isOneSize.
+    if (isOneSize(item.size)) item.size = "";
+    // No colour in a title (asked 2026-10-20): the order's colour for the line comes out of its name,
+    // so every colour of a model is one product under one name. See title-colour.ts.
+    item.title = withoutColour(item.title, [item.colour]);
+    return { rule, item };
   });
   normaliseCodes(enriched.map((e) => e.item));
 
@@ -161,8 +175,11 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
     // A supplier's own kind word is a Type only when it is one the shop uses: "FREERIDE" is not.
     // A skin no rule knows, said so by the supplier's own section: Black Crows' "PILUS SKINS".
     const skin = snow && !group.rule && isSkin(`${title} ${first.category}`) ? "Skins" : null;
+    // The ski shop's bags: any Dakine bag or pack, and a boot or ski bag by anyone, is a Ski
+    // Accessory on the Ski & Boot Bags shelf, whatever rule its name tripped (asked 2026-10-20).
+    const snowBag = snow && isSnowBag(brand, title, first.category, first.productType) ? "Ski Accessories" : null;
     // And as the shop corrected it: a Type changed on this brand's product before is changed here too.
-    const filedAs = correctedProductType(snowboard ?? pack ?? accessory ?? skin ?? group.rule?.productType ?? resolveType(first.productType) ?? "", brand);
+    const filedAs = correctedProductType(snowBag ?? snowboard ?? pack ?? accessory ?? skin ?? group.rule?.productType ?? resolveType(first.productType) ?? "", brand);
     // Filed under one of the shop's own types where one is close, rather than asked about.
     const productType = filedAs && typesAreKnown() && !isValidType(filedAs) ? closestType(filedAs) ?? filedAs : filedAs;
     // Who it is for. A shop that writes "Men's …" and "Women's …" on the front of a name (house
@@ -227,7 +244,10 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
     const sizes = packKnowledge()?.sizes ?? [];
     if (sizes.length) variants.splice(0, variants.length, ...inSizeOrder(variants, (v) => [v.option1Value, v.option2Value, v.option3Value], sizes));
     const description = items.map((i) => i.description.trim()).find(Boolean) ?? "";
-    const collections = snowboard ? [snowboard] : pack ? ["Packs & Bags"] : collectionsFor(group.rule, items);
+    const collections = snowBag
+      // Only a bag or accessories collection: "boot" in the name can trip the boots rule's "Ski Boots".
+      ? collectionsFor(group.rule, items).filter((c) => /\bbags?\b|accessor/i.test(c))
+      : snowboard ? [snowboard] : pack ? ["Packs & Bags"] : collectionsFor(group.rule, items);
     // Tagged for the shelf and for the Type it goes out under: a goggle is "Goggles" to the rule
     // and "Ski Accessories" in the file, and the shop writes both (goggles, ski-accessories, ski).
     const general = catalogTags({ productType, filedAs: csvType(productType, collections), brand, items, ruleTags: tagsFor(group.rule, items, brand), describedAs: `${shown} ${description}`, ...(opts.builtBy ? { builtBy: opts.builtBy } : {}) });
@@ -236,6 +256,12 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
     const remembered = rememberedDisciplines({ title: shown, brand }, opts.listings ?? []);
     const styles = remembered.length > 0 ? remembered : disciplinesFromTerrain(productType, items.map((i) => i.terrain).join(" "));
     const tags = [...general, ...styles.filter((t) => !general.includes(t))];
+    if (snowBag) {
+      // Off the Outdoor menu entirely, onto the ski bag and boot bag shelves.
+      const outdoor = /\b(outdoor|hiking|daypacks?|travel|duffels?|hydration|packs)\b/i;
+      for (let i = tags.length - 1; i >= 0; i--) if (outdoor.test(tags[i].replace(/-/g, " "))) tags.splice(i, 1);
+      for (const t of [...BAG_TAGS, "ski-accessories", "ski"]) if (!tags.includes(t)) tags.push(t);
+    }
     // The shop tags a ski sold with a binding "ski packages".
     if (mounted && !tags.includes("ski packages")) tags.push("ski packages");
     // The kind on the end of the name, where the order's shorthand left it off: the shop writes

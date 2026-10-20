@@ -47,7 +47,9 @@ export function LinksPanel({ batchId, products, locked }: { batchId: string; pro
   const startColours = Object.fromEntries(own.flatMap((p) => (p.colourLinks ?? []).map((l) => [ck(p.id, l.colour), l.url])));
   const [colourUrls, setColourUrls] = useState<Record<string, string>>(startColours);
   const savedColours = useRef<Record<string, string>>({ ...startColours });
-  const [perColour, setPerColour] = useState<Record<string, boolean>>(() => Object.fromEntries(own.map((p) => [p.id, (p.colourLinks ?? []).some((l) => l.url)])));
+  // Each colour's own box is shown from the start: a product in several colours is asked for a
+  // separate page per colour (asked 2026-10-20), not offered one behind a link.
+  const [perColour, setPerColour] = useState<Record<string, boolean>>(() => Object.fromEntries(own.map((p) => [p.id, true])));
   const coloursOf = (p: Row) => (p.colours ?? []);
   const hasColourLink = (p: Row) => coloursOf(p).some((c) => (colourUrls[ck(p.id, c)] ?? "").trim() !== "");
 
@@ -221,7 +223,7 @@ export function LinksPanel({ batchId, products, locked }: { batchId: string; pro
       <p className="mb-3 text-xs text-[var(--ink-soft)]">
         {own.length === 0
           ? <>Every product here is one the shop already lists, so each keeps the page it has. Nothing to link.</>
-          : <>Paste each new product&rsquo;s own page under its name and its description, details and pictures are taken from it. A product with no link is left exactly as it is. Flöda looks at the page&rsquo;s pictures and keeps the ones in the colours you ordered, leaving the other colours&rsquo; out; where you ordered several colours, each colour&rsquo;s variants get its own picture. Opening the page with your colour selected before copying the link helps when a brand only shows one colour at a time.</>}
+          : <>Paste each new product&rsquo;s own page under its name and its description, details and pictures are taken from it. <strong>Where a product comes in more than one colour, paste a separate page for each colour</strong> in that colour&rsquo;s box &mdash; open the brand&rsquo;s page with that colour selected and copy that link &mdash; so each colour gets its own pictures. Flöda looks for each page itself when this opens, and each colour&rsquo;s too where the brand has one. A product with no link is left exactly as it is.</>}
         {read > 0 && <> {read} read so far.</>}
         {own.length > 0 && <> Or let Flöda find them: it tries each brand&rsquo;s usual address first, learned from the links pasted before, then searches, and keeps a page only when it is titled like the product.</>}
         {found && <> <strong>{found}</strong></>}
@@ -247,7 +249,7 @@ export function LinksPanel({ batchId, products, locked }: { batchId: string; pro
                   inputMode="url"
                   value={urls[p.id] ?? ""}
                   disabled={locked || reading === p.id}
-                  placeholder="Link to this product's page, with your colour selected (optional)"
+                  placeholder={coloursOf(p).length > 1 ? "This product's page, for the description (or leave it to the colours' pages below)" : coloursOf(p).length === 1 ? `Link to the ${coloursOf(p)[0]} page — opened with ${coloursOf(p)[0]} selected` : "Link to this product's page"}
                   onChange={(e) => setUrls((u) => ({ ...u, [p.id]: e.target.value }))}
                   onBlur={() => void save(p.id)}
                   onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
@@ -256,7 +258,7 @@ export function LinksPanel({ batchId, products, locked }: { batchId: string; pro
                 {coloursOf(p).length > 1 && (
                   <div className="mt-1">
                     <button type="button" className="text-xs font-medium text-[var(--violet)] underline-offset-2 hover:underline" onClick={() => setPerColour((c) => ({ ...c, [p.id]: !c[p.id] }))}>
-                      {perColour[p.id] ? "Hide the colours' own pages" : `A different page for each colour? (${coloursOf(p).length} colours)`}
+                      {perColour[p.id] ? `${coloursOf(p).length} colours — paste a separate page for each (hide)` : `Show the ${coloursOf(p).length} colours' boxes — a separate page for each colour`}
                     </button>
                     {perColour[p.id] && (
                       <ul className="mt-1 space-y-1.5 border-l-2 border-[var(--line-soft)] pl-3">
@@ -269,7 +271,7 @@ export function LinksPanel({ batchId, products, locked }: { batchId: string; pro
                               inputMode="url"
                               value={colourUrls[ck(p.id, c)] ?? ""}
                               disabled={locked || reading === p.id}
-                              placeholder={`This product's page in ${c} (optional)`}
+                              placeholder={`The ${c} page — opened with ${c} selected`}
                               onChange={(e) => setColourUrls((u) => ({ ...u, [ck(p.id, c)]: e.target.value }))}
                               onBlur={() => void saveColour(p.id, c)}
                               onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}

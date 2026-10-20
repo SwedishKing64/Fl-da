@@ -244,7 +244,10 @@ export function integratedBinding(skiTitle: string, season: string): { title: st
 
 /** Is this grouped product a flat ski — the thing a package is built from? */
 export function isFlatSki(g: { productType: string; title: string; tags: string[] }): boolean {
-  return /^skis?$/i.test(g.productType.trim()) && !/\binc\b|\bpackage\b|\bsystem\b/i.test(g.title) && !g.tags.includes("ski packages");
+  // Any of the shop's ski Types: "Skis", "Mens Skis", "Freeride & Powder Skis" — a model the shop
+  // listed before keeps the Type it was filed under. Not cross-country skis (asked 2026-10-20: a
+  // Bent 100 had no binding picker while the Bent 110 beside it had one).
+  return /\bskis?$/i.test(g.productType.trim()) && !/cross[- ]?country|\bnordic\b/i.test(g.productType) && !/\binc\b|\bpackage\b|\bsystem\b/i.test(g.title) && !g.tags.includes("ski packages");
 }
 
 /**

@@ -201,7 +201,10 @@ binding RRP and costed ski cost + binding wholesale; several bindings make "… 
 one names it. Nothing is ticked for a ski by itself (asked 2026-10-20: an order came in with a
 binding already chosen for every ski, which the shop does not want): a ski with no binding ticked
 has no package until somebody picks one. The old men's Griffon / women's Squire default is gone,
-bar a binding named in the batch's instruction chat.
+bar a binding named in the batch's instruction chat. The picker is on the upload page under the product
+links as well as on the review page (it had been on the review page only), and it lists every flat
+ski whatever ski Type it carries ("Mens Skis", "Freeride & Powder Skis") and whether or not the
+shop already lists it: an Atomic order's Bent 100 had no picker while its Bent 110 did.
 
 **Bindings.** A ski package has a "Please Mount My Bindings" variant priced over its "Do Not
 Mount" twin. The mounting charge differs by binding kind, and the classifier in

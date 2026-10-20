@@ -14,6 +14,7 @@ import { kindsSuffix, onlyKinds } from "@/lib/catalog/narrow-export";
 import { brandsAsked } from "@/lib/catalog/brands";
 import { fitlessOf, type PageDetails } from "@/lib/catalog/page-types";
 import { BulkLinks } from "./BulkLinks";
+import { isFlatSki } from "@/lib/catalog/trades/snow/packages";
 import { listingsFromCsv } from "@/lib/catalog/shop-memory";
 import type { CanonicalLineItem } from "@/lib/catalog/types";
 import type { InvoiceRead } from "@/lib/catalog/invoice";
@@ -156,6 +157,10 @@ const byName = (r: Reconciliation) => r.matched.filter((m) => m.key === "name");
 
 const countChanges = (results: Array<{ result: AdjustResult }>) => results.reduce((n, r) => n + r.result.changes.length, 0);
 const countMatched = (results: Array<{ result: AdjustResult }>) => results.reduce((n, r) => n + r.result.matched, 0);
+
+
+/** A new flat ski, whatever Type the shop files it under, which is asked for its package bindings. */
+const isPickableSki = (p: FreshProduct): boolean => isFlatSki({ productType: p.type, title: p.title, tags: p.tags });
 
 export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnabled: boolean; builtBy?: string; bindings?: Array<{ name: string; rrp: number; cost: number | null }> }) {
   // The bindings picked for each new ski's package, by the ski's first line (asked 2026-10-20).
@@ -1738,7 +1743,7 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
                 />
               )}
 
-              {buildNew && newProducts.some((p) => /^skis?$/i.test(p.type.trim())) && (
+              {buildNew && newProducts.some(isPickableSki) && (
                 <fieldset className="rounded-xl border border-[var(--line-soft)] px-3 py-2.5">
                   <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-[var(--ink-soft)]">Bindings for each ski&rsquo;s package</legend>
                   {bindings.length === 0
@@ -1746,7 +1751,7 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
                     : <p className="py-1 text-xs text-[var(--ink-soft)]">Pick which bindings each ski&rsquo;s package offers, one or several, from your binding list. Nothing is picked for you: a ski with no binding ticked is built on its own, with no package.</p>}
                   {bindings.length > 0 && (
                     <ul className="mt-1 space-y-2">
-                      {newProducts.filter((p) => /^skis?$/i.test(p.type.trim())).map((p) => {
+                      {newProducts.filter(isPickableSki).map((p) => {
                         const key = p.lines[0];
                         const picked = packagePicks[key];
                         const set = (next: string[] | undefined) => setPackagePicks((all) => { const { [key]: _gone, ...rest } = all; void _gone; return next ? { ...rest, [key]: next } : rest; });

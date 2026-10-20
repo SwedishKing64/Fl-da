@@ -13,7 +13,7 @@ import { buildDelivery } from "./delivery";
 import { parseCsv } from "./csv";
 import { alignRows } from "./diff";
 import type { InvoiceLine } from "./reconcile";
-import { SHOP_BINDINGS } from "./binding-list";
+import { SHOP_BINDINGS } from "./trades/snow/binding-list";
 
 const line = (over: Partial<InvoiceLine> = {}): InvoiceLine =>
   ({ sku: "", barcode: "", title: "", costPrice: null, rrp: null, quantity: null, ...over });

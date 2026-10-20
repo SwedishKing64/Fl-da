@@ -237,3 +237,17 @@ describe("the shop's binding list", () => {
     expect(SHOP_BINDINGS.every((b) => b.rrp > 0 && (b.cost ?? 0) > 0)).toBe(true);
   });
 });
+
+describe("which products are flat skis, to be packaged", () => {
+  it("takes any of the shop's ski Types, not cross-country", async () => {
+    const { isFlatSki } = await import("./packages");
+    const ski = (productType: string, title = "N Bent 100 2026") => isFlatSki({ productType, title, tags: [] });
+    expect(ski("Skis")).toBe(true);
+    expect(ski("Mens Skis")).toBe(true);
+    expect(ski("Freeride & Powder Skis")).toBe(true);
+    expect(ski("Cross-Country Skis")).toBe(false);
+    expect(ski("Ski Packages")).toBe(false);
+    expect(ski("Ski Boots")).toBe(false);
+    expect(ski("Skis", "N Bent 100 2026 inc Marker Griffon Binding Package")).toBe(false);
+  });
+});

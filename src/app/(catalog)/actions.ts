@@ -1402,6 +1402,7 @@ export async function saveBatchPicksAction(batchId: string, picks: Record<string
     await (await import("@/lib/catalog/trades/snow/binding-store")).saveBatchPicks(batchId, clean);
     const rebuilt = await autoApplyMappings(batchId, user.id);
     revalidatePath(`/batches/${batchId}/review`);
+    revalidatePath(`/batches/${batchId}`);
     if (!rebuilt.applied) return { ok: false, error: `Saved, but the products could not be built again: ${rebuilt.unmapped.join(", ") || "a file"} still needs its columns mapped.` };
     return { ok: true, data: { products: rebuilt.products } };
   });

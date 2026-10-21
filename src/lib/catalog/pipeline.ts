@@ -447,6 +447,13 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
   const problems: string[] = [];
   for (const input of inputs) for (const p of mappingProblems(input.mapping)) problems.push(`${input.hash}: ${p}`);
   if (problems.length) return { products: 0, variants: 0, problems };
+  // The store, read again when its last read is a day old, so the listings and vocabulary this
+  // build places products against are the store's as it is now. See store-sync.ts.
+  {
+    const { refreshStoreIfStale } = await import("./store-sync");
+    await refreshStoreIfStale(userId);
+    phase("store");
+  }
 
   const byHash = new Map(inputs.map((i) => [i.hash, i]));
   const items: Array<{ item: CanonicalLineItem; fileId: string; rowIndex: number; raw: Record<string, string> }> = [];

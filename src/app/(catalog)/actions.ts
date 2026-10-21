@@ -781,6 +781,53 @@ export async function lookupProductsAction(batchId: string, opts: { productIds?:
   }
 }
 
+/** Keep the store connection, proved by asking the store its name. An empty token keeps the one already kept. */
+export async function saveStoreAction(input: { domain: string; token: string }): Promise<ActionResult<{ name: string }>> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const { getSettings, saveSettings } = await import("@/lib/catalog/settings");
+    const current = await getSettings();
+    const domain = String(input.domain ?? "").trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+    if (!/^[a-z0-9][a-z0-9.-]+\.[a-z]{2,}$/.test(domain)) return { ok: false, error: "That does not look like a store domain. It reads like your-shop.myshopify.com." };
+    const token = String(input.token ?? "").trim() || current.shopify.accessToken;
+    if (!token) return { ok: false, error: "The Admin API access token is needed to read the store." };
+    const before = { ...current.shopify };
+    await saveSettings({ shopify: { ...current.shopify, storeDomain: domain, accessToken: token } });
+    try {
+      const { testStore } = await import("@/lib/catalog/store-sync");
+      const shop = await testStore();
+      await logAudit("store.connected", { userId: user.id, details: { domain, shop: shop.name } });
+      revalidatePath("/training");
+      return { ok: true, data: { name: shop.name } };
+    } catch (err) {
+      await saveSettings({ shopify: before });
+      return { ok: false, error: `The store did not answer: ${err instanceof Error ? err.message : String(err)}` };
+    }
+  });
+}
+
+/** Read the store now: its listings, vocabulary, templates and the catalogue the batch check matches against. */
+export async function syncStoreAction(): Promise<ActionResult<import("@/lib/catalog/store-sync").StoreSync>> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const { syncStore } = await import("@/lib/catalog/store-sync");
+    const data = await syncStore(user.id);
+    revalidatePath("", "layout");
+    return { ok: true, data };
+  });
+}
+
+export async function forgetStoreAction(): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const { forgetStore } = await import("@/lib/catalog/store-sync");
+    await forgetStore();
+    await logAudit("store.forgotten", { userId: user.id });
+    revalidatePath("", "layout");
+    return { ok: true };
+  });
+}
+
 /**
  * Find the pages for a batch's new products (or the ones named) without anyone pasting them: the
  * brand's usual address shape first, then a search, each fetched and checked. See page-finder.ts.

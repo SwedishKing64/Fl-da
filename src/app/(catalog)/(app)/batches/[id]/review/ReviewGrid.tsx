@@ -1,7 +1,8 @@
 "use client";
 
-import { BAR, describeConfidence } from "@/lib/catalog/confidence";
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { BAR, describeConfidence, type ConfidenceField } from "@/lib/catalog/confidence";
+import { ReviewCards } from "./ReviewCards";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import Link from "next/link";
 import {
   addImageUrlAction,
@@ -10,6 +11,7 @@ import {
   attachPhotoAction,
   autoAttachPhotosAction,
   bulkUpdateAction,
+  confirmProductFieldAction,
   deletePhotoAction,
   deleteProductAction,
   deleteVariantAction,
@@ -81,6 +83,26 @@ const BANDS = VARIANT_COLS.reduce<Array<{ name: string; span: number }>>((acc, c
   return acc;
 }, []);
 
+// The chosen view, kept in the browser; the server always renders the quick look and the client
+// corrects it on arrival. In memory as well, so a browser that refuses storage still switches.
+const VIEW_KEY = "floda.review.view";
+let viewInMemory: "look" | "table" | null = null;
+const viewListeners = new Set<() => void>();
+function readView(): "look" | "table" {
+  if (viewInMemory) return viewInMemory;
+  try { return localStorage.getItem(VIEW_KEY) === "table" ? "table" : "look"; } catch { return "look"; }
+}
+function subscribeView(cb: () => void) {
+  viewListeners.add(cb);
+  window.addEventListener("storage", cb);
+  return () => { viewListeners.delete(cb); window.removeEventListener("storage", cb); };
+}
+function writeView(v: "look" | "table") {
+  viewInMemory = v;
+  try { localStorage.setItem(VIEW_KEY, v); } catch {}
+  viewListeners.forEach((cb) => cb());
+}
+
 const FLAG_LABELS: Record<string, string> = {
   MISSING_TITLE: "Missing title", MISSING_PRICE: "Missing price", MISSING_COST: "Missing cost", MISSING_SKU: "Missing SKU", MISSING_BARCODE: "Missing barcode",
   DUPLICATE_SKU_BATCH: "Duplicate SKU (batch)", DUPLICATE_SKU_SHOPIFY: "SKU exists in Shopify", DUPLICATE_HANDLE: "Duplicate handle",
@@ -126,6 +148,10 @@ export function ReviewGrid({ initial, batchId, kinds = [] }: { initial: ReviewDa
   const [productEdit, setProductEdit] = useState<{ productId: string; field: ProductField; value: string } | null>(null);
   const [drawer, setDrawer] = useState<string | null>(null);
   const [message, setMessage] = useState<{ tone: "info" | "success" | "warning" | "danger"; text: string } | null>(null);
+  // The quick look (only what needs a person) or the full table. Remembered per browser: a
+  // person who wants every column every time should not have to ask for it each batch.
+  const view = useSyncExternalStore(subscribeView, readView, () => "look" as const);
+  const setView = writeView;
   const [pending, start] = useTransition();
   const locked = ["EXPORTED", "PUSHED"].includes(data.batch.status);
   const tableRef = useRef<HTMLTableElement>(null);
@@ -143,7 +169,7 @@ export function ReviewGrid({ initial, batchId, kinds = [] }: { initial: ReviewDa
     const ro = new ResizeObserver(measure);
     ro.observe(table);
     return () => ro.disconnect();
-  }, [data.products.length]);
+  }, [data.products.length, view]);
 
   const refresh = useCallback(async () => {
     const fresh = await getReviewAction(batchId);
@@ -319,6 +345,14 @@ export function ReviewGrid({ initial, batchId, kinds = [] }: { initial: ReviewDa
 
   const toggleAll = (on: boolean) => setSelected(on ? new Set(visible.map((p) => p.id)) : new Set());
 
+  /** A person looked at the field and said it is right: recorded, and the product stops asking. */
+  const confirmField = (productId: string, field: ConfidenceField) =>
+    start(async () => {
+      const res = await confirmProductFieldAction(productId, field);
+      if (!res.ok) setMessage({ tone: "danger", text: res.error });
+      await refresh();
+    });
+
   const summary = data.summary;
   // A product with no description exports an empty Body (HTML), which is the one thing nobody
   // notices until the CSV is open in Shopify. Said here, next to the button that fills them.
@@ -331,6 +365,11 @@ export function ReviewGrid({ initial, batchId, kinds = [] }: { initial: ReviewDa
     <div onKeyDown={onKeyDown} onPaste={onPaste} tabIndex={0} className="outline-none">
       {/* Toolbar */}
       <div className="mb-3 flex flex-wrap items-center gap-2">
+        <div className="inline-flex rounded-[10px] border border-[var(--line)] bg-white p-0.5 text-[12.5px] font-semibold" role="tablist" aria-label="How to review">
+          <button type="button" role="tab" aria-selected={view === "look"} className={cx("rounded-[8px] px-3 py-1", view === "look" ? "bg-[var(--ink)] text-white" : "text-[var(--ink-2)]")} onClick={() => setView("look")} title="Only the products that need a person, one card each">Quick look</button>
+          <button type="button" role="tab" aria-selected={view === "table"} className={cx("rounded-[8px] px-3 py-1", view === "table" ? "bg-[var(--ink)] text-white" : "text-[var(--ink-2)]")} onClick={() => setView("table")} title="Every product and every column">Full table</button>
+        </div>
+        {view === "table" && <>
         <input value={filter.q} onChange={(e) => setFilter({ ...filter, q: e.target.value })} placeholder="Search title, SKU, handle…" className={`${INPUT_INLINE} w-56`} />
         <select value={filter.brand} onChange={(e) => setFilter({ ...filter, brand: e.target.value })} className={`${INPUT_INLINE} w-40`}><option value="">All brands</option>{brands.map((b) => <option key={b}>{b}</option>)}</select>
         <select value={filter.category} onChange={(e) => setFilter({ ...filter, category: e.target.value })} className={`${INPUT_INLINE} w-40`}><option value="">All categories</option>{CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}</select>
@@ -345,8 +384,9 @@ export function ReviewGrid({ initial, batchId, kinds = [] }: { initial: ReviewDa
           <option value="brand">Group by brand</option><option value="type">Group by product type</option><option value="none">No grouping</option>
         </select>
         <span className="text-xs text-[var(--ink-soft)]">{visible.length} of {data.products.length} products{data.unassignedImages.length ? ` · ${data.unassignedImages.length} unattached photo${data.unassignedImages.length === 1 ? "" : "s"}` : ""}</span>
+        </>}
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          <Button size="sm" onClick={() => setExpanded(expanded.size ? new Set() : new Set(data.products.map((p) => p.id)))}>{expanded.size ? "Collapse all" : "Expand all"}</Button>
+          {view === "table" && <Button size="sm" onClick={() => setExpanded(expanded.size ? new Set() : new Set(data.products.map((p) => p.id)))}>{expanded.size ? "Collapse all" : "Expand all"}</Button>}
           <Button size="sm" disabled={pending || locked} title="Re-run the tag, collection, type and metafield rules" onClick={() => start(async () => { const r = await applyRulesAction(batchId); setMessage(r.ok ? { tone: "success", text: `Rules applied: ${r.data!.matched} of ${r.data!.products} products matched a rule.` } : { tone: "danger", text: r.error }); await refresh(); })}>Apply rules</Button>
           <Button size="sm" disabled={pending || locked} title="Search the brand's website for the recommended retail and description of anything the invoice did not carry" onClick={() => start(async () => { const r = await lookupProductsAction(batchId, { retry: true }); setMessage(r.ok ? lookupMessage(r.data!) : { tone: "danger", text: r.error }); await refresh(); })}>Look up missing details</Button>
           {data.unassignedImages.length > 0 && !locked && <Button size="sm" disabled={pending} onClick={() => start(async () => { const r = await autoAttachPhotosAction(batchId); setMessage(r.ok ? { tone: "info", text: `${r.data!.attached} photo${r.data!.attached === 1 ? "" : "s"} matched by name/SKU. Open a product's Details to attach the rest.` } : { tone: "danger", text: r.error }); await refresh(); })}>Match photos</Button>}
@@ -354,7 +394,7 @@ export function ReviewGrid({ initial, batchId, kinds = [] }: { initial: ReviewDa
           <Button size="sm" disabled={pending || locked} onClick={() => start(async () => { const r = await enrichSeoAction(batchId, true); setMessage(r.ok ? { tone: "success", text: `SEO written for ${r.data!.updated} products (${r.data!.source === "AI" ? "AI" : r.data!.source === "TEMPLATE" ? "template - set ANTHROPIC_API_KEY for AI copy" : "AI + template"}).` } : { tone: "danger", text: r.error }); await refresh(); })}>Write SEO copy</Button>
           <Button size="sm" disabled={pending || !data.settings.catalogueKnown} title={!data.settings.catalogueKnown ? "Connect Shopify in Settings, or teach Flöda your catalogue from an export, first" : pending ? "Working…" : "Match this batch against what the shop already sells"} onClick={() => start(async () => { const r = await reconcileAction(batchId); setMessage(r.ok ? { tone: r.data!.ambiguous ? "warning" : "info", text: `Checked against the shop: ${r.data!.new} new, ${r.data!.variantAdd} add variants, ${r.data!.update} update existing${r.data!.ambiguous ? `, ${r.data!.ambiguous} could be one of several — open each and say which` : ""}.` } : { tone: "danger", text: r.error }); await refresh(); })}>Check against the shop</Button>
           {summary.errors ? (
-            <button type="button" style={{ color: "#fff" }} className={cx("inline-flex items-center rounded-lg px-3 py-1.5 text-xs font-medium", filter.flags === "errors" ? "bg-[var(--detractor)]" : "bg-neutral-500 hover:bg-[var(--detractor)]")} title="Show only the rows with errors" onClick={() => { setFilter((f) => ({ ...f, flags: f.flags === "errors" ? "" : "errors" })); setExpanded(new Set(data.products.map((p) => p.id))); }}>{summary.errors} error{summary.errors === 1 ? "" : "s"} block export{filter.flags === "errors" ? " · showing" : " · show"}</button>
+            <button type="button" style={{ color: "#fff" }} className={cx("inline-flex items-center rounded-lg px-3 py-1.5 text-xs font-medium", filter.flags === "errors" ? "bg-[var(--detractor)]" : "bg-neutral-500 hover:bg-[var(--detractor)]")} title="Show only the rows with errors" onClick={() => { setView("table"); setFilter((f) => ({ ...f, flags: f.flags === "errors" ? "" : "errors" })); setExpanded(new Set(data.products.map((p) => p.id))); }}>{summary.errors} error{summary.errors === 1 ? "" : "s"} block export{filter.flags === "errors" ? " · showing" : " · show"}</button>
           ) : (
             <Link href={`/batches/${batchId}/export`} style={{ color: "#fff" }} className="inline-flex items-center rounded-lg bg-[var(--ink)] px-3 py-1.5 text-xs font-medium hover:bg-black">Export →</Link>
           )}
@@ -365,14 +405,14 @@ export function ReviewGrid({ initial, batchId, kinds = [] }: { initial: ReviewDa
         <span className="font-semibold">{summary.ready ?? 0} ready to import</span>
         <span className="text-[var(--ink-soft)]">·</span>
         <span className={cx((summary.needLook ?? 0) > 0 ? "font-semibold text-[#8a5a0b]" : "text-[var(--ink-soft)]")}>{summary.needLook ?? 0} need a quick look</span>
-        <span className="text-[12px] text-[var(--ink-soft)]">A product is ready when its title, tags, picture and price are all well founded; the number on a row is how sure Flöda is of the weakest of the four, and its tooltip says what to look at.</span>
+        <span className="text-[12px] text-[var(--ink-soft)]">{view === "look" ? "A product is ready when its title, tags, picture and price are all well founded. Each card below is one that is not, with the field that pulled it down and its fix; \u201cLooks right\u201d is the other answer." : "A product is ready when its title, tags, picture and price are all well founded; the number on a row is how sure Flöda is of the weakest of the four, and its tooltip says what to look at."}</span>
       </div>
 
-      <div className="flag-legend mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-[var(--ink-soft)]" aria-label="What the dots mean">
+      {view === "table" && <div className="flag-legend mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-[var(--ink-soft)]" aria-label="What the dots mean">
         <span><span className="flag error" /> wrong on the shop if it goes out as it is</span>
         <span><span className="flag warning" /> worth a look; the file goes out regardless</span>
         <span>Hover a row&rsquo;s dots to read them. The first columns stay put as the grid scrolls.</span>
-      </div>
+      </div>}
       {(withoutPrice > 0 || withoutDescription > 0) && !locked && (
         <Alert tone="info" className="mb-3">
           {[
@@ -386,8 +426,22 @@ export function ReviewGrid({ initial, batchId, kinds = [] }: { initial: ReviewDa
 
       {message && <Alert tone={message.tone} className="mb-3 flex items-start justify-between gap-3"><span>{message.text}</span><button onClick={() => setMessage(null)} className="text-xs underline">dismiss</button></Alert>}
 
+      {view === "look" && (
+        <ReviewCards
+          products={data.products}
+          kinds={kinds}
+          locked={locked}
+          busy={pending}
+          exportHref={`/batches/${batchId}/export`}
+          commitProduct={commitProduct}
+          commitVariant={commitVariant}
+          openDrawer={setDrawer}
+          confirm={confirmField}
+        />
+      )}
+
       {/* Bulk bar */}
-      {selected.size > 0 && !locked && (
+      {view === "table" && selected.size > 0 && !locked && (
         <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-[var(--violet)] bg-[var(--violet-soft)] px-3 py-2 text-sm">
           <strong>{selected.size} selected</strong>
           <select value={bulk.field} onChange={(e) => setBulk({ field: e.target.value, value: "" })} className={`${INPUT_INLINE} w-44`}>
@@ -407,6 +461,7 @@ export function ReviewGrid({ initial, batchId, kinds = [] }: { initial: ReviewDa
       )}
 
       {/* Grid */}
+      {view === "table" && <>
       <div className="grid-wrap">
         <table className="review-grid" ref={tableRef}>
           <thead>
@@ -532,6 +587,7 @@ export function ReviewGrid({ initial, batchId, kinds = [] }: { initial: ReviewDa
         <div><div className="k">Errors / warnings</div><div className="v"><span className={summary.errors ? "text-red-600" : ""}>{summary.errors}</span> / <span className={summary.warnings ? "text-amber-700" : ""}>{summary.warnings}</span></div></div>
         <div className="self-center text-[11px] text-[var(--ink-soft)]">{pending ? "Saving…" : "Double-click or Enter to edit · arrows to move · paste a column from Excel"}</div>
       </div>
+      </>}
 
       {drawerProduct && <ProductDrawer key={drawerProduct.id} batchId={batchId} product={drawerProduct} unassigned={data.unassignedImages} locked={locked} publicBaseUrl={data.settings.publicBaseUrl} onClose={() => setDrawer(null)} refresh={refresh} setMessage={setMessage} />}
     </div>

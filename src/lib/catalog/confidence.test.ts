@@ -50,6 +50,13 @@ describe("scoreProduct", () => {
     expect(c.title).toBe(100);
   });
 
+  it("takes a person's word that the picture and the price are right", () => {
+    const c = scoreProduct(base({ images: [], retail: { value: 300, from: "lookup", belowCost: true, underFloor: true }, touched: new Set(["image", "price"]) }));
+    expect(c.image).toBe(100);
+    expect(c.price).toBe(100);
+    expect(c.product).toBeGreaterThanOrEqual(BAR);
+  });
+
   it("is pulled down by a tag the shop has never used", () => {
     const c = scoreProduct(base({ tags: ["skis", "freeride-twin"], tagKnown: (t) => t === "skis" }));
     expect(c.tags).toBe(40);

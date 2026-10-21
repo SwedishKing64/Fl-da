@@ -9,7 +9,8 @@ import Link from "next/link";
 export function NextStep({ href, label, disabledWhy }: { href: string; label: string; disabledWhy?: string }) {
   const cls = "inline-flex items-center gap-2 rounded-full px-5 py-3 text-[15px] font-semibold shadow-[0_8px_24px_rgba(0,0,0,0.18)]";
   return (
-    <div className="pointer-events-none fixed bottom-5 right-5 z-30 print:hidden">
+    // Above the Feedback button, which sits in the bottom-right corner on every page.
+    <div className="pointer-events-none fixed bottom-[4.75rem] right-5 z-30 print:hidden">
       {disabledWhy ? (
         <span className={`${cls} pointer-events-auto cursor-not-allowed bg-[var(--line)] text-[var(--ink-soft)]`} title={disabledWhy} aria-disabled="true">{label} <span aria-hidden>→</span></span>
       ) : (

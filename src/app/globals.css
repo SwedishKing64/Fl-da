@@ -421,7 +421,9 @@ select.input { padding-right: 36px; appearance: none; background-image: url("dat
   100% { box-shadow: 0 0 0 0 rgba(8, 102, 255, 0); }
 }
 
-.rise { animation: rb-rise 0.42s var(--ease) both; }
+/* Fills backwards, not both: once it has risen the element keeps no transform, so a fixed
+   button inside a page (Next, bottom right) is pinned to the window, not to the page's end. */
+.rise { animation: rb-rise 0.42s var(--ease) backwards; }
 .rise-1 { animation-delay: 0.04s; }
 .rise-2 { animation-delay: 0.08s; }
 .rise-3 { animation-delay: 0.12s; }

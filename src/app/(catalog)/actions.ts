@@ -366,6 +366,20 @@ export async function updateProductAction(productId: string, patch: z.infer<type
   }
 }
 
+/**
+ * A person looked at a field the system was unsure of and said it is right. That is the end of
+ * the question: the field scores as if they had typed it, and the product stops asking for eyes.
+ */
+export async function confirmProductFieldAction(productId: string, field: "title" | "tags" | "image" | "price"): Promise<ActionResult> {
+  const user = await requireUser();
+  return safely(async () => {
+    const product = await prisma.product.findUnique({ where: { id: productId }, select: { batchId: true } });
+    if (!product) return { ok: false, error: "That product is gone." };
+    await logAudit("product.checked", { batchId: product.batchId, userId: user.id, details: { productId, fields: [field] } });
+    return { ok: true };
+  });
+}
+
 const variantPatch = z.object({
   sku: z.string().optional(),
   barcode: z.string().optional(),

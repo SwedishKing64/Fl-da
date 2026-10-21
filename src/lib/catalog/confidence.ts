@@ -42,7 +42,7 @@ export interface ConfidenceInput {
   tagKnown: (tag: string) => boolean;
   /** The text of the order lines the product came from, so a title's words can be checked against it. */
   sourceText: string;
-  /** Fields a person set by hand on the grid: those are right by definition. */
+  /** Fields a person set by hand on the grid, or looked at and said were right: those are right by definition. */
   touched: ReadonlySet<string>;
   images: Array<{ source: string; validated: boolean }>;
   /** How the retail price was arrived at. */
@@ -108,7 +108,8 @@ export function scoreProduct(input: ConfidenceInput): Confidence {
 
   // Image: looked at against the colour, or at least a real address; none at all is the floor.
   let image = 0;
-  if (input.images.length === 0) { image = 0; reasons.image = "No picture: paste the product's page or drop one in."; }
+  if (input.touched.has("image")) image = 100;
+  else if (input.images.length === 0) { image = 0; reasons.image = "No picture: paste the product's page or drop one in."; }
   else {
     const verified = input.images.filter((i) => i.validated || i.source === "MANUAL" || i.source === "LIBRARY").length;
     image = verified === input.images.length ? 95 : verified > 0 ? 75 : 60;
@@ -118,13 +119,15 @@ export function scoreProduct(input: ConfidenceInput): Confidence {
   // Price: where the retail came from, and whether it makes sense against the cost.
   let price = 0;
   const r = input.retail;
-  if (r.from === "person") price = 100;
-  else if (r.from === "paperwork") price = 90;
-  else if (r.from === "rule") price = 85;
-  else if (r.from === "lookup") { price = 70; reasons.price = "The retail came from the brand's website, not your paperwork: check it is this season's."; }
-  else { price = 0; reasons.price = "No retail price: the column would go out empty."; }
-  if (r.value > 0 && r.belowCost) { price = Math.min(price, 10); reasons.price = "The retail is under the landed cost: a cost in the price column?"; }
-  else if (r.value > 0 && r.underFloor) { price = Math.min(price, 55); reasons.price = reasons.price ?? "The margin is under your floor."; }
+  if (r.from === "person" || input.touched.has("price")) price = 100;
+  else {
+    if (r.from === "paperwork") price = 90;
+    else if (r.from === "rule") price = 85;
+    else if (r.from === "lookup") { price = 70; reasons.price = "The retail came from the brand's website, not your paperwork: check it is this season's."; }
+    else { price = 0; reasons.price = "No retail price: the column would go out empty."; }
+    if (r.value > 0 && r.belowCost) { price = Math.min(price, 10); reasons.price = "The retail is under the landed cost: a cost in the price column?"; }
+    else if (r.value > 0 && r.underFloor) { price = Math.min(price, 55); reasons.price = reasons.price ?? "The margin is under your floor."; }
+  }
 
   const scores = { title: clamp(title), tags: clamp(tags), image: clamp(image), price: clamp(price) };
   const order: ConfidenceField[] = ["title", "tags", "image", "price"];

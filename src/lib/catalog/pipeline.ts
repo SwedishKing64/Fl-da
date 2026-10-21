@@ -1049,7 +1049,7 @@ export async function noteOnFile(fileId: string, note: string): Promise<void> {
 }
 
 /** What counts as somebody having changed a batch's products by hand. A rebuild would undo it. */
-export const HAND_EDITS = ["product.edited", "variant.edited", "variant.deleted", "batch.bulk_edit", "batch.seo"];
+export const HAND_EDITS = ["product.edited", "product.checked", "variant.edited", "variant.deleted", "batch.bulk_edit", "batch.seo"];
 
 /**
  * Whether a batch's products are still exactly what the files built.
@@ -1213,7 +1213,7 @@ export async function loadReview(batchId: string): Promise<ReviewData> {
   // shop's vocabulary of tags.
   const [lines, edits, gate] = await Promise.all([
     prisma.extractedLineItem.findMany({ where: { batchId, variantId: { not: null } }, select: { variantId: true, raw: true } }),
-    prisma.auditLog.findMany({ where: { batchId, action: { in: ["product.edited", "variant.edited"] } }, select: { details: true } }),
+    prisma.auditLog.findMany({ where: { batchId, action: { in: ["product.edited", "product.checked", "variant.edited"] } }, select: { details: true } }),
     loadTagGate(),
   ]);
   const rawByVariant = new Map<string, string>();

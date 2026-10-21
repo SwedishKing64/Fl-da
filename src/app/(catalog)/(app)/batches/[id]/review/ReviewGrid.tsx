@@ -17,7 +17,9 @@ import {
   deleteVariantAction,
   dismissWarningAction,
   enrichSeoAction,
+  findProductPagesAction,
   getReviewAction,
+  readProductLinkAction,
   moveImageAction,
   decideMatchAction,
   reconcileAction,
@@ -345,6 +347,18 @@ export function ReviewGrid({ initial, batchId, kinds = [] }: { initial: ReviewDa
 
   const toggleAll = (on: boolean) => setSelected(on ? new Set(visible.map((p) => p.id)) : new Set());
 
+  /** Find one product's page and read it, so its pictures and copy arrive without a link being pasted. */
+  const findPage = (productId: string) =>
+    start(async () => {
+      const f = await findProductPagesAction(batchId, { productIds: [productId] });
+      if (!f.ok) { setMessage({ tone: "danger", text: f.error }); return; }
+      const r = f.data!.results[0];
+      if (!r || r.how === "none") { setMessage({ tone: "warning", text: r?.said ?? "No page found." }); return; }
+      const read = await readProductLinkAction(productId);
+      setMessage(read.ok ? { tone: read.data!.ok ? "success" : "warning", text: `${r.said} ${read.data!.said}` } : { tone: "danger", text: read.error });
+      await refresh();
+    });
+
   /** A person looked at the field and said it is right: recorded, and the product stops asking. */
   const confirmField = (productId: string, field: ConfidenceField) =>
     start(async () => {
@@ -437,6 +451,7 @@ export function ReviewGrid({ initial, batchId, kinds = [] }: { initial: ReviewDa
           commitVariant={commitVariant}
           openDrawer={setDrawer}
           confirm={confirmField}
+          findPage={findPage}
         />
       )}
 

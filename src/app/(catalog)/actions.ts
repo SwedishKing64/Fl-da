@@ -782,6 +782,22 @@ export async function lookupProductsAction(batchId: string, opts: { productIds?:
 }
 
 /**
+ * Find the pages for a batch's new products (or the ones named) without anyone pasting them: the
+ * brand's usual address shape first, then a search, each fetched and checked. See page-finder.ts.
+ */
+export async function findProductPagesAction(batchId: string, opts: { productIds?: string[] } = {}): Promise<ActionResult<import("@/lib/catalog/page-finder").FindOutcome>> {
+  const user = await requireUser();
+  try {
+    const { findProductPages, FIND_BUDGET_MS } = await import("@/lib/catalog/page-finder");
+    const data = await findProductPages(batchId, { ...opts, userId: user.id, budgetMs: FIND_BUDGET_MS });
+    revalidatePath(`/batches/${batchId}/review`);
+    return { ok: true, data };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/**
  * The link beside a product: saved, or cleared when it is empty. Nothing is fetched yet.
  * See page-link.ts.
  */

@@ -21,6 +21,8 @@ const FIELD_WORD: Record<ConfidenceField, string> = { title: "Title", tags: "Tag
 
 export interface ReviewCardsProps {
   products: ReviewProduct[];
+  /** Find and read a product's page, so its pictures and copy arrive without a link being pasted. */
+  findPage: (productId: string) => void;
   kinds: string[];
   locked: boolean;
   busy: boolean;
@@ -31,7 +33,7 @@ export interface ReviewCardsProps {
   confirm: (productId: string, field: ConfidenceField) => void;
 }
 
-export function ReviewCards({ products, kinds, locked, busy, exportHref, commitProduct, commitVariant, openDrawer, confirm }: ReviewCardsProps) {
+export function ReviewCards({ products, kinds, locked, busy, exportHref, commitProduct, commitVariant, openDrawer, confirm, findPage }: ReviewCardsProps) {
   const needLook = products.filter((p) => p.confidence.product < BAR).sort((a, b) => a.confidence.product - b.confidence.product || a.title.localeCompare(b.title));
   const ready = products.filter((p) => p.confidence.product >= BAR);
   const [showReady, setShowReady] = useState(false);
@@ -46,7 +48,7 @@ export function ReviewCards({ products, kinds, locked, busy, exportHref, commitP
         </div>
       ) : (
         <ol className="space-y-3" data-cards>
-          {needLook.map((p) => <ProductCard key={p.id} p={p} kinds={kinds} locked={locked} busy={busy} commitProduct={commitProduct} commitVariant={commitVariant} openDrawer={openDrawer} confirm={confirm} />)}
+          {needLook.map((p) => <ProductCard key={p.id} p={p} kinds={kinds} locked={locked} busy={busy} commitProduct={commitProduct} commitVariant={commitVariant} openDrawer={openDrawer} confirm={confirm} findPage={findPage} />)}
         </ol>
       )}
       {ready.length > 0 && (
@@ -71,7 +73,7 @@ export function ReviewCards({ products, kinds, locked, busy, exportHref, commitP
   );
 }
 
-function ProductCard({ p, kinds, locked, busy, commitProduct, commitVariant, openDrawer, confirm }: { p: ReviewProduct } & Omit<ReviewCardsProps, "products" | "exportHref">) {
+function ProductCard({ p, kinds, locked, busy, commitProduct, commitVariant, openDrawer, confirm, findPage }: { p: ReviewProduct } & Omit<ReviewCardsProps, "products" | "exportHref">) {
   const c = p.confidence;
   const weakest: ConfidenceField = c.weakest ?? "title";
   const others = (["title", "tags", "image", "price"] as ConfidenceField[]).filter((f) => f !== weakest && c[f] < BAR);
@@ -100,7 +102,7 @@ function ProductCard({ p, kinds, locked, busy, commitProduct, commitVariant, ope
             </ul>
           )}
           <div className="mt-2 space-y-2">
-            <Fix p={p} field={weakest} locked={locked} busy={busy} commitProduct={commitProduct} commitVariant={commitVariant} openDrawer={openDrawer} confirm={confirm} />
+            <Fix p={p} field={weakest} locked={locked} busy={busy} commitProduct={commitProduct} commitVariant={commitVariant} openDrawer={openDrawer} confirm={confirm} findPage={findPage} />
             {typeUnknown && !locked && (
               <label className="flex flex-wrap items-center gap-2 text-[12.5px]">
                 <span className="text-[var(--ink-soft)]">Kind of product</span>
@@ -123,7 +125,7 @@ function ProductCard({ p, kinds, locked, busy, commitProduct, commitVariant, ope
 }
 
 /** The one field's fix, on the card. */
-function Fix({ p, field, locked, busy, commitProduct, commitVariant, openDrawer, confirm }: { p: ReviewProduct; field: ConfidenceField; locked: boolean; busy: boolean } & Pick<ReviewCardsProps, "commitProduct" | "commitVariant" | "openDrawer" | "confirm">) {
+function Fix({ p, field, locked, busy, commitProduct, commitVariant, openDrawer, confirm, findPage }: { p: ReviewProduct; field: ConfidenceField; locked: boolean; busy: boolean } & Pick<ReviewCardsProps, "commitProduct" | "commitVariant" | "openDrawer" | "confirm" | "findPage">) {
   const [title, setTitle] = useState(p.title);
   const [tags, setTags] = useState(p.tags);
   const looksRight = <Button size="sm" variant="ghost" disabled={busy} title="You have looked, and it is right: the product stops asking." onClick={() => confirm(p.id, field)}>Looks right</Button>;
@@ -149,7 +151,8 @@ function Fix({ p, field, locked, busy, commitProduct, commitVariant, openDrawer,
     case "image":
       return (
         <div className="flex flex-wrap items-center gap-2">
-          <Button size="sm" variant="primary" disabled={busy} onClick={() => openDrawer(p.id)}>{p.images.length ? "See the pictures" : "Add pictures"}</Button>
+          {p.images.length === 0 && <Button size="sm" variant="primary" disabled={busy} title="Flöda finds the product's own page (the brand's usual address first, then a search) and takes its pictures and copy" onClick={() => findPage(p.id)}>Find its page</Button>}
+          <Button size="sm" variant={p.images.length ? "primary" : "secondary"} disabled={busy} onClick={() => openDrawer(p.id)}>{p.images.length ? "See the pictures" : "Add pictures"}</Button>
           {p.images.length > 0 && looksRight}
         </div>
       );

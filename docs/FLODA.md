@@ -205,6 +205,8 @@ the proposals with Approve (a tag of the shop's from then on) and Reject (never 
 
 **The quick look.** The review opens on the products that need a person, one card each, worst first: the field that pulled each down, its sentence, and that field's fix on the card (the title to retype, the tags to fix, the pictures to open, the retail to set per variant), with "Looks right" as the other answer, which scores the field as if the person had typed it. What is ready is counted and listed on request. The full table is one click away and the choice is remembered per browser; the errors pill opens the table on the rows with errors.
 
+**Pages found, not pasted.** The links people paste are the memory: from each brand's links the shape of its addresses is worked out (its template with the product's slug in it), a new product's name is put into that shape, and the address is fetched and checked against the product's name before it is believed. A brand nobody has linked yet, or a guess that does not hold, goes to one short web search, checked the same way. A page is kept only when it is titled like the product; a wrong page is worse than none. "Find the pages" on the review does the batch; "Find its page" on a card does one product and reads it.
+
 **The open copy.** A desktop build made with `FLODA_OPEN=1` (`electron-builder.open.yml`, the
 "open" box on the Desktop app workflow) has no sign-in and no licence: `/open` signs whoever opens
 the window in as the copy's owner, an admin called "Shop owner" made the first time

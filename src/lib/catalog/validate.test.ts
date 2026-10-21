@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { blockingErrors, emptyVariantView, hardErrors, summarise, validateReview } from "./validate";
 import type { ReviewProduct } from "./review-types";
+import { unscored } from "./confidence";
 
 function product(partial: Partial<ReviewProduct>): ReviewProduct {
   return {
     id: "p1", handle: "atomic-bent-90", title: "Atomic Bent 90", bodyHtml: "", vendor: "Atomic", productType: "Skis", category: "skis",
     tags: "", collections: "", status: "draft", published: false, seoTitle: "", seoDescription: "", lookupStatus: "NONE", lookupSource: "", matchCandidates: [], matchDecided: false, option1Name: "Length", option2Name: null, option3Name: null,
     metafields: {}, reconcileStatus: "UNKNOWN", shopifyProductId: null, images: [{ id: "i", url: "https://cdn.x.com/a.jpg", position: 1, variantId: null, source: "SUPPLIER", validated: true }],
-    variants: [], flags: [], ...partial,
+    variants: [], flags: [], confidence: unscored(), ...partial,
   };
 }
 

@@ -183,6 +183,26 @@ This is the first step of opening how a shop's system runs to the shop; the next
 correction on the review grid into a rule, per-stage switches and notes, and a rulebook file that
 exports, imports and rolls back.
 
+**One confidence score per field.** `confidence.ts` (pure) scores a product's title, tags,
+picture and price from where each came from, and the product is the lowest of the four: a title
+is checked word by word against the order lines it came from (`titleSupport`), a tag against the
+shop's vocabulary, a picture by whether it was looked at against the colour, a price by whether
+it came from the paperwork, a rule, the brand's site or nowhere, and whether it is under cost or
+the floor. A field a person set by hand is right by definition. Above `BAR` (80) a product needs
+nobody's eyes; below it, the weakest field's sentence is what a person is shown. `loadReview`
+works it out from the products, their line items and the batch's edit log, puts it on each
+`ReviewProduct` and tallies `ready` / `needLook` into the summary; the review grid shows the
+tally as a strip and the score as a pill on each row. The push will read the same score.
+
+**Tags are matched, never invented.** `tag-gate.ts`: the shop's vocabulary of tags is its
+listings, its tag rules and templates, its kinds, the tags the rules work out per product
+(`isRuleGenerated`) and the tags it has approved; a shop with none of those yet has an open
+gate. The build (`applyMappings`) and the batch check (`batch-agent.ts`) pass every product's
+tags through it: a tag the shop has never used is taken off and recorded once as a `TagProposal`
+with the product it was meant for; a tag the batch instructions asked for always stays; a tag a
+person types on the grid is approved as written (`approveTypedTags`). Training and Rules lists
+the proposals with Approve (a tag of the shop's from then on) and Reject (never proposed again).
+
 **The open copy.** A desktop build made with `FLODA_OPEN=1` (`electron-builder.open.yml`, the
 "open" box on the Desktop app workflow) has no sign-in and no licence: `/open` signs whoever opens
 the window in as the copy's owner, an admin called "Shop owner" made the first time

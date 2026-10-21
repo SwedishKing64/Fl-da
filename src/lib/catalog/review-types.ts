@@ -1,5 +1,6 @@
 // Plain data shapes shared between the server (Prisma -> view) and the review grid (client).
 
+import type { Confidence } from "./confidence";
 import type { RowFlag } from "./types";
 import type { MatchCandidate } from "./match-candidates";
 
@@ -73,6 +74,8 @@ export interface ReviewProduct {
   images: ReviewImage[];
   variants: ReviewVariant[];
   flags: RowFlag[];
+  /** How sure the system is of the title, tags, picture and price, and the lowest of those. */
+  confidence: Confidence;
 }
 
 export interface ReviewSummary {
@@ -88,6 +91,9 @@ export interface ReviewSummary {
   lowMarginVariants: number;
   errors: number;
   warnings: number;
+  /** Products over the confidence bar, which need nobody's eyes, and the rest. */
+  ready?: number;
+  needLook?: number;
 }
 
 /** Fields editable inline on a product row. */

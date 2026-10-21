@@ -1,5 +1,6 @@
 "use client";
 
+import { BAR, describeConfidence } from "@/lib/catalog/confidence";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import {
@@ -360,6 +361,13 @@ export function ReviewGrid({ initial, batchId, kinds = [] }: { initial: ReviewDa
         </div>
       </div>
 
+      <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-[10px] border border-[var(--line)] bg-white px-3 py-2 text-[13px]" aria-label="How much of the batch needs a look">
+        <span className="font-semibold">{summary.ready ?? 0} ready to import</span>
+        <span className="text-[var(--ink-soft)]">·</span>
+        <span className={cx((summary.needLook ?? 0) > 0 ? "font-semibold text-[#8a5a0b]" : "text-[var(--ink-soft)]")}>{summary.needLook ?? 0} need a quick look</span>
+        <span className="text-[12px] text-[var(--ink-soft)]">A product is ready when its title, tags, picture and price are all well founded; the number on a row is how sure Flöda is of the weakest of the four, and its tooltip says what to look at.</span>
+      </div>
+
       <div className="flag-legend mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-[var(--ink-soft)]" aria-label="What the dots mean">
         <span><span className="flag error" /> wrong on the shop if it goes out as it is</span>
         <span><span className="flag warning" /> worth a look; the file goes out regardless</span>
@@ -371,7 +379,7 @@ export function ReviewGrid({ initial, batchId, kinds = [] }: { initial: ReviewDa
             withoutPrice > 0 ? `${withoutPrice} of ${data.products.length} products have no recommended retail` : "",
             withoutDescription > 0 ? `${withoutDescription} have no description` : "",
           ].filter(Boolean).join(", ")}. Neither stops the export — a missing price goes out as an
-          empty column, which leaves Shopify&apos;s own price alone. <strong>Look up missing details</strong> searches
+          empty column, which leaves Shopify&apos;s own price alone. <strong>Look up missing details</strong>{" "}searches
           the brand&apos;s website for both.
         </Alert>
       )}
@@ -435,7 +443,7 @@ export function ReviewGrid({ initial, batchId, kinds = [] }: { initial: ReviewDa
                 <tr key={p.id} className={cx("product-row", tone && `row-${tone}`, selected.has(p.id) && "selected")}>
                   <td className="pin pin-0"><span className="cell"><input type="checkbox" checked={selected.has(p.id)} onChange={(e) => { const s = new Set(selected); if (e.target.checked) s.add(p.id); else s.delete(p.id); setSelected(s); }} /></span></td>
                   <td className="pin pin-1"><button className="cell" onClick={() => { const s = new Set(expanded); if (open) s.delete(p.id); else s.add(p.id); setExpanded(s); }}>{open ? "▾" : "▸"}</button></td>
-                  <td className="pin pin-2"><span className="cell" title={pFlags.map((f) => f.message).join("\n")}>{p.flags.map((f, i) => <span key={i} className={cx("flag", f.severity)} />)}{p.variants.some((v) => v.flags.length) && <span className="text-[10px] text-[var(--ink-soft)]">+{p.variants.reduce((s, v) => s + v.flags.length, 0)}</span>}</span></td>
+                  <td className="pin pin-2"><span className="cell" title={[describeConfidence(p.confidence), ...pFlags.map((f) => f.message)].join("\n")}><span className={cx("mr-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold", p.confidence.product >= BAR ? "bg-[var(--promoter-tint)] text-[var(--promoter)]" : "bg-[var(--passive-tint)] text-[#8a5a0b]")}>{p.confidence.product >= BAR ? "\u2713" : p.confidence.product}</span>{p.flags.map((f, i) => <span key={i} className={cx("flag", f.severity)} />)}{p.variants.some((v) => v.flags.length) && <span className="text-[10px] text-[var(--ink-soft)]">+{p.variants.reduce((s, v) => s + v.flags.length, 0)}</span>}</span></td>
                   <td className="pin pin-3"><button className="cell" onClick={() => setDrawer(p.id)} title="Images & details">{/* eslint-disable-next-line @next/next/no-img-element -- supplier CDN hosts are arbitrary */}
                   {p.images[0] ? <img src={p.images[0].url} alt="" className="thumb" /> : <span className="thumb inline-block text-center text-[10px] leading-7 text-[var(--ink-soft)]">+</span>}</button></td>
                   <td colSpan={VARIANT_COLS.length + 1}>

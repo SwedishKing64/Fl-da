@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { forgetStoreAction, saveStoreAction, syncStoreAction } from "@/app/(catalog)/actions";
+import { forgetStoreAction, saveStoreAction, setAutoPushAction, syncStoreAction } from "@/app/(catalog)/actions";
 import { Alert, Badge, Button, Field, INPUT } from "@/app/(catalog)/ui";
 import type { StoreState } from "@/lib/catalog/store-sync";
 
@@ -18,6 +18,16 @@ export function StoreForm({ state }: { state: StoreState }) {
   const [note, setNote] = useState<{ tone: "success" | "danger" | "info"; text: string } | null>(null);
   const [pending, start] = useTransition();
   const [editing, setEditing] = useState(!state.configured);
+  const [autoPush, setAutoPush] = useState(state.autoPush);
+
+  const toggleAuto = (on: boolean) =>
+    start(async () => {
+      setAutoPush(on);
+      const r = await setAutoPushAction(on);
+      if (!r.ok) { setAutoPush(!on); setNote({ tone: "danger", text: r.error }); return; }
+      setNote({ tone: "info", text: on ? "On. After a build, every product with every field above the bar goes to the store as a draft on its own, when its supplier reads clean; the rest wait for the quick look. Nothing goes live: a draft is looked at in the store before it is published." : "Off. Products go to the store only when someone presses the button on the quick look or the export page." });
+      router.refresh();
+    });
 
   const connect = () =>
     start(async () => {
@@ -91,6 +101,16 @@ export function StoreForm({ state }: { state: StoreState }) {
             {state.configured && <Button variant="ghost" disabled={pending} onClick={() => { setEditing(false); setToken(""); setDomain(state.domain); }}>Cancel</Button>}
           </div>
         </div>
+      )}
+
+      {state.configured && !editing && (
+        <label className="flex items-start gap-3 rounded-[12px] border border-[var(--line)] px-4 py-3">
+          <input type="checkbox" className="mt-1" checked={autoPush} disabled={pending} onChange={(e) => toggleAuto(e.target.checked)} />
+          <span>
+            <span className="block font-semibold">Push what is ready on its own</span>
+            <span className="block text-[13px] text-[var(--ink-soft)]">After a build, a product with every field above the bar and nothing wrong on it goes to the store as a draft without anyone pressing anything, once its supplier has a clean record. The products that need a look wait on the quick look and go with one press. Drafts only; a push can be rolled back from the export page.</span>
+          </span>
+        </label>
       )}
 
       {note && <Alert tone={note.tone}>{note.text}</Alert>}

@@ -25,6 +25,7 @@ import { retrying } from "./api-errors";
 import { logAudit } from "./audit";
 import { isValidType, productTypes } from "./taxonomy";
 import { houseTags } from "./product-tags";
+import { loadTagGate, partitionTags, recordTagProposals } from "./tag-gate";
 import { buildHandle } from "./handle";
 import { productTitle, seasonTagFrom } from "./titles";
 import { parseDirectives, describeDirectives } from "./instructions";
@@ -317,6 +318,7 @@ export async function reviewBatch(batchId: string, userId: string | null, ask: A
   const shopHandles = new Set((await prisma.shopListing.findMany({ where: { handle: { in: products.map((p) => p.handle) } }, select: { handle: true } })).map((l) => l.handle));
   const applied: ReviewOutcome["applied"] = [];
   const skipped: ReviewOutcome["skipped"] = [];
+  const gate = await loadTagGate();
 
   for (const fix of review.fixes) {
     const p = byHandle.get(fix.handle.trim());
@@ -342,7 +344,10 @@ export async function reviewBatch(batchId: string, userId: string | null, ask: A
       continue;
     }
     if (fix.field === "tags") {
-      const tags = houseTags(value.split(",").map((t) => t.trim()).filter(Boolean)).join(", ");
+      // Matched, never invented: a tag the shop has never used is proposed, not written.
+      const gated = partitionTags(houseTags(value.split(",").map((t) => t.trim()).filter(Boolean)), gate);
+      if (gated.proposed.length) await recordTagProposals(new Map(gated.proposed.map((t) => [t, p.title])));
+      const tags = gated.kept.join(", ");
       await prisma.product.update({ where: { id: p.id }, data: { tags } });
       applied.push({ handle: p.handle, field: "tags", from: p.tags, to: tags });
       continue;

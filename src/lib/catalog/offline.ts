@@ -10,6 +10,7 @@ import { generateCsv, type CsvProduct } from "./csv";
 import { toCsvProducts } from "./pipeline-pure";
 import { SKI_METAFIELDS, metafieldColumn, type AppSettings, type GstTreatment } from "./types";
 import type { ReviewProduct, ReviewSummary, ReviewVariant } from "./review-types";
+import { unscored } from "./confidence";
 import { blockingErrors, summarise, validateReview, warningList } from "./validate";
 import type { ExtractedTable } from "./extract/types";
 
@@ -55,6 +56,7 @@ export function runOffline(
     published: false,
     seoTitle: seoTitle(g.brand, titleFor(g)),
     seoDescription: "", lookupStatus: "NONE", lookupSource: "", matchCandidates: [], matchDecided: false,
+    confidence: unscored(),
     option1Name: g.option1Name,
     option2Name: g.option2Name,
     option3Name: g.option3Name,

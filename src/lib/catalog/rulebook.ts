@@ -212,6 +212,7 @@ function filing(input: RulebookInput): RuleEntry[] {
     if (k.tags.length) bits.push(`every one is tagged ${k.tags.join(", ")}`);
     if (bits.length) out.push({ id: `kind.filing.${k.type}`, stage: "filing", source: "kind", editHref: "/training#export", sentence: `${k.calledAs || k.type}: ${bits.join("; ")}.` });
   }
+  out.push({ id: "floda.tags.closed", stage: "filing", source: "floda", editHref: "", sentence: "Tags are matched, never invented: a tag your shop has never used is taken off the product and proposed to you on this page; approved, it is one of yours from then on." });
   const kindRule = (r: TagRuleLike) => /^kind: /.test(r.name);
   for (const r of [...input.tagRules].sort((a, b) => b.priority - a.priority)) {
     if (kindRule(r)) continue; // said above, by the kind

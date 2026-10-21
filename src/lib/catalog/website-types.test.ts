@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { ALPSPORT_CONVENTIONS, activateConventions, isValidType, productTypes, typesAreKnown } from "./taxonomy";
 import { emptyVariantView, hardErrors, validateReview } from "./validate";
 import type { ReviewProduct } from "./review-types";
+import { unscored } from "./confidence";
 
 function product(partial: Partial<ReviewProduct>): ReviewProduct {
   return {
@@ -9,7 +10,7 @@ function product(partial: Partial<ReviewProduct>): ReviewProduct {
     tags: "", collections: "", status: "draft", published: false, seoTitle: "", seoDescription: "", lookupStatus: "NONE", lookupSource: "", matchCandidates: [], matchDecided: false, option1Name: "Size", option2Name: null, option3Name: null,
     metafields: {}, reconcileStatus: "UNKNOWN", shopifyProductId: null, images: [{ id: "i", url: "https://cdn.x.com/a.jpg", position: 1, variantId: null, source: "SUPPLIER", validated: true }],
     variants: [emptyVariantView({ id: "v1", productId: "p1", sku: "NW-1", option1Value: "M", costPrice: 58, retailPrice: 139, exGstRevenue: 126.36, gstComponent: 12.64, landedCostAud: 58, profitPerUnit: 68.36, marginPct: 54, quantity: 2 })],
-    flags: [], ...partial,
+    flags: [], confidence: unscored(), ...partial,
   };
 }
 

@@ -351,6 +351,11 @@ export async function updateProductAction(productId: string, patch: z.infer<type
     const product = await prisma.product.update({ where: { id: productId }, data: { ...rest, ...(metafields ? { metafields: JSON.stringify(metafields) } : {}), ...(rest.status ? { published: rest.status === "active" } : {}) } });
     // Recorded so a file added later does not rebuild the batch over this. See untouchedSinceBuilt.
     await logAudit("product.edited", { batchId: product.batchId, details: { productId, fields: Object.keys(data) } });
+    // A tag a person types is the shop's own word: approved as written, so the build keeps it from now on.
+    if (typeof rest.tags === "string") {
+      const { approveTypedTags, loadTagGate } = await import("@/lib/catalog/tag-gate");
+      await approveTypedTags(rest.tags.split(",").map((t) => t.trim()).filter(Boolean), await loadTagGate(), product.title);
+    }
     if (rest.category !== undefined || rest.vendor !== undefined) {
       const variants = await prisma.variant.findMany({ where: { productId }, select: { id: true } });
       for (const v of variants) await repriceVariant(v.id);
@@ -2317,5 +2322,21 @@ export async function ruleReachAction(id: string): Promise<ActionResult<RuleReac
     const live = { ...rule, active: true };
     const hits = products.filter((p) => ruleMatches(live, { title: p.title, vendor: p.vendor, category: p.category, productType: p.productType, skus: p.variants.map((v) => v.sku), tags: p.tags.split(",").map((t) => t.trim()).filter(Boolean), collections: p.collections.split(",").map((t) => t.trim()).filter(Boolean), metafields: parseJson<Record<string, string>>(p.metafields, {}) }));
     return { ok: true, data: { batch: batch.name, matched: hits.length, of: products.length, examples: hits.slice(0, 5).map((p) => p.title) } };
+  });
+}
+
+// ---------------------------------------------------------------------------------------------
+// Tags proposed by a build: approved they are the shop's, rejected they are never proposed again
+// ---------------------------------------------------------------------------------------------
+
+export async function decideTagProposalAction(id: string, approve: boolean): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const proposal = await prisma.tagProposal.findUnique({ where: { id } });
+    if (!proposal) return { ok: false, error: "That proposal is gone." };
+    await prisma.tagProposal.update({ where: { id }, data: { status: approve ? "APPROVED" : "REJECTED", decidedAt: new Date() } });
+    await logAudit(approve ? "tag.approved" : "tag.rejected", { userId: user.id, details: { tag: proposal.tag } });
+    revalidatePath("/training");
+    return { ok: true };
   });
 }

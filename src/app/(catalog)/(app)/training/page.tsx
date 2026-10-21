@@ -12,6 +12,7 @@ import { HouseForm } from "@/app/(catalog)/(setup)/setup/HouseStep";
 import { SuppliersStep } from "@/app/(catalog)/(setup)/setup/SuppliersStep";
 import { WebsiteForm } from "./WebsiteForm";
 import { Rulebook } from "./Rulebook";
+import { TagProposals } from "./TagProposals";
 import { buildRulebook, countRules } from "@/lib/catalog/rulebook";
 import { getSettings } from "@/lib/catalog/settings";
 import { taxName } from "@/lib/catalog/shop-profile";
@@ -45,6 +46,7 @@ export default async function TrainingPage() {
     supplierRecords().catch(() => []),
     getSettings(),
   ]);
+  const proposals = await prisma.tagProposal.findMany({ orderBy: [{ status: "desc" }, { count: "desc" }, { createdAt: "asc" }] }).catch(() => []);
   const kinds = productTypes();
   const rulebook = buildRulebook({
     house,
@@ -67,6 +69,12 @@ export default async function TrainingPage() {
       <div id="rulebook">
         <Card title="Your rulebook" className="mb-6">
           <Rulebook stages={rulebook} counts={countRules(rulebook)} />
+        </Card>
+      </div>
+
+      <div id="tags">
+        <Card title="Tags proposed by a build" className="mb-6">
+          <TagProposals proposals={proposals.map((t) => ({ id: t.id, tag: t.tag, status: t.status, count: t.count, example: t.example }))} />
         </Card>
       </div>
 

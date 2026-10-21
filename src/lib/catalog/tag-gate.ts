@@ -59,7 +59,12 @@ export async function loadTagGate(): Promise<TagGate> {
     prisma.shopListing.findMany({ select: { tags: true } }),
     prisma.tagRule.findMany({ select: { addTags: true } }),
     prisma.productTemplate.findMany({ select: { addTags: true } }),
-    prisma.tagProposal.findMany({ where: { status: "APPROVED" }, select: { tag: true } }),
+    // A database the table could not be added to must not take the build down: the gate then
+    // simply knows no approved tags, and says so once.
+    prisma.tagProposal.findMany({ where: { status: "APPROVED" }, select: { tag: true } }).catch((err: unknown) => {
+      console.warn("[tags] could not read the approved tags:", err instanceof Error ? err.message : err);
+      return [] as { tag: string }[];
+    }),
   ]);
   const known: string[] = [];
   for (const l of listings) for (const t of l.tags.split(",")) known.push(t);

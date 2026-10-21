@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { BAR, type ConfidenceField } from "@/lib/catalog/confidence";
+import { readyToPush } from "@/lib/catalog/autopilot-rules";
 import { Badge, Button, INPUT_INLINE, cx, money, pct } from "@/app/(catalog)/ui";
 import type { ReviewProduct } from "@/lib/catalog/review-types";
 
@@ -23,6 +24,8 @@ export interface ReviewCardsProps {
   products: ReviewProduct[];
   /** Find and read a product's page, so its pictures and copy arrive without a link being pasted. */
   findPage: (productId: string) => void;
+  /** The store, when one is connected: the one press that sends what has earned it. */
+  store: { push: () => void } | null;
   kinds: string[];
   locked: boolean;
   busy: boolean;
@@ -33,13 +36,24 @@ export interface ReviewCardsProps {
   confirm: (productId: string, field: ConfidenceField) => void;
 }
 
-export function ReviewCards({ products, kinds, locked, busy, exportHref, commitProduct, commitVariant, openDrawer, confirm, findPage }: ReviewCardsProps) {
+export function ReviewCards({ products, kinds, locked, busy, exportHref, commitProduct, commitVariant, openDrawer, confirm, findPage, store }: ReviewCardsProps) {
   const needLook = products.filter((p) => p.confidence.product < BAR).sort((a, b) => a.confidence.product - b.confidence.product || a.title.localeCompare(b.title));
   const ready = products.filter((p) => p.confidence.product >= BAR);
   const [showReady, setShowReady] = useState(false);
+  const pushable = readyToPush(products);
+  const inStore = products.filter((p) => p.shopifyProductId).length;
 
   return (
     <div className="space-y-3">
+      {store && (pushable.length > 0 || inStore > 0) && (
+        <div className="flex flex-wrap items-center gap-3 rounded-[12px] border border-[var(--line)] bg-white px-4 py-3">
+          {pushable.length > 0 && <Button variant="primary" disabled={busy} onClick={store.push} title="Every product with every field above the bar and nothing wrong on it goes to the store as a draft; the rest wait here">Push {pushable.length} ready product{pushable.length === 1 ? "" : "s"} to Shopify as drafts →</Button>}
+          <span className="text-[13px] text-[var(--ink-soft)]">
+            {inStore > 0 ? `${inStore} already in the store as draft${inStore === 1 ? "" : "s"}. ` : ""}
+            {pushable.length > 0 ? "Drafts only: nothing reaches a customer until it is published in the store. A push can be rolled back from the export page." : needLook.length > 0 ? "The rest go once the cards below are settled." : ""}
+          </span>
+        </div>
+      )}
       {needLook.length === 0 ? (
         <div className="rounded-[12px] border border-[var(--line)] bg-white px-5 py-6 text-center">
           <div className="text-[17px] font-semibold">Every product is ready to import.</div>
@@ -63,6 +77,7 @@ export function ReviewCards({ products, kinds, locked, busy, exportHref, commitP
                 <li key={p.id} className="flex items-center gap-2 truncate">
                   <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--promoter-tint)] px-1 text-[10px] font-bold text-[var(--promoter)]">✓</span>
                   <button type="button" className="truncate text-left hover:underline" onClick={() => openDrawer(p.id)} title="Open its pictures and details">{p.title}</button>
+                  {p.shopifyProductId && <span className="shrink-0 text-[11px] text-[var(--ink-soft)]">in the store</span>}
                 </li>
               ))}
             </ul>
@@ -73,7 +88,7 @@ export function ReviewCards({ products, kinds, locked, busy, exportHref, commitP
   );
 }
 
-function ProductCard({ p, kinds, locked, busy, commitProduct, commitVariant, openDrawer, confirm, findPage }: { p: ReviewProduct } & Omit<ReviewCardsProps, "products" | "exportHref">) {
+function ProductCard({ p, kinds, locked, busy, commitProduct, commitVariant, openDrawer, confirm, findPage }: { p: ReviewProduct } & Omit<ReviewCardsProps, "products" | "exportHref" | "store">) {
   const c = p.confidence;
   const weakest: ConfidenceField = c.weakest ?? "title";
   const others = (["title", "tags", "image", "price"] as ConfidenceField[]).filter((f) => f !== weakest && c[f] < BAR);

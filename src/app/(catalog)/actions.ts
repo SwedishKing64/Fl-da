@@ -277,7 +277,10 @@ export async function reviewBatchAction(batchId: string, options: { audited?: bo
     if (!review) return { ok: false, error: "No API key is set, so the build cannot be checked. Add ANTHROPIC_API_KEY in Settings." };
     revalidatePath(`/batches/${batchId}`);
     revalidatePath(`/batches/${batchId}/review`);
-    const reading = review.audit ? `Files: ${review.audit.verdict === "right" ? "read right" : review.audit.verdict === "wrong" ? "read wrong" : "not sure"}${review.audit.remapped.length ? `, ${review.audit.remapped.length} column${review.audit.remapped.length === 1 ? "" : "s"} re-read${review.audit.rebuilt ? " and rebuilt" : ""}` : ""}. ` : "";
+    // After the check's fixes, what has earned it goes to the store on its own, when the shop has said to.
+    const { autoPilot } = await import("@/lib/catalog/autopilot");
+    const went = await autoPilot(batchId, user.id).catch(() => null);
+    const reading = `${review.audit ? `Files: ${review.audit.verdict === "right" ? "read right" : review.audit.verdict === "wrong" ? "read wrong" : "not sure"}${review.audit.remapped.length ? `, ${review.audit.remapped.length} column${review.audit.remapped.length === 1 ? "" : "s"} re-read${review.audit.rebuilt ? " and rebuilt" : ""}` : ""}. ` : ""}${went && went.pushed > 0 ? `${went.said} ` : ""}`;
     return { ok: true, data: { summary: `${reading}${review.summary}`, changed: review.applied.length, questions: [...(review.audit?.questions ?? []), ...review.questions] } };
   } catch (err) {
     return { ok: false, error: `The build could not be checked: ${said(err)}` };
@@ -300,6 +303,9 @@ export async function buildProductsAction(batchId: string): Promise<ActionResult
       return { ok: false, error: result.unmapped.length > 0 ? `The columns of ${result.unmapped.join(", ")} could not be read on their own. Open Column mapping and say which column is the product's name.` : "Nothing on the order has a quantity or a price against it, so there was nothing to build." };
     }
     revalidatePath(`/batches/${batchId}`);
+    // What has earned it goes to the store on its own, when the shop has said to. See autopilot.ts.
+    const { autoPilot } = await import("@/lib/catalog/autopilot");
+    await autoPilot(batchId, user.id).catch(() => null);
     const { lastBuild } = await import("@/lib/catalog/pipeline");
     const timing = lastBuild();
     return { ok: true, data: { products: result.products, drifted: result.drifted, ...(timing ? { tookMs: timing.tookMs, phases: timing.phases } : {}) } };
@@ -656,6 +662,33 @@ export async function pushBatchAction(batchId: string, opts: { confirm: boolean;
   } catch (err) {
     return { ok: false, errors: [said(err)], created: 0, updated: 0 };
   }
+}
+
+/** The one press on the quick look: everything that has earned it goes to the store as drafts. */
+export async function pushReadyAction(batchId: string): Promise<ActionResult<{ pushed: number; waiting: number; errors: string[] }>> {
+  const user = await requireUser();
+  return safely(async () => {
+    const { readyToPush, canGoAlone } = await import("@/lib/catalog/autopilot");
+    const review = await loadReview(batchId);
+    const ready = readyToPush(review.products);
+    const waiting = review.products.filter((p) => !canGoAlone(p)).length;
+    if (ready.length === 0) return { ok: false, error: waiting > 0 ? "Nothing is ready yet: settle the cards first." : "Everything is already in the store." };
+    const r = await pushBatch(batchId, user.id, { confirm: true, overrideWarnings: true, productIds: ready.map((p) => p.id) });
+    revalidatePath(`/batches/${batchId}`);
+    return { ok: true, data: { pushed: r.created + r.updated, waiting, errors: r.errors } };
+  });
+}
+
+/** Whether what has earned it goes to the store on its own after a build. */
+export async function setAutoPushAction(on: boolean): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const { saveShopProfile } = await import("@/lib/catalog/shop-profile");
+    await saveShopProfile({ autoPush: Boolean(on) });
+    await logAudit(on ? "store.autopush_on" : "store.autopush_off", { userId: user.id });
+    revalidatePath("/training");
+    return { ok: true };
+  });
 }
 
 export async function rollbackAction(batchId: string): Promise<ActionResult<{ deleted: number; restored: number; errors: string[] }>> {

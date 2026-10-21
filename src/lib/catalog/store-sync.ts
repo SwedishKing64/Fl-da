@@ -114,11 +114,15 @@ export interface StoreState {
   products: number;
   types: number;
   templates: number;
+  /** Whether what has earned it goes to the store on its own after a build. */
+  autoPush: boolean;
 }
 
 /** Where the connection stands: whether there is one, and what the last read found. */
 export async function storeState(): Promise<StoreState> {
   const s = await getSettings();
+  const { getShopProfile } = await import("./shop-profile");
+  const profile = await getShopProfile();
   const row = await prisma.appSetting.findUnique({ where: { key: STORE_KEY } }).catch(() => null);
   const last = parseJson<{ syncedAt?: string; products?: number; types?: number; templates?: number }>(row?.value, {});
   const token = s.shopify.accessToken ?? "";
@@ -130,6 +134,7 @@ export async function storeState(): Promise<StoreState> {
     products: last.products ?? 0,
     types: last.types ?? 0,
     templates: last.templates ?? 0,
+    autoPush: Boolean(profile.autoPush),
   };
 }
 

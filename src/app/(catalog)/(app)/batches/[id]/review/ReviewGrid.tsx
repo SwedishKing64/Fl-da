@@ -19,6 +19,7 @@ import {
   enrichSeoAction,
   findProductPagesAction,
   getReviewAction,
+  pushReadyAction,
   readProductLinkAction,
   moveImageAction,
   decideMatchAction,
@@ -347,6 +348,16 @@ export function ReviewGrid({ initial, batchId, kinds = [] }: { initial: ReviewDa
 
   const toggleAll = (on: boolean) => setSelected(on ? new Set(visible.map((p) => p.id)) : new Set());
 
+  /** The one press: everything that has earned it goes to the store as drafts; the rest wait. */
+  const pushReady = () =>
+    start(async () => {
+      const r = await pushReadyAction(batchId);
+      if (!r.ok) { setMessage({ tone: "warning", text: r.error }); return; }
+      const d = r.data!;
+      setMessage({ tone: d.errors.length ? "warning" : "success", text: `${d.pushed} product${d.pushed === 1 ? "" : "s"} went to the store as drafts${d.waiting ? `; ${d.waiting} still need${d.waiting === 1 ? "s" : ""} a look` : ""}.${d.errors.length ? ` The store refused ${d.errors.length}: ${d.errors.slice(0, 3).join("; ")}` : ""}` });
+      await refresh();
+    });
+
   /** Find one product's page and read it, so its pictures and copy arrive without a link being pasted. */
   const findPage = (productId: string) =>
     start(async () => {
@@ -452,6 +463,7 @@ export function ReviewGrid({ initial, batchId, kinds = [] }: { initial: ReviewDa
           openDrawer={setDrawer}
           confirm={confirmField}
           findPage={findPage}
+          store={data.settings.shopifyConfigured && !locked ? { push: pushReady } : null}
         />
       )}
 

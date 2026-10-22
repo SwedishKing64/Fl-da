@@ -20,7 +20,7 @@ const OUTCOMES: Record<string, { tone: "success" | "warning"; text: string }> = 
  * Connecting the shop's Shopify store. Where this copy has Flöda's Shopify app set up, the owner
  * names the store and approves Flöda on it; otherwise an Admin API token is pasted, as before.
  */
-export function ShopifyConnect({ connected, canInstall, outcome, next = "/settings#shopify" }: { connected: { domain: string; by: "oauth" | "token" } | null; canInstall: boolean; outcome?: string; next?: string }) {
+export function ShopifyConnect({ connected, canInstall, outcome, next = "/settings#shopify", intro = true }: { connected: { domain: string; by: "oauth" | "token" } | null; canInstall: boolean; outcome?: string; next?: string; intro?: boolean }) {
   const [shop, setShop] = useState("");
   const [domain, setDomain] = useState("");
   const [token, setToken] = useState("");
@@ -37,9 +37,9 @@ export function ShopifyConnect({ connected, canInstall, outcome, next = "/settin
           <p className="text-[14px]">Connected to <strong>{connected.domain}</strong>{connected.by === "oauth" ? " through the install link." : " with a pasted token."}</p>
           <Button size="sm" variant="ghost" disabled={pending} onClick={() => { if (confirm("Disconnect the store? Flöda stops reading it and cannot push until it is connected again.")) start(async () => { await disconnectShopifyAction(); router.refresh(); }); }}>Disconnect</Button>
         </div>
-      ) : (
+      ) : intro ? (
         <p className="text-[14px] text-[var(--ink-soft)]">Connect your store so Flöda can read what you already sell and push new products to it as drafts.</p>
-      )}
+      ) : null}
       {canInstall ? (
         <form action="/api/shopify/install" method="get" className="flex flex-wrap items-end gap-3">
           <input type="hidden" name="next" value={next} />

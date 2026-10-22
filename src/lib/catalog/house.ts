@@ -193,7 +193,7 @@ export function cleanKinds(input: unknown): KindRule[] {
  * in the title and the name as the supplier gives it, until it says otherwise.
  */
 export function defaultHouseFor(pack: string | null | undefined): HouseConventions {
-  if (pack === "snow-outdoor") return DEFAULT_HOUSE;
+  if ((pack ?? "").split("+").includes("snow-outdoor")) return DEFAULT_HOUSE;
   return { ...DEFAULT_HOUSE, naming: { ...DEFAULT_HOUSE.naming, brandInTitle: "always", audience: "none" } };
 }
 

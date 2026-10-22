@@ -31,6 +31,7 @@ import { describeDirectives, instructionsAvailable, parseDirectives, readInstruc
 import { lookupBatch, lookupEnabled, LOOKUP_LIMIT, REQUESTED_BUDGET_MS, type LookupOutcome } from "@/lib/catalog/enrich";
 import { SUPPORT_EMAIL } from "@/lib/catalog/support";
 import { homeCurrency } from "@/lib/catalog/shop-profile";
+import { isPackSet } from "@/lib/catalog/trades";
 
 export type ActionResult<T = undefined> = { ok: true; data?: T; message?: string } | { ok: false; error: string };
 
@@ -193,6 +194,18 @@ export async function createBatchAction(_prev: ActionResult | null, formData: Fo
   redirect(`/batches/${id}`);
 }
 
+/** The tutorial's first invoice: an ordinary batch, in the shop's own currency, ready for a file. */
+export async function startFirstInvoiceAction(): Promise<ActionResult<{ id: string }>> {
+  const user = await requireUser();
+  try {
+    const batch = await prisma.importBatch.create({ data: { name: "First invoice", createdById: user.id, builtBy: initialsFrom(user.name || user.email), currency: homeCurrency() } });
+    await logAudit("batch.created", { batchId: batch.id, userId: user.id, details: { name: batch.name, tutorial: true } });
+    return { ok: true, data: { id: batch.id } };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
 export async function updateBatchAction(batchId: string, patch: Partial<z.infer<typeof batchSchema>>): Promise<ActionResult> {
   const user = await requireUser();
   try {
@@ -350,14 +363,37 @@ const productPatch = z.object({
   metafields: z.record(z.string(), z.string()).optional(),
 });
 
+/** What a person changed on a product that the next build should do on its own. */
+async function rememberCorrections(
+  before: { productType: string; vendor: string; option1Name: string | null; option2Name: string | null; option3Name: string | null },
+  after: { productType: string; vendor: string; option1Name: string | null; option2Name: string | null; option3Name: string | null },
+): Promise<void> {
+  const { noteCorrection } = await import("@/lib/catalog/corrections");
+  const { getCorrections, saveCorrections } = await import("@/lib/catalog/shop-profile");
+  let list = await getCorrections();
+  const start = list;
+  if (before.productType && after.productType && before.productType !== after.productType) {
+    list = noteCorrection(list, { kind: "product-type", scope: "", from: before.productType, to: after.productType, brand: after.vendor });
+  }
+  const names = (p: typeof before) => [p.option1Name, p.option2Name, p.option3Name];
+  names(before).forEach((was, i) => {
+    const now = names(after)[i];
+    if (was && now && was !== now) list = noteCorrection(list, { kind: "option-name", scope: after.productType, from: was, to: now, brand: after.vendor });
+  });
+  if (list !== start) await saveCorrections(list);
+}
+
 export async function updateProductAction(productId: string, patch: z.infer<typeof productPatch>): Promise<ActionResult> {
   await requireUser();
   try {
     const data = productPatch.parse(patch);
     const { metafields, ...rest } = data;
+    const before = await prisma.product.findUnique({ where: { id: productId }, select: { productType: true, vendor: true, option1Name: true, option2Name: true, option3Name: true } });
     const product = await prisma.product.update({ where: { id: productId }, data: { ...rest, ...(metafields ? { metafields: JSON.stringify(metafields) } : {}), ...(rest.status ? { published: rest.status === "active" } : {}) } });
     // Recorded so a file added later does not rebuild the batch over this. See untouchedSinceBuilt.
     await logAudit("product.edited", { batchId: product.batchId, details: { productId, fields: Object.keys(data) } });
+    // Fixed once is fixed: a renamed option or a changed Type is the shop's rule from now on. See corrections.ts.
+    if (before) await rememberCorrections(before, product).catch((err) => console.warn("[corrections]", err instanceof Error ? err.message : err));
     // A tag a person types is the shop's own word: approved as written, so the build keeps it from now on.
     if (typeof rest.tags === "string") {
       const { approveTypedTags, loadTagGate } = await import("@/lib/catalog/tag-gate");
@@ -1837,7 +1873,7 @@ const shopSchema = z.object({
   currency: z.string().trim().regex(/^[A-Z]{3}$/, "A three-letter currency code"),
   taxName: z.string().trim().max(24),
   taxRate: z.coerce.number().min(0).max(1),
-  pack: z.enum(["snow-outdoor", "outdoor", "general"]),
+  pack: z.string().refine((p) => isPackSet(p), "Pick the trades to start from again."),
   marker: z.string().trim().toLowerCase().regex(/^[a-z0-9]{0,12}$/, "Letters and digits only, up to twelve"),
 });
 
@@ -2007,7 +2043,7 @@ export async function saveApiKeyAction(_prev: ActionResult | null, formData: For
 }
 
 /** A step of setup put off until later. It stays on the Home checklist. */
-export async function skipSetupStepAction(step: "learn" | "house" | "ai" | "suppliers"): Promise<ActionResult> {
+export async function skipSetupStepAction(step: "store" | "learn" | "house" | "menu" | "ai" | "suppliers" | "first"): Promise<ActionResult> {
   await requireUser("ADMIN");
   return safely(async () => {
     const { saveShopProfile } = await import("@/lib/catalog/shop-profile");

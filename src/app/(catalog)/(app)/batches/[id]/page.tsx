@@ -4,6 +4,7 @@ import { prisma, parseJson } from "@/lib/catalog/db";
 import { Badge, Card, Details, Empty, LinkButton, PageHeader, fmtDate, statusTone } from "@/app/(catalog)/ui";
 import { getSettings } from "@/lib/catalog/settings";
 import { describeDirectives, parseDirectives } from "@/lib/catalog/instructions";
+import { FirstInvoiceNote } from "./FirstInvoiceNote";
 import { Steps } from "./Steps";
 import { NextStep } from "./NextStep";
 import { UploadPanel } from "./UploadPanel";
@@ -73,6 +74,7 @@ async function renderBatchPage(props: PageProps<"/batches/[id]">) {
         </>}
       />
       <Steps batchId={id} current="upload" status={batch.status} />
+      <FirstInvoiceNote stage="upload" />
       <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <div className="min-w-0 space-y-6">
           {batch._count.products > 0 && <BuildCheck batchId={id} needed={!reviewed} aiEnabled={aiAvailable()} locked={locked} />}

@@ -24,6 +24,7 @@ import { activateConventions, type LearnedVocabulary } from "./taxonomy";
 import type { WebsiteCategories } from "./website";
 import { COUNTRIES, DEFAULT_PROFILE, type ShopProfile } from "./shop";
 import { cleanHouse, defaultHouseFor, type HouseConventions } from "./house";
+import { activateCorrections, CORRECTIONS_KEY, type Correction } from "./corrections";
 
 export { COUNTRIES, DEFAULT_PROFILE, type ShopProfile } from "./shop";
 
@@ -71,6 +72,19 @@ export async function saveHouseConventions(house: HouseConventions): Promise<voi
   await refreshConventions();
 }
 
+/** What people have corrected on the review grid, kept as the shop's rules. See corrections.ts. */
+export async function getCorrections(): Promise<Correction[]> {
+  const row = await prisma.appSetting.findUnique({ where: { key: CORRECTIONS_KEY } }).catch(() => null);
+  const list = parseJson<Correction[]>(row?.value, []);
+  return Array.isArray(list) ? list : [];
+}
+
+export async function saveCorrections(list: Correction[]): Promise<void> {
+  const value = JSON.stringify(list);
+  await prisma.appSetting.upsert({ where: { key: CORRECTIONS_KEY }, create: { key: CORRECTIONS_KEY, value }, update: { value } });
+  activateCorrections(list);
+}
+
 export async function getWebsiteCategories(): Promise<WebsiteCategories | null> {
   const row = await prisma.appSetting.findUnique({ where: { key: WEBSITE_KEY } });
   const parsed = parseJson<WebsiteCategories | null>(row?.value, null);
@@ -106,12 +120,14 @@ let loading: Promise<void> | null = null;
 const TRUST_MS = 30_000;
 
 async function load(): Promise<void> {
-  const [profile, learned, key, house, website, licenceRow] = await Promise.all([
+  const [profile, learned, key, house, website, licenceRow, corrections] = await Promise.all([
     getShopProfile(), getLearnedVocabulary(), getStoredApiKey(), getHouseConventions(), getWebsiteCategories(),
     prisma.appSetting.findUnique({ where: { key: LICENCE_KEY_SETTING } }),
+    getCorrections(),
   ]);
   activeProfile = profile;
   activateConventions({ pack: profile.pack, learned, marker: profile.marker, house, website });
+  activateCorrections(corrections);
   setStoredApiKey(key);
   // A copy in good standing with its vendor reads through Flöda when it has no key of its own.
   const standing = licenceState(parseJson<Licence | null>(licenceRow?.value, null));

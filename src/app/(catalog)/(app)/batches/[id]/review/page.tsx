@@ -4,6 +4,7 @@ import { prisma } from "@/lib/catalog/db";
 import { loadReview } from "@/lib/catalog/pipeline";
 import { isPlaceholderBody } from "@/lib/catalog/extract/lookup";
 import { Alert, Badge, LinkButton, PageHeader, statusTone } from "@/app/(catalog)/ui";
+import { FirstInvoiceNote } from "../FirstInvoiceNote";
 import { Steps } from "../Steps";
 import { NextStep } from "../NextStep";
 import { ReviewGrid } from "./ReviewGrid";
@@ -73,6 +74,7 @@ async function renderReviewPage(props: PageProps<"/batches/[id]/review">) {
         actions={<LinkButton href={`/batches/${id}`}>Batch settings</LinkButton>}
       />
       <Steps batchId={id} current="review" status={batch.status} />
+      <FirstInvoiceNote stage="review" />
       <NextStep href={`/batches/${id}/export`} label="Next: Export" disabledWhy={review.products.length === 0 ? "Nothing to export yet; upload a supplier file first." : undefined} />
       {review.products.length === 0 ? (
         <Alert tone="warning">No products yet — upload a supplier file first.</Alert>

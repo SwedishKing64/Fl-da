@@ -25,7 +25,7 @@ export interface ShopProfile {
   /** Setup has been walked through to the end. */
   setupDone: boolean;
   /** Steps a person chose to come back to. */
-  skipped: { learn?: boolean; house?: boolean; ai?: boolean; suppliers?: boolean };
+  skipped: { store?: boolean; learn?: boolean; house?: boolean; menu?: boolean; ai?: boolean; suppliers?: boolean; first?: boolean };
   /** Push what has earned it to the store as drafts on its own, after a build. Off until the shop says so. See autopilot.ts. */
   autoPush?: boolean;
 }

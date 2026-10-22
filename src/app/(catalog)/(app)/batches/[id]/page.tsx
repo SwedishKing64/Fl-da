@@ -18,6 +18,7 @@ import { LinksPanel } from "./review/LinksPanel";
 import { BuildList } from "./BuildList";
 import { TypeList } from "./TypeList";
 import { guarded } from "@/app/(catalog)/page-failed";
+import { homeCurrency } from "@/lib/catalog/shop-profile";
 
 /**
  * The build check, the chat's rebuilds and the page reads are each a long model call, and a
@@ -133,11 +134,12 @@ async function renderBatchPage(props: PageProps<"/batches/[id]">) {
         </div>
         <NextStep href={`/batches/${id}/review`} label="Next: Review & price" disabledWhy={products.length === 0 ? "Build the products first; then the review grid is next." : undefined} />
         <div className="space-y-6">
-          <Details summary="Currency, GST and freight" hint="Set once per batch. Only open it if this invoice is not in plain AUD.">
+          <Details summary="Currency, GST and freight" hint={`Set once per batch. Only open it if this invoice is not in plain ${homeCurrency()}.`}>
             <BatchSettingsForm
-              batch={{ id: batch.id, supplierId: batch.supplierId, currency: batch.currency, fxRateToAud: batch.fxRateToAud, gstTreatment: batch.gstTreatment, freightTotalAud: batch.freightTotalAud, freightMode: batch.freightMode, splitExportBy: batch.splitExportBy, builtBy: batch.builtBy, notes: batch.notes ?? "" }}
+              batch={{ id: batch.id, supplierId: batch.supplierId, currency: batch.currency, fxRateToHome: batch.fxRateToHome, gstTreatment: batch.gstTreatment, freightTotalHome: batch.freightTotalHome, freightMode: batch.freightMode, splitExportBy: batch.splitExportBy, builtBy: batch.builtBy, notes: batch.notes ?? "" }}
               suppliers={suppliers.map((s) => ({ id: s.id, name: s.name }))}
               disabled={locked}
+              home={homeCurrency()}
             />
           </Details>
         </div>

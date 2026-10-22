@@ -5,9 +5,9 @@
  */
 
 import type { TaxonomySection } from "../taxonomy";
-import { LIVE_TAG_SPELLING, TAG_ALSO } from "../tag-spelling";
 import { SNOW_OUTDOOR_TAXONOMY } from "./snow-outdoor";
 import type { TradePack } from "./types";
+import { GENERAL_METAFIELDS } from "../types";
 
 const OUTDOOR_CLOTHING = new Set(["Outdoor Clothing", "Clothing Accessories"]);
 
@@ -15,16 +15,16 @@ const tree: TaxonomySection[] = SNOW_OUTDOOR_TAXONOMY
   .map((s) => (s.top === "Clothing" ? { ...s, groups: s.groups.filter((g) => OUTDOOR_CLOTHING.has(g.heading)) } : s))
   .filter((s) => s.top === "Outdoor" || s.top === "Clothing");
 
-const kinds = new Set(tree.flatMap((s) => s.groups.flatMap((g) => [g.heading, ...g.leaves])));
-const only = <T,>(map: Record<string, T>): Record<string, T> => Object.fromEntries(Object.entries(map).filter(([k]) => kinds.has(k)));
 
 export const OUTDOOR_PACK: TradePack = {
   id: "outdoor",
   name: "Outdoor",
   sells: "Tents, sleeping bags and mats, packs, climbing, hiking footwear and outdoor clothing",
   tree,
-  tagSpelling: only(LIVE_TAG_SPELLING),
-  tagAlso: only(TAG_ALSO),
+  // Not the ski shop's spellings: they were one shop's tags, not the trade's. An outdoor shop's own
+  // store teaches it how its tags are written.
+  tagSpelling: {},
+  tagAlso: {},
   readerExamples: [
     "A pack line \"PK-ATL-65-BLK Atlas Trek Pack 65L Black | 2 | 189.00\" reads as title Atlas Trek Pack, variant 65L with variantName Volume, colour Black, quantity 2, cost 189.",
     "A tent line \"Ridgeback 2P Tent Green\" reads as title Ridgeback Tent, variant 2P with variantName Capacity, colour Green, unless the brand's own model name carries the number.",
@@ -33,4 +33,5 @@ export const OUTDOOR_PACK: TradePack = {
   ],
   seeds: false,
   snowRules: false,
+  metafields: GENERAL_METAFIELDS,
 };

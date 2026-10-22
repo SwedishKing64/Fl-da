@@ -31,11 +31,11 @@ import type { ReviewProduct, ReviewVariant } from "@/lib/catalog/review-types";
 import { priceVariant } from "@/lib/catalog/pricing";
 import { type GstTreatment, type RowFlag } from "@/lib/catalog/types";
 
-type VariantField = "sku" | "barcode" | "option1Value" | "option2Value" | "option3Value" | "quantity" | "costPrice" | "gstTreatment" | "freightPerUnitAud" | "retailOverride" | "compareAtPrice" | "grams";
+type VariantField = "sku" | "barcode" | "option1Value" | "option2Value" | "option3Value" | "quantity" | "costPrice" | "gstTreatment" | "freightPerUnitHome" | "retailOverride" | "compareAtPrice" | "grams";
 type ProductField = "title" | "handle" | "vendor" | "productType" | "category" | "tags" | "collections" | "status";
 
 interface Col {
-  key: VariantField | "landedCostAud" | "exGstRevenue" | "gstComponent" | "profitPerUnit" | "marginPct" | "markupPct";
+  key: VariantField | "landedCostHome" | "exGstRevenue" | "gstComponent" | "profitPerUnit" | "marginPct" | "markupPct";
   label: string;
   editable?: boolean;
   num?: boolean;
@@ -63,8 +63,8 @@ const VARIANT_COLS: Col[] = [
   { key: "grams", label: "Grams", editable: true, num: true, kind: "number", width: 76 },
   { key: "costPrice", label: "Cost", editable: true, num: true, kind: "number", width: 92, band: "Cost" },
   { key: "gstTreatment", label: "Cost GST", editable: true, kind: "select", width: 96 },
-  { key: "freightPerUnitAud", label: "Freight/u", editable: true, num: true, kind: "number", width: 88 },
-  { key: "landedCostAud", label: "Landed", num: true, width: 92 },
+  { key: "freightPerUnitHome", label: "Freight/u", editable: true, num: true, kind: "number", width: 88 },
+  { key: "landedCostHome", label: "Landed", num: true, width: 92 },
   { key: "retailOverride", label: "Retail (inc GST)", editable: true, num: true, kind: "number", width: 120, band: "Price" },
   { key: "compareAtPrice", label: "Compare at", editable: true, num: true, kind: "number", width: 100 },
   { key: "exGstRevenue", label: "Ex-GST", num: true, width: 88, band: "Result" },
@@ -93,7 +93,7 @@ function fmt(v: ReviewVariant, key: Col["key"]): string {
   const val = v[key as keyof ReviewVariant];
   switch (key) {
     case "retailOverride": return v.retailPrice ? v.retailPrice.toFixed(2) : "";
-    case "costPrice": case "freightPerUnitAud": case "landedCostAud": case "exGstRevenue": case "gstComponent": case "profitPerUnit":
+    case "costPrice": case "freightPerUnitHome": case "landedCostHome": case "exGstRevenue": case "gstComponent": case "profitPerUnit":
       return typeof val === "number" ? val.toFixed(2) : "";
     case "compareAtPrice": return typeof val === "number" && val > 0 ? val.toFixed(2) : "";
     case "marginPct": case "markupPct": return typeof val === "number" ? `${val.toFixed(1)}%` : "";
@@ -189,10 +189,10 @@ export function ReviewGrid({ initial, batchId, kinds = [], categories = [] }: { 
           if (v.id !== variantId) return v;
           const next = { ...v, ...patch };
           const r = priceVariant(
-            { costPrice: next.costPrice, gstTreatment: next.gstTreatment as GstTreatment, fxRateToAud: next.fxRateToAud, freightPerUnitAud: next.freightPerUnitAud, quantity: next.quantity, retailOverride: next.retailOverride },
+            { costPrice: next.costPrice, gstTreatment: next.gstTreatment as GstTreatment, fxRateToHome: next.fxRateToHome, freightPerUnitHome: next.freightPerUnitHome, quantity: next.quantity, retailOverride: next.retailOverride },
             { gstRate: d.settings.gstRate, pricesIncludeGst: d.settings.pricesIncludeGst, minMarginPct: d.settings.minMarginPct },
           );
-          return { ...next, landedCostAud: r.landedCostAud, retailPrice: r.retailPrice, exGstRevenue: r.exGstRevenue, gstComponent: r.gstComponent, profitPerUnit: r.profitPerUnit, marginPct: r.marginPct, markupPct: r.markupPct };
+          return { ...next, landedCostHome: r.landedCostHome, retailPrice: r.retailPrice, exGstRevenue: r.exGstRevenue, gstComponent: r.gstComponent, profitPerUnit: r.profitPerUnit, marginPct: r.marginPct, markupPct: r.markupPct };
         }),
       })),
     }));
@@ -203,7 +203,7 @@ export function ReviewGrid({ initial, batchId, kinds = [], categories = [] }: { 
     const num = raw.trim() === "" ? null : Number(raw);
     switch (field) {
       case "quantity": case "grams": patch[field] = Math.max(0, Math.round(num ?? 0)); break;
-      case "costPrice": case "freightPerUnitAud": patch[field] = Math.max(0, num ?? 0); break;
+      case "costPrice": case "freightPerUnitHome": patch[field] = Math.max(0, num ?? 0); break;
       case "retailOverride": case "compareAtPrice": patch[field] = num === null || Number.isNaN(num) ? null : num; break;
       case "gstTreatment": patch[field] = raw; break;
       default: patch[field] = raw;

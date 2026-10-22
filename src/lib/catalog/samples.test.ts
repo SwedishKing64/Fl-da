@@ -40,7 +40,7 @@ describe("sample invoices → expected Shopify CSV", () => {
     it(`${name}: profit figures match samples/expected/profit.json`, () => {
       const result = fixtures.results[name];
       expect(result.summary).toEqual(expectedProfit[name].summary);
-      expect(result.products.flatMap((p) => p.variants.map((v) => ({ sku: v.sku, landedCostAud: v.landedCostAud, retailPrice: v.retailPrice, exGstRevenue: v.exGstRevenue, gstComponent: v.gstComponent, profitPerUnit: v.profitPerUnit, marginPct: v.marginPct })))).toEqual(expectedProfit[name].variants);
+      expect(result.products.flatMap((p) => p.variants.map((v) => ({ sku: v.sku, landedCostHome: v.landedCostHome, retailPrice: v.retailPrice, exGstRevenue: v.exGstRevenue, gstComponent: v.gstComponent, profitPerUnit: v.profitPerUnit, marginPct: v.marginPct })))).toEqual(expectedProfit[name].variants);
       expect(result.warnings).toEqual(expectedProfit[name].warnings);
     });
   }
@@ -81,7 +81,7 @@ describe("sample invoices → expected Shopify CSV", () => {
     expect(mantra.variants).toHaveLength(3);
     expect(mantra.variants[0].sku).toBe("V2410170");
     expect(mantra.variants[0].costPrice).toBe(550); // 1100 line total / 2 pieces
-    expect(mantra.variants[0].landedCostAud).toBeGreaterThan(550 * 1.52); // FX plus freight share
+    expect(mantra.variants[0].landedCostHome).toBeGreaterThan(550 * 1.52); // FX plus freight share
     const griffon = products.find((p) => p.handle === "griffon-13-id-bindings-2026")!;
     // Colour leads on a binding, as it does on all twenty in the catalogue.
     expect(griffon.option1Name).toBe("Colour");
@@ -92,7 +92,7 @@ describe("sample invoices → expected Shopify CSV", () => {
   it("burton: GST-inclusive text invoice backs GST out of the cost", () => {
     const { products } = fixtures.results.burton;
     const board = products.find((p) => p.handle === "custom-snowboard-2027")!;
-    expect(board.variants[0].landedCostAud).toBe(425); // 462 inc GST => 420 ex + 5 freight
+    expect(board.variants[0].landedCostHome).toBe(425); // 462 inc GST => 420 ex + 5 freight
     // The cost is understood; the price is not, because this invoice never stated one.
     expect(board.variants[0].retailPrice).toBe(0);
     // Everything the importer builds is a draft, whatever the invoice was.

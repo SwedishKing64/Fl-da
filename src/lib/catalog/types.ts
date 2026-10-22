@@ -174,7 +174,7 @@ export function emptyLineItem(): CanonicalLineItem {
   };
 }
 
-/** Ski-specific product metafields written as `<name> (product.metafields.<ns>.<key>)`. */
+/** A product metafield, written as `<name> (product.metafields.<ns>.<key>)`. Which ones a shop writes comes from its pack. */
 export interface MetafieldDef {
   key: string;
   namespace: string;
@@ -183,6 +183,7 @@ export interface MetafieldDef {
   source: keyof CanonicalLineItem;
 }
 
+/** The snow pack's metafields, under the namespace the ski shop's store already uses. */
 export const SKI_METAFIELDS: MetafieldDef[] = [
   { key: "length_cm", namespace: "ski", name: "Length (cm)", type: "single_line_text_field", source: "length" },
   { key: "flex", namespace: "ski", name: "Flex", type: "single_line_text_field", source: "flex" },
@@ -193,6 +194,16 @@ export const SKI_METAFIELDS: MetafieldDef[] = [
   { key: "gender", namespace: "ski", name: "Gender", type: "single_line_text_field", source: "gender" },
   { key: "season", namespace: "ski", name: "Season", type: "single_line_text_field", source: "season" },
   { key: "model_code", namespace: "ski", name: "Model Code", type: "single_line_text_field", source: "modelCode" },
+];
+
+/**
+ * Every other shop's: the few that mean the same in any trade, under Shopify's own namespace for
+ * a shop's definitions. A tent written to `ski.length_cm` was the first thing a second trade saw.
+ */
+export const GENERAL_METAFIELDS: MetafieldDef[] = [
+  { key: "gender", namespace: "custom", name: "Gender", type: "single_line_text_field", source: "gender" },
+  { key: "season", namespace: "custom", name: "Season", type: "single_line_text_field", source: "season" },
+  { key: "model_code", namespace: "custom", name: "Model Code", type: "single_line_text_field", source: "modelCode" },
 ];
 
 export function metafieldColumn(def: MetafieldDef): string {

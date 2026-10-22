@@ -1,4 +1,5 @@
 import type { TaxonomySection } from "../taxonomy";
+import type { MetafieldDef } from "../types";
 
 /** The trade packs there are. Adding a trade is a new data file and a line in the registry. */
 export type PackId = "snow-outdoor" | "outdoor" | "general";
@@ -34,4 +35,6 @@ export interface TradePack {
    * a glove and a boot is a boot; the shop's own store says where they go.
    */
   snowRules: boolean;
+  /** The product metafields a shop on this pack writes, and under which namespace. */
+  metafields: MetafieldDef[];
 }

@@ -27,8 +27,8 @@ describe("trade packs", () => {
     expect(kinds).toContain("Outdoor Clothing");
     expect(kinds).not.toContain("Skis");
     expect(kinds).not.toContain("Snow Jackets");
-    expect(PACKS.outdoor.tagSpelling["2 Person Tents"]).toBe("2 person tents");
-    expect(PACKS.outdoor.tagSpelling["Carving Skis"]).toBeUndefined();
+    // Tag spellings are the shop's own, learned from its store, never another shop's.
+    expect(PACKS.outdoor.tagSpelling).toEqual({});
   });
 
   it("knows no kinds at all on a blank shop", () => {
@@ -89,5 +89,51 @@ describe("options from the supplier's own columns", () => {
     activateConventions({ ...BLANK_CONVENTIONS, pack: "outdoor" });
     const [p] = groupLineItems([bag("S1", "Regular", "Left", "1"), bag("S3", "Long", "Right", "3")], []);
     expect([p.option1Name, p.option2Name]).toEqual(["Length", null]);
+  });
+});
+
+describe("product metafields", () => {
+  it("stay under ski for the ski shop, and are custom and trade-neutral for every other shop", async () => {
+    const { metafieldDefs } = await import("./taxonomy");
+    const { metafieldsFor, metafieldColumns } = await import("./categorize");
+    const tent = { ...emptyLineItem(), title: "Ridgeback Tent", length: "210", gender: "Unisex", modelCode: "RB2" };
+    activateConventions(ALPSPORT_CONVENTIONS);
+    expect(metafieldDefs().every((d) => d.namespace === "ski")).toBe(true);
+    activateConventions({ ...BLANK_CONVENTIONS, pack: "outdoor" });
+    expect(metafieldDefs().map((d) => d.namespace)).toEqual(["custom", "custom", "custom"]);
+    expect(Object.keys(metafieldColumns(metafieldsFor([tent])))).toEqual(["Gender (product.metafields.custom.gender)", "Model Code (product.metafields.custom.model_code)"]);
+  });
+});
+
+describe("a ski's own fields", () => {
+  it("are offered to a column only in the snow trade; elsewhere the column is kept as a trait", async () => {
+    const { suggestMapping, applyMapping } = await import("./mapping");
+    const headers = ["SKU", "Name", "Flex", "Terrain", "Qty", "Cost"];
+    const rows = [{ SKU: "B1", Name: "Ridge Bike", Flex: "Stiff", Terrain: "Gravel", Qty: "1", Cost: "900" }];
+    activateConventions(ALPSPORT_CONVENTIONS);
+    expect(suggestMapping(headers, rows)).toMatchObject({ Flex: "flex", Terrain: "terrain" });
+    activateConventions({ ...BLANK_CONVENTIONS, pack: "outdoor" });
+    const mapping = suggestMapping(headers, rows);
+    expect(mapping.Flex || "").toBe("");
+    expect(mapping.Terrain || "").toBe("");
+    expect(applyMapping(rows[0], mapping).extras).toMatchObject({ Flex: "Stiff", Terrain: "Gravel" });
+  });
+
+  it("are not asked of the reader outside the snow trade, whose instructions carry no ski examples", async () => {
+    const { readerInstructions } = await import("./extract/ai");
+    const trade = readerInstructions(false);
+    for (const word of ["Volkl", "Sportrade", "RACETIGER", "flex, abilityLevel", "DIN", "SLR 10", "148cm", "Bent 100"]) expect(trade).not.toContain(word);
+    expect(readerInstructions(true)).toContain("RACETIGER");
+  });
+
+  it("give way to the specs the reader read, kept under the document's own names", async () => {
+    const { aiExtractionToTable, readerMapping, isReaderTable } = await import("./extract/ai");
+    const { applyMapping } = await import("./mapping");
+    const line = { title: "Trail 900 Lamp", brand: "Lumo", modelCode: "", sku: "TL900", barcode: "", costPrice: 40, currency: "", quantity: 2, rrp: 89.95, length: "", size: "", width: "", colour: "Black", variant: "", variantName: "", productType: "", gender: "", season: "", category: "lamps", description: "", tags: "", imageUrls: [], notes: "", specs: [{ name: "Lumens", value: "900" }, { name: "Battery", value: "USB-C" }] };
+    const table = aiExtractionToTable({ documentType: "INVOICE", summary: "", supplier: "", invoiceNumber: "", currency: "", gstTreatment: "EXCLUSIVE", statedTotals: { units: null, subtotal: null }, items: [line] }, "PDF_AI");
+    expect(isReaderTable(table.headers)).toBe(true);
+    const item = applyMapping(table.rows[0], readerMapping(table.headers));
+    expect(item.sku).toBe("TL900");
+    expect(item.extras).toMatchObject({ Lumens: "900", Battery: "USB-C" });
   });
 });

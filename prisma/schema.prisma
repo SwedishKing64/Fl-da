@@ -87,9 +87,9 @@ model ImportBatch {
   supplierId      String?
   createdById     String
   currency        String   @default("AUD")
-  fxRateToAud     Float    @default(1) // multiply invoice-currency cost by this to get AUD
+  fxRateToHome    Float    @default(1) @map("fxRateToAud") // multiply invoice-currency cost by this to get the home currency
   gstTreatment    String   @default("EXCLUSIVE") // how invoice cost prices are expressed
-  freightTotalAud Float    @default(0) // batch-level freight, allocated per unit
+  freightTotalHome Float   @default(0) @map("freightTotalAud") // batch-level freight in the home currency, allocated per unit
   freightMode     String   @default("PER_UNIT") // PER_UNIT (split evenly by qty) | BY_VALUE (pro-rata by cost)
   publishOnExport Boolean  @default(false) // unused: every export is a draft, see csv.ts
   splitExportBy   String   @default("BRAND") // NONE | BRAND | PRODUCT_TYPE — one CSV per group
@@ -229,14 +229,14 @@ model Variant {
   costPrice        Float   @default(0) // as printed on the invoice, in costCurrency
   costCurrency     String  @default("AUD")
   gstTreatment     String  @default("EXCLUSIVE") // INCLUSIVE | EXCLUSIVE | NONE
-  fxRateToAud      Float   @default(1)
-  freightPerUnitAud Float  @default(0)
+  fxRateToHome      Float   @default(1) @map("fxRateToAud")
+  freightPerUnitHome Float  @default(0) @map("freightPerUnitAud")
   pricingRuleId    String?
   retailOverride   Float? // user-entered GST-inclusive retail price, wins over rule
   compareAtPrice   Float?
 
   // --- pricing outputs (recomputed whenever inputs change) ---
-  landedCostAud  Float @default(0)
+  landedCostHome Float @default(0) @map("landedCostAud")
   retailPrice    Float @default(0) // GST-inclusive, goes to Variant Price
   exGstRevenue   Float @default(0)
   gstComponent   Float @default(0)

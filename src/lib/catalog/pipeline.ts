@@ -11,7 +11,7 @@ import { houseTags, retagForType } from "./product-tags";
 import { DEFAULT_CATEGORY_RULES, type CategoryRuleLike } from "./categorize";
 import { enrichFromSpecs, normKey } from "./specs";
 import { keepOrderedLines, resolveAgainstReference } from "./reference-match";
-import { isFlatSki, isPackageBinding, packageProducts, specFromName, type ChosenBindings } from "./packages";
+import { isFlatSki, isPackageBinding, packageProducts, specFromName, type ChosenBindings } from "./trades/snow/packages";
 import { readInvoiceGrids, type PriceRow } from "./invoice";
 import { asShopPrice, existingHandle, listingByBarcode, listingsAsReference, rememberedVendor } from "./shop-memory";
 import { dueInWindow, parseWindow } from "./deliveries";
@@ -24,9 +24,10 @@ import { repairCategoryRules, repairProductTags, repairTagRuleSpelling } from ".
 import { applyTagRules, type TagRuleLike } from "./rules";
 import { conventionGrams, conventionIdentifiers } from "./house";
 import { shopBody } from "./description-style";
-import { houseConventions } from "./taxonomy";
+import { houseConventions, metafieldDefs } from "./taxonomy";
+import { homeCurrency } from "./shop-profile";
 import { applyTemplates, type ProductTemplateLike } from "./templates";
-import { allocateFreight, exGstCostAud, priceVariant } from "./pricing";
+import { allocateFreight, exGstCostHome, priceVariant } from "./pricing";
 import { getSettings } from "./settings";
 import { checkImageUrl, findLibraryImages, recordLibraryImages } from "./images";
 import { framePicture, hostPictures } from "./pictures";
@@ -34,7 +35,7 @@ import { generateCsvParts, validateCsvFile, validateProducts } from "./csv";
 import { toCsvProducts } from "./pipeline-pure";
 import { repairForExport, type Repair } from "./repair";
 export { toCsvProducts };
-import { SKI_METAFIELDS, metafieldColumn, type AppSettings, type CanonicalLineItem, type GstTreatment, CANONICAL_FIELDS } from "./types";
+import { metafieldColumn, type AppSettings, type CanonicalLineItem, type GstTreatment, CANONICAL_FIELDS } from "./types";
 import type { ReviewProduct, ReviewSummary, ReviewVariant } from "./review-types";
 import { hardErrors, summarise, validateReview, warningList } from "./validate";
 import { readsKnown } from "./supplier-record";
@@ -42,7 +43,7 @@ import { supplierRecordFor } from "./supplier-score";
 import type { MatchCandidate } from "./match-candidates";
 import { filePath, pictureHosting, publicFileUrl, readFile, saveFile, usingBlob } from "./storage";
 import { logAudit } from "./audit";
-import { AI_HEADERS } from "./extract/ai";
+import { isReaderTable, readerMapping } from "./extract/ai";
 
 // ---------------------------------------------------------------------------
 // Rules & settings helpers
@@ -296,7 +297,7 @@ export async function ingestFile(batchId: string, given: { filename: string; mim
     if (meta && effective === "INVOICE") {
       const batch = await prisma.importBatch.findUnique({ where: { id: batchId }, select: { currency: true } });
       const data: Prisma.ImportBatchUpdateInput = {};
-      if (meta.currency && batch?.currency === "AUD" && meta.currency !== "AUD") data.currency = meta.currency;
+      if (meta.currency && batch?.currency === homeCurrency() && meta.currency !== homeCurrency()) data.currency = meta.currency;
       if (meta.gstTreatment && meta.gstTreatment !== "UNKNOWN") data.gstTreatment = meta.gstTreatment;
       if (Object.keys(data).length) await prisma.importBatch.update({ where: { id: batchId }, data });
     }
@@ -342,7 +343,7 @@ export async function mappingState(batchId: string): Promise<HeaderGroup[]> {
     const hash = headerHash(headers);
     let group = groups.get(hash);
     if (!group) {
-      const isCanonical = headers.every((h) => (AI_HEADERS as readonly string[]).includes(h));
+      const isCanonical = isReaderTable(headers);
       const exact = templates.find((t) => t.headerHash === hash) ?? null;
       // No layout matches exactly: the nearest remembered one is carried over where its columns
       // still exist, and the difference is reported rather than the file being read from scratch.
@@ -352,7 +353,7 @@ export async function mappingState(batchId: string): Promise<HeaderGroup[]> {
       const fresh = suggestMapping(headers, rows);
       const suggestion = template
         ? repairTemplate(trimToHeaders(parseJson<Mapping>(template.mappings, {}), headers) ?? {}, fresh, rows, trimToHeaders(saved?.suggestedAtSave, headers))
-        : isCanonical ? Object.fromEntries(headers.map((h) => [h, h])) as Mapping : fresh;
+        : isCanonical ? readerMapping(headers) : fresh;
       group = {
         hash,
         headers,
@@ -957,7 +958,7 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
               costPrice: v.item.costPrice ?? 0,
               costCurrency: batch.currency,
               gstTreatment: batch.gstTreatment,
-              fxRateToAud: batch.fxRateToAud,
+              fxRateToHome: batch.fxRateToHome,
               // The recommended retail is what the product sells for, so it sets the price rather
               // than sitting beside it as a strikethrough. Without one the markup rules price it.
               retailOverride: v.item.rrp ?? null,
@@ -1091,9 +1092,9 @@ export async function allocateBatchFreight(batchId: string): Promise<void> {
   const batch = await prisma.importBatch.findUniqueOrThrow({ where: { id: batchId } });
   const settings = await getSettings();
   const variants = await prisma.variant.findMany({ where: { product: { batchId } } });
-  const lines = variants.map((v) => ({ id: v.id, quantity: v.quantity, exGstCostAud: exGstCostAud(v.costPrice, v.gstTreatment as GstTreatment, v.fxRateToAud, settings.gstRate) }));
-  const alloc = allocateFreight(batch.freightTotalAud, batch.freightMode as "PER_UNIT" | "BY_VALUE", lines);
-  await prisma.$transaction(variants.map((v) => prisma.variant.update({ where: { id: v.id }, data: { freightPerUnitAud: alloc[v.id] ?? 0 } })));
+  const lines = variants.map((v) => ({ id: v.id, quantity: v.quantity, exGstCostHome: exGstCostHome(v.costPrice, v.gstTreatment as GstTreatment, v.fxRateToHome, settings.gstRate) }));
+  const alloc = allocateFreight(batch.freightTotalHome, batch.freightMode as "PER_UNIT" | "BY_VALUE", lines);
+  await prisma.$transaction(variants.map((v) => prisma.variant.update({ where: { id: v.id }, data: { freightPerUnitHome: alloc[v.id] ?? 0 } })));
 }
 
 export async function repriceBatch(batchId: string): Promise<void> {
@@ -1121,15 +1122,15 @@ export async function repriceVariant(variantId: string): Promise<void> {
   await prisma.variant.update({ where: { id: v.id }, data: computePricing(v, settings, discountPct) });
 }
 
-type VariantRow = { costPrice: number; gstTreatment: string; fxRateToAud: number; freightPerUnitAud: number; quantity: number; retailOverride: number | null };
+type VariantRow = { costPrice: number; gstTreatment: string; fxRateToHome: number; freightPerUnitHome: number; quantity: number; retailOverride: number | null };
 
 export function computePricing(v: VariantRow, settings: AppSettings, discountPct: number | null = null) {
   const r = priceVariant(
-    { costPrice: v.costPrice, gstTreatment: v.gstTreatment as GstTreatment, fxRateToAud: v.fxRateToAud, freightPerUnitAud: v.freightPerUnitAud, quantity: v.quantity, retailOverride: v.retailOverride, discountPct },
+    { costPrice: v.costPrice, gstTreatment: v.gstTreatment as GstTreatment, fxRateToHome: v.fxRateToHome, freightPerUnitHome: v.freightPerUnitHome, quantity: v.quantity, retailOverride: v.retailOverride, discountPct },
     { gstRate: settings.gstRate, pricesIncludeGst: settings.pricesIncludeGst, minMarginPct: settings.minMarginPct },
   );
   return {
-    landedCostAud: r.landedCostAud,
+    landedCostHome: r.landedCostHome,
     retailPrice: r.retailPrice,
     // The strikethrough, written whenever the product is selling for less than it would have.
     compareAtPrice: r.compareAtPrice,
@@ -1171,9 +1172,9 @@ export interface ReviewData {
     name: string;
     status: string;
     currency: string;
-    fxRateToAud: number;
+    fxRateToHome: number;
     gstTreatment: string;
-    freightTotalAud: number;
+    freightTotalHome: number;
     freightMode: string;
     splitExportBy: string;
     supplierName: string | null;
@@ -1239,13 +1240,13 @@ export async function loadReview(batchId: string): Promise<ReviewData> {
         costPrice: v.costPrice,
         costCurrency: v.costCurrency,
         gstTreatment: v.gstTreatment,
-        fxRateToAud: v.fxRateToAud,
-        freightPerUnitAud: v.freightPerUnitAud,
+        fxRateToHome: v.fxRateToHome,
+        freightPerUnitHome: v.freightPerUnitHome,
         pricingRuleId: v.pricingRuleId,
         pricingRuleName: null, // nothing prices off a rule; the price is the recommended retail
         retailOverride: v.retailOverride,
         compareAtPrice: v.compareAtPrice,
-        landedCostAud: v.landedCostAud,
+        landedCostHome: v.landedCostHome,
         retailPrice: v.retailPrice,
         exGstRevenue: v.exGstRevenue,
         gstComponent: v.gstComponent,
@@ -1272,9 +1273,9 @@ export async function loadReview(batchId: string): Promise<ReviewData> {
       name: batch.name,
       status: batch.status,
       currency: batch.currency,
-      fxRateToAud: batch.fxRateToAud,
+      fxRateToHome: batch.fxRateToHome,
       gstTreatment: batch.gstTreatment,
-      freightTotalAud: batch.freightTotalAud,
+      freightTotalHome: batch.freightTotalHome,
       freightMode: batch.freightMode,
       splitExportBy: batch.splitExportBy,
       supplierName: batch.supplier?.name ?? null,
@@ -1294,7 +1295,7 @@ export async function loadReview(batchId: string): Promise<ReviewData> {
       // this deployment's own, or nowhere (a desktop copy's own address is not public).
       publicBaseUrl: usingBlob() ? "blob" : pictureHosting() ? "floda" : publicFileUrl("images/x.jpg", settings.publicBaseUrl) ? (settings.publicBaseUrl || process.env.APP_PUBLIC_URL || `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`) : "",
     },
-    metafieldColumns: SKI_METAFIELDS.map(metafieldColumn),
+    metafieldColumns: metafieldDefs().map(metafieldColumn),
   };
 }
 

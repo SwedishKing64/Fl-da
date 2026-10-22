@@ -20,7 +20,7 @@
 
 import { parseCsv } from "./csv";
 import { withoutGenerated } from "./generated-tags";
-import { isSystemMount } from "./mount";
+import { isSystemMount } from "./trades/snow/mount";
 
 export interface Scope {
   /** Vendor names, matched case-insensitively. Any one of them matches. */

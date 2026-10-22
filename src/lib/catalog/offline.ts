@@ -5,19 +5,20 @@ import { applyMapping, type Mapping, type MappingOptions } from "./mapping";
 import { productTitle, seoTitle } from "./titles";
 import { groupLineItems } from "./grouping";
 import type { CategoryRuleLike } from "./categorize";
-import { allocateFreight, exGstCostAud, priceVariant } from "./pricing";
+import { allocateFreight, exGstCostHome, priceVariant } from "./pricing";
 import { generateCsv, type CsvProduct } from "./csv";
 import { toCsvProducts } from "./pipeline-pure";
-import { SKI_METAFIELDS, metafieldColumn, type AppSettings, type GstTreatment } from "./types";
+import { metafieldDefs } from "./taxonomy";
+import { metafieldColumn, type AppSettings, type GstTreatment } from "./types";
 import type { ReviewProduct, ReviewSummary, ReviewVariant } from "./review-types";
 import { blockingErrors, summarise, validateReview, warningList } from "./validate";
 import type { ExtractedTable } from "./extract/types";
 
 export interface OfflineBatch {
   currency: string;
-  fxRateToAud: number;
+  fxRateToHome: number;
   gstTreatment: GstTreatment;
-  freightTotalAud: number;
+  freightTotalHome: number;
   freightMode: "PER_UNIT" | "BY_VALUE";
 }
 
@@ -75,13 +76,13 @@ export function runOffline(
       costPrice: v.item.costPrice ?? 0,
       costCurrency: batch.currency,
       gstTreatment: batch.gstTreatment,
-      fxRateToAud: batch.fxRateToAud,
-      freightPerUnitAud: 0,
+      fxRateToHome: batch.fxRateToHome,
+      freightPerUnitHome: 0,
       pricingRuleId: null,
       pricingRuleName: null,
       retailOverride: v.item.rrp,
       compareAtPrice: null,
-      landedCostAud: 0, retailPrice: 0, exGstRevenue: 0, gstComponent: 0, profitPerUnit: 0, marginPct: 0, markupPct: 0,
+      landedCostHome: 0, retailPrice: 0, exGstRevenue: 0, gstComponent: 0, profitPerUnit: 0, marginPct: 0, markupPct: 0,
       reconcileStatus: "UNKNOWN",
       shopifyVariantId: null,
       warningsDismissed: [],
@@ -91,11 +92,11 @@ export function runOffline(
   }));
 
   const allVariants = products.flatMap((p) => p.variants.map((v) => ({ p, v })));
-  const freight = allocateFreight(batch.freightTotalAud, batch.freightMode, allVariants.map(({ v }) => ({ id: v.id, quantity: v.quantity, exGstCostAud: exGstCostAud(v.costPrice, v.gstTreatment as GstTreatment, v.fxRateToAud, settings.gstRate) })));
+  const freight = allocateFreight(batch.freightTotalHome, batch.freightMode, allVariants.map(({ v }) => ({ id: v.id, quantity: v.quantity, exGstCostHome: exGstCostHome(v.costPrice, v.gstTreatment as GstTreatment, v.fxRateToHome, settings.gstRate) })));
   for (const { v } of allVariants) {
-    v.freightPerUnitAud = freight[v.id] ?? 0;
-    const r = priceVariant({ costPrice: v.costPrice, gstTreatment: v.gstTreatment as GstTreatment, fxRateToAud: v.fxRateToAud, freightPerUnitAud: v.freightPerUnitAud, quantity: v.quantity, retailOverride: v.retailOverride }, settings);
-    Object.assign(v, { landedCostAud: r.landedCostAud, retailPrice: r.retailPrice, exGstRevenue: r.exGstRevenue, gstComponent: r.gstComponent, profitPerUnit: r.profitPerUnit, marginPct: r.marginPct, markupPct: r.markupPct, pricingRuleName: r.ruleName });
+    v.freightPerUnitHome = freight[v.id] ?? 0;
+    const r = priceVariant({ costPrice: v.costPrice, gstTreatment: v.gstTreatment as GstTreatment, fxRateToHome: v.fxRateToHome, freightPerUnitHome: v.freightPerUnitHome, quantity: v.quantity, retailOverride: v.retailOverride }, settings);
+    Object.assign(v, { landedCostHome: r.landedCostHome, retailPrice: r.retailPrice, exGstRevenue: r.exGstRevenue, gstComponent: r.gstComponent, profitPerUnit: r.profitPerUnit, marginPct: r.marginPct, markupPct: r.markupPct, pricingRuleName: r.ruleName });
   }
 
   validateReview(products, { minMarginPct: settings.minMarginPct });
@@ -103,7 +104,7 @@ export function runOffline(
   return {
     products,
     csvProducts,
-    csv: generateCsv(csvProducts, { metafieldColumns: SKI_METAFIELDS.map(metafieldColumn) }),
+    csv: generateCsv(csvProducts, { metafieldColumns: metafieldDefs().map(metafieldColumn) }),
     summary: summarise(products),
     errors: blockingErrors(products),
     warnings: warningList(products),

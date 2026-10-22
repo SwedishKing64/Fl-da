@@ -149,7 +149,7 @@ describe.skipIf(!existsSync(`${UP}22065406-products_export_1-7.csv`))("the Volkl
 
   it("prices the Griffon at the shop's own 450 / 241 and the Squire off the Marker tab", { timeout: 60_000 }, async () => {
     const { invoice } = await deliver();
-    const { bindingFrom, DEFAULT_PACKAGE_BINDINGS } = await import("./packages");
+    const { bindingFrom, DEFAULT_PACKAGE_BINDINGS } = await import("./trades/snow/packages");
     expect(bindingFrom(DEFAULT_PACKAGE_BINDINGS.mens, invoice.priceList!)).toMatchObject({ label: "Marker Griffon - Black", rrp: 450, cost: 241 });
     expect(bindingFrom(DEFAULT_PACKAGE_BINDINGS.womens, invoice.priceList!)).toMatchObject({ label: "Marker Squire - White", rrp: 349 });
     // INDENT, which is what the shop's costs are: the M7 Mantra at 749.55.

@@ -16,7 +16,7 @@ import { lookupEnabled } from "@/lib/catalog/enrich";
 import { guarded } from "@/app/(catalog)/page-failed";
 import { SupplierNote } from "./SupplierNote";
 import { supplierRecordFor } from "@/lib/catalog/supplier-score";
-import { getShopProfile } from "@/lib/catalog/shop-profile";
+import { getShopProfile, homeCurrency } from "@/lib/catalog/shop-profile";
 import { SUPPORT_MAILTO } from "@/lib/catalog/support";
 
 /**
@@ -69,7 +69,7 @@ async function renderReviewPage(props: PageProps<"/batches/[id]/review">) {
     <>
       <PageHeader
         title={<>{batch.name} <Badge tone={statusTone(batch.status)} className="align-middle">{batch.status.replace("_", " ")}</Badge></>}
-        subtitle={`Check every product and price. ${review.batch.currency !== "AUD" ? `Costs in ${review.batch.currency} × ${review.batch.fxRateToAud} → AUD.` : ""} Costs are ${review.batch.gstTreatment === "INCLUSIVE" ? "GST-inclusive" : review.batch.gstTreatment === "NONE" ? "GST-free" : "ex-GST"}; retail prices include ${Math.round(review.settings.gstRate * 100)}% GST.`}
+        subtitle={`Check every product and price. ${review.batch.currency !== homeCurrency() ? `Costs in ${review.batch.currency} × ${review.batch.fxRateToHome} → ${homeCurrency()}.` : ""} Costs are ${review.batch.gstTreatment === "INCLUSIVE" ? "GST-inclusive" : review.batch.gstTreatment === "NONE" ? "GST-free" : "ex-GST"}; retail prices include ${Math.round(review.settings.gstRate * 100)}% GST.`}
         actions={<LinkButton href={`/batches/${id}`}>Batch settings</LinkButton>}
       />
       <Steps batchId={id} current="review" status={batch.status} />

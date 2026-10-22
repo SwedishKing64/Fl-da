@@ -9,8 +9,9 @@ import { anthropicClient, cachedSystem, READING_MODEL, WORKING_MODEL } from "../
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import type { ExtractedTable } from "./types";
+import type { Mapping } from "../mapping";
 import { retrying } from "../api-errors";
-import { activeConventions, productTypes, typesAreKnown } from "../taxonomy";
+import { activeConventions, productTypes, snowTrade, typesAreKnown } from "../taxonomy";
 import { packFor } from "../trades";
 import { checkTotals, totalsDistance, type TotalsCheck } from "../totals";
 
@@ -48,7 +49,23 @@ const LineItemSchema = z.object({
   notes: z.string().describe("What was written by hand against this line that is not a season, a retail price, a discount or a quantity, in plain words — 'QTY if it exists', 'should be 148cm', '+ SLR 10 binding', 'could also read 1699'. Empty when nothing was."),
 });
 
-const ExtractionSchema = z.object({
+/**
+ * The line as a shop outside the snow trade has it read: no flex, ability level, DIN range or
+ * terrain, which are a ski's, but any specs the line prints under the name the document gives them
+ * (material, capacity, dimensions, wattage), which become the product's own traits.
+ */
+const TradeLineItemSchema = LineItemSchema.omit({ flex: true, abilityLevel: true, dinRange: true, terrain: true }).extend({
+  title: z.string().describe("Product name without size, colour or other option suffixes, e.g. 'Hubba Hubba Tent', 'Ridge Fleece Jacket', 'Trail 900 Lamp'"),
+  brand: z.string().describe("The brand ON the product. NEVER the distributor, agent or wholesaler the document came from."),
+  length: z.string().describe("A length the product is sold in, as a number with its unit where printed (e.g. 160cm, 50m), when it is one of the options it comes in; else empty. A length written as a word (Regular, Long, Short) is a variant, not a length."),
+  category: z.string().describe("What kind of product this is in one or two plain words (tents, jackets, bikes, lamps); apparel for clothing of any kind; else other."),
+  specs: z.array(z.object({ name: z.string().describe("The spec's name as the document prints it: Material, Capacity, Weight, Dimensions"), value: z.string().describe("Its value as printed") })).describe("Specs printed for this line that no other field holds. Empty on an invoice or price list."),
+});
+
+/** Which line a read asks for: the ski shop's, or every other trade's. */
+const lineSchema = (snow: boolean) => (snow ? LineItemSchema : TradeLineItemSchema);
+
+const extractionSchema = (snow: boolean) => z.object({
   documentType: z.enum(["INVOICE", "SPEC_SHEET", "PRICE_LIST", "PRODUCT_PHOTO", "OTHER"]).describe("What this document is"),
   summary: z.string().describe("One sentence on what the document contains and what was extracted"),
   supplier: z.string().describe("Supplier/company name issuing the document, else empty"),
@@ -59,10 +76,17 @@ const ExtractionSchema = z.object({
     units: z.number().nullable().describe("The total number of units the document states (Total Units, Total Qty, the sum line of the quantity column). Null when it prints none."),
     subtotal: z.number().nullable().describe("The value of the goods the document states, before freight, surcharges and tax, in the document's currency. Null when it prints none, or prints only a total that includes freight or tax."),
   }).describe("The totals printed on the document itself, copied as printed: they are checked against the lines read."),
-  items: z.array(LineItemSchema),
+  items: z.array(lineSchema(snow)),
 });
 
-export type AiExtraction = z.infer<typeof ExtractionSchema> & {
+const ExtractionSchema = extractionSchema(true);
+const TradeExtractionSchema = extractionSchema(false);
+
+/** A line as either read gives it: the ski fields where the shop sells skis, specs where it does not. */
+type AiLine = Omit<z.infer<typeof LineItemSchema>, "flex" | "abilityLevel" | "dinRange" | "terrain"> & Partial<Pick<z.infer<typeof LineItemSchema>, "flex" | "abilityLevel" | "dinRange" | "terrain">> & { specs?: Array<{ name: string; value: string }> };
+
+export type AiExtraction = Omit<z.infer<typeof ExtractionSchema>, "items"> & {
+  items: AiLine[];
   /** Whether the lines read add up to the totals the document states. Set after the read; not asked of the model. */
   check?: TotalsCheck;
 };
@@ -117,6 +141,33 @@ Rules:
 - Ignore freight, deposit, discount, subtotal and tax summary lines - they are not products.
 - On an INVOICE or PRICE_LIST, leave description, flex, abilityLevel, dinRange, terrain, tags and imageUrls empty on every item and keep summary to one short sentence: the shop fills those in from the brand's own pages, and a photographed invoice has to be read quickly.
 - gstTreatment: EXCLUSIVE when prices are marked ex tax / plus tax (GST, VAT or whatever the shop's sales tax is called), INCLUSIVE when marked inc tax, NONE when the supplier is overseas and no local sales tax applies, otherwise UNKNOWN.`;
+
+/**
+ * The reader's instructions for a shop outside the snow trade. The rules are the same; the examples
+ * that were a ski shop's — Völkl's ranges, a ski brand and its binding brand on one order, flex and
+ * DIN among a spec sheet's specs — are put in any trade's words, so a bike or homewares order is not
+ * read with skis in mind. The ski shop's instructions stay byte for byte as they were.
+ */
+const TRADE_WORDING: Array<[string, string]> = [
+  ["specs (flex, ability level, terrain, DIN, widths)", "specs (in specs, each under the name the document gives it)"],
+  ["(skis, boots, apparel, a tent, a pack…)", "(clothing, footwear, a tent, a bike, a lamp…)"],
+  ["\"Sportrade Australia\" is who sells them Volkl; it is not the brand of a single ski, and it must never be the brand on an item.", "The distributor is who sells the shop its brands; it is not the brand of a single product, and it must never be the brand on an item."],
+  ["RACETIGER, BLAZE and MANTRA are Volkl; SQUIRE and GRIFFON are Marker. ", "a range's model names belong to the brand that makes them. "],
+  ["most often a ski brand and the binding brand on the same order, or an outdoor agency's order spanning several of the brands it carries (Osprey packs and Sea to Summit sleeping mats)", "most often an agency's order spanning several of the brands it carries"],
+  ["\"FORMULA RS 130 / 25.5 x1 / 26.5 x1\"", "\"TRAIL 900 / M x1 / L x2\""],
+  ["'should be 148cm', '+ SLR 10 binding'", "'should be the large', '+ spare strap'"],
+  ["\"should be 148cm\" or \"+ SLR 10\"", "\"should be the large\" or \"+ spare strap\""],
+  ["\"Bent 100\", \"Hubba Hubba 2\"", "\"Hubba Hubba 2\", \"Trail 900\""],
+  ["leave description, flex, abilityLevel, dinRange, terrain, tags and imageUrls empty", "leave description, specs, tags and imageUrls empty"],
+];
+
+const TRADE_SYSTEM = TRADE_WORDING.reduce((text, [from, to]) => text.split(from).join(to), SYSTEM);
+
+/** The reader's instructions, for a test to read. */
+export const readerInstructions = (snow: boolean): string => readerFor(snow).system;
+
+/** The instructions and the shape of the answer, for the shop in force. */
+const readerFor = (snow: boolean) => (snow ? { system: SYSTEM, schema: ExtractionSchema } : { system: TRADE_SYSTEM, schema: TradeExtractionSchema });
 
 /** What differs by shop, after the fixed prompt so the fixed prompt is the same bytes for every shop. */
 const SHOP = () => {
@@ -202,14 +253,15 @@ async function runExtraction(content: ContentBlocks, options: ReadOptions = {}):
 }
 
 async function readOnce(content: ContentBlocks, options: ReadOptions, budgetMs: number): Promise<AiExtraction> {
+  const reader = readerFor(snowTrade());
   const deadline = Date.now() + budgetMs;
   const left = () => Math.max(5_000, deadline - Date.now());
   const params = {
     model: options.known ? WORKING_MODEL : READING_MODEL,
     max_tokens: 16000,
-    system: cachedSystem(SYSTEM, SHOP()),
+    system: cachedSystem(reader.system, SHOP()),
     thinking: { type: "adaptive" as const },
-    output_config: { format: zodOutputFormat(ExtractionSchema), effort: "medium" as const },
+    output_config: { format: zodOutputFormat(reader.schema), effort: "medium" as const },
     messages: [{ role: "user" as const, content }],
   };
   const standard = () => getClient().messages.stream(params, { timeout: left(), maxRetries: 0 }).finalMessage();
@@ -236,7 +288,7 @@ async function readOnce(content: ContentBlocks, options: ReadOptions, budgetMs: 
   if (message.stop_reason === "refusal") throw new Error("The AI declined to process this document");
   if (message.stop_reason === "max_tokens") throw new Error("Document too large for a single extraction; split the file");
   const text = message.content.filter((b): b is Anthropic.TextBlock | Anthropic.Beta.BetaTextBlock => b.type === "text").map((b) => b.text).join("");
-  return ExtractionSchema.parse(JSON.parse(text));
+  return reader.schema.parse(JSON.parse(text));
 }
 
 function hintFor(kind?: string): string {
@@ -278,13 +330,32 @@ export const AI_HEADERS = [
   "variant", "variantName", "productType",
 ] as const;
 
+/**
+ * Whether a table is the reader's own: its columns are the reader's fields, and any after them are
+ * the specs it read, each under the document's name for it, which the build keeps as traits.
+ */
+export function isReaderTable(headers: string[]): boolean {
+  return headers.length >= AI_HEADERS.length && AI_HEADERS.every((h, i) => headers[i] === h);
+}
+
+/** The reader's columns map to themselves; the specs after them map to nothing, and are kept as traits. */
+export function readerMapping(headers: string[]): Mapping {
+  return Object.fromEntries(headers.map((h) => [h, (AI_HEADERS as readonly string[]).includes(h) ? h : ""])) as Mapping;
+}
+
 export function aiExtractionToTable(result: AiExtraction, method: ExtractedTable["method"], text?: string): ExtractedTable {
+  const specNames: string[] = [];
+  for (const item of result.items) for (const spec of item.specs ?? []) {
+    const name = spec.name.trim();
+    if (name && !specNames.some((n) => n.toLowerCase() === name.toLowerCase()) && !(AI_HEADERS as readonly string[]).includes(name)) specNames.push(name);
+  }
   const rows = result.items.map((item) => {
     const row: Record<string, string> = {};
     for (const key of AI_HEADERS) {
       const value = item[key as keyof typeof item];
-      row[key] = Array.isArray(value) ? value.join(" | ") : value === null || value === undefined ? "" : String(value);
+      row[key] = Array.isArray(value) ? value.map((v) => (typeof v === "string" ? v : "")).filter(Boolean).join(" | ") : value === null || value === undefined ? "" : String(value);
     }
+    for (const name of specNames) row[name] = item.specs?.find((sp) => sp.name.trim().toLowerCase() === name.toLowerCase())?.value.trim() ?? "";
     return row;
   });
   const warnings: string[] = [];
@@ -292,7 +363,7 @@ export function aiExtractionToTable(result: AiExtraction, method: ExtractedTable
   if (result.documentType === "INVOICE" && result.gstTreatment === "UNKNOWN") warnings.push("Could not tell whether prices include GST; check the batch GST setting.");
   if (result.documentType === "OTHER") warnings.push("The AI could not find product information in this file.");
   if (result.check && !result.check.ok) warnings.unshift(`Does not add up: ${result.check.message}`);
-  return { headers: [...AI_HEADERS], rows, method, text, warnings };
+  return { headers: [...AI_HEADERS, ...specNames], rows, method, text, warnings };
 }
 
 /** Metadata the AI noticed about the document as a whole, for pre-filling the batch. */

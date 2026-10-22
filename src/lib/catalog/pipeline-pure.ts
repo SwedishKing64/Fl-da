@@ -93,7 +93,7 @@ export function toCsvProducts(products: ReviewProduct[]): CsvProduct[] {
         quantity: v.quantity,
         price: v.retailPrice,
         compareAtPrice: v.compareAtPrice,
-        costPerItem: v.landedCostAud,
+        costPerItem: v.landedCostHome,
         imageUrl: variantImage.get(v.id) ?? byColour.get(colourOf(v)) ?? null,
       })),
     };

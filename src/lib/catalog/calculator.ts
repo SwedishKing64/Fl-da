@@ -41,13 +41,13 @@ export function applyRounding(value: number, roundTo: string): number {
 
 /** What the calculator would charge, GST added where the storefront shows GST-inclusive prices. */
 export function retailFor(
-  landedCostAud: number,
+  landedCostHome: number,
   mode: CalculatorMode,
   percent: number,
   roundTo: string,
   settings: { gstRate: number; pricesIncludeGst: boolean },
 ): number {
-  const exGst = targetExGstPrice(landedCostAud, mode, percent);
+  const exGst = targetExGstPrice(landedCostHome, mode, percent);
   const storefront = settings.pricesIncludeGst ? exGst * (1 + settings.gstRate) : exGst;
   return applyRounding(storefront, roundTo);
 }

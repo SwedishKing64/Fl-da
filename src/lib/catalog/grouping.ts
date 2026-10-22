@@ -4,11 +4,11 @@ import { buildHandle } from "./handle";
 import { nameLikeSibling } from "./shop-names";
 import { csvType } from "./pipeline-pure";
 import { chooseOptions, collectionsFor, extraOptions, optionValue, type OptionKey, detectCategory, enrichFromTitle, metafieldsFor, OPTION_LABELS, snowboardType, tagsFor, type CategoryRuleLike } from "./categorize";
-import { resolveType, snowTrade } from "./taxonomy";
+import { houseConventions, resolveType, snowTrade } from "./taxonomy";
 import { withFit } from "./mapping";
-import { classifyAccessory } from "./accessories";
+import { classifyAccessory } from "./trades/snow/accessories";
 import { packShelf } from "./packs";
-import { integratedBinding } from "./packages";
+import { integratedBinding } from "./trades/snow/packages";
 import { isSnowboardBrand } from "./brands";
 import { normaliseOptionName, optionNamesFor } from "./options";
 import { catalogTags } from "./product-tags";
@@ -156,7 +156,8 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
     // of its 20 snowboard bindings and 14 of its 15 boots is "Men's …" or "Women's …", and so are
     // its jackets, gloves and socks. Not a ski, board or pole, which the shop names by model alone
     // and genders in the tags. Men's and women's of one model also stop sharing a title this way.
-    const who = audience(first.gender);
+    // Only where the shop writes its names this way; otherwise the gender goes in the tags alone.
+    const who = houseConventions().naming.audience === "front" ? audience(first.gender) : null;
     // A ski boot is named by its model alone, like a ski: "Zero G Tour Pro 2027", not "Men's Zero
     // G Tour Pro Ski Boots 2027". The gender goes in the tags. (A snowboard boot keeps the shop's
     // "Men's … Snowboard Boots".)
@@ -217,7 +218,8 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
     // jackets and pants. Only where the name has no kind word of its own, and only the kinds the
     // shop's own listings show it does this for.
     const kindSaid = /\b(snowboards?|boards?|boots?|bindings?|gloves?|mitts?|mittens?|socks?|bags?|jackets?|pants?|bibs?|goggles?|helmets?|beanies?|skis?|poles?|hoodies?|anoraks?|vests?|shorts?|fleece|pullovers?|onesies?|suits?)\b/i;
-    const kindSuffix = kindSaid.test(shown) ? "" :
+    // The snow trade's habit, learned from the ski shop's listings; no other trade is assumed to have it.
+    const kindSuffix = !snow || kindSaid.test(shown) ? "" :
       /^snowboard bindings$/i.test(productType) ? "Snowboard Bindings" :
       /^snowboard boots$/i.test(productType) ? "Snowboard Boots" :
       tags.includes("snow jackets") ? "Jacket" :

@@ -6,9 +6,9 @@ import { updateBatchAction } from "@/app/(catalog)/actions";
 import { Alert, Button, Field, INPUT } from "@/app/(catalog)/ui";
 import { CURRENCIES } from "@/lib/catalog/types";
 
-interface BatchForm { id: string; supplierId: string | null; currency: string; fxRateToAud: number; gstTreatment: string; freightTotalAud: number; freightMode: string; splitExportBy: string; builtBy: string; notes: string }
+interface BatchForm { id: string; supplierId: string | null; currency: string; fxRateToHome: number; gstTreatment: string; freightTotalHome: number; freightMode: string; splitExportBy: string; builtBy: string; notes: string }
 
-export function BatchSettingsForm({ batch, suppliers, disabled }: { batch: BatchForm; suppliers: Array<{ id: string; name: string }>; disabled: boolean }) {
+export function BatchSettingsForm({ batch, suppliers, disabled, home }: { batch: BatchForm; suppliers: Array<{ id: string; name: string }>; disabled: boolean; home: string }) {
   const router = useRouter();
   const [form, setForm] = useState(batch);
   const [pending, start] = useTransition();
@@ -20,9 +20,9 @@ export function BatchSettingsForm({ batch, suppliers, disabled }: { batch: Batch
       const res = await updateBatchAction(batch.id, {
         supplierId: form.supplierId,
         currency: form.currency,
-        fxRateToAud: form.currency === "AUD" ? 1 : form.fxRateToAud,
+        fxRateToHome: form.currency === home ? 1 : form.fxRateToHome,
         gstTreatment: form.gstTreatment as "INCLUSIVE" | "EXCLUSIVE" | "NONE",
-        freightTotalAud: form.freightTotalAud,
+        freightTotalHome: form.freightTotalHome,
         freightMode: form.freightMode as "PER_UNIT" | "BY_VALUE",
         splitExportBy: form.splitExportBy as "NONE" | "BRAND" | "PRODUCT_TYPE",
         builtBy: form.builtBy,
@@ -42,7 +42,7 @@ export function BatchSettingsForm({ batch, suppliers, disabled }: { batch: Batch
       </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Currency"><select value={form.currency} onChange={(e) => set("currency", e.target.value)} disabled={disabled} className={INPUT}>{CURRENCIES.map((c) => <option key={c}>{c}</option>)}</select></Field>
-        <Field label="FX → AUD"><input type="number" step="0.0001" value={form.currency === "AUD" ? 1 : form.fxRateToAud} onChange={(e) => set("fxRateToAud", Number(e.target.value))} disabled={disabled || form.currency === "AUD"} className={INPUT} /></Field>
+        <Field label={`FX → ${home}`}><input type="number" step="0.0001" value={form.currency === home ? 1 : form.fxRateToHome} onChange={(e) => set("fxRateToHome", Number(e.target.value))} disabled={disabled || form.currency === home} className={INPUT} /></Field>
       </div>
       <Field label="GST on cost prices">
         <select value={form.gstTreatment} onChange={(e) => set("gstTreatment", e.target.value)} disabled={disabled} className={INPUT}>
@@ -50,7 +50,7 @@ export function BatchSettingsForm({ batch, suppliers, disabled }: { batch: Batch
         </select>
       </Field>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Freight total (AUD)"><input type="number" step="0.01" min="0" value={form.freightTotalAud} onChange={(e) => set("freightTotalAud", Number(e.target.value))} disabled={disabled} className={INPUT} /></Field>
+        <Field label={`Freight total (${home})`}><input type="number" step="0.01" min="0" value={form.freightTotalHome} onChange={(e) => set("freightTotalHome", Number(e.target.value))} disabled={disabled} className={INPUT} /></Field>
         <Field label="Spread"><select value={form.freightMode} onChange={(e) => set("freightMode", e.target.value)} disabled={disabled} className={INPUT}><option value="PER_UNIT">Per unit</option><option value="BY_VALUE">By value</option></select></Field>
       </div>
       <Field label="Export files">

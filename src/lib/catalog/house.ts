@@ -16,6 +16,8 @@ export interface HouseConventions {
     season: "seasonal" | "always" | "never";
     /** Case a supplier's capitals back into the shop's mixed case, or keep names as the supplier writes them. */
     casing: "shop" | "supplier";
+    /** "Men's" or "Women's" on the front of a gendered product's name, or the name as the supplier gives it. */
+    audience: "front" | "none";
     /** One real title, the way the shop writes it, shown to the reader as the shape to match. */
     example: string;
   };
@@ -69,7 +71,7 @@ export interface KindRule {
 }
 
 export const DEFAULT_HOUSE: HouseConventions = {
-  naming: { brandInTitle: "never", season: "seasonal", casing: "shop", example: "" },
+  naming: { brandInTitle: "never", season: "seasonal", casing: "shop", audience: "front", example: "" },
   identifiers: { sku: "supplier", barcode: "keep" },
   weights: { mode: "none", unit: "g", fixedGrams: 0, byKind: [] },
   descriptions: { format: "", specsHeading: "Tech Specs", example: "" },
@@ -133,6 +135,7 @@ export function houseGuidance(house: HouseConventions): string {
   if (n.season === "always") lines.push("Every product title ends with its model year.");
   if (n.season === "never") lines.push("Product titles never carry a model year.");
   if (n.casing === "supplier") lines.push("Names are written exactly as the supplier writes them, capitals included.");
+  lines.push(n.audience === "front" ? "A gendered product's title starts with Men's, Women's or Kids'." : "Titles do not start with Men's or Women's; the gender goes in the tags.");
   if (n.example.trim()) lines.push(`A typical title here reads: "${n.example.trim()}". Match that shape.`);
   if (house.identifiers.sku === "none") lines.push("The shop does not use SKUs.");
   if (house.identifiers.sku === "barcode") lines.push("The barcode is used as the SKU.");
@@ -157,7 +160,7 @@ export function houseGuidance(house: HouseConventions): string {
 export function describeHouse(house: HouseConventions): string[] {
   const out: string[] = [];
   const n = house.naming;
-  out.push(`Titles ${n.brandInTitle === "always" ? "lead with the brand" : "leave the brand to the Vendor column"}${n.season === "always" ? " and always end with the year" : n.season === "never" ? " and never carry a year" : "; seasonal kinds carry their year"}${n.casing === "supplier" ? ", written as the supplier writes them" : ", in the shop's own case"}.`);
+  out.push(`Titles ${n.brandInTitle === "always" ? "lead with the brand" : "leave the brand to the Vendor column"}${n.season === "always" ? " and always end with the year" : n.season === "never" ? " and never carry a year" : "; seasonal kinds carry their year"}${n.casing === "supplier" ? ", written as the supplier writes them" : ", in the shop's own case"}${n.audience === "front" ? ", with Men's or Women's on the front of a gendered product" : ""}.`);
   const id = house.identifiers;
   out.push(`SKU: ${id.sku === "supplier" ? "the supplier's code" : id.sku === "barcode" ? "the barcode" : "not used"}. Barcodes: ${id.barcode === "keep" ? "kept when the paperwork has them" : id.barcode === "required" ? "required on every variant" : "not used"}.`);
   const w = house.weights;
@@ -183,17 +186,29 @@ export function cleanKinds(input: unknown): KindRule[] {
   return out;
 }
 
-export function cleanHouse(input: Partial<HouseConventions> | null | undefined): HouseConventions {
+/**
+ * Where a shop that has said nothing starts. The ski shop's habits — no brand in the title, "Men's"
+ * on the front of a jacket's name — were every shop's default until a second trade showed they were
+ * one shop's. They stay the snow pack's starting point; every other shop starts plain, with the brand
+ * in the title and the name as the supplier gives it, until it says otherwise.
+ */
+export function defaultHouseFor(pack: string | null | undefined): HouseConventions {
+  if (pack === "snow-outdoor") return DEFAULT_HOUSE;
+  return { ...DEFAULT_HOUSE, naming: { ...DEFAULT_HOUSE.naming, brandInTitle: "always", audience: "none" } };
+}
+
+export function cleanHouse(input: Partial<HouseConventions> | null | undefined, base: HouseConventions = DEFAULT_HOUSE): HouseConventions {
   const i = input ?? {};
   const pick = <T extends string>(value: unknown, allowed: readonly T[], fallback: T): T => (allowed.includes(value as T) ? (value as T) : fallback);
-  const n = i.naming ?? DEFAULT_HOUSE.naming;
+  const n = { ...base.naming, ...(i.naming ?? {}) };
   const id = i.identifiers ?? DEFAULT_HOUSE.identifiers;
   const w = i.weights ?? DEFAULT_HOUSE.weights;
   return {
     naming: {
-      brandInTitle: pick(n.brandInTitle, ["never", "always"] as const, "never"),
-      season: pick(n.season, ["seasonal", "always", "never"] as const, "seasonal"),
-      casing: pick(n.casing, ["shop", "supplier"] as const, "shop"),
+      brandInTitle: pick(n.brandInTitle, ["never", "always"] as const, base.naming.brandInTitle),
+      season: pick(n.season, ["seasonal", "always", "never"] as const, base.naming.season),
+      casing: pick(n.casing, ["shop", "supplier"] as const, base.naming.casing),
+      audience: pick(n.audience, ["front", "none"] as const, base.naming.audience),
       example: String(n.example ?? "").trim().slice(0, 160),
     },
     identifiers: {

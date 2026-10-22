@@ -34,8 +34,8 @@ export interface PricingInput {
   costPrice: number; // in costCurrency, as printed on invoice
   costCurrency?: string;
   gstTreatment: GstTreatment; // how costPrice is expressed
-  fxRateToAud: number; // AUD per 1 unit of costCurrency
-  freightPerUnitAud: number;
+  fxRateToHome: number; // AUD per 1 unit of costCurrency
+  freightPerUnitHome: number;
   quantity: number;
   /**
    * The recommended retail, and so the price. From the invoice, from a web lookup, or typed in.
@@ -47,7 +47,7 @@ export interface PricingInput {
 }
 
 export interface PricingResult {
-  landedCostAud: number;
+  landedCostHome: number;
   /** True when no recommended retail is known, so there is no price to write. */
   missingRetail: boolean;
   retailPrice: number; // storefront price written to CSV
@@ -73,14 +73,14 @@ export interface PricingResult {
 
 
 /** Convert an invoice cost to an ex-GST AUD figure (before freight). */
-export function exGstCostAud(
+export function exGstCostHome(
   costPrice: number,
   gstTreatment: GstTreatment,
-  fxRateToAud: number,
+  fxRateToHome: number,
   gstRate: number,
 ): number {
   const exGstInCurrency = gstTreatment === "INCLUSIVE" ? costPrice / (1 + gstRate) : costPrice;
-  return exGstInCurrency * (fxRateToAud || 1);
+  return exGstInCurrency * (fxRateToHome || 1);
 }
 
 /** Target ex-GST sell price for a landed cost under a MARGIN or MARKUP rule. */
@@ -88,9 +88,9 @@ export function priceVariant(input: PricingInput, settings: PricingSettings): Pr
   const gst = settings.gstRate;
   const qty = Math.max(0, input.quantity || 0);
 
-  const landedCostAud = roundCents(
-    exGstCostAud(input.costPrice || 0, input.gstTreatment, input.fxRateToAud, gst) +
-      (input.freightPerUnitAud || 0),
+  const landedCostHome = roundCents(
+    exGstCostHome(input.costPrice || 0, input.gstTreatment, input.fxRateToHome, gst) +
+      (input.freightPerUnitHome || 0),
   );
 
   // The recommended retail is the price. Nothing else sets one.
@@ -109,12 +109,12 @@ export function priceVariant(input: PricingInput, settings: PricingSettings): Pr
 
   const exGstRevenue = roundCents(settings.pricesIncludeGst ? retailPrice / (1 + gst) : retailPrice);
   const gstComponent = roundCents(settings.pricesIncludeGst ? retailPrice - exGstRevenue : retailPrice * gst);
-  const profitPerUnit = roundCents(exGstRevenue - landedCostAud);
+  const profitPerUnit = roundCents(exGstRevenue - landedCostHome);
   const marginPct = exGstRevenue > 0 ? (profitPerUnit / exGstRevenue) * 100 : 0;
-  const markupPct = landedCostAud > 0 ? (profitPerUnit / landedCostAud) * 100 : 0;
+  const markupPct = landedCostHome > 0 ? (profitPerUnit / landedCostHome) * 100 : 0;
 
   return {
-    landedCostAud,
+    landedCostHome,
     missingRetail,
     retailPrice,
     compareAtPrice,
@@ -144,7 +144,7 @@ function round1(n: number): number {
 export interface FreightLine {
   id: string;
   quantity: number;
-  exGstCostAud: number; // per unit, before freight
+  exGstCostHome: number; // per unit, before freight
 }
 
 /**
@@ -152,26 +152,26 @@ export interface FreightLine {
  * BY_VALUE splits pro-rata by ex-GST cost value. Returns per-unit freight per line id.
  */
 export function allocateFreight(
-  totalAud: number,
+  totalHome: number,
   mode: "PER_UNIT" | "BY_VALUE",
   lines: FreightLine[],
 ): Record<string, number> {
   const out: Record<string, number> = {};
-  if (!totalAud || totalAud <= 0 || lines.length === 0) {
+  if (!totalHome || totalHome <= 0 || lines.length === 0) {
     for (const l of lines) out[l.id] = 0;
     return out;
   }
   if (mode === "BY_VALUE") {
-    const totalValue = lines.reduce((s, l) => s + Math.max(0, l.exGstCostAud) * Math.max(0, l.quantity), 0);
-    if (totalValue <= 0) return allocateFreight(totalAud, "PER_UNIT", lines);
+    const totalValue = lines.reduce((s, l) => s + Math.max(0, l.exGstCostHome) * Math.max(0, l.quantity), 0);
+    if (totalValue <= 0) return allocateFreight(totalHome, "PER_UNIT", lines);
     for (const l of lines) {
-      const lineShare = (Math.max(0, l.exGstCostAud) * Math.max(0, l.quantity)) / totalValue;
-      out[l.id] = l.quantity > 0 ? roundCents((totalAud * lineShare) / l.quantity) : 0;
+      const lineShare = (Math.max(0, l.exGstCostHome) * Math.max(0, l.quantity)) / totalValue;
+      out[l.id] = l.quantity > 0 ? roundCents((totalHome * lineShare) / l.quantity) : 0;
     }
     return out;
   }
   const totalUnits = lines.reduce((s, l) => s + Math.max(0, l.quantity), 0);
-  const perUnit = totalUnits > 0 ? roundCents(totalAud / totalUnits) : 0;
+  const perUnit = totalUnits > 0 ? roundCents(totalHome / totalUnits) : 0;
   for (const l of lines) out[l.id] = l.quantity > 0 ? perUnit : 0;
   return out;
 }
@@ -207,7 +207,7 @@ export function summariseBatch(
     totalRetailIncGst += result.lineRevenueIncGst;
     totalGst += result.gstComponent * q;
     totalExGstRevenue += result.exGstRevenue * q;
-    totalLandedCost += result.landedCostAud * q;
+    totalLandedCost += result.landedCostHome * q;
     if (result.lowMargin) lowMarginVariants++;
   }
   const totalNetProfit = roundCents(totalExGstRevenue - totalLandedCost);

@@ -38,7 +38,9 @@ async function main() {
     const ext = extname(f).toLowerCase();
     const mime = MIME[ext] ?? "application/octet-stream";
     if (![".csv", ".xlsx"].includes(ext) && !aiAvailable()) { skipped.push(`${f} (needs ANTHROPIC_API_KEY)`); continue; }
-    const key = JSON.parse(readFileSync(keyPath, "utf8")) as CorpusKey;
+    const key = JSON.parse(readFileSync(keyPath, "utf8")) as CorpusKey & { checked?: boolean };
+    // A key drafted by scripts/redact.ts is the reader's own reading until a person has checked it.
+    if (key.checked === false) { skipped.push(`${f} (answer key not checked yet)`); continue; }
     const started = Date.now();
     const { table } = await extractFile(readFileSync(join(dir, f)), f, mime, "INVOICE");
     const score = scoreDocument(linesFromTable(table), key);

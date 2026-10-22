@@ -28,7 +28,7 @@
 import { packFor, type PackId } from "./trades";
 import { DEFAULT_HOUSE, type HouseConventions } from "./house";
 import type { WebsiteCategories } from "./website";
-import type { MetafieldDef } from "./types";
+import { CANONICAL_FIELDS, type CanonicalFieldDef, type MetafieldDef } from "./types";
 
 export interface TaxonomyGroup {
   /** The bold heading. This is the value written to the Shopify `Type` column. */
@@ -237,6 +237,14 @@ export function activateConventions(next: Conventions): void {
 
 export function activeConventions(): Conventions {
   return conventions;
+}
+
+/** The fields that are a ski's alone: offered to a column, and asked of the reader, only in the snow trade. */
+export const SNOW_FIELDS = new Set<string>(["flex", "abilityLevel", "dinRange", "terrain"]);
+
+/** The fields a supplier's column can be mapped to in this shop. Elsewhere a ski's columns are kept as traits. */
+export function fieldsInForce(): CanonicalFieldDef[] {
+  return snowTrade() ? CANONICAL_FIELDS : CANONICAL_FIELDS.filter((f) => !SNOW_FIELDS.has(f.key));
 }
 
 /** The product metafields this shop writes, from its pack. See types.ts. */

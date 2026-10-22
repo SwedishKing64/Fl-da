@@ -3,7 +3,8 @@
 // mapping to raw rows to produce CanonicalLineItems.
 
 import { createHash } from "node:crypto";
-import { CANONICAL_FIELDS, FEATURE_COLUMN, emptyLineItem, type CanonicalLineItem } from "./types";
+import { FEATURE_COLUMN, emptyLineItem, type CanonicalLineItem } from "./types";
+import { fieldsInForce, snowTrade } from "./taxonomy";
 export { FEATURE_COLUMN };
 import { parseIntSafe, parseMoney } from "./money";
 import { seasonFrom } from "./season";
@@ -154,8 +155,10 @@ export function suggestMapping(headers: string[], rows: Array<Record<string, str
     }
     return false;
   };
-  const canonicalKeys = new Set(CANONICAL_FIELDS.map((f) => f.key as string));
-  const codeField = CANONICAL_FIELDS.find((f) => f.key === "modelCode")!;
+  // A ski's own fields only where the shop sells skis; elsewhere those columns are kept as traits.
+  const fields = fieldsInForce();
+  const canonicalKeys = new Set(fields.map((f) => f.key as string));
+  const codeField = fields.find((f) => f.key === "modelCode")!;
 
   // Pass 1: exact canonical key or exact synonym matches.
   for (const header of headers) {
@@ -171,7 +174,7 @@ export function suggestMapping(headers: string[], rows: Array<Record<string, str
     }
     if (skip.has(header) || party.has(header)) continue;
     const names = [...new Set([n, core(n), untaxed(n), core(untaxed(n))])];
-    const exact = CANONICAL_FIELDS.find((f) => !used.has(f.key) && names.some((x) => f.synonyms.includes(x)) && !refused(header, f.key));
+    const exact = fields.find((f) => !used.has(f.key) && names.some((x) => f.synonyms.includes(x)) && !refused(header, f.key));
     if (exact) {
       mapping[header] = exact.key;
       used.add(exact.key);
@@ -202,7 +205,7 @@ export function suggestMapping(headers: string[], rows: Array<Record<string, str
     if (skip.has(header) || party.has(header)) { mapping[header] = ""; continue; }
     const n = norm(header);
     let best: { key: keyof CanonicalLineItem; len: number } | null = null;
-    for (const f of CANONICAL_FIELDS) {
+    for (const f of fields) {
       if (used.has(f.key) || refused(header, f.key)) continue;
       for (const s of f.synonyms) {
         if (s.length < 3) continue;
@@ -222,7 +225,7 @@ export function suggestMapping(headers: string[], rows: Array<Record<string, str
   // Pass 3: the riding style, by what is written under it. Burton heads it "PH3" and Volkl
   // "category"; under both are the words that name a shelf — ALL MOUNTAIN, Freeride, Freestyle —
   // and that is what files a new model on the shop's riding-style shelves.
-  if (!used.has("terrain") && rows.length > 0) {
+  if (snowTrade() && !used.has("terrain") && rows.length > 0) {
     const styled = terrainColumn(
       headers.filter((h) => mapping[h] === "" || mapping[h] === "category"),
       (h) => rows.map((r) => (r[h] ?? "").toString()),

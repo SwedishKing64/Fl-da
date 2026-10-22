@@ -10,7 +10,7 @@
  * matched, its rows turned into lines, the rows nobody ordered dropped.
  */
 
-import { AI_HEADERS } from "./extract/ai";
+import { isReaderTable, readerMapping } from "./extract/ai";
 import type { ExtractedTable } from "./extract/types";
 import { applyMapping, suggestMapping, type Mapping } from "./mapping";
 import { keepOrderedLines } from "./reference-match";
@@ -59,8 +59,7 @@ export interface DocumentScore {
 
 /** The table a file was read into, as the lines the build would start from. */
 export function linesFromTable(table: ExtractedTable): CanonicalLineItem[] {
-  const canonical = table.headers.length > 0 && table.headers.every((h) => (AI_HEADERS as readonly string[]).includes(h));
-  const mapping: Mapping = canonical ? (Object.fromEntries(table.headers.map((h) => [h, h])) as Mapping) : suggestMapping(table.headers, table.rows);
+  const mapping: Mapping = isReaderTable(table.headers) ? readerMapping(table.headers) : suggestMapping(table.headers, table.rows);
   const items = table.rows.map((row) => applyMapping(row, mapping)).filter((i) => i.title || i.sku || i.costPrice !== null);
   return keepOrderedLines(items.map((item) => ({ item, fileId: "doc" }))).kept.map((l) => l.item);
 }

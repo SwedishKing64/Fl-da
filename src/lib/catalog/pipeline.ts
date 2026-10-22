@@ -42,7 +42,7 @@ import { supplierRecordFor } from "./supplier-score";
 import type { MatchCandidate } from "./match-candidates";
 import { filePath, pictureHosting, publicFileUrl, readFile, saveFile, usingBlob } from "./storage";
 import { logAudit } from "./audit";
-import { AI_HEADERS } from "./extract/ai";
+import { isReaderTable, readerMapping } from "./extract/ai";
 
 // ---------------------------------------------------------------------------
 // Rules & settings helpers
@@ -342,7 +342,7 @@ export async function mappingState(batchId: string): Promise<HeaderGroup[]> {
     const hash = headerHash(headers);
     let group = groups.get(hash);
     if (!group) {
-      const isCanonical = headers.every((h) => (AI_HEADERS as readonly string[]).includes(h));
+      const isCanonical = isReaderTable(headers);
       const exact = templates.find((t) => t.headerHash === hash) ?? null;
       // No layout matches exactly: the nearest remembered one is carried over where its columns
       // still exist, and the difference is reported rather than the file being read from scratch.
@@ -352,7 +352,7 @@ export async function mappingState(batchId: string): Promise<HeaderGroup[]> {
       const fresh = suggestMapping(headers, rows);
       const suggestion = template
         ? repairTemplate(trimToHeaders(parseJson<Mapping>(template.mappings, {}), headers) ?? {}, fresh, rows, trimToHeaders(saved?.suggestedAtSave, headers))
-        : isCanonical ? Object.fromEntries(headers.map((h) => [h, h])) as Mapping : fresh;
+        : isCanonical ? readerMapping(headers) : fresh;
       group = {
         hash,
         headers,

@@ -3,7 +3,7 @@ import { prisma } from "@/lib/catalog/db";
 import { requireUser } from "@/lib/catalog/auth";
 import { Card, PageHeader, fmtDate } from "@/app/(catalog)/ui";
 import { getHouseConventions, getLearnedVocabulary, getWebsiteCategories } from "@/lib/catalog/shop-profile";
-import { productTypes } from "@/lib/catalog/taxonomy";
+import { fieldsInForce, productTypes } from "@/lib/catalog/taxonomy";
 import { houseTagRules } from "@/app/(catalog)/actions";
 import { describeLearned } from "@/lib/catalog/learn";
 import { CANONICAL_FIELDS } from "@/lib/catalog/types";
@@ -103,7 +103,7 @@ export default async function TrainingPage() {
             </table>
           </div>
         )}
-        <SuppliersStep fields={CANONICAL_FIELDS.map((f) => ({ key: f.key, label: f.label, required: Boolean(f.required) }))} templates={templates.length} standalone />
+        <SuppliersStep fields={fieldsInForce().map((f) => ({ key: f.key, label: f.label, required: Boolean(f.required) }))} templates={templates.length} standalone />
       </Card>
       </div>
 

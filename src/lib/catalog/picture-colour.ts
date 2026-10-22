@@ -8,12 +8,14 @@
 
 import type { PageDetails } from "./page-types";
 import { hostPicturesOfColour } from "./pictures";
+import { isColourCode } from "./colour";
 
 const list = (xs: string[]): string => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
 
 /** The page's pictures hosted and in the colour ordered, with the note to show. */
 export async function picturesForColour(details: PageDetails, name: string, colours: string[], deps: Parameters<typeof hostPicturesOfColour>[3] = {}): Promise<PageDetails> {
-  const wanted = colours.map((c) => c.trim()).filter(Boolean);
+  // A colour that is only a code ("001") cannot be seen in a picture, so it is not looked for.
+  const wanted = colours.map((c) => c.trim()).filter((c) => c && !isColourCode(c));
   const r = await hostPicturesOfColour(details.images, name, wanted, deps);
   let pictureNote = "";
   if (r.looked && wanted.length > 0) {

@@ -94,6 +94,18 @@ bare reservoirs, do not.
 three-or-four-digit amount beside a line is the RRP, a percentage is a discount, struck lines are
 skipped, and every other remark is kept as a note on the line.
 
+**Outdoor shops (October 2026).** The same platform put into an outdoor shop struggled with
+pictures and with invoice layouts it had never read. The causes were the ski shop's assumptions
+left in the code: the reader's fields were ski-shaped (length in cm, width as a boot last, a ski
+category list), spreadsheet size grids were only recognised with lengths across the top, colour
+codes (BLK, 001) went through as colours, pictures were taken only from a page's markup (outdoor
+brands' own shop software keeps them in scripts), and only 16 pictures were looked at for the
+ordered colour. Each of these is now general: any size words across a grid, a free option for
+capacity, volume, length or zip side, the kind of product from the shop's own list, colour
+shorthand written out and bare codes not matched, pictures read from a page's scripts, and up to
+32 looked at before the 16 kept. Real outdoor invoices and links that read badly are still wanted
+as test cases.
+
 **QuickBooks (Rubin only).** Rubin reads supplier invoices into QuickBooks bill sheets. Flöda
 removed that section; the rules the shop gave for it (its one-row-per-bill sheet, supplier names
 from its QuickBooks list, batch PDFs split into one bill per invoice) live in Rubin's handover.

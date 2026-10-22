@@ -19,8 +19,12 @@ import { z } from "zod";
 import sharp from "sharp";
 
 
-/** The most pictures shown in one look. A page rarely has more that are the product's own. */
-export const MOST_PICTURES = 16;
+/**
+ * The most pictures shown in one look. A jacket in six colours with six angles each has 36, and
+ * the colour ordered may be anywhere among them; looking at 32 finds it, and what is kept is cut
+ * to the 16 a listing needs afterwards.
+ */
+export const MOST_PICTURES = 32;
 /** The thumbnail's longer side: enough to tell black from brown, small enough to be quick. */
 const THUMB = 384;
 const LOOK_MS = 45_000;

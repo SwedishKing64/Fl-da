@@ -68,6 +68,14 @@ export interface CanonicalLineItem {
   size: string; // boot size / apparel size
   width: string; // boot last width (e.g. 98mm) or ski waist width
   colour: string;
+  /**
+   * Any other option that tells a variant apart and is not its length, size, width or colour: a
+   * tent's capacity (2P), a pack's volume (65L), a sleeping bag's length or zip side, a bottle's
+   * capacity. Outdoor and general goods vary on these, and a ski-shaped line had nowhere for them.
+   */
+  variant?: string;
+  /** What that option is called on the listing: Capacity, Volume, Zip. Empty for "Option". */
+  variantName?: string;
   gender: string;
   season: string;
   category: string; // if the supplier states it; otherwise detected
@@ -117,6 +125,7 @@ export const CANONICAL_FIELDS: CanonicalFieldDef[] = [
   { key: "grams", label: "Weight (grams)", kind: "number", synonyms: ["weight", "grams", "weight g", "weight (g)", "unit weight", "mass"] },
   { key: "length", label: "Length (cm)", kind: "text", synonyms: ["length", "len", "ski length", "size ski length", "board length", "size cm", "length cm", "cm"] },
   { key: "size", label: "Size", kind: "text", synonyms: ["size", "sizes", "sz", "sz.", "size range", "garment size", "apparel size", "clothing size", "size name", "size code", "size desc", "size description", "boot size", "mondo", "mondopoint", "mp", "shoe size", "size us", "us size", "eu size", "uk size"] },
+  { key: "variant", label: "Other option (capacity, volume, zip…)", kind: "text", synonyms: ["volume", "capacity", "litres", "liters", "volume l", "capacity l", "persons", "person", "sleeps", "berth", "zip", "zip side", "zip position", "torso", "torso size", "bag length", "option", "variant"] },
   { key: "width", label: "Width / fit", kind: "text", synonyms: ["width", "last", "last width", "waist", "waist width", "last mm", "fit", "fit type", "fitting"] },
   { key: "colour", label: "Colour", kind: "text", synonyms: ["colour", "color", "col", "colour name", "color name", "colour description", "color description", "basic colour", "basic color", "colourway", "colorway", "farbe"] },
   { key: "gender", label: "Gender", kind: "text", synonyms: ["gender", "sex", "suitable for", "mens/womens", "m/w", "unisex"] },

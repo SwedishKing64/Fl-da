@@ -458,6 +458,9 @@ export function applyMapping(row: Record<string, string>, mapping: Mapping, opti
       if (NOT_A_VALUE.test(raw)) continue;
       const existing = item[key] as string;
       (item as unknown as Record<string, unknown>)[key] = existing ? `${existing} ${raw}` : raw;
+      // A column read as the free option names it — "Volume", "Capacity", "Zip Side" — unless the
+      // sheet says the name in a column of its own.
+      if (key === "variant" && !item.variantName && !Object.values(mapping).includes("variantName")) item.variantName = header.trim().replace(/\s*\(.*\)$/, "");
     }
   }
 

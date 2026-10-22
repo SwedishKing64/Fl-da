@@ -187,6 +187,41 @@ function structuredProduct(html: string, base: string): Distilled["structured"] 
  * are kept as lines, because a "Details" or "Technical specifications" section is exactly a list or
  * a table and its labels have to stay beside its values.
  */
+/**
+ * The pictures a page keeps in its scripts rather than in its markup.
+ *
+ * Many brands' own shop software (not Shopify) builds the gallery in the browser from data it
+ * carries in a script: the raw page has a picture or none in its markup and every picture's
+ * address in a block of JSON. Those addresses are taken here — but a script carries the whole
+ * site's pictures as well (the menu's, the banners', other products'), so where the markup already
+ * had pictures only the ones that carry the product's own code or name from the page's address
+ * are taken; where it had almost none, the first of them are, and the model picks the product's.
+ */
+export function scriptPictures(html: string, pageUrl: string, alreadyFound: number): Candidate[] {
+  const scripts = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].map((m) => m[1]).filter((t) => /\.(?:jpe?g|png|webp)/i.test(t));
+  if (scripts.length === 0) return [];
+  const raw = scripts.join("\n").replace(/\\u002[fF]/g, "/").replace(/\\\//g, "/");
+  const urls = new Set<string>();
+  for (const m of raw.matchAll(/(?:https?:)?\/\/[^\s"'<>()\\]+?\.(?:jpe?g|png|webp)(?:\?[^\s"'<>()\\]*)?/gi)) {
+    const u = m[0].startsWith("//") ? `https:${m[0]}` : m[0];
+    if (!NOT_A_PRODUCT_PICTURE.test(u)) urls.add(u);
+  }
+  if (urls.size === 0) return [];
+  // What names this product in its page's address: a style number, a code, the slug's words.
+  let path = "";
+  try { path = decodeURIComponent(new URL(pageUrl).pathname).toLowerCase(); } catch { /* not a page address */ }
+  const codes = [...new Set(path.match(/[a-z]*\d[a-z0-9]{3,}/g) ?? [])].filter((c) => !/^(19|20)\d\d$/.test(c));
+  const words = (path.split("/").filter(Boolean).pop() ?? "").replace(/\.[a-z]+$/, "").split(/[-_]+/).filter((w) => w.length >= 4 && !/^\d+$/.test(w));
+  const own = (u: string): boolean => {
+    const l = u.toLowerCase();
+    if (codes.some((c) => l.includes(c))) return true;
+    return words.length >= 2 && words.filter((w) => l.includes(w)).length >= 2;
+  };
+  const mine = [...urls].filter(own);
+  const taken = mine.length > 0 ? mine : alreadyFound < 3 ? [...urls] : [];
+  return taken.slice(0, 30).map((u) => ({ url: u, alt: "from the page's data" }));
+}
+
 export function distillPage(html: string, url: string): Distilled {
   const meta = (name: string): string => {
     for (const m of html.matchAll(/<meta\b[^>]*>/gi)) {
@@ -222,6 +257,9 @@ export function distillPage(html: string, url: string): Distilled {
   }
   for (const m of html.matchAll(/<source\b[^>]*>/gi)) add(largestOfSrcset(attr(m[0], "srcset")));
   for (const m of html.matchAll(/<a\b[^>]*\shref\s*=\s*["']([^"']+\.(?:jpe?g|png|webp)(?:\?[^"']*)?)["']/gi)) add(m[1]);
+  // A zoom or full-size picture a gallery keeps in an attribute of its own.
+  for (const m of html.matchAll(/\sdata-(?:zoom|large|full|hires|big|image|img|original)[\w-]*\s*=\s*["']([^"']+\.(?:jpe?g|png|webp)(?:\?[^"']*)?)["']/gi)) add(m[1]);
+  for (const c of scriptPictures(html, url, found.length)) add(c.url, c.alt);
 
   // Text.
   let body = html
@@ -265,7 +303,7 @@ const ReadSchema = z.object({
   pageTitle: z.string().describe("The product's name as this page gives it."),
   description: z.string().describe("The manufacturer's own description, in their words, as the page writes it — the opening copy, not the legal text or the delivery information. Up to about 140 words; a blank line between paragraphs. Empty if the page has none."),
   features: z.array(z.string()).describe("Every line of the page's own details / technical specifications / features section, each as the page writes it: \"Label: value\" where the page pairs a label with a value, a bare phrase where it does not. Up to 30. Empty if the page has none. Never compose a line the page does not carry."),
-  imageNumbers: z.array(z.number()).describe("The numbers, from the list of pictures, of the pictures of THIS product itself, in the order the shop shows them: first the product on its own (the goggle alone, the boot alone, the jacket alone — front view), then its other angles, then shots that include anything bundled with it such as a face mask, a spare lens or a bag, then the same product in its other colours. Where a colour was ordered, put the pictures of that colour first when the captions or addresses say which that is — but include the product's pictures whatever their colour; they are sorted by looking at them afterwards. Not related products, logos, banners, lifestyle thumbnails of other items, size charts or icons. At most 16. Empty if none are the product."),
+  imageNumbers: z.array(z.number()).describe("The numbers, from the list of pictures, of the pictures of THIS product itself, in the order the shop shows them: first the product on its own (the goggle alone, the boot alone, the jacket alone — front view), then its other angles, then shots that include anything bundled with it such as a face mask, a spare lens or a bag, then the same product in its other colours. Where a colour was ordered, put the pictures of that colour first when the captions or addresses say which that is — but include the product's pictures whatever their colour; they are sorted by looking at them afterwards. Not related products, logos, banners, lifestyle thumbnails of other items, size charts or icons. At most 16, or at most 30 when a colour was ordered, so that a page with many colourways still has the ordered one among them. Empty if none are the product."),
   pictureColour: z.string().describe("The colour the page shows as selected or names for its pictures, where it says. Empty when it does not."),
   note: z.string().describe("One short sentence for the person: what the page gave and what it did not, and, where a colour was ordered, whether the pictures are of that colour."),
 });
@@ -366,7 +404,8 @@ export async function extractFromPage(d: Distilled, hint: PageHint, ask: AskPage
   return {
     description: r.description.trim(),
     features: r.features.map((f) => f.replace(/\s+/g, " ").trim()).filter(Boolean).slice(0, 30),
-    images: images.slice(0, 16),
+    // More when a colour was ordered: they are looked at for the colour next and cut to 16 after.
+    images: images.slice(0, (hint.colours ?? []).some((c) => c.trim()) ? 30 : 16),
     pageTitle: r.pageTitle.trim() || d.structured.name || d.title,
     confident: r.confident,
     sourceUrl: d.url,
@@ -386,7 +425,9 @@ export async function extractFromPage(d: Distilled, hint: PageHint, ask: AskPage
  */
 const FETCH_SYSTEM = () => `You read one product's web page for ${retailer()} who is building a Shopify listing. Fetch the page you are given and report what it says about the product.
 
-Quote the manufacturer's wording; do not paraphrase it and do not write marketing copy of your own. The details section is often headed "Details", "Specs", "Technical specifications", "Features" or "Product information": report its lines exactly as written, keeping each label with its value. Say plainly if the page could not be fetched, if it is not for this product, or if it is a different model year.`;
+Quote the manufacturer's wording; do not paraphrase it and do not write marketing copy of your own. The details section is often headed "Details", "Specs", "Technical specifications", "Features" or "Product information": report its lines exactly as written, keeping each label with its value. Say plainly if the page could not be fetched, if it is not for this product, or if it is a different model year.
+
+Then, under the heading "Pictures:", list the addresses of this product's own photographs that the fetched page shows — links ending .jpg, .jpeg, .png or .webp, in the colour ordered first where the page says which is which — one per line, exactly as written. Leave the heading out when the page shows none.`;
 
 const FetchedSchema = ReadSchema.omit({ imageNumbers: true });
 

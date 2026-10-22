@@ -10,14 +10,15 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import type { ExtractedTable } from "./types";
 import { retrying } from "../api-errors";
+import { productTypes, typesAreKnown } from "../taxonomy";
 
 export { EXTRACTION_MODEL } from "../anthropic";
 
 export type DocumentType = "INVOICE" | "SPEC_SHEET" | "PRICE_LIST" | "PRODUCT_PHOTO" | "OTHER";
 
 const LineItemSchema = z.object({
-  title: z.string().describe("Product name without size/length/colour suffixes, e.g. 'Bent 90'"),
-  brand: z.string().describe("The brand ON the product — Volkl, Atomic, Marker. NEVER the distributor, agent or wholesaler the document came from."),
+  title: z.string().describe("Product name without size/length/colour suffixes, e.g. 'Bent 90', 'Atmos AG', 'Hubba Hubba Tent'"),
+  brand: z.string().describe("The brand ON the product — Volkl, Atomic, Osprey, MSR. NEVER the distributor, agent or wholesaler the document came from."),
   modelCode: z.string().describe("Model/style code shared across sizes of the same product, else empty"),
   sku: z.string().describe("Supplier SKU / item code for this exact variant, else empty"),
   barcode: z.string().describe("EAN/UPC if present, digits only, else empty"),
@@ -25,13 +26,16 @@ const LineItemSchema = z.object({
   currency: z.string().describe("ISO currency code if stated on the document, else empty"),
   quantity: z.number().nullable().describe("Units ordered/invoiced for this line; null when not an order"),
   rrp: z.number().nullable().describe("Recommended retail price if stated — printed in an RRP column, or written by hand against the line (see the handwriting rules)"),
-  length: z.string().describe("Ski/snowboard length in cm, digits only, else empty"),
-  size: z.string().describe("Boot size (mondopoint) or apparel size (S, M, L, XL, 8, 10, 12…), else empty. On a size-grid invoice this is the column header the quantity sat under."),
-  width: z.string().describe("Boot last width in mm or ski waist width, else empty"),
-  colour: z.string().describe("Colourway, else empty"),
+  length: z.string().describe("A length in cm for skis, snowboards and poles, digits only; else empty. A length written as a word (Regular, Long, Short) is a variant, not a length."),
+  size: z.string().describe("The size the line is sold in, as printed: apparel (XS–XXXL, 8, 10, 12), footwear with its system where printed (US 9.5, UK 8, EU 42), boot mondopoint (26.5), pack, harness or glove size (S/M, M/L), One Size. Else empty. On a size-grid invoice this is the column header the quantity sat under."),
+  width: z.string().describe("Fit or width: Wide, Regular, Narrow, a boot last or ski waist in mm. Else empty."),
+  colour: z.string().describe("The colourway's name. Where the line prints only a colour code (001, BLK, 4417) and the document names that code somewhere — a legend, another line, a heading — give the name; otherwise the code as printed. Else empty."),
+  variant: z.string().describe("Any other option that tells this line apart from the same product's other lines and is not its length, size, width or colour: a tent's capacity (2P, 3 Person), a pack's or bag's volume (35L, 65L), a sleeping bag's length (Regular, Long) or zip side (Left Zip), a bottle's capacity (750ml). As printed. Else empty."),
+  variantName: z.string().describe("What that option is called on a listing: Capacity, Volume, Length, Zip. Empty when variant is empty."),
+  productType: z.string().describe("What kind of product this is, in the shop's own words: one of the shop's kinds listed in the message when there are any, else the plainest name for it (Tents, Hiking Packs, Sleeping Bags, Trail Shoes, Rain Jackets). Empty if you cannot tell."),
   gender: z.string().describe("Mens/Womens/Unisex/Kids if stated, else empty"),
   season: z.string().describe("Season/model year like '2026' or 'FW25', else empty. A two-digit year written by hand against the line — 23, 24, 27 — is that year: '2023', '2024', '2027'. A handwritten 2998 or 2999 is copied as written."),
-  category: z.string().describe("One of: skis, snowboards, boots, bindings, poles, helmets, goggles, apparel, accessories, other"),
+  category: z.string().describe("One of: skis, snowboards, boots, bindings, poles, helmets, goggles, apparel, accessories, other. Boots means ski and snowboard boots; hiking boots, shoes, tents, packs, sleeping gear, cooking and climbing gear are other; clothing of any kind is apparel."),
   description: z.string().describe("Marketing description and key features in plain prose, else empty"),
   flex: z.string().describe("Flex rating if stated"),
   abilityLevel: z.string().describe("Ability level if stated (Beginner/Intermediate/Advanced/Expert)"),
@@ -60,11 +64,11 @@ Document types:
 - INVOICE / order confirmation: one item per purchasable variant line (each length/size/colour is its own item) with unit cost and quantity.
 - PRICE_LIST / pre-book form: like an invoice but quantities may be absent; still one item per variant with the unit cost.
 - SPEC_SHEET / catalogue page / workbook: one item per product (not per size) carrying brand, model, description, specs (flex, ability level, terrain, DIN, widths), the list of available lengths/sizes in the length/size field separated by commas, colourways, RRP if shown, and suggested tags. costPrice and quantity are null.
-- PRODUCT_PHOTO: a photo of a product (skis, boots, apparel…). Return one item with the brand, model name, model code (if printed), colour and category you can see, everything else empty/null.
+- PRODUCT_PHOTO: a photo of a product (skis, boots, apparel, a tent, a pack…). Return one item with the brand, model name, model code (if printed), colour and category you can see, everything else empty/null.
 - OTHER: nothing useful; return no items.
 
 Size grids (very common on apparel invoices, and the shape most often got wrong):
-- Some invoices do not list one row per variant. Instead the sizes run ACROSS as column headers (S M L XL XXL XXXL, or 0 2 4 6 8 10 12 14 16 18 20, or 36 38 40 42) and each product row carries a quantity in the cell under each size it was ordered in. Empty cells were not ordered.
+- Some invoices do not list one row per variant. Instead the sizes run ACROSS as column headers (S M L XL XXL XXXL, or 0 2 4 6 8 10 12 14 16 18 20, or 36 38 40 42, or US 8 8.5 9 9.5, or S/M M/L, or Regular Long) and each product row carries a quantity in the cell under each size it was ordered in. Empty cells were not ordered.
 - When you see that, emit ONE ITEM PER SIZE THAT HAS A QUANTITY, not one item per row. Each item takes that size, that cell's quantity, and the row's name, code, colour and prices. A row with quantities under M and L is two items, not one.
 - Quantities in those cells are often HANDWRITTEN, and may be circled or ticked. Read them as the quantity. A circle around a number does not change the number.
 - Check your work against the row's printed total quantity ("2 EA", "3 EA") and the stated Total Units: the quantities you emit for a row should add up to it.
@@ -73,7 +77,7 @@ Size grids (very common on apparel invoices, and the shape most often got wrong)
 The brand is the brand on the product, never the company that sent the document:
 - An order form, an invoice and a price list all carry a letterhead: a name, an address, a phone number, an email, usually top-right. That company is the DISTRIBUTOR — the agent this shop buys through. "Sportrade Australia" is who sells them Volkl; it is not the brand of a single ski, and it must never be the brand on an item.
 - The brand is what is printed on the goods, and it is what the range is called: RACETIGER, BLAZE and MANTRA are Volkl; SQUIRE and GRIFFON are Marker. It is usually in the document's title, in a logo, in the sheet's name, or in the model codes — and it is the same for most or all of the rows.
-- One workbook can hold two brands, most often a ski brand and the binding brand on the same order. Give each item the brand of the thing that item IS.
+- One workbook can hold two brands, most often a ski brand and the binding brand on the same order, or an outdoor agency's order spanning several of the brands it carries (Osprey packs and Sea to Summit sleeping mats). Give each item the brand of the thing that item IS.
 - If the document names no brand at all, leave it empty. An empty brand is fixed in one click on the batch; a distributor's name is fixed by someone noticing it first, and nobody does.
 
 Section headers:
@@ -97,7 +101,7 @@ Handwriting — a printed document the shop's staff have written on in pen, whic
 - Where a handwritten figure could be read two ways, take the likelier and say in notes what else it could read.
 
 Rules:
-- title is the product name only; put length/size/colour in their own fields. Keep the brand out of the title when it is identifiable separately.
+- title is the product name only; put length, size, width, colour and any other option (capacity, volume, zip side) in their own fields, so the lines of one product share one title: "Atmos AG" in 65L and 50L is one product with a Volume option, not two products. Keep the brand out of the title when it is identifiable separately. A number that is part of the model's name stays in the title: "Bent 100", "Hubba Hubba 2" when that is what the brand calls it.
 - modelCode is the code shared across sizes of the same product (style number); sku is the code unique to this variant. If only one code exists, put it in sku and derive modelCode by stripping the size/colour suffix when obvious, otherwise leave modelCode empty.
 - costPrice is the UNIT price for one item, never the line total. Strip currency symbols.
 - Never invent values. Leave a string empty or a number null when the document does not state it.
@@ -106,7 +110,10 @@ Rules:
 - gstTreatment: EXCLUSIVE when prices are marked ex tax / plus tax (GST, VAT or whatever the shop's sales tax is called), INCLUSIVE when marked inc tax, NONE when the supplier is overseas and no local sales tax applies, otherwise UNKNOWN.`;
 
 /** What differs by shop, after the fixed prompt so the fixed prompt is the same bytes for every shop. */
-const SHOP = () => `The retailer is ${retailer()}; its sales tax is called ${taxName()}.`;
+const SHOP = () => {
+  const kinds = typesAreKnown() ? productTypes().slice(0, 120) : [];
+  return `The retailer is ${retailer()}; its sales tax is called ${taxName()}.${kinds.length ? ` The shop's kinds of product, for productType: ${kinds.join(", ")}.` : ""}`;
+};
 
 const getClient = (): Anthropic => anthropicClient(6);
 
@@ -220,6 +227,7 @@ export async function extractFromImage(buffer: Buffer, mimeType: string, kind?: 
 export const AI_HEADERS = [
   "title", "brand", "modelCode", "sku", "barcode", "costPrice", "quantity", "rrp", "length", "size", "width",
   "colour", "gender", "season", "category", "description", "flex", "abilityLevel", "dinRange", "terrain", "tags", "imageUrls", "notes",
+  "variant", "variantName", "productType",
 ] as const;
 
 export function aiExtractionToTable(result: AiExtraction, method: ExtractedTable["method"], text?: string): ExtractedTable {

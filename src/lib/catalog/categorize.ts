@@ -202,12 +202,13 @@ export const OPTION_LABELS: Record<string, string> = {
   size: "Size",
   width: "Width",
   colour: "Colour",
+  variant: "Option",
 };
 
 /** Decide option names for a product group given its category rule and which attributes vary. */
 export function chooseOptions(rule: CategoryRuleLike | null, items: CanonicalLineItem[]): Array<keyof CanonicalLineItem> {
   const preferred = ((rule ? [rule.option1, rule.option2, rule.option3] : ["size", "colour"]).filter(Boolean) as Array<keyof CanonicalLineItem>);
-  const fallback: Array<keyof CanonicalLineItem> = ["length", "size", "width", "colour"];
+  const fallback: Array<keyof CanonicalLineItem> = ["length", "size", "width", "variant", "colour"];
   const present = (key: keyof CanonicalLineItem) => items.some((i) => String(i[key] ?? "").trim() !== "");
   const chosen = preferred.filter(present);
   for (const key of fallback) {

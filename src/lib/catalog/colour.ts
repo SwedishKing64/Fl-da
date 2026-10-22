@@ -10,6 +10,8 @@ export function colourName(value: string): string {
   let v = value.trim();
   const m = /^\d{2,4}\s+(\S.*)$/.exec(v);
   if (m) v = m[1];
+  // A colour that is nothing but the trade's shorthand ("BLK", "NVY") is written out.
+  if (/^[A-Za-z]{2,6}$/.test(v) && COLOUR_SHORTHAND[v.toUpperCase()]) v = COLOUR_SHORTHAND[v.toUpperCase()];
   if (v === v.toUpperCase() && /[A-Z]/.test(v)) v = v.toLowerCase().replace(/\b([a-z])/g, (c) => c.toUpperCase());
   return v;
 }
@@ -29,7 +31,24 @@ export function colourName(value: string): string {
  * ONYX" and "PRCV VRBL BLUE" on every row, and Perceive Sunny Onyx and Perceive Variable Blue on
  * the shop's shelf. Whole words only, and "Sun" is "Sunny" only in a Perceive lens name.
  */
-const COLOUR_SHORTHAND: Record<string, string> = { TRUBLK: "TRUE BLACK", BLK: "BLACK", WHT: "WHITE", GRY: "GRAY", BLU: "BLUE", GRN: "GREEN", PRPL: "PURPLE", ORG: "ORANGE", YLW: "YELLOW", ARSTBL: "AIRSTREAM BLUE", PRCV: "PERCEIVE", VRBL: "VARIABLE" };
+const COLOUR_SHORTHAND: Record<string, string> = {
+  TRUBLK: "TRUE BLACK", BLK: "BLACK", WHT: "WHITE", GRY: "GRAY", BLU: "BLUE", GRN: "GREEN", PRPL: "PURPLE", ORG: "ORANGE", YLW: "YELLOW", ARSTBL: "AIRSTREAM BLUE", PRCV: "PERCEIVE", VRBL: "VARIABLE",
+  // The clothing and outdoor trade's own: a colour column of three-letter codes is common there.
+  NVY: "NAVY", CHR: "CHARCOAL", CHAR: "CHARCOAL", OLV: "OLIVE", BRN: "BROWN", BGE: "BEIGE", KHK: "KHAKI", SLV: "SILVER", PNK: "PINK", PRP: "PURPLE", TRQ: "TURQUOISE", MRN: "MAROON", BRG: "BURGUNDY", CRL: "CORAL", LIM: "LIME", MLT: "MULTI", NAT: "NATURAL", SND: "SAND", STN: "STONE", GRPH: "GRAPHITE",
+};
+
+/**
+ * A colour that is only a code: "001", "4417", "0-9A", or letters that name nothing ("XKCD").
+ * Pictures cannot be matched to it, so it is not offered as a colour to look for.
+ */
+export function isColourCode(value: string): boolean {
+  const v = value.trim();
+  if (!v) return false;
+  if (/^[\d\s./-]+$/.test(v)) return true;
+  if (/^[A-Z0-9]{2,6}$/.test(v) && /\d/.test(v)) return true;
+  if (/^[A-Z]{2,4}$/.test(v) && !COLOUR_SHORTHAND[v] && !/[AEIOU]/.test(v)) return true;
+  return false;
+}
 function writeOutWords(part: string): string {
   // Whole words only, whatever the case they arrived in: a reader may have cased the colour
   // already, and a word written out joins it in that case.

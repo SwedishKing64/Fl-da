@@ -176,7 +176,7 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
     // read in. A jacket is colour then size on forty-one of forty-three products, a ski is length
     // first, and a sleeping bag is size, loft, then which side the zip is on.
     const optionKeys = orderByConvention(productType, chooseOptions(group.rule, items));
-    const names = optionKeys.map((k) => normaliseOptionName(OPTION_LABELS[k] ?? titleCase(String(k))));
+    const names = optionKeys.map((k) => normaliseOptionName(k === "variant" ? variantNameOf(items) : OPTION_LABELS[k] ?? titleCase(String(k))));
     const seenCombos = new Set<string>();
     const variants: GroupedVariant[] = [];
     for (const e of entries) {
@@ -251,6 +251,16 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
     });
   }
   return products;
+}
+
+/** What the free option is called on this product: the name its lines give most often, else "Option". */
+function variantNameOf(items: CanonicalLineItem[]): string {
+  const counts = new Map<string, number>();
+  for (const i of items) {
+    const n = (i.variantName ?? "").trim();
+    if (n) counts.set(titleCase(n.toLowerCase()), (counts.get(titleCase(n.toLowerCase())) ?? 0) + 1);
+  }
+  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "Option";
 }
 
 /**

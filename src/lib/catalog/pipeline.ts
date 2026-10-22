@@ -46,6 +46,7 @@ import { isValidType, typesAreKnown } from "./taxonomy";
 import type { MatchCandidate } from "./match-candidates";
 import { filePath, pictureHosting, publicFileUrl, readFile, saveFile, usingBlob } from "./storage";
 import { logAudit } from "./audit";
+import { contributeLayout, findSharedLayout } from "./shared-layouts-store";
 import { isReaderTable, readerMapping } from "./extract/ai";
 
 // ---------------------------------------------------------------------------
@@ -332,6 +333,8 @@ export interface HeaderGroup {
   confident: boolean; // safe to apply without showing the mapping screen
   /** Set when the supplier has a remembered layout and this file's columns differ from it. */
   drift: LayoutDrift | null;
+  /** How many other shops taught the reading in use, where it came from them rather than this shop. */
+  sharedBy: number | null;
 }
 
 export async function mappingState(batchId: string): Promise<HeaderGroup[]> {
@@ -354,9 +357,12 @@ export async function mappingState(batchId: string): Promise<HeaderGroup[]> {
       const template = exact ?? near?.template ?? null;
       const saved = template ? parseJson<SavedOptions>(template.options, {}) : null;
       const fresh = suggestMapping(headers, rows);
+      // A layout this shop has never seen may be one other shops buying from the same supplier
+      // have: their reading stands where it differs from the fresh one, unless the data rules it out.
+      const shared = !template && !isCanonical ? await findSharedLayout(headers) : null;
       const suggestion = template
         ? repairTemplate(trimToHeaders(parseJson<Mapping>(template.mappings, {}), headers) ?? {}, fresh, rows, trimToHeaders(saved?.suggestedAtSave, headers))
-        : isCanonical ? readerMapping(headers) : fresh;
+        : isCanonical ? readerMapping(headers) : shared ? repairTemplate(shared.mappings, fresh, rows, fresh) : fresh;
       group = {
         hash,
         headers,
@@ -375,10 +381,11 @@ export async function mappingState(batchId: string): Promise<HeaderGroup[]> {
             }
           : { ...(isCanonical ? {} : suggestOptions(fresh)), ...(batch.supplier?.defaultBrand ? { fixed: { brand: batch.supplier.defaultBrand } } : {}) },
         templateId: exact?.id ?? null,
-        templateName: template?.name ?? null,
+        templateName: template?.name ?? (shared ? `Taught by ${shared.shops} other ${shared.shops === 1 ? "shop" : "shops"}` : null),
         isCanonical,
         confident: false,
         drift: near?.drift ?? null,
+        sharedBy: shared?.shops ?? null,
       };
       groups.set(hash, group);
     }
@@ -412,6 +419,9 @@ export async function autoApplyMappings(batchId: string, userId: string | null):
   const unmapped = groups.filter((g) => !usable.includes(g) && !g.drift).flatMap((g) => g.filenames);
   if (usable.length === 0) return { applied: false, products: 0, variants: 0, unmapped, drifted };
   const result = await applyMappings(batchId, usable.map((g) => ({ hash: g.hash, mapping: g.suggestion, options: g.options, saveTemplate: null })), userId);
+  for (const g of usable.filter((x) => x.sharedBy)) {
+    await logAudit("layout.shared-used", { batchId, userId, details: { files: g.filenames.length, shops: g.sharedBy } }).catch(() => undefined);
+  }
   return { applied: result.problems.length === 0 && drifted.length === 0, products: result.products, variants: result.variants, unmapped, drifted };
 }
 
@@ -562,6 +572,8 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
       const data = { name: input.saveTemplate.name, mappings: JSON.stringify(input.mapping), options: JSON.stringify(options), headerHash: input.hash };
       if (existing) await prisma.mappingTemplate.update({ where: { id: existing.id }, data });
       else await prisma.mappingTemplate.create({ data: { ...data, supplierId: batch.supplierId } });
+      // A layout a person confirmed is offered to the other shops: its headings and fields only.
+      if (file) void contributeLayout(parseJson<string[]>(file.headers, []), input.mapping);
     }
   }
 

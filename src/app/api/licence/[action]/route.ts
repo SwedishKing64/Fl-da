@@ -8,6 +8,8 @@ import { checkAccount } from "@/lib/catalog/account";
 import { allowanceOf, periodEnd } from "@/lib/catalog/ai-usage";
 import { SUPPORT_EMAIL } from "@/lib/catalog/support";
 import { findBlobToken } from "@/lib/catalog/blob-token";
+import { lookupLayout, recordLayout } from "@/lib/catalog/shared-layouts-store";
+import type { Mapping } from "@/lib/catalog/mapping";
 
 export const runtime = "nodejs";
 
@@ -27,6 +29,7 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/licence/[ac
   if (action === "checkout") return checkout(req);
   if (action === "portal") return portal(req);
   if (action === "picture") return picture(req);
+  if (action === "layout-share" || action === "layout-find") return layouts(req, action);
   if (action !== "activate" && action !== "check") return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const body = (await req.json().catch(() => null)) as Partial<{ key: string; install: string; shop: string; version: string; platform: string; monthBatches: number; monthProducts: number }> | null;
@@ -174,4 +177,26 @@ async function picture(req: NextRequest) {
   const month = new Date().toISOString().slice(0, 7);
   const stored = await put(`catalog/pictures/${client.id}/${month}/${crypto.randomUUID().slice(0, 8)}-${name}`, bytes, { access: "public", contentType: type, addRandomSuffix: false, token: blob.token });
   return NextResponse.json({ ok: true, url: stored.url });
+}
+
+/**
+ * A supplier's layout, shared between shops: a copy offers the headings of a file a person
+ * confirmed and the field each is, or asks how other shops read a layout it has never seen. Only
+ * headings and field names are taken or given; which shops taught a layout never leaves here.
+ */
+async function layouts(req: NextRequest, action: "layout-share" | "layout-find") {
+  const key = normaliseKey((req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, ""));
+  if (!key) return NextResponse.json({ ok: false, why: "This copy sent no licence key." }, { status: 401 });
+  const client = await prisma.client.findUnique({ where: { licenceKey: key } });
+  const verdict = verdictFor(client);
+  if (!client || !verdict.ok) return NextResponse.json({ ok: false, why: "Shared layouts are for copies in good standing." }, { status: 403 });
+  const body = (await req.json().catch(() => null)) as Partial<{ headers: unknown; mappings: unknown; headerHash: unknown }> | null;
+  if (action === "layout-find") {
+    const hash = typeof body?.headerHash === "string" && /^[0-9a-f]{16}$/.test(body.headerHash) ? body.headerHash : "";
+    if (!hash) return NextResponse.json({ ok: false, why: "No layout was named." }, { status: 400 });
+    return NextResponse.json({ ok: true, layout: await lookupLayout(hash, client.id) });
+  }
+  const headers = Array.isArray(body?.headers) ? body.headers.filter((h): h is string => typeof h === "string") : [];
+  const mappings = body?.mappings && typeof body.mappings === "object" ? Object.fromEntries(Object.entries(body.mappings as Record<string, unknown>).filter(([, v]) => typeof v === "string")) as Mapping : {};
+  return NextResponse.json({ ok: true, kept: await recordLayout({ headers, mappings }, client.id) });
 }

@@ -154,6 +154,16 @@ from its QuickBooks list, batch PDFs split into one bill per invoice) live in Ru
 
 ## Decisions and history, newest first
 
+- 2026-10-22 Supplier layouts are shared between shops (`shared-layouts.ts`,
+  `shared-layouts-store.ts`, the `layout-share` and `layout-find` calls on the licence route). When a
+  person saves a supplier's column mapping, the file's headings and the field each one is go to
+  Flöda's deployment under the shop's licence key. Values, prices, the supplier's name and the
+  shop's never go, and which shops taught a layout is never sent back. A file in a layout the shop
+  has never seen starts from the reading most other shops agree on ("Taught by N other shops" on
+  the mapping screen). Their choices stand where they differ from Flöda's own guess, unless the
+  data rules them out. A shop can turn it off under Settings → Licence, which also stops it asking.
+  Each build that used one is logged as `layout.shared-used`.
+
 - 2026-10-13 Repository moved to `RubinAlp/Rubin`; the business has its own Vercel project, Neon
   database and Blob store, with the old data copied in. Settings gained "Copy from the old site"
   to bring the old Blob files across. Packs carry `backpacks`. The Burton RRP problem is fixed.
@@ -207,6 +217,7 @@ Open at handover:
 | Pages and pictures | `src/lib/catalog/extract/page.ts`, `shopify-store.ts`, `pictures.ts`, `colour-match.ts` |
 | Categorising and tagging | `src/lib/catalog/grouping.ts`, `categorize.ts`, `accessories.ts`, `packs.ts`, `product-tags.ts`, `tagging.ts`, `taxonomy.ts` (the vocabulary in force), `tag-spelling.ts`, `learn.ts` (from the shop's export), `shop-profile.ts` |
 | Setup, clients, licences, desktop | `src/app/(catalog)/(setup)/setup/`, `(app)/clients/`, `src/lib/catalog/licence.ts`, `licence-store.ts`, `desktop/`, `scripts/desktop-build.mjs` |
+| Supplier layouts | `src/lib/catalog/mapping.ts`, `layout.ts`, `shared-layouts.ts` (shared between shops) |
 | Invoice reading | `src/lib/catalog/invoice.ts` (spreadsheets), `extract/ai.ts` (PDF and photo), `extract/transcribe.ts` (Tidy) |
 | Prices and stock page | `src/app/(catalog)/(app)/bulk/BulkPanel.tsx` |
 | Batch page | `src/app/(catalog)/(app)/batches/[id]/` (`BuildList`, `TypeList`, `LinksPanel`) |

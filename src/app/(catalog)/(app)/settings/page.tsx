@@ -10,6 +10,7 @@ import { getShopProfile, getStoredApiKey } from "@/lib/catalog/shop-profile";
 import { ShopForm } from "@/app/(catalog)/(setup)/setup/ShopStep";
 import { ApiKeyForm } from "@/app/(catalog)/(setup)/setup/AiStep";
 import { LicenceForm } from "./LicenceForm";
+import { ShareLayouts } from "./ShareLayouts";
 import { Backups } from "./Backups";
 import { ShopifyConnect } from "./ShopifyConnect";
 import { getSettings } from "@/lib/catalog/settings";
@@ -63,6 +64,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           {licenceServer() && (
             <Card title="Licence">
               <LicenceForm state={await currentLicence()} use={await monthUse()} reading={await readingUsage()} servers={await servers()} override={await getServerOverride()} />
+              <ShareLayouts on={settings.shareLayouts !== false} />
             </Card>
           )}
         </div>

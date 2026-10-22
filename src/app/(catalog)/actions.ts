@@ -807,6 +807,7 @@ export async function saveSettingsAction(patch: Partial<AppSettings>): Promise<A
       locations: z.array(z.object({ id: z.string(), name: z.string(), isDefault: z.boolean().optional() })).optional(),
       publicBaseUrl: z.string().optional(),
       seoTone: z.string().optional(),
+      shareLayouts: z.boolean().optional(),
     });
     const data = schema.parse(patch);
     await saveSettings(data as Partial<AppSettings>);

@@ -886,6 +886,24 @@ export async function retryExtractionAction(fileId: string): Promise<ActionResul
 }
 
 /**
+ * A document that did not add up, checked by the person: its lines are right as read. The note
+ * comes off the file, so the batch stops asking, and the audit trail keeps who settled it.
+ */
+export async function settleTotalsAction(fileId: string): Promise<ActionResult> {
+  const user = await requireUser();
+  try {
+    const { settledTotals, offTotals } = await import("@/lib/catalog/totals");
+    const file = await prisma.sourceFile.findUniqueOrThrow({ where: { id: fileId }, select: { batchId: true, extractionError: true } });
+    await prisma.sourceFile.update({ where: { id: fileId }, data: { extractionError: settledTotals(file.extractionError) } });
+    await logAudit("file.totals_settled", { batchId: file.batchId, userId: user.id, details: { fileId, said: offTotals(file.extractionError) } });
+    revalidatePath(`/batches/${file.batchId}/review`);
+    return { ok: true };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/**
  * The CSV as text, so the browser can save it itself.
  *
  * The file route is the normal way down, but when it fails there is nothing to see: a link that

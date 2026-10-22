@@ -139,6 +139,9 @@ model SourceFile {
   /// The supplier's price list off an order form — every priced row, ordered or not — as JSON.
   /// Read once, from the upload itself: a package is priced from a binding nobody ordered.
   priceList        String   @default("[]")
+  /// The document's layout: the words of its column headings, sorted. The same supplier sending the
+  /// same layout again is read as known; a new one is read fresh. See layout.ts.
+  layout           String?
   createdAt        DateTime @default(now())
 
   batch     ImportBatch         @relation(fields: [batchId], references: [id], onDelete: Cascade)

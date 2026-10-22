@@ -30,3 +30,15 @@ describe("checkTotals", () => {
     expect(totalsDistance(near)).toBeLessThan(totalsDistance(far));
   });
 });
+
+describe("a file that does not add up, once the person has looked", () => {
+  const note = "Does not add up: The lines read add up to 11 units: a line may be missing, doubled or misread. Check the lines against the document before building. Could not tell whether prices include GST.";
+
+  it("says what is off until it is settled, and keeps the file's other notes", async () => {
+    const { offTotals, settledTotals } = await import("./totals");
+    expect(offTotals(note)).toMatch(/^The lines read add up to 11 units/);
+    expect(settledTotals(note)).toBe("Could not tell whether prices include GST.");
+    expect(offTotals(settledTotals(note))).toBeNull();
+    expect(settledTotals("Does not add up: x. Check the lines against the document before building.")).toBeNull();
+  });
+});

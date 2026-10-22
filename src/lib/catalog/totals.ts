@@ -56,3 +56,17 @@ export function totalsDistance(c: TotalsCheck): number {
   const ds = c.subtotal.stated !== null && c.subtotal.stated > 0 ? Math.abs(c.subtotal.read - c.subtotal.stated) / c.subtotal.stated : 0;
   return du + ds;
 }
+
+/** How a read that does not add up is noted on its file. See aiExtractionToTable. */
+const OFF = /Does not add up: ([^]*?Check the lines against the document before building\.)\s*/;
+
+/** What a file's note says about its totals, or null where they added up or were settled. */
+export function offTotals(note: string | null | undefined): string | null {
+  return OFF.exec(note ?? "")?.[1]?.trim() ?? null;
+}
+
+/** The file's note with the totals settled: the person checked the lines and they are right as read. */
+export function settledTotals(note: string | null | undefined): string | null {
+  const rest = (note ?? "").replace(OFF, "").trim();
+  return rest || null;
+}

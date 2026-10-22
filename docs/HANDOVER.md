@@ -122,6 +122,15 @@ A line keeps every column the mapping had no field for, under the supplier's hea
 lines of one product would otherwise be the same variant, the column that tells them apart (a
 sleeping bag's "Zip Side") becomes an option of its own (`extraOptions` in categorize.ts).
 
+**Known suppliers, known layouts (phase 2).** Each file keeps its layout: the words of its column
+headings (`layout.ts`). The lines of a supplier's exported or pushed batches are kept as examples —
+the line as printed and what the shop settled it as — and the nearest few, same layout first, go to
+the reader with the supplier's next document (`read-examples.ts`). A known supplier's document in
+a layout it has never sent is read on the full model and the batch says so. A document whose lines
+do not add up is put to the person on the review page ("Read it again" or "The lines are right");
+until settled the export page lists it and a push asks for the override. Export is never stopped.
+Reference knowledge per trade comes from `docs/KNOWLEDGE-PROMPT.md`, run by an agent once per trade.
+
 **QuickBooks (Rubin only).** Rubin reads supplier invoices into QuickBooks bill sheets. Flöda
 removed that section; the rules the shop gave for it (its one-row-per-bill sheet, supplier names
 from its QuickBooks list, batch PDFs split into one bill per invoice) live in Rubin's handover.

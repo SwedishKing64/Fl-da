@@ -10,6 +10,7 @@ import { candidatesFor, type CatalogueRow, type MatchCandidate } from "./match-c
 import type { ReviewProduct } from "./review-types";
 import { SKI_METAFIELDS, type ShopifyLocation } from "./types";
 import { blockingErrors } from "./validate";
+import { offTotals } from "./totals";
 
 export interface ShopifyConfig {
   storeDomain: string;
@@ -358,6 +359,9 @@ export async function pushBatch(batchId: string, userId: string, opts: { confirm
   if (errors.length) return { ok: false, errors, created: 0, updated: 0 };
   const hasWarnings = review.products.some((p) => p.flags.length || p.variants.some((v) => v.flags.length));
   if (hasWarnings && !opts.overrideWarnings) return { ok: false, errors: ["Batch has warnings; confirm the override to push anyway."], created: 0, updated: 0 };
+  // A document whose lines did not add up to its own totals, not settled on the review page.
+  const off = (await prisma.sourceFile.findMany({ where: { batchId, extractionError: { contains: "Does not add up:" } }, select: { filename: true, extractionError: true } })).filter((f) => offTotals(f.extractionError));
+  if (off.length && !opts.overrideWarnings) return { ok: false, errors: [`${off.map((f) => f.filename).join(", ")} ${off.length === 1 ? "does" : "do"} not add up to ${off.length === 1 ? "its" : "their"} own totals; settle ${off.length === 1 ? "it" : "them"} on the review page, or confirm the override to push anyway.`], created: 0, updated: 0 };
 
   const locationId = settings.locations.find((l) => l.isDefault)?.id ?? settings.locations[0]?.id ?? null;
   const locationQuantities: Record<string, Record<string, number>> = {};

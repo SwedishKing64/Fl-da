@@ -28,6 +28,7 @@
 import { packFor, type PackId } from "./trades";
 import { DEFAULT_HOUSE, type HouseConventions } from "./house";
 import type { WebsiteCategories } from "./website";
+import type { MetafieldDef } from "./types";
 
 export interface TaxonomyGroup {
   /** The bold heading. This is the value written to the Shopify `Type` column. */
@@ -236,6 +237,11 @@ export function activateConventions(next: Conventions): void {
 
 export function activeConventions(): Conventions {
   return conventions;
+}
+
+/** The product metafields this shop writes, from its pack. See types.ts. */
+export function metafieldDefs(): MetafieldDef[] {
+  return packFor(conventions.pack).metafields;
 }
 
 /**

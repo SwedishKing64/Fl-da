@@ -24,7 +24,7 @@ import { repairCategoryRules, repairProductTags, repairTagRuleSpelling } from ".
 import { applyTagRules, type TagRuleLike } from "./rules";
 import { conventionGrams, conventionIdentifiers } from "./house";
 import { shopBody } from "./description-style";
-import { houseConventions } from "./taxonomy";
+import { houseConventions, metafieldDefs } from "./taxonomy";
 import { applyTemplates, type ProductTemplateLike } from "./templates";
 import { allocateFreight, exGstCostAud, priceVariant } from "./pricing";
 import { getSettings } from "./settings";
@@ -34,7 +34,7 @@ import { generateCsvParts, validateCsvFile, validateProducts } from "./csv";
 import { toCsvProducts } from "./pipeline-pure";
 import { repairForExport, type Repair } from "./repair";
 export { toCsvProducts };
-import { SKI_METAFIELDS, metafieldColumn, type AppSettings, type CanonicalLineItem, type GstTreatment, CANONICAL_FIELDS } from "./types";
+import { metafieldColumn, type AppSettings, type CanonicalLineItem, type GstTreatment, CANONICAL_FIELDS } from "./types";
 import type { ReviewProduct, ReviewSummary, ReviewVariant } from "./review-types";
 import { hardErrors, summarise, validateReview, warningList } from "./validate";
 import { readsKnown } from "./supplier-record";
@@ -1294,7 +1294,7 @@ export async function loadReview(batchId: string): Promise<ReviewData> {
       // this deployment's own, or nowhere (a desktop copy's own address is not public).
       publicBaseUrl: usingBlob() ? "blob" : pictureHosting() ? "floda" : publicFileUrl("images/x.jpg", settings.publicBaseUrl) ? (settings.publicBaseUrl || process.env.APP_PUBLIC_URL || `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`) : "",
     },
-    metafieldColumns: SKI_METAFIELDS.map(metafieldColumn),
+    metafieldColumns: metafieldDefs().map(metafieldColumn),
   };
 }
 

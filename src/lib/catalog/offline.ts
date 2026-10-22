@@ -8,7 +8,8 @@ import type { CategoryRuleLike } from "./categorize";
 import { allocateFreight, exGstCostAud, priceVariant } from "./pricing";
 import { generateCsv, type CsvProduct } from "./csv";
 import { toCsvProducts } from "./pipeline-pure";
-import { SKI_METAFIELDS, metafieldColumn, type AppSettings, type GstTreatment } from "./types";
+import { metafieldDefs } from "./taxonomy";
+import { metafieldColumn, type AppSettings, type GstTreatment } from "./types";
 import type { ReviewProduct, ReviewSummary, ReviewVariant } from "./review-types";
 import { blockingErrors, summarise, validateReview, warningList } from "./validate";
 import type { ExtractedTable } from "./extract/types";
@@ -103,7 +104,7 @@ export function runOffline(
   return {
     products,
     csvProducts,
-    csv: generateCsv(csvProducts, { metafieldColumns: SKI_METAFIELDS.map(metafieldColumn) }),
+    csv: generateCsv(csvProducts, { metafieldColumns: metafieldDefs().map(metafieldColumn) }),
     summary: summarise(products),
     errors: blockingErrors(products),
     warnings: warningList(products),

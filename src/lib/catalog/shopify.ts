@@ -8,7 +8,8 @@ import { logAudit } from "./audit";
 import { loadReview, toCsvProducts } from "./pipeline";
 import { candidatesFor, type CatalogueRow, type MatchCandidate } from "./match-candidates";
 import type { ReviewProduct } from "./review-types";
-import { SKI_METAFIELDS, type ShopifyLocation } from "./types";
+import { type ShopifyLocation } from "./types";
+import { metafieldDefs } from "./taxonomy";
 import { blockingErrors } from "./validate";
 import { offTotals } from "./totals";
 
@@ -323,7 +324,7 @@ export function buildProductSetInput(p: ReviewProduct, opts: { publish: boolean;
   if (p.shopifyProductId) input.id = p.shopifyProductId;
   const files = p.images.map((i) => ({ originalSource: i.url, contentType: "IMAGE" as const, alt: p.title }));
   if (files.length) input.files = files;
-  const metafields = SKI_METAFIELDS.filter((d) => p.metafields[d.key]).map((d) => ({ namespace: d.namespace, key: d.key, type: d.type, value: p.metafields[d.key] }));
+  const metafields = metafieldDefs().filter((d) => p.metafields[d.key]).map((d) => ({ namespace: d.namespace, key: d.key, type: d.type, value: p.metafields[d.key] }));
   if (metafields.length) input.metafields = metafields;
   return input;
 }

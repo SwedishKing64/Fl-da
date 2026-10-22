@@ -1,6 +1,7 @@
 /** No trade at all: every kind of product, tag and option is learned from the shop's own store. */
 
 import type { TradePack } from "./types";
+import { GENERAL_METAFIELDS } from "../types";
 
 export const GENERAL_PACK: TradePack = {
   id: "general",
@@ -12,4 +13,5 @@ export const GENERAL_PACK: TradePack = {
   readerExamples: [],
   seeds: false,
   snowRules: false,
+  metafields: GENERAL_METAFIELDS,
 };

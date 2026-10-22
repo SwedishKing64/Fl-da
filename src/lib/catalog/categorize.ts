@@ -1,7 +1,8 @@
 // Category detection and enrichment rules: product type, collections, tags, which canonical
 // attributes become Shopify options vs metafields, and title clean-up.
 
-import { SKI_METAFIELDS, metafieldColumn, type CanonicalLineItem, type Category } from "./types";
+import { metafieldColumn, type CanonicalLineItem, type Category } from "./types";
+import { metafieldDefs } from "./taxonomy";
 import { isSnowboardBrand } from "./brands";
 
 export interface CategoryRuleLike {
@@ -274,7 +275,7 @@ export function extraOptions(items: CanonicalLineItem[], chosen: OptionKey[]): O
 /** Metafield column values for a product, from the first item carrying each attribute. */
 export function metafieldsFor(items: CanonicalLineItem[]): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const def of SKI_METAFIELDS) {
+  for (const def of metafieldDefs()) {
     const values = Array.from(new Set(items.map((i) => String(i[def.source] ?? "").trim()).filter(Boolean)));
     if (values.length === 0) continue;
     out[def.key] = def.key === "length_cm" ? values.join(", ") : values[0];
@@ -284,7 +285,7 @@ export function metafieldsFor(items: CanonicalLineItem[]): Record<string, string
 
 export function metafieldColumns(metafields: Record<string, string>): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const def of SKI_METAFIELDS) {
+  for (const def of metafieldDefs()) {
     if (metafields[def.key]) out[metafieldColumn(def)] = metafields[def.key];
   }
   return out;

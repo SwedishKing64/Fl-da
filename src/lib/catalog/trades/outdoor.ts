@@ -8,6 +8,7 @@ import type { TaxonomySection } from "../taxonomy";
 import { LIVE_TAG_SPELLING, TAG_ALSO } from "../tag-spelling";
 import { SNOW_OUTDOOR_TAXONOMY } from "./snow-outdoor";
 import type { TradePack } from "./types";
+import { GENERAL_METAFIELDS } from "../types";
 
 const OUTDOOR_CLOTHING = new Set(["Outdoor Clothing", "Clothing Accessories"]);
 
@@ -33,4 +34,5 @@ export const OUTDOOR_PACK: TradePack = {
   ],
   seeds: false,
   snowRules: false,
+  metafields: GENERAL_METAFIELDS,
 };

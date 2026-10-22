@@ -91,3 +91,16 @@ describe("options from the supplier's own columns", () => {
     expect([p.option1Name, p.option2Name]).toEqual(["Length", null]);
   });
 });
+
+describe("product metafields", () => {
+  it("stay under ski for the ski shop, and are custom and trade-neutral for every other shop", async () => {
+    const { metafieldDefs } = await import("./taxonomy");
+    const { metafieldsFor, metafieldColumns } = await import("./categorize");
+    const tent = { ...emptyLineItem(), title: "Ridgeback Tent", length: "210", gender: "Unisex", modelCode: "RB2" };
+    activateConventions(ALPSPORT_CONVENTIONS);
+    expect(metafieldDefs().every((d) => d.namespace === "ski")).toBe(true);
+    activateConventions({ ...BLANK_CONVENTIONS, pack: "outdoor" });
+    expect(metafieldDefs().map((d) => d.namespace)).toEqual(["custom", "custom", "custom"]);
+    expect(Object.keys(metafieldColumns(metafieldsFor([tent])))).toEqual(["Gender (product.metafields.custom.gender)", "Model Code (product.metafields.custom.model_code)"]);
+  });
+});

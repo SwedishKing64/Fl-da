@@ -26,6 +26,8 @@
  */
 
 import { packFor, type PackId } from "./trades";
+import type { PackKnowledge } from "./trades/knowledge";
+import { setTradeColours } from "./colour";
 import { DEFAULT_HOUSE, type HouseConventions } from "./house";
 import type { WebsiteCategories } from "./website";
 import { categoryById, resolveCategory, type TaxonomyCategory } from "./shopify-taxonomy";
@@ -234,6 +236,12 @@ let active: Vocabulary = build(conventions);
 export function activateConventions(next: Conventions): void {
   conventions = next;
   active = build(next);
+  setTradeColours(packFor(next.pack).knowledge?.colours ?? {});
+}
+
+/** What the shop's trade pack knows beyond its menu: kinds, sizes, colour shorthand. None for most packs. */
+export function packKnowledge(): PackKnowledge | null {
+  return packFor(conventions.pack).knowledge ?? null;
 }
 
 export function activeConventions(): Conventions {
@@ -419,7 +427,10 @@ export function resolveType(value: string): string | undefined {
   const exact = active.productTypes.find((t) => norm(t) === want);
   if (exact) return exact;
   const alias = ALIASES[want];
-  return alias && active.productTypes.includes(alias) ? alias : undefined;
+  if (alias && active.productTypes.includes(alias)) return alias;
+  // What the trade's suppliers call a kind: "FS" is a full-suspension mountain bike, "TLR" a tyre.
+  const called = packKnowledge()?.kinds.find((k) => k.supplierWords.some((w) => norm(w) === want));
+  return called ? active.productTypes.find((t) => norm(t) === norm(called.kind)) : undefined;
 }
 
 /** True when this names a place a product can legitimately be filed. */

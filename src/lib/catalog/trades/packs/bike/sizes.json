@@ -1,0 +1,373 @@
+[
+  {
+    "system": "bike-frame-letter",
+    "appliesTo": [
+      "Mountain Bikes",
+      "Hybrid Bikes",
+      "Electric Bikes"
+    ],
+    "order": [
+      "XXS",
+      "XS",
+      "S",
+      "M",
+      "L",
+      "XL",
+      "XXL"
+    ],
+    "writtenAs": {
+      "XS": [
+        "XS",
+        "X-Small",
+        "Extra Small"
+      ],
+      "S": [
+        "S",
+        "Small",
+        "SM"
+      ],
+      "M": [
+        "M",
+        "Medium",
+        "MD",
+        "MED"
+      ],
+      "L": [
+        "L",
+        "Large",
+        "LG"
+      ],
+      "XL": [
+        "XL",
+        "X-Large",
+        "Extra Large"
+      ],
+      "XXL": [
+        "XXL",
+        "2XL"
+      ]
+    },
+    "source": "Common retail practice; each brand publishes its own chart of rider height to frame letter."
+  },
+  {
+    "system": "road-frame-cm",
+    "appliesTo": [
+      "Road Bikes",
+      "Gravel Bikes",
+      "Cyclocross Bikes"
+    ],
+    "order": [
+      "44",
+      "47",
+      "49",
+      "50",
+      "51",
+      "52",
+      "53",
+      "54",
+      "55",
+      "56",
+      "57",
+      "58",
+      "60",
+      "61",
+      "62",
+      "64"
+    ],
+    "writtenAs": {
+      "54": [
+        "54",
+        "54cm",
+        "54 cm"
+      ],
+      "56": [
+        "56",
+        "56cm",
+        "56 cm"
+      ]
+    },
+    "source": "Road and gravel frames are usually sized by seat-tube length in cm; some brands use letters instead."
+  },
+  {
+    "system": "wheel-size",
+    "appliesTo": [
+      "Kids' Bikes",
+      "Wheels",
+      "Forks"
+    ],
+    "order": [
+      "12\"",
+      "14\"",
+      "16\"",
+      "20\"",
+      "24\"",
+      "26\"",
+      "27.5\"",
+      "29\"",
+      "650b",
+      "700c"
+    ],
+    "writtenAs": {
+      "27.5\"": [
+        "27.5",
+        "27.5\"",
+        "27.5in",
+        "584"
+      ],
+      "29\"": [
+        "29",
+        "29\"",
+        "29er",
+        "29in"
+      ],
+      "700c": [
+        "700",
+        "700c",
+        "700C",
+        "622"
+      ],
+      "650b": [
+        "650b",
+        "650B"
+      ]
+    },
+    "source": "ISO 5775 (ETRTO) bead seat diameters: 584 for 27.5/650b, 622 for 29/700c."
+  },
+  {
+    "system": "tyre-size",
+    "appliesTo": [
+      "Tyres",
+      "Tubes"
+    ],
+    "order": [
+      "20 x 2.0",
+      "24 x 2.2",
+      "26 x 2.25",
+      "27.5 x 2.4",
+      "29 x 2.2",
+      "29 x 2.4",
+      "29 x 2.6",
+      "700 x 25c",
+      "700 x 28c",
+      "700 x 32c",
+      "700 x 40c",
+      "700 x 45c"
+    ],
+    "writtenAs": {
+      "29 x 2.4": [
+        "29 x 2.4",
+        "29x2.4",
+        "29 x 2.40",
+        "61-622"
+      ],
+      "700 x 28c": [
+        "700 x 28c",
+        "700x28",
+        "700x28c",
+        "28-622"
+      ]
+    },
+    "source": "ISO 5775 (ETRTO); suppliers print the inch or French size, often with the ETRTO beside it."
+  },
+  {
+    "system": "chain-speed",
+    "appliesTo": [
+      "Chains"
+    ],
+    "order": [
+      "8",
+      "9",
+      "10",
+      "11",
+      "12",
+      "13"
+    ],
+    "writtenAs": {
+      "12": [
+        "12",
+        "12-speed",
+        "12sp",
+        "12s",
+        "12 Speed"
+      ],
+      "11": [
+        "11",
+        "11-speed",
+        "11sp",
+        "11s",
+        "11 Speed"
+      ]
+    },
+    "source": "Drivetrain speed count, as every chain is sold."
+  },
+  {
+    "system": "rotor-size",
+    "appliesTo": [
+      "Rotors"
+    ],
+    "order": [
+      "140mm",
+      "160mm",
+      "180mm",
+      "200mm",
+      "203mm",
+      "220mm"
+    ],
+    "writtenAs": {
+      "160mm": [
+        "160",
+        "160mm",
+        "160 mm"
+      ],
+      "180mm": [
+        "180",
+        "180mm",
+        "180 mm"
+      ],
+      "203mm": [
+        "203",
+        "203mm",
+        "203 mm"
+      ]
+    },
+    "source": "Rotor diameter in mm."
+  },
+  {
+    "system": "helmet-size",
+    "appliesTo": [
+      "Helmets"
+    ],
+    "order": [
+      "XS",
+      "S",
+      "M",
+      "L",
+      "XL"
+    ],
+    "writtenAs": {
+      "S": [
+        "S",
+        "Small",
+        "51-55"
+      ],
+      "M": [
+        "M",
+        "Medium",
+        "55-59"
+      ],
+      "L": [
+        "L",
+        "Large",
+        "59-63"
+      ]
+    },
+    "convertsTo": {
+      "cm": {
+        "S": "51-55",
+        "M": "55-59",
+        "L": "59-63"
+      }
+    },
+    "source": "Typical head circumference bands; brands differ by a centimetre or two."
+  },
+  {
+    "system": "eu-shoe",
+    "appliesTo": [
+      "Cycling Shoes"
+    ],
+    "order": [
+      "36",
+      "36.5",
+      "37",
+      "37.5",
+      "38",
+      "38.5",
+      "39",
+      "39.5",
+      "40",
+      "40.5",
+      "41",
+      "41.5",
+      "42",
+      "42.5",
+      "43",
+      "43.5",
+      "44",
+      "44.5",
+      "45",
+      "45.5",
+      "46",
+      "46.5",
+      "47",
+      "47.5",
+      "48",
+      "48.5",
+      "49"
+    ],
+    "writtenAs": {
+      "42.5": [
+        "42.5",
+        "42½",
+        "42 1/2"
+      ]
+    },
+    "source": "EU (Paris point) sizes, the norm for cycling shoes; halves are common."
+  },
+  {
+    "system": "clothing-letter",
+    "appliesTo": [
+      "Jerseys",
+      "Shorts & Bibs",
+      "Jackets & Gilets",
+      "Base Layers",
+      "Tights",
+      "Cycling Gloves"
+    ],
+    "order": [
+      "XXS",
+      "XS",
+      "S",
+      "M",
+      "L",
+      "XL",
+      "XXL",
+      "3XL"
+    ],
+    "writtenAs": {
+      "XXL": [
+        "XXL",
+        "2XL"
+      ],
+      "3XL": [
+        "3XL",
+        "XXXL"
+      ]
+    },
+    "source": "Letter sizes; each brand's chart differs."
+  },
+  {
+    "system": "sock-size",
+    "appliesTo": [
+      "Cycling Socks"
+    ],
+    "order": [
+      "XS/S",
+      "S/M",
+      "M/L",
+      "L/XL"
+    ],
+    "writtenAs": {
+      "S/M": [
+        "S/M",
+        "SM",
+        "S-M"
+      ],
+      "L/XL": [
+        "L/XL",
+        "LXL",
+        "L-XL"
+      ]
+    },
+    "source": "Paired letter sizes, as most cycling socks are sold."
+  }
+]

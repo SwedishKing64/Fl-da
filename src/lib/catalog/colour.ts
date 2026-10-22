@@ -11,7 +11,7 @@ export function colourName(value: string): string {
   const m = /^\d{2,4}\s+(\S.*)$/.exec(v);
   if (m) v = m[1];
   // A colour that is nothing but the trade's shorthand ("BLK", "NVY") is written out.
-  if (/^[A-Za-z]{2,6}$/.test(v) && COLOUR_SHORTHAND[v.toUpperCase()]) v = COLOUR_SHORTHAND[v.toUpperCase()];
+  if (/^[A-Za-z]{2,6}$/.test(v) && writtenOut(v.toUpperCase())) v = writtenOut(v.toUpperCase())!;
   if (v === v.toUpperCase() && /[A-Z]/.test(v)) v = v.toLowerCase().replace(/\b([a-z])/g, (c) => c.toUpperCase());
   return v;
 }
@@ -37,6 +37,16 @@ const COLOUR_SHORTHAND: Record<string, string> = {
   NVY: "NAVY", CHR: "CHARCOAL", CHAR: "CHARCOAL", OLV: "OLIVE", BRN: "BROWN", BGE: "BEIGE", KHK: "KHAKI", SLV: "SILVER", PNK: "PINK", PRP: "PURPLE", TRQ: "TURQUOISE", MRN: "MAROON", BRG: "BURGUNDY", CRL: "CORAL", LIM: "LIME", MLT: "MULTI", NAT: "NATURAL", SND: "SAND", STN: "STONE", GRPH: "GRAPHITE",
 };
 
+/** The colour shorthand of the trade the shop started from, laid over the common one. See trades/knowledge.ts. */
+let tradeShorthand: Record<string, string> = {};
+
+export function setTradeColours(shorthand: Record<string, string>): void {
+  tradeShorthand = shorthand;
+}
+
+/** A shorthand word written out, the trade's own first. */
+const writtenOut = (word: string): string | undefined => tradeShorthand[word] ?? COLOUR_SHORTHAND[word];
+
 /**
  * A colour that is only a code: "001", "4417", "0-9A", or letters that name nothing ("XKCD").
  * Pictures cannot be matched to it, so it is not offered as a colour to look for.
@@ -46,7 +56,7 @@ export function isColourCode(value: string): boolean {
   if (!v) return false;
   if (/^[\d\s./-]+$/.test(v)) return true;
   if (/^[A-Z0-9]{2,6}$/.test(v) && /\d/.test(v)) return true;
-  if (/^[A-Z]{2,4}$/.test(v) && !COLOUR_SHORTHAND[v] && !/[AEIOU]/.test(v)) return true;
+  if (/^[A-Z]{2,4}$/.test(v) && !writtenOut(v) && !/[AEIOU]/.test(v)) return true;
   return false;
 }
 function writeOutWords(part: string): string {
@@ -54,7 +64,7 @@ function writeOutWords(part: string): string {
   // already, and a word written out joins it in that case.
   const cased = /[a-z]/.test(part);
   const asCase = (w: string) => (cased ? w.toLowerCase().replace(/\b([a-z])/g, (c) => c.toUpperCase()) : w);
-  const out = part.trim().split(/\s+/).map((w) => (COLOUR_SHORTHAND[w.toUpperCase()] ? asCase(COLOUR_SHORTHAND[w.toUpperCase()]) : w));
+  const out = part.trim().split(/\s+/).map((w) => (writtenOut(w.toUpperCase()) ? asCase(writtenOut(w.toUpperCase())!) : w));
   // Anon's lens names: "Perceive Sunny Onyx", "Perceive Variable Blue". "Sun" is Sunny only there.
   return out.map((w, i) => (w.toUpperCase() === "SUN" && (out[i - 1] ?? "").toUpperCase() === "PERCEIVE" ? asCase("SUNNY") : w)).join(" ");
 }

@@ -2,7 +2,20 @@
 
 Give the prompt below to a research agent once per trade, with `{TRADE}` replaced (for example
 "bike shop", "surf shop", "running and footwear", "fashion boutique", "homewares", "toys and games",
-"pet supplies", "beauty"). Put what it returns in `knowledge/<trade-id>/` and open a pull request.
+"pet supplies", "beauty"). What it returns is a trade pack:
+
+1. Put `pack.json`, `kinds.json`, `sizes.json`, `colours.json` and `reader-examples.json` in
+   `src/lib/catalog/trades/packs/<trade-id>/`, with `"verified": false` in `pack.json`.
+2. Check them: `npx tsx scripts/check-pack.ts src/lib/catalog/trades/packs/<trade-id>`. It names
+   every kind without a Shopify category, every kind or size system that does not line up.
+3. Compare the menu with what real shops in the trade sell:
+   `npx tsx scripts/ground-pack.ts <store> <store> --pack src/lib/catalog/trades/packs/<trade-id>`.
+4. Register it beside `trades/bike.ts` (the bike pack is the worked example) and open a pull request.
+5. Keep the sample documents out of the pack folder, in `knowledge/<trade-id>/documents/`.
+
+A pack is marked verified only after it has been scored on real documents from a pilot shop in the
+trade, with and without it (`npm run eval:read -- --pack <trade-id>`, see docs/PILOT.md).
+
 Its sample documents can be scored the same day:
 
 ```
@@ -55,7 +68,8 @@ Write these files in a folder named `<trade-id>`, where the id is lowercase with
     ] }
   ],
   "tagSpelling": { "Full Suspension": "full suspension" },
-  "shopifyTaxonomy": { "Mountain Bikes": "Sporting Goods > Outdoor Recreation > Cycling > Bicycles" }
+  "shopifyTaxonomy": { "Mountain Bikes": "Sporting Goods > Outdoor Recreation > Cycling > Bicycles > Mountain Bikes" },
+  "verified": false
 }
 ```
 

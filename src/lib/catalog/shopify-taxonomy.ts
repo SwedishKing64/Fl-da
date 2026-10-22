@@ -39,6 +39,14 @@ export function categoryById(id: string): TaxonomyCategory | null {
   return index().get(id.replace(/^gid:\/\/shopify\/TaxonomyCategory\//, "")) ?? null;
 }
 
+let byPath: Map<string, TaxonomyCategory> | null = null;
+
+/** A category by its full path, "Sporting Goods > … > Tents", whatever its case. */
+export function categoryByPath(path: string): TaxonomyCategory | null {
+  byPath ??= new Map([...index().values()].map((c) => [c.path.toLowerCase(), c]));
+  return byPath.get(path.trim().replace(/\s*>\s*/g, " > ").toLowerCase()) ?? null;
+}
+
 /** The id as the Admin API takes it. */
 export const categoryGid = (id: string): string => `gid://shopify/TaxonomyCategory/${id}`;
 

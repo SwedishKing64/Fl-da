@@ -9,7 +9,7 @@
  * spells that Title / Default Title.
  */
 
-import { resolveType } from "./taxonomy";
+import { packKnowledge, resolveType } from "./taxonomy";
 
 /** Shopify's own spelling for a product with a single variant. */
 export const NO_VARIANT_OPTION = { name: "Title", value: "Default Title" } as const;
@@ -105,6 +105,10 @@ export function optionPlanFor(type: string, context: OptionContext = {}): string
   if (resolved === "Sleeping Bags") return ["Size", "Loft", "Zip Side"];
   if (resolved === "Tents") return ["Add Footprint (recommended)"];
   if (resolved === "Hydration") return ["Colour", "Volume"];
+
+  // The order the shop's trade pack gives this kind: a tyre by size then casing, a rotor by size then mount.
+  const known = packKnowledge()?.kinds.find((k) => k.kind.toLowerCase() === resolved.toLowerCase());
+  if (known?.optionOrder.length) return known.optionOrder;
 
   // Everything else the shop sells by colour and size, in that order — clothing, footwear, boots,
   // bindings, packs and the accessories that come in more than one.

@@ -16,12 +16,21 @@ import { readdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join, extname, basename } from "node:path";
 import { extractFile } from "../src/lib/catalog/extract";
 import { aiAvailable } from "../src/lib/catalog/anthropic";
+import { activateConventions, BLANK_CONVENTIONS } from "../src/lib/catalog/taxonomy";
+import { isPackSet } from "../src/lib/catalog/trades";
 import { addToTally, emptyTally, fieldsPct, linesFromTable, linesPct, regressions, scoreDocument, type CorpusKey, type Tally } from "../src/lib/catalog/corpus";
 
 const args = process.argv.slice(2);
 const flag = (name: string) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : undefined; };
 const dir = process.env.CORPUS_DIR || flag("--dir") || "samples/corpus";
 const verbose = args.includes("--verbose");
+// Read as a shop that started from these packs ("bike", "outdoor+bike"), or from none: run once
+// with and once without to see what a pack is worth on the same documents.
+const pack = flag("--pack");
+if (pack) {
+  if (!isPackSet(pack)) throw new Error(`No pack called ${pack}.`);
+  activateConventions({ ...BLANK_CONVENTIONS, pack });
+}
 
 const MIME: Record<string, string> = { ".csv": "text/csv", ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", ".pdf": "application/pdf", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".txt": "text/plain" };
 

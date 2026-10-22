@@ -128,8 +128,9 @@ Only" or as an option named Footprint, Yes / No. A freight, postage or handling 
 barcode is a charge and is dropped when the invoice is read.
 
 **An invoice and its order sheet together, on Prices and stock (asked 2026-10-22).** What arrived and
-what it cost often differ from what was ordered, so both can be loaded with the exports: dropped
-together, or the order sheet added after with "Add the order sheet too". Which is the invoice is
+what it cost often differ from what was ordered, so both can be loaded with the exports. The card
+has two boxes (asked again 2026-10-22): "Order form" (one; usually the one with the barcodes) and
+"Invoices" (any number — an order shipped in parts is one delivery). Either works alone. Which is the invoice is
 read off the files (a name with "invoice", a PDF) — `invoiceFirst` in `invoice-merge.ts`. Each
 invoice line is paired with its order line by barcode, then item code, then name + size + colour,
 never guessed between two. The count and the cost are always the invoice's; the barcode, size,

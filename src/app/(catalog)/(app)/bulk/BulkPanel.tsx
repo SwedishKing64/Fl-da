@@ -177,7 +177,20 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
 
   const invoiceRef = useRef<HTMLInputElement>(null);
   const orderSheetRef = useRef<HTMLInputElement>(null);
-  const [delivered, setInvoice] = useState<Invoice | null>(null);
+  /**
+   * The invoices of this delivery — what arrived and what it cost. Several can be added: one
+   * order is often shipped, and invoiced, in parts (asked 2026-10-22).
+   */
+  const [invoiceDocs, setInvoiceDocs] = useState<Invoice[]>([]);
+  const setInvoice = (doc: Invoice | null) => setInvoiceDocs(doc ? [doc] : []);
+  const delivered: Invoice | null = invoiceDocs.length === 0 ? null : invoiceDocs.length === 1 ? invoiceDocs[0] : {
+    ...invoiceDocs[0],
+    filename: invoiceDocs.map((d) => d.filename).join(" + "),
+    lines: invoiceDocs.flatMap((d) => d.lines),
+    priceList: invoiceDocs.flatMap((d) => d.priceList ?? []),
+    warnings: invoiceDocs.flatMap((d) => d.warnings),
+    source: `${invoiceDocs.length} invoices read together`,
+  };
   /**
    * The order sheet the invoice was shipped against, where both were given (asked 2026-10-22): the
    * invoice says what arrived and what it cost, the order sheet fills in the rest. See invoice-merge.
@@ -192,7 +205,7 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
         source: `${delivered.source}, with ${orderSheet.filename} for what the invoice does not say`,
         warnings: [...delivered.warnings, ...describeMerge(merging, delivered.filename, orderSheet.filename)],
       }
-    : delivered;
+    : delivered ?? orderSheet;
   /**
    * Which of an invoice's numbers to write.
    *
@@ -408,7 +421,7 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
       order = readings.find((r) => r.file === inv.file)!;
       sheet = readings.find((r) => r.file === ord.file)!;
     }
-    setInvoice(order.data); setOrderSheet(sheet?.data ?? null); setLinks({}); setLinkNotes({}); setBrandsOff([]); setDecisions({}); setApplied(null); setAgainConfirmed(false);
+    setInvoice(sheet ? order.data : null); setOrderSheet(sheet?.data ?? (sheet ? null : order.data)); setLinks({}); setLinkNotes({}); setBrandsOff([]); setDecisions({}); setApplied(null); setAgainConfirmed(false);
     const rest = readings.filter((r) => r !== order && r !== sheet);
     const sheetsOnly = rest.filter((r) => /\.(xlsx?|csv)$/i.test(r.file.name));
     const skipped = rest.filter((r) => !sheetsOnly.includes(r));
@@ -510,23 +523,29 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
     }
   }
 
+  /** One document read as an order or invoice, without its freight and other charge lines. */
+  async function readDocument(file: File): Promise<Invoice | null> {
+    const sent = await shrinkImage(file);
+    if (!fitsUpload(sent.file.size)) { setError(tooBig(file, sent.file.size)); return null; }
+    setProgress(sent.note ? `Reading ${file.name} — ${sent.note}` : `Reading ${file.name}…`);
+    const r = await readInvoiceAction({ name: file.name, type: sent.file.type, base64: await read(sent.file, file.name) });
+    if (!r.ok) { setError(`${file.name}: ${r.error}`); return null; }
+    return withoutCharges({ ...r.data!, filename: file.name });
+  }
+
+  const freshDelivery = () => { setLinks({}); setLinkNotes({}); setBrandsOff([]); setDecisions({}); setApplied(null); setAgainConfirmed(false); };
+
   /**
-   * Take a supplier's invoice and match it against every loaded file.
-   *
-   * The matching runs here, in the browser, against the files as they stand — the same as every
-   * other change on this page, and for the same reason: an export runs to megabytes and never
-   * needs to leave the machine. Only the invoice itself goes to the server, and only to be read.
+   * The order form: what was ordered, usually with the barcodes, sizes, colours and recommended
+   * retail an invoice leaves out (asked 2026-10-22). On its own it is the delivery, as before; with
+   * invoices it fills in what they do not say. See invoice-merge.
    */
-  async function takeInvoice(file: File) {
+  async function takeOrderForm(file: File) {
     setBusy("invoice"); setError(null); clearPreview(); setSaved(null);
     try {
-      const sent = await shrinkImage(file);
-      if (!fitsUpload(sent.file.size)) { setError(tooBig(file, sent.file.size)); return; }
-      setProgress(sent.note ? `Reading ${file.name} — ${sent.note}` : `Reading ${file.name}…`);
-      const r = await readInvoiceAction({ name: file.name, type: sent.file.type, base64: await read(sent.file, file.name) });
-      if (!r.ok) { setError(r.error); setInvoice(null); setLinks({}); setLinkNotes({}); return; }
-      const data = r.data!;
-      setInvoice(withoutCharges({ ...data, filename: file.name })); setOrderSheet(null); setLinks({}); setLinkNotes({}); setBrandsOff([]); setDecisions({}); setApplied(null); setAgainConfirmed(false);
+      const doc = await readDocument(file);
+      if (!doc) return;
+      setOrderSheet(doc); freshDelivery();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -535,27 +554,32 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
   }
 
   /**
-   * The other of the pair: the order sheet when the invoice is loaded, or the invoice when the
-   * order sheet is. Which is which is read off the two files (see invoiceFirst), not off which
-   * button was pressed, so either way round gives the same delivery.
+   * One or more invoices — what arrived, and what it cost. Added to those already loaded, so a
+   * delivery invoiced in parts is one delivery. Each is matched against the order form, if there is
+   * one, and the lot against the exports.
    */
-  async function takeSecondDocument(file: File) {
-    if (!delivered) return takeInvoice(file);
+  async function addInvoices(files: File[]) {
     setBusy("invoice"); setError(null); clearPreview(); setSaved(null);
     try {
-      const sent = await shrinkImage(file);
-      if (!fitsUpload(sent.file.size)) { setError(tooBig(file, sent.file.size)); return; }
-      setProgress(`Reading ${file.name}…`);
-      const r = await readInvoiceAction({ name: file.name, type: sent.file.type, base64: await read(sent.file, file.name) });
-      if (!r.ok) { setError(r.error); return; }
-      const added: Invoice = withoutCharges({ ...r.data!, filename: file.name });
-      const [inv, ord] = invoiceFirst(delivered, added);
-      setInvoice(inv); setOrderSheet(ord); setLinks({}); setLinkNotes({}); setDecisions({}); setApplied(null); setAgainConfirmed(false);
+      const read_: Invoice[] = [];
+      for (const file of files) {
+        const doc = await readDocument(file);
+        if (doc) read_.push(doc);
+      }
+      if (read_.length === 0) return;
+      setInvoiceDocs((now) => [...now.filter((d) => !read_.some((x) => x.filename === d.filename)), ...read_]);
+      freshDelivery();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(null); setProgress("");
     }
+  }
+
+  /** A single dropped document: an invoice when an order form is loaded, the order form when not. */
+  async function takeInvoice(file: File) {
+    if (orderSheet) return addInvoices([file]);
+    return takeOrderForm(file);
   }
 
   /**
@@ -1462,22 +1486,32 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
         */}
       <Card
           title="A delivery, or a supplier's invoice"
-          actions={invoice ? <Button size="sm" onClick={() => { setInvoice(null); setOrderSheet(null); setLinks({}); setLinkNotes({}); setError(null); }}>Remove {orderSheet ? "them" : "it"}</Button> : undefined}
+          actions={invoice ? <Button size="sm" onClick={() => { setInvoiceDocs([]); setOrderSheet(null); setLinks({}); setLinkNotes({}); setError(null); }}>Remove all</Button> : undefined}
         >
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="text-sm">
-              <span className="font-medium">A delivery arriving, or prices that have changed?</span>
-              <span className="ml-2 text-xs text-[var(--ink-soft)]">Add the order form and each line is matched by barcode, then by item code, then by the product&rsquo;s name — so a line that says SX-2M finds the SX-2M. A line that fits two products is never guessed at. What it matches has its stock put up; a size the product does not list arrives as a variant of it, and a product the shop does not have is built onto the end of the same file. A spreadsheet or CSV is read by its columns; a PDF or a photo of one goes to the API to be read. <strong>Have the invoice and the order sheet both?</strong> Add the two (together, or the order sheet after with &ldquo;Add the order sheet too&rdquo;): the invoice decides what arrived and what it cost, and the order sheet fills in the barcodes, sizes, colours and recommended retail the invoice leaves out.</span>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button icon="🧾" size="sm" disabled={busy !== null} onClick={() => invoiceRef.current?.click()}>{busy === "invoice" ? "Reading…" : invoice ? "Use a different invoice" : "Add the invoice"}</Button>
-              {delivered && (
-                <Button icon="📋" size="sm" disabled={busy !== null} onClick={() => orderSheetRef.current?.click()}>{orderSheet ? "Use a different order sheet" : "Add the order sheet too"}</Button>
-              )}
-            </div>
-            <input ref={invoiceRef} type="file" multiple className="hidden" onChange={(e) => { const f = Array.from(e.target.files ?? []); if (f.length) void takeDocuments(f); e.target.value = ""; }} />
-            <input ref={orderSheetRef} type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void takeSecondDocument(f); e.target.value = ""; }} />
+          <div className="text-sm">
+            <span className="font-medium">A delivery arriving, or prices that have changed?</span>
+            <span className="ml-2 text-xs text-[var(--ink-soft)]">Add the <strong>order form</strong> and the <strong>invoices</strong> for what arrived. The invoices decide what arrived and what it cost; the order form fills in what they leave out &mdash; the barcodes, sizes, colours and recommended retail. Every line is then matched to your exports by barcode, then item code, then name, and a line that fits two products is never guessed at. Either one works on its own too. A spreadsheet or CSV is read by its columns; a PDF or a photo goes to the API to be read.</span>
           </div>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <div className="rounded-xl border border-[var(--line-soft)] px-3 py-2.5 text-sm">
+              <div className="text-xs font-semibold uppercase tracking-wide text-[var(--ink-soft)]">Order form</div>
+              {orderSheet
+                ? <div className="mt-1 flex items-center justify-between gap-2"><span className="truncate">{orderSheet.filename} <span className="text-xs text-[var(--ink-soft)]">· {orderSheet.lines.length} lines</span></span><button type="button" className="text-xs text-[var(--violet)] hover:underline" disabled={busy !== null} onClick={() => { setOrderSheet(null); freshDelivery(); }}>Remove</button></div>
+                : <div className="mt-1 text-xs text-[var(--ink-soft)]">None yet. Usually has the barcodes.</div>}
+              <Button className="mt-2" icon="📋" size="sm" disabled={busy !== null} onClick={() => orderSheetRef.current?.click()}>{busy === "invoice" ? "Reading…" : orderSheet ? "Use a different order form" : "Add the order form"}</Button>
+            </div>
+            <div className="rounded-xl border border-[var(--line-soft)] px-3 py-2.5 text-sm">
+              <div className="text-xs font-semibold uppercase tracking-wide text-[var(--ink-soft)]">Invoices</div>
+              {invoiceDocs.length > 0
+                ? <ul className="mt-1 space-y-0.5">{invoiceDocs.map((d) => (
+                    <li key={d.filename} className="flex items-center justify-between gap-2"><span className="truncate">{d.filename} <span className="text-xs text-[var(--ink-soft)]">· {d.lines.length} lines</span></span><button type="button" className="text-xs text-[var(--violet)] hover:underline" disabled={busy !== null} onClick={() => { setInvoiceDocs((now) => now.filter((x) => x.filename !== d.filename)); freshDelivery(); }}>Remove</button></li>
+                  ))}</ul>
+                : <div className="mt-1 text-xs text-[var(--ink-soft)]">None yet. What actually arrived, and what it cost.</div>}
+              <Button className="mt-2" icon="🧾" size="sm" disabled={busy !== null} onClick={() => invoiceRef.current?.click()}>{busy === "invoice" ? "Reading…" : invoiceDocs.length > 0 ? "Add another invoice" : "Add an invoice"}</Button>
+            </div>
+          </div>
+          <input ref={invoiceRef} type="file" multiple className="hidden" onChange={(e) => { const f = Array.from(e.target.files ?? []); if (f.length) void addInvoices(f); e.target.value = ""; }} />
+          <input ref={orderSheetRef} type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void takeOrderForm(f); e.target.value = ""; }} />
 
           {busy === "invoice" && progress && (
             <div className="mt-3">
@@ -1489,7 +1523,7 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
           {invoice && (
             <div className="mt-4 space-y-3">
               <div className="rounded-xl border border-[var(--line-soft)] px-3 py-2.5 text-sm">
-                <div className="font-medium">{invoice.filename}{orderSheet && <span className="font-normal text-[var(--ink-soft)]"> · with the order sheet {orderSheet.filename}</span>}</div>
+                <div className="font-medium">{delivered ? delivered.filename : invoice.filename}{delivered && orderSheet && <span className="font-normal text-[var(--ink-soft)]"> · with the order form {orderSheet.filename}</span>}</div>
                 <div className="mt-0.5 text-xs text-[var(--ink-soft)]">
                   {(order ?? invoice).lines.length} line{(order ?? invoice).lines.length === 1 ? "" : "s"}, {invoice.source}.
                   {invoice.columns.rrp || invoice.columns.quantity

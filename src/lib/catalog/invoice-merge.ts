@@ -1,10 +1,10 @@
 /**
- * An invoice and the order sheet it was shipped against, read as one delivery (asked 2026-10-22).
+ * An invoice and the order form it was shipped against, read as one delivery (asked 2026-10-22).
  *
- * The order sheet is what was ordered, with what the supplier's form carries: barcodes, sizes,
+ * The order form is what was ordered, with what the supplier's form carries: barcodes, sizes,
  * colours, the recommended retail. The invoice is what actually arrived, and at what price — and
  * the two are often different: a line short-shipped, a size swapped, a cost that moved. So the
- * invoice decides the count and the cost of every line, and the order sheet fills in what the
+ * invoice decides the count and the cost of every line, and the order form fills in what the
  * invoice does not say. A line ordered and not invoiced did not arrive and is left out; a line
  * invoiced and not on the order is kept as the invoice has it. The result is matched against the
  * shop's export like any other delivery.
@@ -19,7 +19,7 @@ export interface MergeReport {
   lines: InvoiceLine[];
   /** Invoice lines paired with an order line. */
   paired: number;
-  /** Invoice lines with nothing on the order sheet to pair with. */
+  /** Invoice lines with nothing on the order form to pair with. */
   invoiceOnly: InvoiceLine[];
   /** Lines ordered that the invoice does not have: they did not arrive. */
   notArrived: InvoiceLine[];
@@ -95,9 +95,9 @@ export function mergeInvoiceWithOrder(invoice: InvoiceLine[], order: InvoiceLine
       // What arrived and what it cost: the invoice's, always.
       quantity: line.quantity,
       costPrice: line.costPrice ?? o.costPrice,
-      // The recommended retail an invoice seldom prints: the order sheet's, where the invoice has none.
+      // The recommended retail an invoice seldom prints: the order form's, where the invoice has none.
       rrp: line.rrp !== null && line.rrp > 0 ? line.rrp : o.rrp,
-      // The order sheet's name for the model where the two were paired by a code: an invoice's
+      // The order form's name for the model where the two were paired by a code: an invoice's
       // line is often a shorthand ("M CARTEL X EST BK") of the form's.
       title: pick(o.title, line.title) ?? "",
       barcode: pick(line.barcode, o.barcode) ?? "",
@@ -111,7 +111,7 @@ export function mergeInvoiceWithOrder(invoice: InvoiceLine[], order: InvoiceLine
   return report;
 }
 
-/** Which of two documents is the invoice — what arrived — and which the order sheet. */
+/** Which of two documents is the invoice — what arrived — and which the order form. */
 export function invoiceFirst<T extends { filename: string; lines: InvoiceLine[] }>(a: T, b: T): [T, T] {
   const score = (d: T): number => {
     const n = d.filename.toLowerCase();
@@ -128,11 +128,11 @@ export function invoiceFirst<T extends { filename: string; lines: InvoiceLine[] 
 /** The report in words, for the screen. */
 export function describeMerge(r: MergeReport, invoiceName: string, orderName: string): string[] {
   const n = (k: number, one: string, many: string) => `${k} ${k === 1 ? one : many}`;
-  const out = [`${n(r.paired, "line", "lines")} of ${invoiceName} paired with ${orderName}: the count and the cost are the invoice's, and anything the invoice does not say — barcode, size, colour, recommended retail — is the order sheet's.`];
+  const out = [`${n(r.paired, "line", "lines")} of ${invoiceName} paired with ${orderName}: the count and the cost are the invoice's, and anything the invoice does not say — barcode, size, colour, recommended retail — is the order form's.`];
   if (r.costChanged.length > 0) out.push(`${n(r.costChanged.length, "line costs", "lines cost")} something different on the invoice than on the order (${r.costChanged.slice(0, 3).map((c) => `${c.line.title}${c.line.size ? ` ${c.line.size}` : ""}: ${c.ordered.toFixed(2)} → ${c.invoiced.toFixed(2)}`).join("; ")}${r.costChanged.length > 3 ? "; …" : ""}). The invoice's cost is used.`);
   if (r.countChanged.length > 0) out.push(`${n(r.countChanged.length, "line arrived", "lines arrived")} in a different number than ordered (${r.countChanged.slice(0, 3).map((c) => `${c.line.title}${c.line.size ? ` ${c.line.size}` : ""}: ${c.ordered} ordered, ${c.invoiced} invoiced`).join("; ")}${r.countChanged.length > 3 ? "; …" : ""}). The invoice's count is used.`);
   if (r.notArrived.length > 0) out.push(`${n(r.notArrived.length, "line was", "lines were")} ordered and not on the invoice, so ${r.notArrived.length === 1 ? "it is" : "they are"} left out as not arrived: ${r.notArrived.slice(0, 4).map((l) => `${l.title}${l.size ? ` ${l.size}` : ""}`).join(", ")}${r.notArrived.length > 4 ? ", …" : ""}.`);
-  if (r.invoiceOnly.length > 0) out.push(`${n(r.invoiceOnly.length, "invoice line", "invoice lines")} had nothing on the order sheet to pair with, and ${r.invoiceOnly.length === 1 ? "is" : "are"} taken as the invoice has ${r.invoiceOnly.length === 1 ? "it" : "them"}: ${r.invoiceOnly.slice(0, 4).map((l) => l.title || l.sku).join(", ")}${r.invoiceOnly.length > 4 ? ", …" : ""}.`);
+  if (r.invoiceOnly.length > 0) out.push(`${n(r.invoiceOnly.length, "invoice line", "invoice lines")} had nothing on the order form to pair with, and ${r.invoiceOnly.length === 1 ? "is" : "are"} taken as the invoice has ${r.invoiceOnly.length === 1 ? "it" : "them"}: ${r.invoiceOnly.slice(0, 4).map((l) => l.title || l.sku).join(", ")}${r.invoiceOnly.length > 4 ? ", …" : ""}.`);
   return out;
 }
 

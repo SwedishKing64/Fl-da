@@ -277,11 +277,14 @@ export async function createTables(): Promise<{ statements: number }> {
  */
 let tableRepair: Promise<number> | null = null;
 
+/** Whether this copy runs on SQLite (the desktop app) rather than Postgres. */
+const onSqlite = (): boolean => (resolveDatabaseUrl()?.url ?? "").startsWith("file:");
+
 export function addMissingTables(): Promise<number> {
   tableRepair ??= (async () => {
     const { tableStatements } = await import("./schema-repair");
     let applied = 0;
-    for (const statement of tableStatements()) {
+    for (const statement of tableStatements(onSqlite() ? "sqlite" : "postgres")) {
       try {
         await prisma.$executeRawUnsafe(statement);
         applied++;
@@ -300,8 +303,29 @@ let columnRepair: Promise<number> | null = null;
 
 export function addMissingColumns(): Promise<number> {
   columnRepair ??= (async () => {
-    const { columnStatements } = await import("./schema-repair");
+    const { columnStatements, sqliteColumns } = await import("./schema-repair");
     let applied = 0;
+    if (onSqlite()) {
+      // SQLite cannot ADD COLUMN IF NOT EXISTS: each table is asked what it has, and the rest added.
+      const have = new Map<string, Set<string>>();
+      for (const { table, column, statement } of sqliteColumns()) {
+        if (!have.has(table)) {
+          const rows = await prisma.$queryRawUnsafe<Array<{ name: string }>>(`PRAGMA table_info("${table}")`).catch(() => []);
+          have.set(table, new Set(rows.map((r) => r.name)));
+        }
+        const columns = have.get(table)!;
+        if (columns.size === 0 || columns.has(column)) continue;
+        try {
+          await prisma.$executeRawUnsafe(statement);
+          columns.add(column);
+          applied++;
+        } catch (error) {
+          console.error(`[schema] ${statement}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+      forgetDatabaseStatus();
+      return applied;
+    }
     for (const statement of columnStatements()) {
       try {
         await prisma.$executeRawUnsafe(statement);

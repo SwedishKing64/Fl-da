@@ -215,7 +215,7 @@ export async function refreshStoreIfStale(userId: string | null): Promise<StoreS
 /** Forget the connection and what the store's reads made; what an export taught stays. */
 export async function forgetStore(): Promise<void> {
   const { saveSettings } = await import("./settings");
-  await saveSettings({ shopify: { storeDomain: "", accessToken: "", apiVersion: (await getSettings()).shopify.apiVersion } });
+  await saveSettings({ shopify: { storeDomain: "", accessToken: "", apiVersion: (await getSettings()).shopify.apiVersion, connectedBy: undefined, refreshToken: "", expiresAt: 0, refreshExpiresAt: 0, scope: "" } });
   await prisma.productTemplate.deleteMany({ where: { sourceFileName: STORE_TEMPLATE_SOURCE } });
   await prisma.appSetting.deleteMany({ where: { key: STORE_KEY } });
 }

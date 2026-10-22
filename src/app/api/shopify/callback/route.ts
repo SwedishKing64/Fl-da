@@ -1,6 +1,6 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
 import { requireApiUser } from "@/lib/catalog/auth";
-import { exchangeCode, oauthApp, shopDomain, signedByShopify } from "@/lib/catalog/shopify-oauth";
+import { exchangeCode, oauthApp, returnPath, shopDomain, signedByShopify, withOutcome } from "@/lib/catalog/shopify-oauth";
 import { getSettings, saveSettings } from "@/lib/catalog/settings";
 import { logAudit } from "@/lib/catalog/audit";
 
@@ -16,15 +16,16 @@ const STATE_COOKIE = "floda_shopify_state";
 export async function GET(req: NextRequest) {
   const app = oauthApp();
   if (!app) return NextResponse.json({ error: "This copy of Flöda has no Shopify app set up." }, { status: 400 });
+  const [state, asked, nextRaw] = (req.cookies.get(STATE_COOKIE)?.value ?? "").split(":");
+  const next = returnPath(decodeURIComponent(nextRaw ?? ""));
   const back = (outcome: string) => {
-    const res = NextResponse.redirect(new URL(`/settings?shopify=${outcome}#shopify`, app.appUrl));
+    const res = NextResponse.redirect(new URL(withOutcome(next, outcome), app.appUrl));
     res.cookies.delete({ name: STATE_COOKIE, path: "/api/shopify" });
     return res;
   };
   const user = await requireApiUser("ADMIN");
   if (!user) return back("signed-out");
   const q = req.nextUrl.searchParams;
-  const [state, asked] = (req.cookies.get(STATE_COOKIE)?.value ?? "").split(":");
   const shop = shopDomain(q.get("shop") ?? "");
   if (!state || q.get("state") !== state || !shop || shop !== asked) return back("expired");
   if (!signedByShopify(q, app.clientSecret)) return back("unsigned");
@@ -35,6 +36,11 @@ export async function GET(req: NextRequest) {
     const current = await getSettings();
     await saveSettings({ shopify: { ...current.shopify, storeDomain: shop, accessToken: token.accessToken, connectedBy: "oauth", refreshToken: token.refreshToken, expiresAt: token.expiresAt, refreshExpiresAt: token.refreshExpiresAt, scope: token.scope } });
     await logAudit("store.connected", { userId: user.id, details: { domain: shop, by: "install link", scope: token.scope } }).catch(() => undefined);
+    // The store is read as soon as it is connected: its kinds, tags and listings, after the answer.
+    after(async () => {
+      const { syncStore } = await import("@/lib/catalog/store-sync");
+      await syncStore(user.id).catch((err) => console.warn(`[shopify-oauth] first read of ${shop}: ${err instanceof Error ? err.message : String(err)}`));
+    });
     return back("connected");
   } catch (err) {
     console.error(`[shopify-oauth] ${shop}: ${err instanceof Error ? err.message : String(err)}`);

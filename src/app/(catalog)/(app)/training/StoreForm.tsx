@@ -11,7 +11,7 @@ import type { StoreState } from "@/lib/catalog/store-sync";
  * then read. What the store teaches is listed with when it was last read, and it can be read
  * again at any time; a batch reads it on its own when the last read is a day old.
  */
-export function StoreForm({ state }: { state: StoreState }) {
+export function StoreForm({ state, canInstall = false }: { state: StoreState; canInstall?: boolean }) {
   const router = useRouter();
   const [domain, setDomain] = useState(state.domain);
   const [token, setToken] = useState("");
@@ -82,13 +82,25 @@ export function StoreForm({ state }: { state: StoreState }) {
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <Button size="sm" variant="primary" disabled={pending} onClick={readAgain}>{pending ? "Reading…" : "Read it again"}</Button>
-            <Button size="sm" variant="ghost" disabled={pending} onClick={() => setEditing(true)}>Change the token</Button>
+            <Button size="sm" variant="ghost" disabled={pending} onClick={() => setEditing(true)}>{canInstall ? "Connect again" : "Change the token"}</Button>
             <Button size="sm" variant="ghost" disabled={pending} onClick={forget}>Forget the store</Button>
           </div>
         </div>
       )}
 
-      {editing && (
+      {editing && canInstall && (
+        // Flöda's Shopify app: the owner approves it on their own admin, and comes back here.
+        <form action="/api/shopify/install" method="get" className="flex flex-wrap items-end gap-3">
+          <input type="hidden" name="next" value="/training#store" />
+          <Field label="Your store" hint="The name before .myshopify.com, as your Shopify admin shows it.">
+            <input id="store-shop" name="shop" className={INPUT} defaultValue={state.domain.replace(/\.myshopify\.com$/, "")} placeholder="your-shop" required />
+          </Field>
+          <Button variant="primary" type="submit">Connect with Shopify</Button>
+          {state.configured && <Button variant="ghost" type="button" onClick={() => setEditing(false)}>Cancel</Button>}
+        </form>
+      )}
+
+      {editing && !canInstall && (
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Store domain" hint="Your Shopify admin's address, such as alpine-sports.myshopify.com.">
             <input className={INPUT} value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="your-shop.myshopify.com" autoComplete="off" />

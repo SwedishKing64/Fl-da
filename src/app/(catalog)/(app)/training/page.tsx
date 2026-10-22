@@ -13,6 +13,7 @@ import { SuppliersStep } from "@/app/(catalog)/(setup)/setup/SuppliersStep";
 import { WebsiteForm } from "./WebsiteForm";
 import { StoreForm } from "./StoreForm";
 import { storeState } from "@/lib/catalog/store-sync";
+import { oauthApp } from "@/lib/catalog/shopify-oauth";
 import { Rulebook } from "./Rulebook";
 import { TagProposals } from "./TagProposals";
 import { buildRulebook, countRules } from "@/lib/catalog/rulebook";
@@ -120,7 +121,7 @@ export default async function TrainingPage() {
 
       <div id="store">
       <Card title="Your store: read, not told" className="mb-6">
-        <StoreForm state={store} />
+        <StoreForm state={store} canInstall={Boolean(oauthApp())} />
       </Card>
       </div>
 

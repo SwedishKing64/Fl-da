@@ -59,3 +59,14 @@ describe("connecting a store through the install link", () => {
     await expect(exchangeCode(app, "ridgeway-outdoor.myshopify.com", "old", fetcher)).rejects.toThrow(/already used/);
   });
 });
+
+describe("coming back from Shopify", () => {
+  it("returns only to a page on this site, with what happened on it", async () => {
+    const { returnPath, withOutcome } = await import("./shopify-oauth");
+    expect(returnPath("/setup?step=store")).toBe("/setup?step=store");
+    expect(returnPath("https://evil.example")).toBe("/settings");
+    expect(returnPath("//evil.example")).toBe("/settings");
+    expect(withOutcome("/training#store", "connected")).toBe("/training?shopify=connected#store");
+    expect(withOutcome("/setup?step=store", "declined")).toBe("/setup?step=store&shopify=declined");
+  });
+});

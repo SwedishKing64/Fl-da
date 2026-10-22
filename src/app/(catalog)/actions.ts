@@ -826,7 +826,7 @@ export async function saveStoreAction(input: { domain: string; token: string }):
     const token = String(input.token ?? "").trim() || current.shopify.accessToken;
     if (!token) return { ok: false, error: "The Admin API access token is needed to read the store." };
     const before = { ...current.shopify };
-    await saveSettings({ shopify: { ...current.shopify, storeDomain: domain, accessToken: token } });
+    await saveSettings({ shopify: { ...current.shopify, storeDomain: domain, accessToken: token, connectedBy: "token", refreshToken: "", expiresAt: 0, refreshExpiresAt: 0 } });
     try {
       const { testStore } = await import("@/lib/catalog/store-sync");
       const shop = await testStore();

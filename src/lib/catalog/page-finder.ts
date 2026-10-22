@@ -1,8 +1,8 @@
 /**
  * Finding a product's own page without anyone pasting it.
  *
- * A brand's site puts its products at one shape of address: once somebody has pasted a link for an
- * Atomic ski, every other Atomic product's page is a slug away. So the links people have pasted
+ * A brand's site puts its products at one shape of address: once somebody has pasted a link for one
+ * of a brand's lamps, every other product of that brand is a slug away. So the links people have pasted
  * are the memory: from each brand's links the shape of its addresses is worked out, the new
  * product's name is put into that shape, and the address is fetched and checked against the
  * product before it is believed. A brand nobody has linked yet, or a guess that does not hold, goes
@@ -70,7 +70,7 @@ export function learnPatterns(examples: LinkExample[]): BrandPattern[] {
     const shape = shapeOf(e.url);
     if (!shape) continue;
     for (const { style, slug } of slugCandidates(e)) {
-      // At a word boundary inside a segment: "bent-100-2027-skis" carries "bent-100-2027", and the
+      // At a word boundary inside a segment: "trail-900-2027-lamp" carries "trail-900-2027", and the
       // slugs are tried longest first, so the year's absence is never mistaken for the year.
       const segments = shape.path.split("/");
       const at = segments.findIndex((s) => s === slug || s.startsWith(`${slug}-`) || s.startsWith(`${slug}.`) || s.endsWith(`-${slug}`) || s.includes(`-${slug}-`) || s.includes(`-${slug}.`));

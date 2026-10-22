@@ -20,7 +20,7 @@ const OUTCOMES: Record<string, { tone: "success" | "warning"; text: string }> = 
  * Connecting the shop's Shopify store. Where this copy has Flöda's Shopify app set up, the owner
  * names the store and approves Flöda on it; otherwise an Admin API token is pasted, as before.
  */
-export function ShopifyConnect({ connected, canInstall, outcome }: { connected: { domain: string; by: "oauth" | "token" } | null; canInstall: boolean; outcome?: string }) {
+export function ShopifyConnect({ connected, canInstall, outcome, next = "/settings#shopify" }: { connected: { domain: string; by: "oauth" | "token" } | null; canInstall: boolean; outcome?: string; next?: string }) {
   const [shop, setShop] = useState("");
   const [domain, setDomain] = useState("");
   const [token, setToken] = useState("");
@@ -42,6 +42,7 @@ export function ShopifyConnect({ connected, canInstall, outcome }: { connected: 
       )}
       {canInstall ? (
         <form action="/api/shopify/install" method="get" className="flex flex-wrap items-end gap-3">
+          <input type="hidden" name="next" value={next} />
           <Field label="Your store" hint="The name before .myshopify.com, as your Shopify admin shows it.">
             <input id="shopify-shop" name="shop" className={INPUT} value={shop} onChange={(e) => setShop(e.target.value)} placeholder="your-shop" required />
           </Field>

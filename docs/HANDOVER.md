@@ -131,6 +131,23 @@ do not add up is put to the person on the review page ("Read it again" or "The l
 until settled the export page lists it and a push asks for the override. Export is never stopped.
 Reference knowledge per trade comes from `docs/KNOWLEDGE-PROMPT.md`, run by an agent once per trade.
 
+**Industry expansion (memo of 23 October 2026).** Phase 0 de-skied the core: metafields come from
+the pack (`ski.*` for the ski shop, `custom.*` for every other), the ski shop's habits are its
+pack's starting point and every other shop starts plain, a ski's own fields and rules run only in
+the snow trade, ski code lives in `trades/snow/`, and `deski.test.ts` holds the rest to a list
+that can only shrink. Costs convert into the shop's home currency (`fxRateToHome` and the like in
+code; the database columns keep their AUD names).
+
+**Connecting Shopify.** A hosted copy with Flöda's Shopify app set up connects through an install
+link in Settings: set SHOPIFY_CLIENT_ID and SHOPIFY_CLIENT_SECRET from the app in Shopify's Dev
+Dashboard, FLODA_APP_URL to where Flöda is served, and list FLODA_APP_URL/api/shopify/callback as
+an allowed redirect on the app. Tokens are expiring offline ones (an hour, with a 90-day refresh
+token) and are refreshed before they lapse. A copy without the app connects with a pasted token.
+Every product of a shop outside the snow trade goes out with its Shopify Standard Product Taxonomy
+category (release 2026-08, `data/shopify-taxonomy.ts`, `npx tsx scripts/taxonomy.ts <release>` to
+update); the packs place each of their kinds by hand, and other kinds are found by name or left
+blank. The ski shop keeps its habit of filling only boards, downhill skis and sleeping bags.
+
 **QuickBooks (Rubin only).** Rubin reads supplier invoices into QuickBooks bill sheets. Flöda
 removed that section; the rules the shop gave for it (its one-row-per-bill sheet, supplier names
 from its QuickBooks list, batch PDFs split into one bill per invoice) live in Rubin's handover.

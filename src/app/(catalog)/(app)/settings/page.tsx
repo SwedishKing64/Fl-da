@@ -11,6 +11,9 @@ import { ShopForm } from "@/app/(catalog)/(setup)/setup/ShopStep";
 import { ApiKeyForm } from "@/app/(catalog)/(setup)/setup/AiStep";
 import { LicenceForm } from "./LicenceForm";
 import { Backups } from "./Backups";
+import { ShopifyConnect } from "./ShopifyConnect";
+import { getSettings } from "@/lib/catalog/settings";
+import { oauthApp } from "@/lib/catalog/shopify-oauth";
 import { backupDir, listBackups, sqliteFile } from "@/lib/catalog/backup";
 import { licenceServer } from "@/lib/catalog/licence";
 import { currentLicence, getServerOverride, monthUse, readingUsage, servers } from "@/lib/catalog/licence-store";
@@ -27,14 +30,17 @@ import { currentLicence, getServerOverride, monthUse, readingUsage, servers } fr
 /** Teaching from a large export is several requests; each takes the page's limit. */
 export const maxDuration = 300;
 
-export default async function SettingsPage() {
+export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ shopify?: string }> }) {
   const me = await requireUser("ADMIN");
-  const [users, latency, profile, storedKey] = await Promise.all([
+  const [users, latency, profile, storedKey, settings, asked] = await Promise.all([
     prisma.user.findMany({ orderBy: { createdAt: "asc" } }),
     databaseLatency(),
     getShopProfile(),
     getStoredApiKey(),
+    getSettings(),
+    searchParams,
   ]);
+  const store = settings.shopify.storeDomain && settings.shopify.accessToken ? { domain: settings.shopify.storeDomain, by: settings.shopify.connectedBy ?? "token" } : null;
   return (
     <>
       <PageHeader title="Settings" subtitle="Admin only." />
@@ -46,6 +52,11 @@ export default async function SettingsPage() {
           <Card title="Training and Rules">
             <p className="text-[14px] text-[var(--ink-soft)]">What Flöda is taught lives on its own page: your website&apos;s categories as the kinds of product, each supplier&apos;s paperwork, your Shopify export, and the rules for every listing. <Link href="/training" className="font-semibold text-[var(--meta)]">Open Training and Rules →</Link></p>
           </Card>
+          <div id="shopify">
+            <Card title="Your Shopify store">
+              <ShopifyConnect connected={store} canInstall={Boolean(oauthApp())} outcome={asked.shopify} />
+            </Card>
+          </div>
           <Card title="Reading documents">
             <ApiKeyForm source={apiKeySource()} tail={keyTail(storedKey)} />
           </Card>

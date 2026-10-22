@@ -28,6 +28,7 @@
 import { packFor, type PackId } from "./trades";
 import { DEFAULT_HOUSE, type HouseConventions } from "./house";
 import type { WebsiteCategories } from "./website";
+import { categoryById, resolveCategory, type TaxonomyCategory } from "./shopify-taxonomy";
 import { CANONICAL_FIELDS, type CanonicalFieldDef, type MetafieldDef } from "./types";
 
 export interface TaxonomyGroup {
@@ -245,6 +246,24 @@ export const SNOW_FIELDS = new Set<string>(["flex", "abilityLevel", "dinRange", 
 /** The fields a supplier's column can be mapped to in this shop. Elsewhere a ski's columns are kept as traits. */
 export function fieldsInForce(): CanonicalFieldDef[] {
   return snowTrade() ? CANONICAL_FIELDS : CANONICAL_FIELDS.filter((f) => !SNOW_FIELDS.has(f.key));
+}
+
+/**
+ * A kind of product's place in Shopify's Standard Product Taxonomy: as the pack places it, or its
+ * heading as the pack places that, or — for a kind the shop taught Flöda — found by name, where the
+ * name says plainly what it is. Null where none of these says: no category beats the wrong one.
+ */
+export function categoryForKind(kind: string): TaxonomyCategory | null {
+  const placed = packFor(conventions.pack).shopifyCategories;
+  const name = resolveType(kind) ?? kind;
+  const id = placed[name] ?? (active.typeParents[name] ?? []).map((h) => placed[h]).find(Boolean);
+  if (id) return categoryById(id);
+  return resolveCategory(name, (active.typeSections[name] ?? []).join(" "));
+}
+
+/** Whether every product goes out with its Shopify category filled in. See TradePack.fillsCategory. */
+export function fillsCategory(): boolean {
+  return packFor(conventions.pack).fillsCategory;
 }
 
 /** The product metafields this shop writes, from its pack. See types.ts. */

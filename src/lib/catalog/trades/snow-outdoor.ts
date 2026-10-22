@@ -7,6 +7,7 @@
 import type { TaxonomySection } from "../taxonomy";
 import { LIVE_TAG_SPELLING, TAG_ALSO } from "../tag-spelling";
 import type { TradePack } from "./types";
+import { SNOW_OUTDOOR_CATEGORIES } from "./shopify-categories";
 import { SKI_METAFIELDS } from "../types";
 
 export const SNOW_OUTDOOR_TAXONOMY: TaxonomySection[] = [
@@ -83,5 +84,7 @@ export const SNOW_OUTDOOR_PACK: TradePack = {
   ],
   seeds: true,
   snowRules: true,
+  shopifyCategories: SNOW_OUTDOOR_CATEGORIES,
+  fillsCategory: false,
   metafields: SKI_METAFIELDS,
 };

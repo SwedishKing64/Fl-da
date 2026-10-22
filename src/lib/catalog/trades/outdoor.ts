@@ -7,6 +7,7 @@
 import type { TaxonomySection } from "../taxonomy";
 import { SNOW_OUTDOOR_TAXONOMY } from "./snow-outdoor";
 import type { TradePack } from "./types";
+import { SNOW_OUTDOOR_CATEGORIES } from "./shopify-categories";
 import { GENERAL_METAFIELDS } from "../types";
 
 const OUTDOOR_CLOTHING = new Set(["Outdoor Clothing", "Clothing Accessories"]);
@@ -33,5 +34,7 @@ export const OUTDOOR_PACK: TradePack = {
   ],
   seeds: false,
   snowRules: false,
+  shopifyCategories: SNOW_OUTDOOR_CATEGORIES,
+  fillsCategory: true,
   metafields: GENERAL_METAFIELDS,
 };

@@ -886,6 +886,43 @@ export async function retryExtractionAction(fileId: string): Promise<ActionResul
   }
 }
 
+/** Connect the store with a pasted Admin API token, where this copy has no Shopify app for the install link. */
+export async function saveShopifyTokenAction(input: { domain: string; token: string }): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const { shopDomain } = await import("@/lib/catalog/shopify-oauth");
+    const domain = shopDomain(String(input.domain ?? ""));
+    if (!domain) return { ok: false, error: "That is not a store address. It reads like your-shop.myshopify.com." };
+    const token = String(input.token ?? "").trim();
+    if (!token) return { ok: false, error: "Paste the Admin API access token." };
+    const current = await getSettings();
+    const before = current.shopify;
+    await saveSettings({ shopify: { storeDomain: domain, accessToken: token, apiVersion: before.apiVersion, connectedBy: "token" } });
+    try {
+      const { graphql, shopifyConfig } = await import("@/lib/catalog/shopify");
+      const shop = await graphql<{ shop: { name: string } }>(await shopifyConfig(), "{ shop { name } }");
+      await logAudit("store.connected", { userId: user.id, details: { domain, by: "pasted token", shop: shop.shop.name } });
+      revalidatePath("/settings");
+      return { ok: true, message: `Connected to ${shop.shop.name}.` };
+    } catch (err) {
+      await saveSettings({ shopify: before });
+      return { ok: false, error: `The store did not answer with that token: ${err instanceof Error ? err.message : String(err)}` };
+    }
+  });
+}
+
+/** Forget the store's token. Its products and what Flöda learned from them stay. */
+export async function disconnectShopifyAction(): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const current = await getSettings();
+    await saveSettings({ shopify: { storeDomain: "", accessToken: "", apiVersion: current.shopify.apiVersion, connectedBy: undefined, refreshToken: "", expiresAt: 0, refreshExpiresAt: 0, scope: "" } });
+    await logAudit("store.disconnected", { userId: user.id, details: { domain: current.shopify.storeDomain } });
+    revalidatePath("/settings");
+    return { ok: true };
+  });
+}
+
 /**
  * A document that did not add up, checked by the person: its lines are right as read. The note
  * comes off the file, so the batch stops asking, and the audit trail keeps who settled it.

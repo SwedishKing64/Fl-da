@@ -16,7 +16,8 @@ function sources(dir: string): string[] {
 
 describe("the snow trade stays in its pack", () => {
   const mentioning = sources("src")
-    .filter((f) => !f.startsWith(join("src", "lib", "catalog", "trades")) && !f.endsWith("schema-sql.ts"))
+    // The pack itself, the generated schema, and data that is others' (Shopify's taxonomy names every trade).
+    .filter((f) => !f.startsWith(join("src", "lib", "catalog", "trades")) && !f.startsWith(join("src", "lib", "catalog", "data")) && !f.endsWith("schema-sql.ts"))
     .filter((f) => SKI_WORDS.test(readFileSync(f, "utf8")))
     .sort();
 

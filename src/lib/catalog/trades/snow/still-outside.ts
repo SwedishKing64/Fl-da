@@ -39,6 +39,7 @@ export const STILL_OUTSIDE: readonly string[] = [
   "src/lib/catalog/extract/shopify-store.ts",
   "src/lib/catalog/extract/tabular.ts",
   "src/lib/catalog/extract/transcribe.ts",
+  "src/lib/catalog/extract/transcript.ts",
   "src/lib/catalog/feedback.ts",
   "src/lib/catalog/generated-tags.ts",
   "src/lib/catalog/grouping.ts",

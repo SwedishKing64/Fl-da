@@ -18,12 +18,12 @@
  * along with everything else rather than bolted on afterwards.
  */
 
-import { money } from "./adjust";
-import { slugify } from "./handle";
-import type { GroupedProduct } from "./grouping";
-import { asShopWritesIt, productTitle, seasonTagFrom } from "./titles";
-import { rememberedBinding, type Listing } from "./shop-memory";
-import { COLOUR_WORDS } from "./types";
+import { money } from "../../adjust";
+import { slugify } from "../../handle";
+import type { GroupedProduct } from "../../grouping";
+import { asShopWritesIt, productTitle, seasonTagFrom } from "../../titles";
+import { rememberedBinding, type Listing } from "../../shop-memory";
+import { COLOUR_WORDS } from "../../types";
 
 /** What the shop charges to mount a binding, before any discount. */
 export const MOUNT_FEE = 55;

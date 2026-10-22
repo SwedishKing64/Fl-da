@@ -8,10 +8,10 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { DEFAULT_CATEGORY_RULES } from "./categorize";
-import { groupLineItems } from "./grouping";
+import { DEFAULT_CATEGORY_RULES } from "../../categorize";
+import { groupLineItems } from "../../grouping";
 import { integratedBinding, packageProducts } from "./packages";
-import { emptyLineItem, type CanonicalLineItem } from "./types";
+import { emptyLineItem, type CanonicalLineItem } from "../../types";
 
 const line = (title: string, length: string, over: Partial<CanonicalLineItem> = {}): CanonicalLineItem => ({
   ...emptyLineItem(), title, brand: "Rossignol", length, season: "2026", category: "skis", quantity: 1, costPrice: 1534.09, rrp: 2700, gender: "MENS", ...over,

@@ -11,7 +11,7 @@ import { houseTags, retagForType } from "./product-tags";
 import { DEFAULT_CATEGORY_RULES, type CategoryRuleLike } from "./categorize";
 import { enrichFromSpecs, normKey } from "./specs";
 import { keepOrderedLines, resolveAgainstReference } from "./reference-match";
-import { isFlatSki, isPackageBinding, packageProducts, specFromName, type ChosenBindings } from "./packages";
+import { isFlatSki, isPackageBinding, packageProducts, specFromName, type ChosenBindings } from "./trades/snow/packages";
 import { readInvoiceGrids, type PriceRow } from "./invoice";
 import { asShopPrice, existingHandle, listingByBarcode, listingsAsReference, rememberedVendor } from "./shop-memory";
 import { dueInWindow, parseWindow } from "./deliveries";

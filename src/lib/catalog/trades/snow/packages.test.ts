@@ -189,7 +189,7 @@ describe("a binding as somebody names it in the instruction chat", () => {
 
 describe("directives saved before packages could be asked for", () => {
   it("still read, with packages left as usual", async () => {
-    const { parseDirectives } = await import("./instructions");
+    const { parseDirectives } = await import("../../instructions");
     const d = parseDirectives(JSON.stringify({ addTags: ["2998"], discountPct: 30, vendor: "", productType: "", evergreen: false, notes: "" }));
     expect(d.addTags).toEqual(["2998"]);
     expect(d.discountPct).toBe(30);
@@ -200,7 +200,7 @@ describe("directives saved before packages could be asked for", () => {
 
 describe("a year said in the instruction chat", () => {
   it("is read, described, and absent from directives saved before it existed", async () => {
-    const { parseDirectives, describeDirectives } = await import("./instructions");
+    const { parseDirectives, describeDirectives } = await import("../../instructions");
     expect(describeDirectives(parseDirectives(JSON.stringify({ season: "2026" })))).toContain("Year tag 2026 on every product");
     expect(describeDirectives(parseDirectives(JSON.stringify({ addTags: ["2998"] })))).not.toContain("Year tag");
   });

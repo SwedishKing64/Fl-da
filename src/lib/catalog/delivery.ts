@@ -42,7 +42,7 @@ import { applyInvoice, reconcile, sameSizeText, type InvoiceFields, type Invoice
 import { resolveAgainstReference } from "./reference-match";
 import { asShopPrice, listingsFromCsv, rememberedVendor, type Listing } from "./shop-memory";
 import { brandIn, isDistributor, audienceByModel } from "./brands";
-import { isFlatSki, isPackageBinding, packageProducts } from "./packages";
+import { isFlatSki, isPackageBinding, packageProducts } from "./trades/snow/packages";
 import type { PriceRow } from "./invoice";
 import type { CanonicalLineItem } from "./types";
 import type { PageDetails } from "./page-types";

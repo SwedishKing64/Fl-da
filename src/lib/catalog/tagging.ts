@@ -11,9 +11,9 @@
  */
 
 import { SNOW_OUTDOOR_TAXONOMY, activeTree, clothingContextsFor, headingsFor, isValidType, markerPrefix, productTypes, resolveType, sectionNames, tagAlso, tagSpelling, typeSections } from "./taxonomy";
-import { classifyBinding, classifySnowboardBinding, type BindingKind } from "./bindings";
-import { classifySkiBoot, classifySnowboardBoot } from "./boots";
-import { accessoryKind } from "./accessories";
+import { classifyBinding, classifySnowboardBinding, type BindingKind } from "./trades/snow/bindings";
+import { classifySkiBoot, classifySnowboardBoot } from "./trades/snow/boots";
+import { accessoryKind } from "./trades/snow/accessories";
 
 export type Gender = "mens" | "womens" | "kids";
 

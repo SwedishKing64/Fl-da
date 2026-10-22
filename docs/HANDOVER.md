@@ -114,6 +114,31 @@ and stock, every line the delivery will build is asked for its page, even one th
 not yet group into a product (a Dakine upload that also had quantity updates built a new product
 without asking).
 
+**An invoice and its order sheet together, on Prices and stock (asked 2026-10-22).** What arrived and
+what it cost often differ from what was ordered, so both can be loaded with the exports: dropped
+together, or the order sheet added after with "Add the order sheet too". Which is the invoice is
+read off the files (a name with "invoice", a PDF) — `invoiceFirst` in `invoice-merge.ts`. Each
+invoice line is paired with its order line by barcode, then item code, then name + size + colour,
+never guessed between two. The count and the cost are always the invoice's; the barcode, size,
+colour, kind and recommended retail come from the order sheet where the invoice has none, and the
+order sheet's name is kept. A line ordered and not invoiced did not arrive and is left out; an
+invoice line with no order line is taken as it is. The page lists costs and counts that changed.
+
+**"Regular" is never a width (asked 2026-10-22).** A Burton boot on Prices and stock came out with a
+made-up "Regular" Width variant: the order's fit column said Regular, which the import cleared but
+the delivery builder did not. `withFit` now drops a default fit on every path; Wide, Low Bridge and
+the like still go on the name.
+
+**No brand in a title, wherever the page puts it (2026-10-22).** Burton's pages write "Men's Burton
+Cartel X Re:Flex", and the brand was only taken off the very front. `withoutVendor` now takes it off
+after a Men's / Women's / Kids', and with its ® or accents (Völkl).
+
+**A colour's page always gives that colour its pictures (2026-10-22).** A White Cartel X link took no
+pictures: Burton shows every colour on one page, the product's own link had brought those pictures
+in already, and a picture already there was counted as nothing taken. It is now marked as that
+colour's and put on its variants. A read whose model picked no picture keeps the page's or the
+store's own instead of none.
+
 **No colour in any title, ever (asked 2026-10-20).** Not even when the brand's own page writes one.
 The order's colour for the line comes out of its name before grouping, so every colour of a model
 is one product; a page's title loses the product's colours, and a colour after a dash, bar, comma

@@ -404,6 +404,12 @@ export async function extractFromPage(d: Distilled, hint: PageHint, ask: AskPage
     const c = d.images[Math.round(n) - 1];
     if (c && !images.includes(c.url)) images.push(c.url);
   }
+  // The model chose none, on a page that is this product: the pictures the page itself declares as
+  // the product's are taken rather than none (asked 2026-10-22, pictures fetched by hand again).
+  if (images.length === 0 && r.confident) {
+    for (const u of d.structured.images) if (!images.includes(u)) images.push(u);
+    if (images.length === 0) for (const c of d.images.filter((c) => c.alt === "declared by the page")) if (!images.includes(c.url)) images.push(c.url);
+  }
   return {
     description: r.description.trim(),
     features: r.features.map((f) => f.replace(/\s+/g, " ").trim()).filter(Boolean).slice(0, 30),
@@ -520,7 +526,9 @@ export async function readProductPage(link: string, hint: PageHint, deps: { fetc
     const withColour = (out: PageDetails): PageDetails => (matched ? { ...out, pictureColour: matched } : out);
     if (!aiAvailable() && !deps.ask) return withColour(basicDetails(d));
     try {
-      const out = withColour(await extractFromPage(d, hint, deps.ask, by));
+      const read = withColour(await extractFromPage(d, hint, deps.ask, by));
+      // A store's pictures are the product's own, already sorted to the colour asked for: never none.
+      const out = read.images.length > 0 ? read : { ...read, images: pictures.slice(0, 16).map((c) => c.url) };
       // No details in the store's data, and the page refused this server: the page is fetched
       // through the API, which the site may let in, for its details alone. The store's
       // description and its colour-matched pictures stay.

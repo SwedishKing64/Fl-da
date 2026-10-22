@@ -325,3 +325,15 @@ describe("a new product with a page for each colour", () => {
     expect(out.fresh[0].title).toBe("Men's Cyclic GORE-TEX 2L Jacket 2026");
   });
 });
+
+describe("a boot whose order says its fit is Regular", () => {
+  it("gets no Width option: Regular is no fit at all", () => {
+    const out = buildDelivery(EXPORT, [
+      line({ sku: "B1", barcode: "9009520000017", title: "PHOTON BOA", size: "9", quantity: 1, rrp: 699.95, fit: "Regular", kind: "Snowboard Boots" }),
+      line({ sku: "B1", barcode: "9009520000024", title: "PHOTON BOA", size: "10", quantity: 1, rrp: 699.95, fit: "Regular", kind: "Snowboard Boots" }),
+    ], { season: "2027", vendor: "Burton" });
+    const boot = out.fresh.find((f) => /photon/i.test(f.title))!;
+    expect(boot.variants.map((v) => v.option)).toEqual(["9", "10"]);
+    expect(boot.title).not.toMatch(/regular/i);
+  });
+});

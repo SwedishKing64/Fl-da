@@ -410,6 +410,10 @@ export function withoutAudiencePrefix(title: string, gender: string): string {
 const FIT_WORD = /^(wide|extra wide|x-?wide|narrow|low bridge( fit)?|asian fit|round fit|oval fit|slim( fit)?|relaxed( fit)?|short|long|tall|petite|plus)$/i;
 export function withFit(item: CanonicalLineItem): CanonicalLineItem {
   const fit = item.width.trim();
+  // "Regular" is no fit at all, and never a Width option: a delivery's Burton boots came out with a
+  // made-up "Regular" width variant (asked 2026-10-22). Only a fit that is not the default is kept,
+  // on the name.
+  if (DEFAULT_FIT.test(fit)) return { ...item, width: "" };
   if (!FIT_WORD.test(fit)) return item;
   const title = item.title.trim();
   const already = new RegExp(`\\b${fit.replace(/[^a-z0-9 ]/gi, "")}\\b`, "i").test(title);

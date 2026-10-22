@@ -200,17 +200,25 @@ async function applyColourPictures(productId: string, colour: string, urls: stri
   const mark = colourMark(colour);
   const earlier = p.images.filter((i) => i.source === "PAGE" && i.altText === mark);
   const kept = p.images.filter((i) => !earlier.includes(i));
-  const have = new Set(kept.map((i) => i.url));
-  const fresh = urls.filter((u) => !have.has(u));
-  if (fresh.length === 0) return 0;
+  if (urls.length === 0) return 0;
+  const have = new Map(kept.map((i) => [i.url, i]));
   if (earlier.length > 0) await prisma.productImage.deleteMany({ where: { id: { in: earlier.map((i) => i.id) } } });
   const at = [p.option1Name, p.option2Name, p.option3Name].findIndex((n) => /colou?r/i.test(n ?? ""));
   const first = at < 0 ? undefined : p.variants.find((v) => sameColour([v.option1Value, v.option2Value, v.option3Value][at] ?? "", colour));
   let position = Math.max(0, ...kept.map((i) => i.position)) + 1;
-  for (const [i, url] of fresh.entries()) {
+  // A picture the product already has — a brand like Burton shows every colour on one page, so the
+  // product's own link brought it in — is this colour's all the same: it is marked as this colour's,
+  // and the first becomes its variants' picture. Counting it as nothing taken left the White Cartel
+  // X with no pictures of its own (asked 2026-10-22).
+  for (const [i, url] of urls.entries()) {
+    const there = have.get(url);
+    if (there) {
+      await prisma.productImage.update({ where: { id: there.id }, data: { altText: mark, ...(i === 0 && first ? { variantId: first.id } : {}) } });
+      continue;
+    }
     await prisma.productImage.create({ data: { productId, url, position: position++, source: "PAGE", altText: mark, validated: false, ...(i === 0 && first ? { variantId: first.id } : {}) } });
   }
-  return fresh.length;
+  return urls.length;
 }
 
 /** Save, or clear, one colour's own page. */

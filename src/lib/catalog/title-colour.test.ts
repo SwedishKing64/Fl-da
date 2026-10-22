@@ -28,3 +28,16 @@ describe("no colour in a title", () => {
     expect(pageProductTitle("Dakine Heli Pro 20L Backpack - Night Sky", "Dakine", null, [])).toBe("Heli Pro 20L Backpack");
   });
 });
+
+describe("no brand in a title taken from a page", () => {
+  it("takes the brand off after a gender, with its ® and accents", async () => {
+    const { withoutVendor } = await import("./titles");
+    expect(withoutVendor("Burton", "Men's Burton Cartel X Re:Flex Snowboard Bindings")).toBe("Men's Cartel X Re:Flex Snowboard Bindings");
+    expect(withoutVendor("Burton", "Burton® Step On Genesis")).toBe("Step On Genesis");
+    expect(withoutVendor("Volkl", "Völkl Mantra 102")).toBe("Mantra 102");
+    expect(withoutVendor("Black Crows", "Black Crows Camox")).toBe("Camox");
+    expect(withoutVendor("Burton", "Custom Camber")).toBe("Custom Camber");
+    expect(withoutVendor("Line", "Lineup Jacket")).toBe("Lineup Jacket");
+    expect(pageProductTitle("Men's Burton Cartel X Re:Flex Snowboard Bindings | Burton.com", "Burton", "2027", ["White"])).toBe("Cartel X Re:Flex Snowboard Bindings 2027");
+  });
+});

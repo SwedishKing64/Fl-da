@@ -14,11 +14,11 @@ import { kindsSuffix, onlyKinds } from "@/lib/catalog/narrow-export";
 import { brandsAsked } from "@/lib/catalog/brands";
 import { fitlessOf, type PageDetails } from "@/lib/catalog/page-types";
 import { BulkLinks } from "./BulkLinks";
+import { describeMerge, invoiceFirst, mergeInvoiceWithOrder } from "@/lib/catalog/invoice-merge";
 import { isFlatSki } from "@/lib/catalog/trades/snow/packages";
 import { listingsFromCsv } from "@/lib/catalog/shop-memory";
 import type { CanonicalLineItem } from "@/lib/catalog/types";
 import type { InvoiceRead } from "@/lib/catalog/invoice";
-import { invoiceOf, joinOrderAndInvoice } from "@/lib/catalog/order-and-invoice";
 import { fitsUpload, looksLikeImage, shrinkImage, tooBig } from "@/app/(catalog)/shrink";
 import { Alert, Button, Card, INPUT, INPUT_INLINE, cx } from "@/app/(catalog)/ui";
 import { ChangedCells } from "./ChangedCells";
@@ -176,7 +176,23 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
   const [confirmedWhole, setConfirmedWhole] = useState<number[]>([]);
 
   const invoiceRef = useRef<HTMLInputElement>(null);
-  const [invoice, setInvoice] = useState<Invoice | null>(null);
+  const orderSheetRef = useRef<HTMLInputElement>(null);
+  const [delivered, setInvoice] = useState<Invoice | null>(null);
+  /**
+   * The order sheet the invoice was shipped against, where both were given (asked 2026-10-22): the
+   * invoice says what arrived and what it cost, the order sheet fills in the rest. See invoice-merge.
+   */
+  const [orderSheet, setOrderSheet] = useState<Invoice | null>(null);
+  const merging = delivered && orderSheet ? mergeInvoiceWithOrder(delivered.lines, orderSheet.lines) : null;
+  const invoice: Invoice | null = delivered && orderSheet && merging
+    ? {
+        ...delivered,
+        lines: merging.lines,
+        priceList: [...(delivered.priceList ?? []), ...(orderSheet.priceList ?? [])],
+        source: `${delivered.source}, with ${orderSheet.filename} for what the invoice does not say`,
+        warnings: [...delivered.warnings, ...describeMerge(merging, delivered.filename, orderSheet.filename)],
+      }
+    : delivered;
   /**
    * Which of an invoice's numbers to write.
    *
@@ -261,7 +277,6 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
     ? { ...invoice, lines: (narrowed ? narrowed.lines : invoice.lines).filter((l) => !brandsSetAside.includes((l.brand ?? "").trim()) && !kindsOff.includes(kindOf(l))) }
     : invoice;
   const referenceRef = useRef<HTMLInputElement>(null);
-  const orderFormRef = useRef<HTMLInputElement>(null);
   const [references, setReferences] = useState<Reference[]>([]);
 
   const [instruction, setInstruction] = useState("");
@@ -378,23 +393,23 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
       setBusy(null); setProgress("");
     }
     const readable = readings.filter((r) => r.data);
-    // An order form and its invoice, both with quantities: the invoice is what arrived and what it
-    // cost; the order form fills in the barcodes and retail prices the invoice leaves out.
-    const counted = [...readable].filter((r) => r.ordered > 0).sort((a, b) => b.ordered - a.ordered);
-    if (counted.length >= 2) {
-      const pair = invoiceOf({ name: counted[0].file.name, lines: counted[0].ordered, r: counted[0] }, { name: counted[1].file.name, lines: counted[1].ordered, r: counted[1] });
-      combine(pair.form.r.data!, pair.invoice.r.data!);
-      const rest = readings.filter((r) => r !== pair.form.r && r !== pair.invoice.r && /\.(xlsx?|csv)$/i.test(r.file.name));
-      for (const r of rest) await takeReference(r.file);
-      return;
-    }
-    const order = [...readable].sort((a, b) => b.ordered - a.ordered)[0];
+    const ranked = [...readable].sort((a, b) => b.ordered - a.ordered);
+    let order = ranked[0];
     if (!order) {
       setError(`None of ${files.map((f) => f.name).join(", ")} reads as an order or invoice — it needs a column identifying each line and a column of prices or quantities. Add the order form, then these as its spec sheets.`);
       return;
     }
-    setInvoice(order.data); setLinks({}); setLinkNotes({}); setBrandsOff([]); setDecisions({}); setApplied(null); setAgainConfirmed(false);
-    const rest = readings.filter((r) => r !== order);
+    // Two documents with counts on them: the invoice (what arrived) and the order sheet it was
+    // shipped against, read as one delivery. See invoice-merge.
+    const second = ranked[1] && ranked[1].ordered > 0 && order.ordered > 0 ? ranked[1] : undefined;
+    let sheet: typeof order | undefined;
+    if (second) {
+      const [inv, ord] = invoiceFirst({ ...order, filename: order.file.name, lines: order.data!.lines }, { ...second, filename: second.file.name, lines: second.data!.lines });
+      order = readings.find((r) => r.file === inv.file)!;
+      sheet = readings.find((r) => r.file === ord.file)!;
+    }
+    setInvoice(order.data); setOrderSheet(sheet?.data ?? null); setLinks({}); setLinkNotes({}); setBrandsOff([]); setDecisions({}); setApplied(null); setAgainConfirmed(false);
+    const rest = readings.filter((r) => r !== order && r !== sheet);
     const sheetsOnly = rest.filter((r) => /\.(xlsx?|csv)$/i.test(r.file.name));
     const skipped = rest.filter((r) => !sheetsOnly.includes(r));
     for (const r of sheetsOnly) await takeReference(r.file);
@@ -502,39 +517,6 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
    * other change on this page, and for the same reason: an export runs to megabytes and never
    * needs to leave the machine. Only the invoice itself goes to the server, and only to be read.
    */
-  /** An order form and its invoice as one delivery: see order-and-invoice.ts. */
-  function combine(form: Invoice, inv: Invoice) {
-    const j = joinOrderAndInvoice(form.lines, inv.lines);
-    const said = `${inv.filename} is the invoice: what arrived and what it cost. ${form.filename} is the order form: barcodes and retail prices were taken from it where the invoice has none. ${j.matched} of ${inv.lines.length} invoice line${inv.lines.length === 1 ? "" : "s"} found on the order form.${j.notShipped.length ? ` ${j.notShipped.length} ordered line${j.notShipped.length === 1 ? " is" : "s are"} not on the invoice (not shipped yet, or not coming).` : ""}`;
-    setInvoice({
-      ...inv,
-      filename: `${inv.filename} + ${form.filename}`,
-      lines: j.lines,
-      columns: { ...form.columns, ...Object.fromEntries(Object.entries(inv.columns).filter(([, v]) => v)), rrp: inv.columns.rrp || form.columns.rrp, barcode: inv.columns.barcode || form.columns.barcode },
-      warnings: [said, ...inv.warnings],
-      priceList: form.priceList ?? inv.priceList,
-    });
-    setLinks({}); setLinkNotes({}); setBrandsOff([]); setDecisions({}); setApplied(null); setAgainConfirmed(false);
-  }
-
-  /** The order form for the invoice already loaded, added after it. */
-  async function takeOrderForm(file: File) {
-    if (!invoice) return;
-    setBusy("invoice"); setError(null); setSaved(null);
-    try {
-      const sent = await shrinkImage(file);
-      if (!fitsUpload(sent.file.size)) { setError(tooBig(file, sent.file.size)); return; }
-      setProgress(`Reading ${file.name}…`);
-      const r = await readInvoiceAction({ name: file.name, type: sent.file.type, base64: await read(sent.file, file.name) });
-      if (!r.ok) { setError(r.error); return; }
-      combine({ ...r.data!, filename: file.name }, invoice);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(null); setProgress("");
-    }
-  }
-
   async function takeInvoice(file: File) {
     setBusy("invoice"); setError(null); clearPreview(); setSaved(null);
     try {
@@ -544,7 +526,31 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
       const r = await readInvoiceAction({ name: file.name, type: sent.file.type, base64: await read(sent.file, file.name) });
       if (!r.ok) { setError(r.error); setInvoice(null); setLinks({}); setLinkNotes({}); return; }
       const data = r.data!;
-      setInvoice({ ...data, filename: file.name }); setLinks({}); setLinkNotes({}); setBrandsOff([]); setDecisions({}); setApplied(null); setAgainConfirmed(false);
+      setInvoice({ ...data, filename: file.name }); setOrderSheet(null); setLinks({}); setLinkNotes({}); setBrandsOff([]); setDecisions({}); setApplied(null); setAgainConfirmed(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(null); setProgress("");
+    }
+  }
+
+  /**
+   * The other of the pair: the order sheet when the invoice is loaded, or the invoice when the
+   * order sheet is. Which is which is read off the two files (see invoiceFirst), not off which
+   * button was pressed, so either way round gives the same delivery.
+   */
+  async function takeSecondDocument(file: File) {
+    if (!delivered) return takeInvoice(file);
+    setBusy("invoice"); setError(null); clearPreview(); setSaved(null);
+    try {
+      const sent = await shrinkImage(file);
+      if (!fitsUpload(sent.file.size)) { setError(tooBig(file, sent.file.size)); return; }
+      setProgress(`Reading ${file.name}…`);
+      const r = await readInvoiceAction({ name: file.name, type: sent.file.type, base64: await read(sent.file, file.name) });
+      if (!r.ok) { setError(r.error); return; }
+      const added: Invoice = { ...r.data!, filename: file.name };
+      const [inv, ord] = invoiceFirst(delivered, added);
+      setInvoice(inv); setOrderSheet(ord); setLinks({}); setLinkNotes({}); setDecisions({}); setApplied(null); setAgainConfirmed(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -1456,15 +1462,21 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
         */}
       <Card
           title="A delivery, or a supplier's invoice"
-          actions={invoice ? <Button size="sm" onClick={() => { setInvoice(null); setLinks({}); setLinkNotes({}); setError(null); }}>Remove it</Button> : undefined}
+          actions={invoice ? <Button size="sm" onClick={() => { setInvoice(null); setOrderSheet(null); setLinks({}); setLinkNotes({}); setError(null); }}>Remove {orderSheet ? "them" : "it"}</Button> : undefined}
         >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="text-sm">
               <span className="font-medium">A delivery arriving, or prices that have changed?</span>
-              <span className="ml-2 text-xs text-[var(--ink-soft)]">Add the order form and each line is matched by barcode, then by item code, then by the product&rsquo;s name — so a line that says SX-2M finds the SX-2M. A line that fits two products is never guessed at. What it matches has its stock put up; a size the product does not list arrives as a variant of it, and a product the shop does not have is built onto the end of the same file. A spreadsheet or CSV is read by its columns; a PDF or a photo of one goes to the API to be read.</span>
+              <span className="ml-2 text-xs text-[var(--ink-soft)]">Add the order form and each line is matched by barcode, then by item code, then by the product&rsquo;s name — so a line that says SX-2M finds the SX-2M. A line that fits two products is never guessed at. What it matches has its stock put up; a size the product does not list arrives as a variant of it, and a product the shop does not have is built onto the end of the same file. A spreadsheet or CSV is read by its columns; a PDF or a photo of one goes to the API to be read. <strong>Have the invoice and the order sheet both?</strong> Add the two (together, or the order sheet after with &ldquo;Add the order sheet too&rdquo;): the invoice decides what arrived and what it cost, and the order sheet fills in the barcodes, sizes, colours and recommended retail the invoice leaves out.</span>
             </div>
-            <Button icon="🧾" size="sm" disabled={busy !== null} onClick={() => invoiceRef.current?.click()}>{busy === "invoice" ? "Reading…" : invoice ? "Use a different invoice" : "Add the invoice"}</Button>
+            <div className="flex flex-wrap gap-2">
+              <Button icon="🧾" size="sm" disabled={busy !== null} onClick={() => invoiceRef.current?.click()}>{busy === "invoice" ? "Reading…" : invoice ? "Use a different invoice" : "Add the invoice"}</Button>
+              {delivered && (
+                <Button icon="📋" size="sm" disabled={busy !== null} onClick={() => orderSheetRef.current?.click()}>{orderSheet ? "Use a different order sheet" : "Add the order sheet too"}</Button>
+              )}
+            </div>
             <input ref={invoiceRef} type="file" multiple className="hidden" onChange={(e) => { const f = Array.from(e.target.files ?? []); if (f.length) void takeDocuments(f); e.target.value = ""; }} />
+            <input ref={orderSheetRef} type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void takeSecondDocument(f); e.target.value = ""; }} />
           </div>
 
           {busy === "invoice" && progress && (
@@ -1477,7 +1489,7 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
           {invoice && (
             <div className="mt-4 space-y-3">
               <div className="rounded-xl border border-[var(--line-soft)] px-3 py-2.5 text-sm">
-                <div className="font-medium">{invoice.filename}</div>
+                <div className="font-medium">{invoice.filename}{orderSheet && <span className="font-normal text-[var(--ink-soft)]"> · with the order sheet {orderSheet.filename}</span>}</div>
                 <div className="mt-0.5 text-xs text-[var(--ink-soft)]">
                   {(order ?? invoice).lines.length} line{(order ?? invoice).lines.length === 1 ? "" : "s"}, {invoice.source}.
                   {invoice.columns.rrp || invoice.columns.quantity
@@ -1485,13 +1497,6 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
                     : null}
                 </div>
                 {invoice.warnings.map((w, i) => <p key={i} className="mt-1.5 text-xs text-[var(--ink-soft)]">{w}</p>)}
-                {!invoice.filename.includes(" + ") && (
-                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[var(--ink-soft)]">
-                    <Button size="sm" variant="ghost" disabled={busy !== null} onClick={() => orderFormRef.current?.click()}>Add the order form for this invoice</Button>
-                    <span>Barcodes and retail prices come from the order form; what arrived and its cost, discounts and all, from the invoice.</span>
-                    <input ref={orderFormRef} type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void takeOrderForm(f); }} />
-                  </div>
-                )}
               </div>
 
               <ul className="divide-y divide-[var(--line-soft)] text-sm">

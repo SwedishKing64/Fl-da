@@ -164,7 +164,12 @@ export interface ReadOptions {
   visual?: boolean;
   /** The supplier's paperwork reads clean on its record, so the lighter model reads it at half the price. */
   known?: boolean;
+  /** How this supplier's lines were read before, as the shop settled them. See read-examples.ts. */
+  guide?: string;
 }
+
+/** The supplier's settled examples, as a block ahead of the document, where there are any. */
+const guided = (options: ReadOptions): Anthropic.TextBlockParam[] => (options.guide ? [{ type: "text", text: options.guide }] : []);
 
 /** Lines that count toward a document's totals: those with a quantity and a cost of their own. */
 const countable = (r: AiExtraction) => r.items.map((i) => ({ quantity: i.quantity, costPrice: i.costPrice }));
@@ -244,11 +249,12 @@ function hintFor(kind?: string): string {
 }
 
 export async function extractFromText(text: string, kind?: string, options: ReadOptions = {}): Promise<AiExtraction> {
-  return runExtraction([{ type: "text", text: `${hintFor(kind)} Extract what is relevant from this document:\n\n<document>\n${text}\n</document>` }], { known: options.known });
+  return runExtraction([...guided(options), { type: "text", text: `${hintFor(kind)} Extract what is relevant from this document:\n\n<document>\n${text}\n</document>` }], { known: options.known });
 }
 
 export async function extractFromPdf(buffer: Buffer, kind?: string, options: ReadOptions = {}): Promise<AiExtraction> {
   return runExtraction([
+    ...guided(options),
     { type: "document", source: { type: "base64", media_type: "application/pdf", data: buffer.toString("base64") } },
     { type: "text", text: `${hintFor(kind)} Extract what is relevant from this document.` },
   ], { visual: true, known: options.known });
@@ -259,6 +265,7 @@ const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp
 export async function extractFromImage(buffer: Buffer, mimeType: string, kind?: string, options: ReadOptions = {}): Promise<AiExtraction> {
   if (!IMAGE_TYPES.has(mimeType)) throw new Error(`Unsupported image type ${mimeType}`);
   return runExtraction([
+    ...guided(options),
     { type: "image", source: { type: "base64", media_type: mimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: buffer.toString("base64") } },
     { type: "text", text: `${hintFor(kind)} This is an uploaded image: it may be a photo or scan of an invoice, a catalogue page, or a photo of a product.` },
   ], { visual: true, known: options.known });

@@ -8,6 +8,8 @@ import { Steps } from "../Steps";
 import { NextStep } from "../NextStep";
 import { ReviewGrid } from "./ReviewGrid";
 import { LinksPanel } from "./LinksPanel";
+import { TotalsQuestion } from "./TotalsQuestion";
+import { offTotals } from "@/lib/catalog/totals";
 import { parseDirectives } from "@/lib/catalog/instructions";
 import { LookupPanel } from "./LookupPanel";
 import { lookupEnabled } from "@/lib/catalog/enrich";
@@ -54,8 +56,9 @@ async function renderReviewPage(props: PageProps<"/batches/[id]/review">) {
   // customer is stuck is the moment the engineer who set them up should be one click away.
   const finished = await prisma.importBatch.count({ where: { status: { in: ["EXPORTED", "PUSHED"] } } });
   // A document whose lines did not add up to its own printed totals, even after a second read.
-  const offTotals = (await prisma.sourceFile.findMany({ where: { batchId: id, extractionError: { contains: "Does not add up:" } }, select: { filename: true, extractionError: true } }))
-    .map((f) => ({ filename: f.filename, said: (/Does not add up: ([^]*?Check the lines against the document before building\.)/.exec(f.extractionError ?? "")?.[1] ?? "").trim() }));
+  const offFiles = (await prisma.sourceFile.findMany({ where: { batchId: id, extractionError: { contains: "Does not add up:" } }, select: { id: true, filename: true, extractionError: true } }))
+    .map((f) => ({ id: f.id, filename: f.filename, said: offTotals(f.extractionError) ?? "" }))
+    .filter((f) => f.said);
   const profile = await getShopProfile();
   const askHref = `${SUPPORT_MAILTO}?subject=${encodeURIComponent(`${profile.name || "A shop"} · batch "${batch.name}"`)}&body=${encodeURIComponent(`Hello,\n\nI'm looking at the batch "${batch.name}"${batch.supplierId ? ` from ${record?.name ?? "a supplier"}` : ""} and\n\n(say what looks wrong, or what you are unsure about)\n\n`)}`;
   const inShop = parseDirectives(batch.directives).allNew
@@ -82,10 +85,11 @@ async function renderReviewPage(props: PageProps<"/batches/[id]/review">) {
               <a href={askHref} className="ml-auto font-semibold text-[var(--meta)] underline">Ask a Flöda engineer about this batch →</a>
             </div>
           )}
-          {offTotals.length > 0 && (
+          {offFiles.length > 0 && (
             <Alert tone="warning" className="mb-4">
-              <div className="font-semibold">{offTotals.length === 1 ? "A document does not add up to its own totals" : `${offTotals.length} documents do not add up to their own totals`}</div>
-              <ul className="mt-1 list-disc pl-5 text-[13px]">{offTotals.map((f) => <li key={f.filename}><strong>{f.filename}</strong>: {f.said}</li>)}</ul>
+              <div className="font-semibold">{offFiles.length === 1 ? "A document does not add up to its own totals" : `${offFiles.length} documents do not add up to their own totals`}</div>
+              <div className="text-[13px]">Check its lines against the document. Read it again, or say the lines are right; until then the export lists it, and a push to Shopify asks first.</div>
+              <ul className="mt-1 divide-y divide-[var(--line-soft)] text-[13px]">{offFiles.map((f) => <TotalsQuestion key={f.id} batchId={id} fileId={f.id} filename={f.filename} said={f.said} />)}</ul>
             </Alert>
           )}
           {record && <SupplierNote record={record} />}

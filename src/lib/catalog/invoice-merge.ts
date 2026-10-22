@@ -135,3 +135,13 @@ export function describeMerge(r: MergeReport, invoiceName: string, orderName: st
   if (r.invoiceOnly.length > 0) out.push(`${n(r.invoiceOnly.length, "invoice line", "invoice lines")} had nothing on the order sheet to pair with, and ${r.invoiceOnly.length === 1 ? "is" : "are"} taken as the invoice has ${r.invoiceOnly.length === 1 ? "it" : "them"}: ${r.invoiceOnly.slice(0, 4).map((l) => l.title || l.sku).join(", ")}${r.invoiceOnly.length > 4 ? ", …" : ""}.`);
   return out;
 }
+
+/** A freight, postage or handling line: a charge on the invoice, not a product. Never built or counted. */
+export function isChargeLine(line: InvoiceLine): boolean {
+  return !line.barcode.trim() && /^\s*(freight|shipping|postage|delivery|courier|handling|surcharge|fuel levy)(\s+(charge|fee|cost|levy))?\s*$/i.test(line.title);
+}
+
+/** The document without its charge lines, so every page and the delivery number its lines the same. */
+export function withoutCharges<T extends { lines: InvoiceLine[] }>(doc: T): T {
+  return doc.lines.some(isChargeLine) ? { ...doc, lines: doc.lines.filter((l) => !isChargeLine(l)) } : doc;
+}

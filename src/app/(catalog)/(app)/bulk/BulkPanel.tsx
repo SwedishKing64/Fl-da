@@ -14,7 +14,7 @@ import { kindsSuffix, onlyKinds } from "@/lib/catalog/narrow-export";
 import { brandsAsked } from "@/lib/catalog/brands";
 import { fitlessOf, type PageDetails } from "@/lib/catalog/page-types";
 import { BulkLinks } from "./BulkLinks";
-import { describeMerge, invoiceFirst, mergeInvoiceWithOrder } from "@/lib/catalog/invoice-merge";
+import { describeMerge, invoiceFirst, mergeInvoiceWithOrder, withoutCharges } from "@/lib/catalog/invoice-merge";
 import { isFlatSki } from "@/lib/catalog/trades/snow/packages";
 import { listingsFromCsv } from "@/lib/catalog/shop-memory";
 import type { CanonicalLineItem } from "@/lib/catalog/types";
@@ -383,7 +383,7 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
         if (!fitsUpload(sent.file.size)) { setError(tooBig(file, sent.file.size)); return; }
         setProgress(`Reading ${file.name}…`);
         const r = await readInvoiceAction({ name: file.name, type: sent.file.type, base64: await read(sent.file, file.name) });
-        const data = r.ok && r.data ? { ...r.data, filename: file.name } : null;
+        const data = r.ok && r.data ? withoutCharges({ ...r.data, filename: file.name }) : null;
         readings.push({ file, data, ordered: data ? data.lines.filter((l) => (l.quantity ?? 0) > 0).length : 0 });
       }
     } catch (err) {
@@ -526,7 +526,7 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
       const r = await readInvoiceAction({ name: file.name, type: sent.file.type, base64: await read(sent.file, file.name) });
       if (!r.ok) { setError(r.error); setInvoice(null); setLinks({}); setLinkNotes({}); return; }
       const data = r.data!;
-      setInvoice({ ...data, filename: file.name }); setOrderSheet(null); setLinks({}); setLinkNotes({}); setBrandsOff([]); setDecisions({}); setApplied(null); setAgainConfirmed(false);
+      setInvoice(withoutCharges({ ...data, filename: file.name })); setOrderSheet(null); setLinks({}); setLinkNotes({}); setBrandsOff([]); setDecisions({}); setApplied(null); setAgainConfirmed(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -548,7 +548,7 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
       setProgress(`Reading ${file.name}…`);
       const r = await readInvoiceAction({ name: file.name, type: sent.file.type, base64: await read(sent.file, file.name) });
       if (!r.ok) { setError(r.error); return; }
-      const added: Invoice = { ...r.data!, filename: file.name };
+      const added: Invoice = withoutCharges({ ...r.data!, filename: file.name });
       const [inv, ord] = invoiceFirst(delivered, added);
       setInvoice(inv); setOrderSheet(ord); setLinks({}); setLinkNotes({}); setDecisions({}); setApplied(null); setAgainConfirmed(false);
     } catch (err) {

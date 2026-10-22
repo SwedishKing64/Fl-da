@@ -121,7 +121,18 @@ export function leadsWithVendor(vendor: string, title: string): boolean {
   const brand = plainBrand(vendor);
   if (!brand) return false;
   const name = plainBrand(title).replace(LEAD_WORD, "");
-  return name === brand || name.startsWith(`${brand} `) || name.startsWith(`${brand}:`) || name.startsWith(`${brand}-`);
+  return name === brand || name.startsWith(`${brand} `) || name.startsWith(`${brand}:`) || name.startsWith(`${brand}-`) || Boolean(brandCode(vendor, title));
+}
+
+/**
+ * A distributor's short code for the brand on the front of a line, in capitals: Outdoor Agencies
+ * writes Nemo's tents "NEM Dagger Osmo 2P Tent". Three or four letters that begin the brand's
+ * name, and not the whole of it. "" when the title has none.
+ */
+function brandCode(vendor: string, title: string): string {
+  const first = /^([A-Z]{3,4})\s+(?=\S)/.exec(title.trim())?.[1] ?? "";
+  const brand = plainBrand(vendor).replace(/\s+/g, "");
+  return first && brand.length > first.length && brand.startsWith(first.toLowerCase()) ? first : "";
 }
 
 /**
@@ -132,6 +143,8 @@ export function leadsWithVendor(vendor: string, title: string): boolean {
 export function withoutVendor(vendor: string, title: string): string {
   const t = title.trim();
   if (!leadsWithVendor(vendor, t)) return t;
+  const code = brandCode(vendor, t);
+  if (code) return t.slice(code.length).trim();
   const lead = LEAD_WORD.exec(t)?.[0] ?? "";
   const rest = t.slice(lead.length);
   // The brand as the title spells it, accents and ® included: as many words as the vendor has.

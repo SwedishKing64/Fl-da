@@ -114,6 +114,19 @@ and stock, every line the delivery will build is asked for its page, even one th
 not yet group into a product (a Dakine upload that also had quantity updates built a new product
 without asking).
 
+**Tents and footprints (Nemo, from Outdoor Agencies, asked 2026-10-22).** "FP" on any invoice is a
+footprint ("NEM Dagger 2P FP" is the Dagger 2P Footprint), and a distributor's three- or four-letter
+brand code on the front ("NEM") comes off with the brand. The shop lists a tent with two variants,
+the tent alone and the tent with its footprint, both on the TENT's barcode; the footprint is its own
+product. On Prices and stock a tent's barcode lands on the tent-alone variant (not a clash), and
+after the counts go on, every with-footprint variant of a tent that arrived, or whose footprint
+arrived, is set to the smaller of its tent-alone count and the footprint's stock: never more than the
+tent alone, nothing while there is no footprint (`footprints.ts`). A footprint fits a tent when its
+name without "Footprint" is in the tent's ("Dagger 2P" in "Dagger OSMO 2P Tent"); two that fit
+equally leave the tent alone, with a note. The option may be written "Tent + Footprint" / "Tent
+Only" or as an option named Footprint, Yes / No. A freight, postage or handling line without a
+barcode is a charge and is dropped when the invoice is read.
+
 **An invoice and its order sheet together, on Prices and stock (asked 2026-10-22).** What arrived and
 what it cost often differ from what was ordered, so both can be loaded with the exports: dropped
 together, or the order sheet added after with "Add the order sheet too". Which is the invoice is

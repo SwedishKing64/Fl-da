@@ -45,6 +45,7 @@ import { resolveAgainstReference } from "./reference-match";
 import { asShopPrice, listingsFromCsv, rememberedVendor, type Listing } from "./shop-memory";
 import { brandIn, isDistributor, audienceByModel } from "./brands";
 import { isFlatSki, isPackageBinding, packageProducts } from "./trades/snow/packages";
+import { syncFootprintBundles } from "./footprints";
 import type { PriceRow } from "./invoice";
 import type { CanonicalLineItem } from "./types";
 import { fitlessOf, type PageDetails } from "./page-types";
@@ -290,6 +291,14 @@ export function buildDelivery(csv: string, invoiced: InvoiceLine[], options: Del
   appended += mirrored.appended;
   reorder.changes.push(...mirrored.changes);
   warnings.push(...mirrored.warnings);
+
+  // Pass 2c. A tent's with-footprint variant, from the tent alone and its footprint. See footprints.ts.
+  if (fields.quantity) {
+    const bundles = syncFootprintBundles(csvSoFar, new Set(reconciliation.matched.map((m) => m.handle)));
+    csvSoFar = bundles.csv;
+    reorder.changes.push(...bundles.changes);
+    warnings.push(...bundles.warnings);
+  }
 
   if (options.reorderOnly || reconciliation.unmatched.length === 0) {
     return { csv: regroupByHandle(csvSoFar), changes: reorder.changes, carryOver: reconciliation.matched, fresh: [], freshSizes: sizes.added, appended, heldBack, reconciliation, warnings };

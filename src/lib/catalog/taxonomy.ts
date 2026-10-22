@@ -25,7 +25,7 @@
  * a Type that has nowhere to live on the website.
  */
 
-import { LIVE_TAG_SPELLING, TAG_ALSO } from "./tag-spelling";
+import { packFor, type PackId } from "./trades";
 import { DEFAULT_HOUSE, type HouseConventions } from "./house";
 import type { WebsiteCategories } from "./website";
 
@@ -42,65 +42,7 @@ export interface TaxonomySection {
   groups: TaxonomyGroup[];
 }
 
-export const SNOW_OUTDOOR_TAXONOMY: TaxonomySection[] = [
-  {
-    top: "Clothing",
-    groups: [
-      { heading: "Mens Clothing", leaves: ["Down Jackets", "Rainwear", "Snow Jackets", "Snow Pants", "Synthetic Insulation", "Midlayers", "Baselayers", "Socks"] },
-      { heading: "Womens Clothing", leaves: ["Rainwear", "Snow Jackets", "Snow Pants", "Down Jackets", "Synthetic Insulation", "Midlayers", "Baselayers", "Socks"] },
-      { heading: "Kids Clothing", leaves: ["Snow Jackets", "Snow Pants", "Rainwear", "Midlayers", "Baselayers"] },
-      { heading: "Snow Clothing", leaves: ["Snow Jackets", "Snow Pants", "Midlayers", "Baselayers", "Headwear", "Snow Socks", "Streetwear"] },
-      { heading: "Outdoor Clothing", leaves: ["Pants & Shorts", "Shirts", "Rainwear", "Down Jackets", "Midlayers", "Synthetic Insulation", "Hiking Socks"] },
-      { heading: "Clothing Accessories", leaves: ["Gloves", "Hats", "Gaiters"] },
-    ],
-  },
-  {
-    top: "Ski",
-    groups: [
-      { heading: "Skis", leaves: ["Mens Skis", "Womens Skis", "Kids Skis", "Ski Packages"] },
-      { heading: "Ski Categories", leaves: ["Frontside & All-Mountain Skis", "Carving Skis", "Freeride & Powder Skis", "Park & Twin Tip Skis", "Race Skis", "Mogul Skis", "Touring Skis"] },
-      { heading: "Ski Boots", leaves: ["Mens Boots", "Womens Boots", "Kids Boots", "Alpine Boots", "Race Boots", "Touring Boots"] },
-      { heading: "Ski Bindings", leaves: ["Alpine Bindings", "Touring Bindings"] },
-      // "Helmets", "Gloves" and "Mitts" are here as well as under Snowboard Accessories because
-      // that is where the shop files them: every snow helmet, all 27 goggles and 127 of 129 pairs
-      // of gloves in their exports are typed Ski Accessories. See PREFERS_SKI in headingsFor.
-      { heading: "Ski Accessories", leaves: ["Goggles", "Ski Helmets", "Helmets", "Ski Gloves", "Gloves", "Mitts", "Ski Poles", "Ski & Boot Bags", "Ski Tuning", "Other Ski Accessories"] },
-    ],
-  },
-  {
-    top: "Snowboard",
-    groups: [
-      { heading: "Snowboards", leaves: ["Mens Snowboards", "Womens Snowboards", "Kids Snowboards", "Snowboard Packages"] },
-      { heading: "Snowboard Categories", leaves: ["Freestyle & All-Mountain Boards", "Freeride & Powder Boards", "Park Boards"] },
-      { heading: "Snowboard Boots", leaves: ["Mens Boots", "Womens Boots", "Kids Boots"] },
-      { heading: "Snowboard Bindings", leaves: ["Mens Bindings", "Womens Bindings", "Kids Bindings"] },
-      { heading: "Snowboard Accessories", leaves: ["Goggles", "Helmets", "Gloves", "Body Protection", "Snowboard Bags", "Snowboard Tuning", "Other Snowboard Accessories"] },
-    ],
-  },
-  {
-    top: "Backcountry",
-    groups: [
-      { heading: "Alpine Touring", leaves: ["Alpine Touring Skis", "Alpine Touring Bindings", "Alpine Touring Boots", "Skins", "Alpine Touring Accessories"] },
-      { heading: "Cross-Country Skiing", leaves: ["Cross-Country Skis", "Cross-Country Bindings", "Cross-Country Boots", "Cross-Country Poles", "Cross-Country Accessories"] },
-      { heading: "Backcountry Gear", leaves: ["Avalanche Equipment", "Climbing Skins", "Snow Packs", "Ice Tools", "Other Back-Country Gear"] },
-      { heading: "Avalanche Gear", leaves: ["Snow Shovels and Ice Tools", "Beacons and Probes"] },
-    ],
-  },
-  {
-    top: "Outdoor",
-    groups: [
-      { heading: "Tents", leaves: ["1 Person Tents", "2 Person Tents", "3+ Person Tents", "Ultralight Tents", "Winter Tents", "Tarps & Bivies", "Tent Accessories & Spares"] },
-      { heading: "Sleeping Bags", leaves: ["Down Sleeping Bags", "Synthetic Sleeping Bags", "Sleeping Bag Accessories", "Sleeping Bag Cleaning & Servicing"] },
-      { heading: "Sleeping Mats", leaves: ["Air Mats", "Self-Inflating Mats", "Closed Cell Foam Mats", "Winter Mats", "Sleeping Mat Accessories"] },
-      { heading: "Packs & Bags", leaves: ["Daypacks", "Hiking Packs", "Hydration Packs", "Travel Packs", "Duffels"] },
-      { heading: "Climbing & Abseiling", leaves: ["Ropes and Cords", "Climbing Helmets", "Climbing Harnesses", "Climbing Shoes", "Carabiners and Quickdraws", "Belay Devices", "Ascenders & Descenders", "Climbing Accessories"] },
-      { heading: "Footwear", leaves: ["Hiking Boots", "Trail Shoes", "Travel Shoes", "Apres Boots", "Climbing Shoes"] },
-      { heading: "Stoves & Cooking", leaves: ["Stoves", "Cookware", "Freeze-Dried Meals", "Cooking Accessories"] },
-      { heading: "Hydration", leaves: ["Water Bottles", "Hydration Packs & Bladders", "Filters & Purifiers", "Hydration Accessories"] },
-      { heading: "Outdoor Accessories", leaves: ["Trekking Poles", "Compasses and GPS", "Maps", "Multitools", "Storage & Compression Sacks", "Gaiters", "Torches & Lighting", "Other Outdoor Accessories"] },
-    ],
-  },
-];
+export { SNOW_OUTDOOR_TAXONOMY } from "./trades/snow-outdoor";
 
 /** Top-level menu entries that hold no product types — they are merchandising, not categories. */
 export const NON_TYPE_MENUS = ["Brands", "Clearance", "Rentals", "Gift Cards"] as const;
@@ -162,8 +104,8 @@ export interface LearnedVocabulary {
   learnedAt: string;
 }
 
-/** Which rules pack is on: the snow-and-outdoor menu and its rules, or a blank vocabulary. */
-export type RulesPack = "snow-outdoor" | "general";
+/** Which trade pack is on: a data file of what a trade sells (see trades/), or none. */
+export type RulesPack = PackId;
 
 /** What decides the vocabulary: the pack, what was learned, and the shop's marker tag. */
 export interface Conventions {
@@ -236,10 +178,12 @@ function fromTree(tree: TaxonomySection[]): Pick<Vocabulary, "productTypes" | "t
 }
 
 function build(conventions: Conventions): Vocabulary {
-  const tree = conventions.pack === "snow-outdoor" ? SNOW_OUTDOOR_TAXONOMY : [];
+  // What the trade pack brings: its menu, its tag spellings. The engine knows no trade of its own.
+  const pack = packFor(conventions.pack);
+  const tree = pack.tree;
   const base = fromTree(tree);
-  const spelling: Record<string, string> = conventions.pack === "snow-outdoor" ? { ...LIVE_TAG_SPELLING } : {};
-  const also: Record<string, readonly string[]> = conventions.pack === "snow-outdoor" ? { ...TAG_ALSO } : {};
+  const spelling: Record<string, string> = { ...pack.tagSpelling };
+  const also: Record<string, readonly string[]> = { ...pack.tagAlso };
   const sections = [...base.sections];
   const learned = conventions.learned;
   if (learned) {
@@ -292,6 +236,14 @@ export function activateConventions(next: Conventions): void {
 
 export function activeConventions(): Conventions {
   return conventions;
+}
+
+/**
+ * True where the ski and snowboard rules apply: the shop started from the snow pack, or its own
+ * store or exports have taught Flöda that it sells skis or snowboards.
+ */
+export function snowTrade(): boolean {
+  return packFor(conventions.pack).snowRules || active.productTypes.some((t) => /\b(skis?|snowboards?)\b/i.test(t));
 }
 
 /** True once the shop has told Flöda its kinds of product, from its website or its export, so a Type can be checked against them. */

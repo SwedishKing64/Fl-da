@@ -10,7 +10,9 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import type { ExtractedTable } from "./types";
 import { retrying } from "../api-errors";
-import { productTypes, typesAreKnown } from "../taxonomy";
+import { activeConventions, productTypes, typesAreKnown } from "../taxonomy";
+import { packFor } from "../trades";
+import { checkTotals, totalsDistance, type TotalsCheck } from "../totals";
 
 export { EXTRACTION_MODEL } from "../anthropic";
 
@@ -53,10 +55,17 @@ const ExtractionSchema = z.object({
   invoiceNumber: z.string().describe("Invoice / order confirmation number, else empty"),
   currency: z.string().describe("Document currency ISO code if determinable, else empty"),
   gstTreatment: z.enum(["INCLUSIVE", "EXCLUSIVE", "NONE", "UNKNOWN"]).describe("How unit prices are expressed with respect to Australian GST"),
+  statedTotals: z.object({
+    units: z.number().nullable().describe("The total number of units the document states (Total Units, Total Qty, the sum line of the quantity column). Null when it prints none."),
+    subtotal: z.number().nullable().describe("The value of the goods the document states, before freight, surcharges and tax, in the document's currency. Null when it prints none, or prints only a total that includes freight or tax."),
+  }).describe("The totals printed on the document itself, copied as printed: they are checked against the lines read."),
   items: z.array(LineItemSchema),
 });
 
-export type AiExtraction = z.infer<typeof ExtractionSchema>;
+export type AiExtraction = z.infer<typeof ExtractionSchema> & {
+  /** Whether the lines read add up to the totals the document states. Set after the read; not asked of the model. */
+  check?: TotalsCheck;
+};
 
 const SYSTEM = `You read documents uploaded by a retailer who is building Shopify products. Work out what each document is, then extract only what is relevant.
 
@@ -112,7 +121,9 @@ Rules:
 /** What differs by shop, after the fixed prompt so the fixed prompt is the same bytes for every shop. */
 const SHOP = () => {
   const kinds = typesAreKnown() ? productTypes().slice(0, 120) : [];
-  return `The retailer is ${retailer()}; its sales tax is called ${taxName()}.${kinds.length ? ` The shop's kinds of product, for productType: ${kinds.join(", ")}.` : ""}`;
+  // How this trade's lines read, from the trade pack the shop started from (none for a blank shop).
+  const examples = packFor(activeConventions().pack).readerExamples;
+  return `The retailer is ${retailer()}; its sales tax is called ${taxName()}.${kinds.length ? ` The shop's kinds of product, for productType: ${kinds.join(", ")}.` : ""}${examples.length ? `\n\nHow lines in this trade read:\n${examples.map((e) => `- ${e}`).join("\n")}` : ""}`;
 };
 
 const getClient = (): Anthropic => anthropicClient(6);
@@ -155,8 +166,38 @@ export interface ReadOptions {
   known?: boolean;
 }
 
+/** Lines that count toward a document's totals: those with a quantity and a cost of their own. */
+const countable = (r: AiExtraction) => r.items.map((i) => ({ quantity: i.quantity, costPrice: i.costPrice }));
+
+/**
+ * Read a document, and read it once more when its lines do not add up to the totals it states.
+ *
+ * The second read is told what the first one added up to and what the document says, which is
+ * usually enough for it to find the line it skipped or doubled. The better of the two is kept, and
+ * one that still does not add up carries the check, so the batch says so before anything is built.
+ */
 async function runExtraction(content: ContentBlocks, options: ReadOptions = {}): Promise<AiExtraction> {
-  const deadline = Date.now() + READ_BUDGET_MS;
+  const started = Date.now();
+  const first = await readOnce(content, options, READ_BUDGET_MS);
+  const check = checkTotals(countable(first), first.statedTotals);
+  if (check.ok || !check.checked) return { ...first, check };
+  const left = READ_BUDGET_MS - (Date.now() - started);
+  if (left < 60_000) return { ...first, check };
+  const told: ContentBlocks = [
+    ...(Array.isArray(content) ? content : [{ type: "text" as const, text: content }]),
+    { type: "text", text: `A first reading of this document found ${first.items.length} lines adding up to ${check.units.read} units and ${check.subtotal.read.toFixed(2)} in goods, but the document states ${check.units.stated ?? "no unit total"}${check.units.stated !== null ? " units" : ""} and ${check.subtotal.stated !== null ? check.subtotal.stated.toFixed(2) : "no goods subtotal"}. Read it again, line by line, and find what was missed, read twice, or misread: a size-grid cell, a second page, a line total taken for a unit price.` },
+  ];
+  try {
+    const second = await readOnce(told, options, left);
+    const again = checkTotals(countable(second), second.statedTotals);
+    return totalsDistance(again) < totalsDistance(check) ? { ...second, check: again } : { ...first, check };
+  } catch {
+    return { ...first, check };
+  }
+}
+
+async function readOnce(content: ContentBlocks, options: ReadOptions, budgetMs: number): Promise<AiExtraction> {
+  const deadline = Date.now() + budgetMs;
   const left = () => Math.max(5_000, deadline - Date.now());
   const params = {
     model: options.known ? WORKING_MODEL : READING_MODEL,
@@ -243,6 +284,7 @@ export function aiExtractionToTable(result: AiExtraction, method: ExtractedTable
   if (result.summary) warnings.push(result.summary);
   if (result.documentType === "INVOICE" && result.gstTreatment === "UNKNOWN") warnings.push("Could not tell whether prices include GST; check the batch GST setting.");
   if (result.documentType === "OTHER") warnings.push("The AI could not find product information in this file.");
+  if (result.check && !result.check.ok) warnings.unshift(`Does not add up: ${result.check.message}`);
   return { headers: [...AI_HEADERS], rows, method, text, warnings };
 }
 

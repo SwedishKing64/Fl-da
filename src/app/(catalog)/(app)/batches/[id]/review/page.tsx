@@ -53,11 +53,15 @@ async function renderReviewPage(props: PageProps<"/batches/[id]/review">) {
   // On the shop's first two batches a person is named, not a feedback box: the moment a new
   // customer is stuck is the moment the engineer who set them up should be one click away.
   const finished = await prisma.importBatch.count({ where: { status: { in: ["EXPORTED", "PUSHED"] } } });
+  // A document whose lines did not add up to its own printed totals, even after a second read.
+  const offTotals = (await prisma.sourceFile.findMany({ where: { batchId: id, extractionError: { contains: "Does not add up:" } }, select: { filename: true, extractionError: true } }))
+    .map((f) => ({ filename: f.filename, said: (/Does not add up: ([^]*?Check the lines against the document before building\.)/.exec(f.extractionError ?? "")?.[1] ?? "").trim() }));
   const profile = await getShopProfile();
   const askHref = `${SUPPORT_MAILTO}?subject=${encodeURIComponent(`${profile.name || "A shop"} · batch "${batch.name}"`)}&body=${encodeURIComponent(`Hello,\n\nI'm looking at the batch "${batch.name}"${batch.supplierId ? ` from ${record?.name ?? "a supplier"}` : ""} and\n\n(say what looks wrong, or what you are unsure about)\n\n`)}`;
   const inShop = parseDirectives(batch.directives).allNew
     ? new Set<string>()
     : new Set((await prisma.shopListing.findMany({ where: { handle: { in: review.products.map((p) => p.handle) } }, select: { handle: true } })).map((l) => l.handle));
+  const categories = (await prisma.categoryRule.findMany({ select: { category: true }, distinct: ["category"] }).catch(() => [])).map((r) => r.category);
   return (
     <>
       <PageHeader
@@ -78,6 +82,12 @@ async function renderReviewPage(props: PageProps<"/batches/[id]/review">) {
               <a href={askHref} className="ml-auto font-semibold text-[var(--meta)] underline">Ask a Flöda engineer about this batch →</a>
             </div>
           )}
+          {offTotals.length > 0 && (
+            <Alert tone="warning" className="mb-4">
+              <div className="font-semibold">{offTotals.length === 1 ? "A document does not add up to its own totals" : `${offTotals.length} documents do not add up to their own totals`}</div>
+              <ul className="mt-1 list-disc pl-5 text-[13px]">{offTotals.map((f) => <li key={f.filename}><strong>{f.filename}</strong>: {f.said}</li>)}</ul>
+            </Alert>
+          )}
           {record && <SupplierNote record={record} />}
           <LinksPanel
             batchId={id}
@@ -85,7 +95,7 @@ async function renderReviewPage(props: PageProps<"/batches/[id]/review">) {
             products={review.products.map((p) => ({ id: p.id, title: p.title, handle: p.handle, url: ["LINKED", "RELINKED", "LINK_FAILED", "PAGE", "PAGE_UNSURE"].includes(p.lookupStatus) ? p.lookupSource : "", status: p.lookupStatus, inShop: inShop.has(p.handle) }))}
           />
           <LookupPanel batchId={id} outstanding={outstanding} enabled={lookupEnabled()} states={states} />
-          <ReviewGrid initial={review} batchId={id} kinds={typesAreKnown() ? productTypes() : []} />
+          <ReviewGrid initial={review} batchId={id} kinds={typesAreKnown() ? productTypes() : []} categories={categories} />
         </>
       )}
     </>

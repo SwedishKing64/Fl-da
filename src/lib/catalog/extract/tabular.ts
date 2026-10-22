@@ -114,7 +114,17 @@ export function extractCsv(buffer: Buffer): ExtractedTable {
   const text = buffer.toString("utf8").replace(/^﻿/, "");
   const parsed = Papa.parse<string[]>(text, { skipEmptyLines: "greedy" });
   const warnings = parsed.errors.slice(0, 5).map((e) => `CSV parse warning (row ${e.row ?? "?"}): ${e.message}`);
-  return gridToTable(parsed.data.map((r) => r.map((c) => (c ?? "").toString())), "CSV", warnings);
+  const grid = parsed.data.map((r) => r.map((c) => (c ?? "").toString()));
+  // A size grid sent as a CSV is the same order as one sent as a workbook: one line per size
+  // ordered, not one per row. It went straight to the column matcher, which cannot read a grid.
+  const order = readInvoiceGrids([{ name: "CSV", grid }]);
+  // Only a real size grid: a flat CSV with an item code and a quantity is a table already, and read
+  // as one it keeps every column.
+  if (order && order.shape === "grid" && order.columns.size === "the column heading" && order.lines.some((l) => l.quantity !== null)) {
+    const table = orderToTable(order);
+    return { ...table, method: "CSV", warnings: [...warnings, ...table.warnings] };
+  }
+  return gridToTable(grid, "CSV", warnings);
 }
 
 function cellToString(value: ExcelJS.CellValue): string {

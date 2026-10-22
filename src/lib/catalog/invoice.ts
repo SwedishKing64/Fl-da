@@ -229,7 +229,7 @@ function sectionsOf(grid: string[][]): Section[] {
     const named = loose ? find(/^(style name|product name|item name|description|product description|style description|model name|name|product)$/) : -1;
     const colour = find(/^colou?r( name)?$/);
     const indent = find(/^indent( price)?$/);
-    const cost = indent >= 0 ? indent : find(/^(w s|ws|wholesale|whsl|dealer|cost|unit cost|net price|nett|trade|trade price)( price)?$/);
+    const cost = indent >= 0 ? indent : find(/^(w s|ws|wholesale|whsl|dealer|cost|unit cost|unit price|net price|nett|trade|trade price)( price)?$/);
     const rrp = find(RRP);
     // The lengths and sizes. On the ski forms they come past the quantity column, so that a price
     // or an item number in the heading row cannot be mistaken for one. A clothing or footwear form

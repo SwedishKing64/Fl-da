@@ -88,6 +88,16 @@ export const PARTY = /\b(payer|customer|buyer|account|sold to|ship to|bill to|de
  */
 const core = (n: string): string => n.replace(/\s(description|desc|text|name|value)$/, "");
 
+/**
+ * A heading without the tax words that qualify it: "Cost Ex GST" is the cost, "RRP Inc GST" the
+ * retail. Left on, they made "cost" too small a part of the heading to count, and the column was
+ * never read.
+ */
+const untaxed = (n: string): string => n.replace(/\b(ex|excl|excluding|inc|incl|including|plus|less)\s*(gst|vat|tax|sales tax)\b/g, " ").replace(/\b(gst|vat|tax)\s*(ex|excl|inc|incl)\b/g, " ").replace(/\s+/g, " ").trim();
+
+/** A party heading that is really a price: "Dealer Price", "Retailer Cost". */
+const PRICED = /\b(price|cost|net|wholesale|nett)\b/;
+
 /** Who an order line is for, written as a word on its own: Burton's "MENS", "WOMENS", "KIDS". */
 const AUDIENCE = /^(mens?|womens?|ladies|kids?|youth|junior|jr|boys?|girls?|unisex|adult)$/i;
 
@@ -121,7 +131,7 @@ export function suggestMapping(headers: string[], rows: Array<Record<string, str
   const used = new Set<string>();
   // Checked before anything claims a field, so a twin can never take the AUD column's place.
   const skip = new Set(headers.filter((h) => isOtherCurrencyTwin(h, headers)));
-  const party = new Set(headers.filter((h) => PARTY.test(norm(h))));
+  const party = new Set(headers.filter((h) => PARTY.test(norm(h)) && !PRICED.test(norm(h))));
   /**
    * Whether what is under a heading rules out what the heading says.
    *
@@ -160,7 +170,7 @@ export function suggestMapping(headers: string[], rows: Array<Record<string, str
       continue;
     }
     if (skip.has(header) || party.has(header)) continue;
-    const names = [...new Set([n, core(n)])];
+    const names = [...new Set([n, core(n), untaxed(n), core(untaxed(n))])];
     const exact = CANONICAL_FIELDS.find((f) => !used.has(f.key) && names.some((x) => f.synonyms.includes(x)) && !refused(header, f.key));
     if (exact) {
       mapping[header] = exact.key;

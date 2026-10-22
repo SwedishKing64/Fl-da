@@ -3,8 +3,8 @@
 import { buildHandle } from "./handle";
 import { nameLikeSibling } from "./shop-names";
 import { csvType } from "./pipeline-pure";
-import { chooseOptions, collectionsFor, detectCategory, enrichFromTitle, metafieldsFor, OPTION_LABELS, snowboardType, tagsFor, type CategoryRuleLike } from "./categorize";
-import { resolveType } from "./taxonomy";
+import { chooseOptions, collectionsFor, extraOptions, optionValue, type OptionKey, detectCategory, enrichFromTitle, metafieldsFor, OPTION_LABELS, snowboardType, tagsFor, type CategoryRuleLike } from "./categorize";
+import { resolveType, snowTrade } from "./taxonomy";
 import { withFit } from "./mapping";
 import { classifyAccessory } from "./accessories";
 import { packShelf } from "./packs";
@@ -122,6 +122,9 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
   });
 
   const products: GroupedProduct[] = [];
+  // The ski and snowboard rules below are for a shop that sells skis and snowboards. Elsewhere a
+  // boot is a boot and a glove a glove, and the shop's own store says where they go.
+  const snow = snowTrade();
   for (const [key, group] of groups) {
     const entries = group.entries;
     const first = entries[0].item;
@@ -136,7 +139,7 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
     // would otherwise share a title and so a handle. The shop's own way of telling them apart is on
     // the front of the name: "Men's GORE-TEX Gloves", "Women's GORE-TEX Gloves", "Kids Gore-Tex Gloves".
     // A snowboard brand's boots are snowboard boots, whatever the boots rule says. See snowboardType.
-    const snowboard = snowboardType(group.rule, items);
+    const snowboard = snow ? snowboardType(group.rule, items) : null;
     // "Accessories" is a rule's word, not a Type the shop has: an accessory is filed under the
     // heading of the sport it serves — a Burton board bag or stomp pad under Snowboard Accessories,
     // a glove or a goggle under Ski Accessories whoever made it, which is where the shop keeps all
@@ -144,7 +147,7 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
     // A pack is filed on the Outdoor menu by what it is, before the accessories rules can read
     // "bag" into it: an Osprey Exos is a hiking pack, not a ski bag. See packs.ts.
     const pack = packShelf(brand, title, first.category, first.productType, first.description);
-    const accessory = group.rule?.category === "accessories"
+    const accessory = snow && group.rule?.category === "accessories"
       ? classifyAccessory(items.some((i) => isSnowboardBrand(i.brand) || /\bsnowboard/i.test(`${i.category} ${i.productType} ${i.title}`)) ? "Snowboard" : "Ski", title, first.description, first.category, first.productType).type
       : null;
     // A supplier's own kind word is a Type only when it is one the shop uses: "FREERIDE" is not.
@@ -170,17 +173,18 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
     // A ski the supplier sends already mounted — "HERO FIS GS FAC SPX15" — is a package, and is
     // named as one: "Hero FIS GS Fac 2026 inc SPX 15 Binding Package". See integratedBinding.
     const season = items.map((i) => i.season).find((s) => /^20\d{2}$/.test(s)) ?? "";
-    const mounted = /^skis?$/i.test(productType) ? integratedBinding(titled, season) : null;
+    const mounted = snow && /^skis?$/i.test(productType) ? integratedBinding(titled, season) : null;
     const shown = mounted ? mounted.title : titled;
     // What varies decides which options exist; the shop's own habit decides the order they are
     // read in. A jacket is colour then size on forty-one of forty-three products, a ski is length
     // first, and a sleeping bag is size, loft, then which side the zip is on.
-    const optionKeys = orderByConvention(productType, chooseOptions(group.rule, items));
-    const names = optionKeys.map((k) => normaliseOptionName(k === "variant" ? variantNameOf(items) : OPTION_LABELS[k] ?? titleCase(String(k))));
+    // A supplier's own column joins them where two lines would otherwise be the same variant.
+    const optionKeys = orderByConvention(productType, extraOptions(items, chooseOptions(group.rule, items)));
+    const names = optionKeys.map((k) => normaliseOptionName(optionLabel(k, items)));
     const seenCombos = new Set<string>();
     const variants: GroupedVariant[] = [];
     for (const e of entries) {
-      const values = optionKeys.map((k) => String(e.item[k] ?? "").trim() || null);
+      const values = optionKeys.map((k) => optionValue(e.item, k) || null);
       const combo = values.map((v) => (v ?? "").toLowerCase()).join("|");
       // Duplicate option combos in the same group are kept as separate variants so the
       // review grid can flag them, unless the SKUs are identical (true duplicate line).
@@ -267,9 +271,17 @@ function variantNameOf(items: CanonicalLineItem[]): string {
  * The same option keys, in the order the shop reads them for this kind of product. Anything the
  * convention has no opinion about keeps the order it arrived in.
  */
-function orderByConvention(productType: string, keys: Array<keyof CanonicalLineItem>): Array<keyof CanonicalLineItem> {
+/** What an option is called on the listing: the field's label, or the supplier's own heading. */
+function optionLabel(k: OptionKey, items: CanonicalLineItem[]): string {
+  const key = String(k);
+  if (key === "variant") return variantNameOf(items);
+  if (key.startsWith("extra:")) return titleCase(key.slice(6).toLowerCase());
+  return OPTION_LABELS[key] ?? titleCase(key);
+}
+
+function orderByConvention(productType: string, keys: OptionKey[]): OptionKey[] {
   if (keys.length < 2) return keys;
-  const label = (k: keyof CanonicalLineItem) => normaliseOptionName(OPTION_LABELS[k] ?? titleCase(String(k)));
+  const label = (k: OptionKey) => normaliseOptionName(OPTION_LABELS[String(k)] ?? (String(k).startsWith("extra:") ? titleCase(String(k).slice(6).toLowerCase()) : titleCase(String(k))));
   const wanted = optionNamesFor(productType, keys.map(label));
   return [...keys].sort((a, b) => {
     const ia = wanted.indexOf(label(a));

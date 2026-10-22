@@ -1,0 +1,26 @@
+{
+  "bike": {
+    "fields": 100,
+    "lines": 100
+  },
+  "clothing": {
+    "fields": 100,
+    "lines": 100
+  },
+  "general": {
+    "fields": 100,
+    "lines": 100
+  },
+  "outdoor": {
+    "fields": 100,
+    "lines": 100
+  },
+  "snow": {
+    "fields": 100,
+    "lines": 100
+  },
+  "surf": {
+    "fields": 100,
+    "lines": 100
+  }
+}

@@ -106,6 +106,15 @@ shorthand written out and bare codes not matched, pictures read from a page's sc
 32 looked at before the 16 kept. Real outdoor invoices and links that read badly are still wanted
 as test cases.
 
+**Blank slate, any trade (plan of 22 October 2026).** The plan is the Claude doc "Flöda Blank
+Slate: Any Invoice, Any Shop". Trade knowledge now lives in `src/lib/catalog/trades/`, one data
+file per trade (snow-and-outdoor, outdoor, none), chosen at setup as "Start from" and laid under
+whatever the shop teaches. Reading is measured: `npm run eval:read` scores the reader against
+documents with answer keys (a synthetic corpus in `samples/corpus`, the real one outside the
+repository via `CORPUS_DIR`), and the synthetic corpus is a test that fails on any trade scoring
+below `samples/corpus/baseline.json`. A document read by the AI is checked against the totals it
+prints; a miss is re-read once, and one still off is flagged at the top of the review page.
+
 **QuickBooks (Rubin only).** Rubin reads supplier invoices into QuickBooks bill sheets. Flöda
 removed that section; the rules the shop gave for it (its one-row-per-bill sheet, supplier names
 from its QuickBooks list, batch PDFs split into one bill per invoice) live in Rubin's handover.

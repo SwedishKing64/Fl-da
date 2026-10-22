@@ -4,6 +4,7 @@ import { prisma } from "./db";
 import { ACCESSORIES_PATTERN, BINDINGS_PATTERN, DEFAULT_CATEGORY_RULES, OLD_ACCESSORIES_PATTERN, OLD_BINDINGS_PATTERN } from "./categorize";
 import { DEFAULT_TAG_RULES } from "./rules";
 import { activeConventions, isValidType } from "./taxonomy";
+import { packFor } from "./trades";
 
 /**
  * No pricing rules. The price is the supplier's recommended retail, so there is nothing for a
@@ -156,7 +157,7 @@ export async function repairCategoryRules(): Promise<number> {
 async function repairCategoryRulesNow(): Promise<number> {
   // The defaults are the snow-and-outdoor pack's. A shop on a blank vocabulary writes its own
   // rules, and nothing here knows better than it does.
-  if (activeConventions().pack !== "snow-outdoor") return 0;
+  if (!packFor(activeConventions().pack).seeds) return 0;
   // A bindings rule still on the old default learns the binding model names. One somebody has
   // edited is theirs and is left alone.
   await prisma.categoryRule.updateMany({ where: { category: "bindings", pattern: OLD_BINDINGS_PATTERN }, data: { pattern: BINDINGS_PATTERN } }).catch(() => undefined);

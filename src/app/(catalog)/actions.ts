@@ -1666,7 +1666,7 @@ const shopSchema = z.object({
   currency: z.string().trim().regex(/^[A-Z]{3}$/, "A three-letter currency code"),
   taxName: z.string().trim().max(24),
   taxRate: z.coerce.number().min(0).max(1),
-  pack: z.enum(["snow-outdoor", "general"]),
+  pack: z.enum(["snow-outdoor", "outdoor", "general"]),
   marker: z.string().trim().toLowerCase().regex(/^[a-z0-9]{0,12}$/, "Letters and digits only, up to twelve"),
 });
 
@@ -1682,8 +1682,11 @@ export async function saveShopAction(_prev: ActionResult | null, formData: FormD
     const { getShopProfile, saveShopProfile } = await import("@/lib/catalog/shop-profile");
     const before = await getShopProfile();
     await saveShopProfile(data);
-    if (data.pack === "snow-outdoor" && before.pack !== "snow-outdoor") await seedDefaults();
-    if (data.pack !== "snow-outdoor" && before.pack === "snow-outdoor") await (await import("@/lib/catalog/seed")).unseedDefaults();
+    // A pack that brings starting rules seeds them once when switched on, and takes the seeded ones
+    // back out when switched off, leaving anything a person wrote.
+    const { packFor } = await import("@/lib/catalog/trades");
+    if (packFor(data.pack).seeds && !packFor(before.pack).seeds) await seedDefaults();
+    if (!packFor(data.pack).seeds && packFor(before.pack).seeds) await (await import("@/lib/catalog/seed")).unseedDefaults();
     await saveSettings({ gstRate: data.taxRate });
     await logAudit("shop.saved", { userId: user.id, details: { pack: data.pack, country: data.country, currency: data.currency } });
     revalidatePath("", "layout");

@@ -13,5 +13,7 @@ export const GENERAL_PACK: TradePack = {
   readerExamples: [],
   seeds: false,
   snowRules: false,
+  shopifyCategories: {},
+  fillsCategory: true,
   metafields: GENERAL_METAFIELDS,
 };

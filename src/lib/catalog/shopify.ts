@@ -10,6 +10,8 @@ import { candidatesFor, type CatalogueRow, type MatchCandidate } from "./match-c
 import type { ReviewProduct } from "./review-types";
 import { type ShopifyLocation } from "./types";
 import { metafieldDefs } from "./taxonomy";
+import { productCategoryOf, csvType } from "./pipeline-pure";
+import { categoryGid } from "./shopify-taxonomy";
 import { blockingErrors } from "./validate";
 import { offTotals } from "./totals";
 
@@ -299,6 +301,8 @@ export interface ProductSetInput {
     inventoryQuantities?: Array<{ locationId: string; name: "available"; quantity: number }>;
   }>;
   files?: Array<{ originalSource: string; contentType: "IMAGE"; alt: string }>;
+  /** Shopify's Standard Product Taxonomy category, as its id. */
+  category?: string;
   metafields?: Array<{ namespace: string; key: string; type: string; value: string }>;
 }
 
@@ -335,6 +339,8 @@ export function buildProductSetInput(p: ReviewProduct, opts: { publish: boolean;
     }),
   };
   if (productOptions.length) input.productOptions = productOptions;
+  const category = productCategoryOf(csvType(p.productType, p.collections.split(",")), p.title);
+  if (category) input.category = categoryGid(category.id);
   if (p.shopifyProductId) input.id = p.shopifyProductId;
   const files = p.images.map((i) => ({ originalSource: i.url, contentType: "IMAGE" as const, alt: p.title }));
   if (files.length) input.files = files;

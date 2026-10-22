@@ -35,6 +35,14 @@ export interface TradePack {
    * a glove and a boot is a boot; the shop's own store says where they go.
    */
   snowRules: boolean;
+  /** Each kind of product's place in Shopify's Standard Product Taxonomy, by the category's id. */
+  shopifyCategories: Record<string, string>;
+  /**
+   * Whether every product goes out with its Shopify category filled in. The ski shop's own exports
+   * leave most of the catalogue Uncategorized and fill only boards, downhill skis and sleeping bags,
+   * so its pack keeps that habit; every other shop gets the category Shopify asks for.
+   */
+  fillsCategory: boolean;
   /** The product metafields a shop on this pack writes, and under which namespace. */
   metafields: MetafieldDef[];
 }

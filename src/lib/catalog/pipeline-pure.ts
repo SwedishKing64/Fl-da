@@ -1,7 +1,8 @@
 // Pure helpers shared by the DB pipeline and the offline/regression pipeline.
 
 import { metafieldColumns } from "./categorize";
-import { headingsFor } from "./taxonomy";
+import { categoryForKind, fillsCategory, headingsFor } from "./taxonomy";
+import { categoryById, type TaxonomyCategory } from "./shopify-taxonomy";
 import type { CsvProduct } from "./csv";
 import type { ReviewProduct } from "./review-types";
 
@@ -40,15 +41,24 @@ export function csvType(productType: string, collections: string[]): string {
  * as the shop leaves it.
  */
 const PRODUCT_CATEGORY: Record<string, string> = {
-  Snowboards: "Sporting Goods > Outdoor Recreation > Winter Sports & Activities > Skiing & Snowboarding > Snowboards",
-  Skis: "Sporting Goods > Outdoor Recreation > Winter Sports & Activities > Skiing & Snowboarding > Skis > Downhill Skis",
-  "Sleeping Bags": "Sporting Goods > Outdoor Recreation > Camping & Hiking > Sleeping Bags",
+  Snowboards: "sg-4-17-2-17", // Sporting Goods > … > Skiing & Snowboarding > Snowboards
+  Skis: "sg-4-17-2-13-2", // Sporting Goods > … > Skiing & Snowboarding > Skis > Downhill Skis
+  "Sleeping Bags": "sg-4-2-14", // Sporting Goods > Outdoor Recreation > Camping & Hiking > Sleeping Bags
 };
 
-export function productCategoryFor(csvProductType: string, title = ""): string | undefined {
+/** A product's Shopify category, where it goes out with one. */
+export function productCategoryOf(csvProductType: string, title = ""): TaxonomyCategory | null {
+  // Every shop but the ski shop gets the category Shopify asks for. See TradePack.fillsCategory.
+  if (fillsCategory()) return categoryForKind(csvProductType.trim());
   // A package is a board or ski with bindings on it; the shop leaves those uncategorised.
-  if (/\binc\b|\bpackage\b/i.test(title)) return undefined;
-  return PRODUCT_CATEGORY[csvProductType.trim()];
+  if (/\binc\b|\bpackage\b/i.test(title)) return null;
+  const id = PRODUCT_CATEGORY[csvProductType.trim()];
+  return id ? categoryById(id) : null;
+}
+
+/** The category as the CSV's Product Category column writes it: its full path. */
+export function productCategoryFor(csvProductType: string, title = ""): string | undefined {
+  return productCategoryOf(csvProductType, title)?.path;
 }
 
 export function toCsvProducts(products: ReviewProduct[]): CsvProduct[] {

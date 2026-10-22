@@ -1,6 +1,13 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { ALPSPORT_CONVENTIONS, BLANK_CONVENTIONS, SNOW_OUTDOOR_TAXONOMY, activateConventions, productTypes } from "./taxonomy";
 import { PACKS, PACK_IDS, packFor } from "./trades";
+import { groupLineItems } from "./grouping";
+import { emptyLineItem, type CanonicalLineItem } from "./types";
+import type { CategoryRuleLike } from "./categorize";
+
+const rule = (category: string, pattern: string, productType: string): CategoryRuleLike => ({ category, pattern, productType, collections: "", tags: "", priority: 1, active: true });
+const RULES = [rule("accessories", "glove", "Accessories"), rule("boots", "boot", "Boots")];
+const line = (over: Partial<CanonicalLineItem>): CanonicalLineItem => ({ ...emptyLineItem(), quantity: 1, ...over });
 
 afterEach(() => activateConventions(BLANK_CONVENTIONS));
 
@@ -37,5 +44,32 @@ describe("trade packs", () => {
   it("offers every pack at setup, none first, and only the snow pack seeds rules", () => {
     expect(PACK_IDS[0]).toBe("general");
     expect(PACK_IDS.filter((id) => PACKS[id].seeds)).toEqual(["snow-outdoor"]);
+  });
+});
+
+describe("the ski and snowboard rules", () => {
+  const glove = line({ brand: "Burton", title: "Profile Glove", sku: "G1", size: "M" });
+  const boot = line({ brand: "Burton", title: "Trail Boot", sku: "B1", size: "9" });
+
+  it("file a ski shop's glove under Ski Accessories and a Burton boot as a snowboard boot", () => {
+    activateConventions(ALPSPORT_CONVENTIONS);
+    const [g] = groupLineItems([glove], RULES);
+    const [b] = groupLineItems([boot], RULES);
+    expect(g.productType).toBe("Ski Accessories");
+    expect(b.productType).toBe("Snowboard Boots");
+  });
+
+  it("stay out of an outdoor shop: a glove is not a ski accessory, a boot is not a snowboard boot", () => {
+    activateConventions({ ...BLANK_CONVENTIONS, pack: "outdoor" });
+    const [g] = groupLineItems([glove], RULES);
+    const [b] = groupLineItems([boot], RULES);
+    expect(g.productType).not.toMatch(/ski|snowboard/i);
+    expect(b.productType).toBe("Boots");
+  });
+
+  it("apply to a shop with no pack once its own store shows it sells skis", () => {
+    activateConventions({ ...BLANK_CONVENTIONS, learned: { types: [{ type: "Skis", count: 12, sections: [] }, { type: "Gloves", count: 30, sections: [] }], sections: [], spelling: {}, vendors: [], products: 42, file: "export.csv", learnedAt: "2026-10-22" } });
+    const [b] = groupLineItems([boot], RULES);
+    expect(b.productType).toBe("Snowboard Boots");
   });
 });

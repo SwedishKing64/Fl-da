@@ -81,4 +81,5 @@ export const SNOW_OUTDOOR_PACK: TradePack = {
     "A boot line \"BT2610 PRO 110 | 26.5 x1 | 27.5 x1\" is two lines: size 26.5 and size 27.5, quantity 1 each.",
   ],
   seeds: true,
+  snowRules: true,
 };

@@ -238,6 +238,14 @@ export function activeConventions(): Conventions {
   return conventions;
 }
 
+/**
+ * True where the ski and snowboard rules apply: the shop started from the snow pack, or its own
+ * store or exports have taught Flöda that it sells skis or snowboards.
+ */
+export function snowTrade(): boolean {
+  return packFor(conventions.pack).snowRules || active.productTypes.some((t) => /\b(skis?|snowboards?)\b/i.test(t));
+}
+
 /** True once the shop has told Flöda its kinds of product, from its website or its export, so a Type can be checked against them. */
 export function typesAreKnown(): boolean {
   return active.productTypes.length > 0;

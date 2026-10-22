@@ -61,6 +61,7 @@ async function renderReviewPage(props: PageProps<"/batches/[id]/review">) {
   const inShop = parseDirectives(batch.directives).allNew
     ? new Set<string>()
     : new Set((await prisma.shopListing.findMany({ where: { handle: { in: review.products.map((p) => p.handle) } }, select: { handle: true } })).map((l) => l.handle));
+  const categories = (await prisma.categoryRule.findMany({ select: { category: true }, distinct: ["category"] }).catch(() => [])).map((r) => r.category);
   return (
     <>
       <PageHeader
@@ -94,7 +95,7 @@ async function renderReviewPage(props: PageProps<"/batches/[id]/review">) {
             products={review.products.map((p) => ({ id: p.id, title: p.title, handle: p.handle, url: ["LINKED", "RELINKED", "LINK_FAILED", "PAGE", "PAGE_UNSURE"].includes(p.lookupStatus) ? p.lookupSource : "", status: p.lookupStatus, inShop: inShop.has(p.handle) }))}
           />
           <LookupPanel batchId={id} outstanding={outstanding} enabled={lookupEnabled()} states={states} />
-          <ReviewGrid initial={review} batchId={id} kinds={typesAreKnown() ? productTypes() : []} />
+          <ReviewGrid initial={review} batchId={id} kinds={typesAreKnown() ? productTypes() : []} categories={categories} />
         </>
       )}
     </>

@@ -11,4 +11,5 @@ export const GENERAL_PACK: TradePack = {
   tagAlso: {},
   readerExamples: [],
   seeds: false,
+  snowRules: false,
 };

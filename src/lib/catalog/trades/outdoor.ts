@@ -32,4 +32,5 @@ export const OUTDOOR_PACK: TradePack = {
     "A clothing grid row \"OW3101 Ridge Fleece Jacket Black\" with 1 under S and 2 under M is two lines: size S quantity 1, size M quantity 2.",
   ],
   seeds: false,
+  snowRules: false,
 };

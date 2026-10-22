@@ -27,4 +27,11 @@ export interface TradePack {
   readerExamples: string[];
   /** Whether switching the pack on seeds its own starting rules (see seed.ts). */
   seeds: boolean;
+  /**
+   * Whether the ski and snowboard rules apply: snowboard boots and bindings told from ski ones by
+   * the brand, accessories filed under Ski or Snowboard Accessories, skis sent mounted named as
+   * binding packages, riding-style shelves read from a supplier's terrain words. Off, a glove is
+   * a glove and a boot is a boot; the shop's own store says where they go.
+   */
+  snowRules: boolean;
 }

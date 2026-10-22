@@ -29,7 +29,7 @@ import { Alert, Badge, Button, INPUT, INPUT_INLINE, cx, money, pct } from "@/app
 import type { ReviewData } from "@/lib/catalog/pipeline";
 import type { ReviewProduct, ReviewVariant } from "@/lib/catalog/review-types";
 import { priceVariant } from "@/lib/catalog/pricing";
-import { CATEGORIES, type GstTreatment, type RowFlag } from "@/lib/catalog/types";
+import { type GstTreatment, type RowFlag } from "@/lib/catalog/types";
 
 type VariantField = "sku" | "barcode" | "option1Value" | "option2Value" | "option3Value" | "quantity" | "costPrice" | "gstTreatment" | "freightPerUnitAud" | "retailOverride" | "compareAtPrice" | "grams";
 type ProductField = "title" | "handle" | "vendor" | "productType" | "category" | "tags" | "collections" | "status";
@@ -114,7 +114,7 @@ function worst(flags: RowFlag[]): "error" | "warning" | null {
   return null;
 }
 
-export function ReviewGrid({ initial, batchId, kinds = [] }: { initial: ReviewData; batchId: string; kinds?: string[] }) {
+export function ReviewGrid({ initial, batchId, kinds = [], categories = [] }: { initial: ReviewData; batchId: string; kinds?: string[]; categories?: string[] }) {
   const [data, setData] = useState<ReviewData>(initial);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(initial.products.map((p) => p.id)));
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -150,6 +150,8 @@ export function ReviewGrid({ initial, batchId, kinds = [] }: { initial: ReviewDa
   }, [batchId]);
 
 
+  // The shop's own categories, from its rules, and any this batch already uses: not a fixed ski list.
+  const categoryChoices = useMemo(() => Array.from(new Set([...categories, ...data.products.map((p) => p.category), "other"].filter(Boolean))).sort(), [categories, data.products]);
   const brands = useMemo(() => Array.from(new Set(data.products.map((p) => p.vendor).filter(Boolean))).sort(), [data.products]);
 
   const visible = useMemo(() => {
@@ -332,7 +334,7 @@ export function ReviewGrid({ initial, batchId, kinds = [] }: { initial: ReviewDa
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <input value={filter.q} onChange={(e) => setFilter({ ...filter, q: e.target.value })} placeholder="Search title, SKU, handle…" className={`${INPUT_INLINE} w-56`} />
         <select value={filter.brand} onChange={(e) => setFilter({ ...filter, brand: e.target.value })} className={`${INPUT_INLINE} w-40`}><option value="">All brands</option>{brands.map((b) => <option key={b}>{b}</option>)}</select>
-        <select value={filter.category} onChange={(e) => setFilter({ ...filter, category: e.target.value })} className={`${INPUT_INLINE} w-40`}><option value="">All categories</option>{CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}</select>
+        <select value={filter.category} onChange={(e) => setFilter({ ...filter, category: e.target.value })} className={`${INPUT_INLINE} w-40`}><option value="">All categories</option>{categoryChoices.map((c) => <option key={c} value={c}>{c}</option>)}</select>
         <select value={filter.flags} onChange={(e) => setFilter({ ...filter, flags: e.target.value })} className={`${INPUT_INLINE} w-48`}>
           <option value="">All rows</option><option value="errors">Errors only</option><option value="warnings">Warnings only</option><option value="any">Any flag</option>
           {Object.entries(FLAG_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -389,7 +391,7 @@ export function ReviewGrid({ initial, batchId, kinds = [] }: { initial: ReviewDa
           </select>
           {bulk.field === "productType" && kinds.length > 0 && <select value={bulk.value} onChange={(e) => setBulk({ ...bulk, value: e.target.value })} className={`${INPUT_INLINE} w-56`}><option value="">Choose a kind…</option>{kinds.map((k) => <option key={k} value={k}>{k}</option>)}</select>}
           {(["addTag", "addCollection", "vendor"].includes(bulk.field) || (bulk.field === "productType" && kinds.length === 0)) && <input value={bulk.value} onChange={(e) => setBulk({ ...bulk, value: e.target.value })} className={`${INPUT_INLINE} w-48`} placeholder="Value" />}
-          {bulk.field === "category" && <select value={bulk.value} onChange={(e) => setBulk({ ...bulk, value: e.target.value })} className={`${INPUT_INLINE} w-40`}><option value="">Choose…</option>{CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}</select>}
+          {bulk.field === "category" && <select value={bulk.value} onChange={(e) => setBulk({ ...bulk, value: e.target.value })} className={`${INPUT_INLINE} w-40`}><option value="">Choose…</option>{categoryChoices.map((c) => <option key={c} value={c}>{c}</option>)}</select>}
           {bulk.field === "status" && <select value={bulk.value} onChange={(e) => setBulk({ ...bulk, value: e.target.value })} className={`${INPUT_INLINE} w-40`}><option value="">Choose…</option><option value="draft">Draft</option><option value="active">Active</option></select>}
           {bulk.field === "gstTreatment" && <select value={bulk.value} onChange={(e) => setBulk({ ...bulk, value: e.target.value })} className={`${INPUT_INLINE} w-40`}><option value="">Choose…</option><option value="EXCLUSIVE">Ex GST</option><option value="INCLUSIVE">Inc GST</option><option value="NONE">No GST</option></select>}
           {bulk.field === "dismissWarnings" && <select value={bulk.value} onChange={(e) => setBulk({ ...bulk, value: e.target.value })} className={`${INPUT_INLINE} w-56`}><option value="">All warnings</option>{["NO_IMAGE", "LOW_MARGIN", "MISSING_SKU", "MISSING_BARCODE", "MISSING_VENDOR", "MISSING_TYPE", "NEGATIVE_PROFIT", "UPDATE_EXISTING", "DUPLICATE_SKU_SHOPIFY"].map((c) => <option key={c} value={c}>{FLAG_LABELS[c]}</option>)}</select>}
@@ -445,7 +447,7 @@ export function ReviewGrid({ initial, batchId, kinds = [] }: { initial: ReviewDa
                       <ProductCell p={p} field="handle" width={200} edit={productEdit} setEdit={setProductEdit} commit={commitProduct} locked={locked} mono />
                       <ProductCell p={p} field="vendor" width={110} edit={productEdit} setEdit={setProductEdit} commit={commitProduct} locked={locked} label="Vendor" />
                       <ProductCell p={p} field="productType" width={110} edit={productEdit} setEdit={setProductEdit} commit={commitProduct} locked={locked} label="Type" options={kinds.length ? ["", ...(p.productType && !kinds.includes(p.productType) ? [p.productType] : []), ...kinds] : undefined} />
-                      <ProductCell p={p} field="category" width={100} edit={productEdit} setEdit={setProductEdit} commit={commitProduct} locked={locked} label="Category" options={[...CATEGORIES]} />
+                      <ProductCell p={p} field="category" width={100} edit={productEdit} setEdit={setProductEdit} commit={commitProduct} locked={locked} label="Category" options={categoryChoices} />
                       <ProductCell p={p} field="tags" width={180} edit={productEdit} setEdit={setProductEdit} commit={commitProduct} locked={locked} label="Tags" />
                       <ProductCell p={p} field="collections" width={130} edit={productEdit} setEdit={setProductEdit} commit={commitProduct} locked={locked} label="Collections" />
                       <ProductCell p={p} field="status" width={70} edit={productEdit} setEdit={setProductEdit} commit={commitProduct} locked={locked} label="Status" options={["draft", "active"]} />

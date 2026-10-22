@@ -114,6 +114,10 @@ documents with answer keys (a synthetic corpus in `samples/corpus`, the real one
 repository via `CORPUS_DIR`), and the synthetic corpus is a test that fails on any trade scoring
 below `samples/corpus/baseline.json`. A document read by the AI is checked against the totals it
 prints; a miss is re-read once, and one still off is flagged at the top of the review page.
+The ski and snowboard rules (snowboard boots and bindings told apart by brand, accessories filed
+under Ski or Snowboard Accessories, skis sent mounted named as binding packages) run only for the
+snow pack, or for a shop whose own store or export shows it sells skis or snowboards (`snowTrade()`
+in taxonomy.ts). The review screen's category choices are the shop's own rules', not a fixed list.
 
 **QuickBooks (Rubin only).** Rubin reads supplier invoices into QuickBooks bill sheets. Flöda
 removed that section; the rules the shop gave for it (its one-row-per-bill sheet, supplier names

@@ -3,7 +3,7 @@
 // with a custom-app access token configured in Settings.
 
 import { prisma, parseJson } from "./db";
-import { getSettings } from "./settings";
+import { getSettings, saveSettings } from "./settings";
 import { logAudit } from "./audit";
 import { loadReview, toCsvProducts } from "./pipeline";
 import { candidatesFor, type CatalogueRow, type MatchCandidate } from "./match-candidates";
@@ -28,8 +28,22 @@ export class ShopifyError extends Error {
 
 export async function shopifyConfig(): Promise<ShopifyConfig> {
   const s = await getSettings();
-  if (!s.shopify.storeDomain || !s.shopify.accessToken) throw new ShopifyError("Shopify is not configured. Add the store domain and Admin API token in Settings.");
-  return { storeDomain: s.shopify.storeDomain.replace(/^https?:\/\//, "").replace(/\/+$/, ""), accessToken: s.shopify.accessToken, apiVersion: s.shopify.apiVersion || "2025-07" };
+  if (!s.shopify.storeDomain || !s.shopify.accessToken) throw new ShopifyError("Shopify is not connected. Connect your store in Settings.");
+  const storeDomain = s.shopify.storeDomain.replace(/^https?:\/\//, "").replace(/\/+$/, "");
+  let accessToken = s.shopify.accessToken;
+  // A token from the install link lasts an hour; the next one is fetched just before it lapses.
+  const { dueForRefresh, oauthApp, refreshToken } = await import("./shopify-oauth");
+  const app = oauthApp();
+  if (app && s.shopify.connectedBy === "oauth" && dueForRefresh({ expiresAt: s.shopify.expiresAt ?? 0, refreshToken: s.shopify.refreshToken ?? "" })) {
+    try {
+      const next = await refreshToken(app, storeDomain, s.shopify.refreshToken ?? "");
+      await saveSettings({ shopify: { ...s.shopify, accessToken: next.accessToken, refreshToken: next.refreshToken, expiresAt: next.expiresAt, refreshExpiresAt: next.refreshExpiresAt, scope: next.scope || s.shopify.scope } });
+      accessToken = next.accessToken;
+    } catch (err) {
+      throw new ShopifyError(`The store's connection has lapsed and could not be renewed (${err instanceof Error ? err.message : String(err)}). Connect the store again in Settings.`);
+    }
+  }
+  return { storeDomain, accessToken, apiVersion: s.shopify.apiVersion || "2025-07" };
 }
 
 interface GraphQLResponse<T> {

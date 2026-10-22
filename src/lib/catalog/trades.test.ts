@@ -73,3 +73,21 @@ describe("the ski and snowboard rules", () => {
     expect(b.productType).toBe("Snowboard Boots");
   });
 });
+
+describe("options from the supplier's own columns", () => {
+  const bag = (sku: string, length: string, zip: string, line: string): CanonicalLineItem =>
+    ({ ...emptyLineItem(), brand: "Sea to Summit", title: "Spark Sleeping Bag", sku, quantity: 1, variant: length, variantName: "Length", extras: { "Zip Side": zip, "Line No": line, "Unit Price": "399.00" } });
+
+  it("takes a kept column as an option where two lines would otherwise be the same variant", () => {
+    activateConventions({ ...BLANK_CONVENTIONS, pack: "outdoor" });
+    const [p] = groupLineItems([bag("S1", "Regular", "Left", "1"), bag("S2", "Regular", "Right", "2"), bag("S3", "Long", "Left", "3"), bag("S4", "Long", "Right", "4")], []);
+    expect([p.option1Name, p.option2Name, p.option3Name]).toEqual(["Length", "Zip Side", null]);
+    expect(p.variants.map((v) => `${v.option1Value}/${v.option2Value}`)).toEqual(["Regular/Left", "Regular/Right", "Long/Left", "Long/Right"]);
+  });
+
+  it("leaves the kept columns alone where the options already tell the lines apart", () => {
+    activateConventions({ ...BLANK_CONVENTIONS, pack: "outdoor" });
+    const [p] = groupLineItems([bag("S1", "Regular", "Left", "1"), bag("S3", "Long", "Right", "3")], []);
+    expect([p.option1Name, p.option2Name]).toEqual(["Length", null]);
+  });
+});

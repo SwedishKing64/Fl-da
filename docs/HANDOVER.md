@@ -118,6 +118,9 @@ The ski and snowboard rules (snowboard boots and bindings told apart by brand, a
 under Ski or Snowboard Accessories, skis sent mounted named as binding packages) run only for the
 snow pack, or for a shop whose own store or export shows it sells skis or snowboards (`snowTrade()`
 in taxonomy.ts). The review screen's category choices are the shop's own rules', not a fixed list.
+A line keeps every column the mapping had no field for, under the supplier's heading; where two
+lines of one product would otherwise be the same variant, the column that tells them apart (a
+sleeping bag's "Zip Side") becomes an option of its own (`extraOptions` in categorize.ts).
 
 **QuickBooks (Rubin only).** Rubin reads supplier invoices into QuickBooks bill sheets. Flöda
 removed that section; the rules the shop gave for it (its one-row-per-bill sheet, supplier names

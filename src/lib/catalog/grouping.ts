@@ -4,7 +4,8 @@ import { buildHandle } from "./handle";
 import { nameLikeSibling } from "./shop-names";
 import { csvType } from "./pipeline-pure";
 import { chooseOptions, collectionsFor, extraOptions, optionValue, type OptionKey, detectCategory, enrichFromTitle, metafieldsFor, OPTION_LABELS, snowboardType, tagsFor, type CategoryRuleLike } from "./categorize";
-import { houseConventions, resolveType, snowTrade } from "./taxonomy";
+import { houseConventions, packKnowledge, resolveType, snowTrade } from "./taxonomy";
+import { inSizeOrder } from "./size-order";
 import { correctedOptionName, correctedProductType } from "./corrections";
 import { withFit } from "./mapping";
 import { classifyAccessory } from "./trades/snow/accessories";
@@ -202,6 +203,9 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
       seenCombos.add(skuKey);
       variants.push({ item: e.item, sourceIndex: e.index, option1Value: values[0] ?? null, option2Value: values[1] ?? null, option3Value: values[2] ?? null });
     }
+    // In the order of the trade's size systems, where the shop's pack has them. See size-order.ts.
+    const sizes = packKnowledge()?.sizes ?? [];
+    if (sizes.length) variants.splice(0, variants.length, ...inSizeOrder(variants, (v) => [v.option1Value, v.option2Value, v.option3Value], sizes));
     const description = items.map((i) => i.description.trim()).find(Boolean) ?? "";
     const collections = snowboard ? [snowboard] : pack ? ["Packs & Bags"] : collectionsFor(group.rule, items);
     // Tagged for the shelf and for the Type it goes out under: a goggle is "Goggles" to the rule

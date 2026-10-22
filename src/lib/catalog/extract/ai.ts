@@ -11,7 +11,7 @@ import { z } from "zod";
 import type { ExtractedTable } from "./types";
 import type { Mapping } from "../mapping";
 import { retrying } from "../api-errors";
-import { activeConventions, productTypes, snowTrade, typesAreKnown } from "../taxonomy";
+import { activeConventions, packKnowledge, productTypes, snowTrade, typesAreKnown } from "../taxonomy";
 import { packFor } from "../trades";
 import { checkTotals, totalsDistance, type TotalsCheck } from "../totals";
 
@@ -174,7 +174,12 @@ const SHOP = () => {
   const kinds = typesAreKnown() ? productTypes().slice(0, 120) : [];
   // How this trade's lines read, from the trade pack the shop started from (none for a blank shop).
   const examples = packFor(activeConventions().pack).readerExamples;
-  return `The retailer is ${retailer()}; its sales tax is called ${taxName()}.${kinds.length ? ` The shop's kinds of product, for productType: ${kinds.join(", ")}.` : ""}${examples.length ? `\n\nHow lines in this trade read:\n${examples.map((e) => `- ${e}`).join("\n")}` : ""}`;
+  // What the trade's kinds vary by, and how their codes carry the size, from a pack built from files.
+  const known = (packKnowledge()?.kinds ?? []).slice(0, 30).map((k) => {
+    const parts = [k.options.length ? `sold by ${k.options.map((o) => o.name).join(" and ")}` : "", k.notOptions.length ? `not an option: ${k.notOptions.join("; ")}` : "", k.codeHints ? k.codeHints : ""].filter(Boolean);
+    return parts.length ? `- ${k.kind}${k.supplierWords.length ? ` (${k.supplierWords.slice(0, 4).join(", ")})` : ""}: ${parts.join(". ")}` : "";
+  }).filter(Boolean);
+  return `The retailer is ${retailer()}; its sales tax is called ${taxName()}.${kinds.length ? ` The shop's kinds of product, for productType: ${kinds.join(", ")}.` : ""}${examples.length ? `\n\nHow lines in this trade read:\n${examples.map((e) => `- ${e}`).join("\n")}` : ""}${known.length ? `\n\nThis trade's kinds of product and what each varies by:\n${known.join("\n")}` : ""}`;
 };
 
 const getClient = (): Anthropic => anthropicClient(6);

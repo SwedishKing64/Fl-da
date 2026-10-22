@@ -1,8 +1,9 @@
 import type { TaxonomySection } from "../taxonomy";
 import type { MetafieldDef } from "../types";
+import type { PackKnowledge } from "./knowledge";
 
 /** The trade packs there are. Adding a trade is a new data file and a line in the registry. */
-export type PackId = "snow-outdoor" | "outdoor" | "general";
+export type PackId = "snow-outdoor" | "outdoor" | "bike" | "general";
 
 /**
  * What one trade sells and how its documents read: data, not code. The engine reads whichever
@@ -46,4 +47,6 @@ export interface TradePack {
   fillsCategory: boolean;
   /** The product metafields a shop on this pack writes, and under which namespace. */
   metafields: MetafieldDef[];
+  /** What a pack built from files knows beyond its menu: kinds, sizes, colour shorthand. See knowledge.ts. */
+  knowledge?: PackKnowledge;
 }

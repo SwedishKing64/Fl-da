@@ -1,0 +1,1057 @@
+[
+  {
+    "kind": "Hardtail Mountain Bikes",
+    "supplierWords": [
+      "HT",
+      "hardtail",
+      "MTB HT"
+    ],
+    "options": [
+      {
+        "name": "Colour",
+        "examples": [
+          "Gloss Black",
+          "Satin Sage"
+        ]
+      },
+      {
+        "name": "Size",
+        "system": "bike-frame-letter",
+        "examples": [
+          "S",
+          "M",
+          "L",
+          "XL"
+        ]
+      }
+    ],
+    "optionOrder": [
+      "Colour",
+      "Size"
+    ],
+    "notOptions": [
+      "the wheel size, where the model name carries it",
+      "the groupset, which makes a different model"
+    ],
+    "specFields": [
+      {
+        "name": "Wheel Size",
+        "unit": "in",
+        "example": "29"
+      },
+      {
+        "name": "Frame Material",
+        "example": "Carbon"
+      },
+      {
+        "name": "Groupset",
+        "example": "Shimano Deore 12-speed"
+      }
+    ],
+    "titleExample": "Ridgeline 29 Deore",
+    "codeHints": "A model code, then a colour code, then the frame size on the end: RL140-GB-M or 2027RL140CGBM. The year often leads the code.",
+    "confidence": "medium"
+  },
+  {
+    "kind": "Full Suspension Mountain Bikes",
+    "supplierWords": [
+      "FS",
+      "full sus",
+      "dual suspension",
+      "MTB FS"
+    ],
+    "options": [
+      {
+        "name": "Colour",
+        "examples": [
+          "Gloss Black",
+          "Satin Sage"
+        ]
+      },
+      {
+        "name": "Size",
+        "system": "bike-frame-letter",
+        "examples": [
+          "S",
+          "M",
+          "L",
+          "XL"
+        ]
+      }
+    ],
+    "optionOrder": [
+      "Colour",
+      "Size"
+    ],
+    "notOptions": [
+      "the wheel size, where the model name carries it",
+      "the groupset, which makes a different model"
+    ],
+    "specFields": [
+      {
+        "name": "Wheel Size",
+        "unit": "in",
+        "example": "29"
+      },
+      {
+        "name": "Travel",
+        "unit": "mm",
+        "example": "140"
+      },
+      {
+        "name": "Frame Material",
+        "example": "Carbon"
+      },
+      {
+        "name": "Groupset",
+        "example": "Shimano Deore 12-speed"
+      }
+    ],
+    "titleExample": "Ridgeline 140 Carbon",
+    "codeHints": "A model code, then a colour code, then the frame size on the end: RL140-GB-M or 2027RL140CGBM. The year often leads the code.",
+    "confidence": "medium"
+  },
+  {
+    "kind": "E-Mountain Bikes",
+    "supplierWords": [
+      "eMTB",
+      "e-MTB",
+      "E-MTB",
+      "pedelec MTB"
+    ],
+    "options": [
+      {
+        "name": "Colour",
+        "examples": [
+          "Gloss Black",
+          "Satin Sage"
+        ]
+      },
+      {
+        "name": "Size",
+        "system": "bike-frame-letter",
+        "examples": [
+          "S",
+          "M",
+          "L",
+          "XL"
+        ]
+      }
+    ],
+    "optionOrder": [
+      "Colour",
+      "Size"
+    ],
+    "notOptions": [
+      "the wheel size, where the model name carries it",
+      "the groupset, which makes a different model"
+    ],
+    "specFields": [
+      {
+        "name": "Wheel Size",
+        "unit": "in",
+        "example": "29"
+      },
+      {
+        "name": "Travel",
+        "unit": "mm",
+        "example": "150"
+      },
+      {
+        "name": "Frame Material",
+        "example": "Carbon"
+      },
+      {
+        "name": "Groupset",
+        "example": "Shimano Deore 12-speed"
+      }
+    ],
+    "titleExample": "Ridgeline E 150",
+    "codeHints": "A model code, then a colour code, then the frame size on the end: RL140-GB-M or 2027RL140CGBM. The year often leads the code.",
+    "confidence": "medium"
+  },
+  {
+    "kind": "Road Bikes",
+    "supplierWords": [
+      "road",
+      "RD"
+    ],
+    "options": [
+      {
+        "name": "Colour",
+        "examples": [
+          "Gloss Black",
+          "Satin Sage"
+        ]
+      },
+      {
+        "name": "Size",
+        "system": "road-frame-cm",
+        "examples": [
+          "52",
+          "54",
+          "56"
+        ]
+      }
+    ],
+    "optionOrder": [
+      "Colour",
+      "Size"
+    ],
+    "notOptions": [
+      "the wheel size, where the model name carries it",
+      "the groupset, which makes a different model"
+    ],
+    "specFields": [
+      {
+        "name": "Wheel Size",
+        "unit": "in",
+        "example": "29"
+      },
+      {
+        "name": "Frame Material",
+        "example": "Carbon"
+      },
+      {
+        "name": "Groupset",
+        "example": "Shimano Deore 12-speed"
+      }
+    ],
+    "titleExample": "Tempo SL 105",
+    "codeHints": "A model code, then a colour code, then the frame size on the end: RL140-GB-M or 2027RL140CGBM. The year often leads the code.",
+    "confidence": "medium"
+  },
+  {
+    "kind": "Gravel Bikes",
+    "supplierWords": [
+      "gravel",
+      "GRV",
+      "all-road"
+    ],
+    "options": [
+      {
+        "name": "Colour",
+        "examples": [
+          "Gloss Black",
+          "Satin Sage"
+        ]
+      },
+      {
+        "name": "Size",
+        "system": "road-frame-cm",
+        "examples": [
+          "52",
+          "54",
+          "56"
+        ]
+      }
+    ],
+    "optionOrder": [
+      "Colour",
+      "Size"
+    ],
+    "notOptions": [
+      "the wheel size, where the model name carries it",
+      "the groupset, which makes a different model"
+    ],
+    "specFields": [
+      {
+        "name": "Wheel Size",
+        "unit": "in",
+        "example": "29"
+      },
+      {
+        "name": "Frame Material",
+        "example": "Carbon"
+      },
+      {
+        "name": "Groupset",
+        "example": "Shimano Deore 12-speed"
+      }
+    ],
+    "titleExample": "Tempo AR GRX",
+    "codeHints": "A model code, then a colour code, then the frame size on the end: RL140-GB-M or 2027RL140CGBM. The year often leads the code.",
+    "confidence": "medium"
+  },
+  {
+    "kind": "Hybrid Bikes",
+    "supplierWords": [
+      "hybrid",
+      "fitness",
+      "flat bar"
+    ],
+    "options": [
+      {
+        "name": "Colour",
+        "examples": [
+          "Gloss Black",
+          "Satin Sage"
+        ]
+      },
+      {
+        "name": "Size",
+        "system": "bike-frame-letter",
+        "examples": [
+          "S",
+          "M",
+          "L",
+          "XL"
+        ]
+      }
+    ],
+    "optionOrder": [
+      "Colour",
+      "Size"
+    ],
+    "notOptions": [
+      "the wheel size, where the model name carries it",
+      "the groupset, which makes a different model"
+    ],
+    "specFields": [
+      {
+        "name": "Wheel Size",
+        "unit": "in",
+        "example": "29"
+      },
+      {
+        "name": "Frame Material",
+        "example": "Carbon"
+      },
+      {
+        "name": "Groupset",
+        "example": "Shimano Deore 12-speed"
+      }
+    ],
+    "titleExample": "Commute 3",
+    "codeHints": "A model code, then a colour code, then the frame size on the end: RL140-GB-M or 2027RL140CGBM. The year often leads the code.",
+    "confidence": "medium"
+  },
+  {
+    "kind": "Electric Bikes",
+    "supplierWords": [
+      "e-bike",
+      "ebike",
+      "pedelec",
+      "EPAC"
+    ],
+    "options": [
+      {
+        "name": "Colour",
+        "examples": [
+          "Gloss Black",
+          "Satin Sage"
+        ]
+      },
+      {
+        "name": "Size",
+        "system": "bike-frame-letter",
+        "examples": [
+          "S",
+          "M",
+          "L",
+          "XL"
+        ]
+      }
+    ],
+    "optionOrder": [
+      "Colour",
+      "Size"
+    ],
+    "notOptions": [
+      "the wheel size, where the model name carries it",
+      "the groupset, which makes a different model"
+    ],
+    "specFields": [
+      {
+        "name": "Wheel Size",
+        "unit": "in",
+        "example": "29"
+      },
+      {
+        "name": "Frame Material",
+        "example": "Carbon"
+      },
+      {
+        "name": "Groupset",
+        "example": "Shimano Deore 12-speed"
+      }
+    ],
+    "titleExample": "Commute E 5",
+    "codeHints": "A model code, then a colour code, then the frame size on the end: RL140-GB-M or 2027RL140CGBM. The year often leads the code.",
+    "confidence": "medium"
+  },
+  {
+    "kind": "Kids' Bikes",
+    "supplierWords": [
+      "kids",
+      "junior",
+      "JR",
+      "youth"
+    ],
+    "options": [
+      {
+        "name": "Colour",
+        "examples": [
+          "Gloss Black",
+          "Satin Sage"
+        ]
+      },
+      {
+        "name": "Wheel Size",
+        "system": "wheel-size",
+        "examples": [
+          "16\"",
+          "20\"",
+          "24\""
+        ]
+      }
+    ],
+    "optionOrder": [
+      "Colour",
+      "Wheel Size"
+    ],
+    "notOptions": [],
+    "specFields": [
+      {
+        "name": "Rider Height",
+        "unit": "cm",
+        "example": "115-135"
+      }
+    ],
+    "titleExample": "Scout 20",
+    "codeHints": "",
+    "confidence": "medium"
+  },
+  {
+    "kind": "Tyres",
+    "supplierWords": [
+      "tire",
+      "tyre",
+      "TYR",
+      "clincher",
+      "tubeless ready",
+      "TLR"
+    ],
+    "options": [
+      {
+        "name": "Size",
+        "system": "tyre-size",
+        "examples": [
+          "29 x 2.4",
+          "700 x 28c"
+        ]
+      },
+      {
+        "name": "Casing",
+        "examples": [
+          "EXO",
+          "Double Down"
+        ]
+      }
+    ],
+    "optionOrder": [
+      "Size",
+      "Casing"
+    ],
+    "notOptions": [
+      "the colour of the sidewall, where the model name carries it"
+    ],
+    "specFields": [
+      {
+        "name": "ETRTO",
+        "example": "61-622"
+      },
+      {
+        "name": "TPI",
+        "example": "60"
+      },
+      {
+        "name": "Bead",
+        "example": "Folding"
+      }
+    ],
+    "titleExample": "Trailblazer 29 x 2.4 Tubeless Ready",
+    "codeHints": "Width and wheel size are in the code: 2924 or 61-622.",
+    "confidence": "medium"
+  },
+  {
+    "kind": "Tubes",
+    "supplierWords": [
+      "inner tube",
+      "tube",
+      "IT"
+    ],
+    "options": [
+      {
+        "name": "Size",
+        "system": "tyre-size",
+        "examples": [
+          "29 x 2.1-2.4",
+          "700 x 25-32c"
+        ]
+      },
+      {
+        "name": "Valve",
+        "examples": [
+          "Presta 48mm",
+          "Schrader"
+        ]
+      }
+    ],
+    "optionOrder": [
+      "Size",
+      "Valve"
+    ],
+    "notOptions": [],
+    "specFields": [],
+    "titleExample": "Standard Tube",
+    "codeHints": "",
+    "confidence": "high"
+  },
+  {
+    "kind": "Chains",
+    "supplierWords": [
+      "chain",
+      "CN-"
+    ],
+    "options": [
+      {
+        "name": "Speed",
+        "system": "chain-speed",
+        "examples": [
+          "11",
+          "12"
+        ]
+      }
+    ],
+    "optionOrder": [
+      "Speed"
+    ],
+    "notOptions": [],
+    "specFields": [
+      {
+        "name": "Links",
+        "example": "126"
+      }
+    ],
+    "titleExample": "12-Speed Chain",
+    "codeHints": "",
+    "confidence": "high"
+  },
+  {
+    "kind": "Cassettes",
+    "supplierWords": [
+      "cassette",
+      "CS-",
+      "freehub cluster"
+    ],
+    "options": [
+      {
+        "name": "Range",
+        "examples": [
+          "10-51T",
+          "11-34T"
+        ]
+      }
+    ],
+    "optionOrder": [
+      "Range"
+    ],
+    "notOptions": [
+      "the speed, which makes a different model"
+    ],
+    "specFields": [
+      {
+        "name": "Freehub",
+        "example": "Micro Spline"
+      }
+    ],
+    "titleExample": "Deore 12-Speed Cassette",
+    "codeHints": "",
+    "confidence": "medium"
+  },
+  {
+    "kind": "Rotors",
+    "supplierWords": [
+      "rotor",
+      "disc",
+      "RT-"
+    ],
+    "options": [
+      {
+        "name": "Size",
+        "system": "rotor-size",
+        "examples": [
+          "160mm",
+          "180mm",
+          "203mm"
+        ]
+      },
+      {
+        "name": "Mount",
+        "examples": [
+          "6-Bolt",
+          "Centerlock"
+        ]
+      }
+    ],
+    "optionOrder": [
+      "Size",
+      "Mount"
+    ],
+    "notOptions": [],
+    "specFields": [],
+    "titleExample": "Centerline Rotor",
+    "codeHints": "",
+    "confidence": "high"
+  },
+  {
+    "kind": "Brake Pads",
+    "supplierWords": [
+      "pads",
+      "brake pad",
+      "disc pad"
+    ],
+    "options": [
+      {
+        "name": "Compound",
+        "examples": [
+          "Resin",
+          "Metal",
+          "Sintered"
+        ]
+      }
+    ],
+    "optionOrder": [
+      "Compound"
+    ],
+    "notOptions": [
+      "which brake they fit, which makes a different product"
+    ],
+    "specFields": [],
+    "titleExample": "Disc Brake Pads for Deore 4-Piston",
+    "codeHints": "",
+    "confidence": "medium"
+  },
+  {
+    "kind": "Dropper Posts",
+    "supplierWords": [
+      "dropper",
+      "dropper post"
+    ],
+    "options": [
+      {
+        "name": "Diameter",
+        "examples": [
+          "30.9mm",
+          "31.6mm",
+          "34.9mm"
+        ]
+      },
+      {
+        "name": "Travel",
+        "examples": [
+          "150mm",
+          "175mm"
+        ]
+      }
+    ],
+    "optionOrder": [
+      "Diameter",
+      "Travel"
+    ],
+    "notOptions": [],
+    "specFields": [
+      {
+        "name": "Actuation",
+        "example": "Internal cable"
+      }
+    ],
+    "titleExample": "Reverb AXS Dropper Post",
+    "codeHints": "",
+    "confidence": "medium"
+  },
+  {
+    "kind": "Saddles",
+    "supplierWords": [
+      "saddle",
+      "seat"
+    ],
+    "options": [
+      {
+        "name": "Width",
+        "examples": [
+          "143mm",
+          "155mm"
+        ]
+      },
+      {
+        "name": "Colour",
+        "examples": [
+          "Gloss Black",
+          "Satin Sage"
+        ]
+      }
+    ],
+    "optionOrder": [
+      "Width",
+      "Colour"
+    ],
+    "notOptions": [],
+    "specFields": [
+      {
+        "name": "Rails",
+        "example": "Chromoly"
+      }
+    ],
+    "titleExample": "Phenom Comp",
+    "codeHints": "",
+    "confidence": "medium"
+  },
+  {
+    "kind": "Helmets",
+    "supplierWords": [
+      "helmet",
+      "HLMT",
+      "lid"
+    ],
+    "options": [
+      {
+        "name": "Colour",
+        "examples": [
+          "Gloss Black",
+          "Satin Sage"
+        ]
+      },
+      {
+        "name": "Size",
+        "system": "helmet-size",
+        "examples": [
+          "S",
+          "M",
+          "L"
+        ]
+      }
+    ],
+    "optionOrder": [
+      "Colour",
+      "Size"
+    ],
+    "notOptions": [
+      "MIPS, which makes a different model"
+    ],
+    "specFields": [
+      {
+        "name": "Certification",
+        "example": "AS/NZS 2063"
+      }
+    ],
+    "titleExample": "Tactic MIPS",
+    "codeHints": "",
+    "confidence": "medium"
+  },
+  {
+    "kind": "Cycling Shoes",
+    "supplierWords": [
+      "shoe",
+      "shoes",
+      "SPD",
+      "clipless"
+    ],
+    "options": [
+      {
+        "name": "Colour",
+        "examples": [
+          "Gloss Black",
+          "Satin Sage"
+        ]
+      },
+      {
+        "name": "Size",
+        "system": "eu-shoe",
+        "examples": [
+          "42",
+          "43",
+          "44"
+        ]
+      }
+    ],
+    "optionOrder": [
+      "Colour",
+      "Size"
+    ],
+    "notOptions": [
+      "wide fit, which is usually its own model"
+    ],
+    "specFields": [
+      {
+        "name": "Cleat",
+        "example": "2-bolt SPD"
+      }
+    ],
+    "titleExample": "Recon 3",
+    "codeHints": "Sizes are EU on almost every bike shoe, often with halves.",
+    "confidence": "medium"
+  },
+  {
+    "kind": "Jerseys",
+    "supplierWords": [
+      "jersey",
+      "JSY",
+      "SS jersey",
+      "LS jersey"
+    ],
+    "options": [
+      {
+        "name": "Colour",
+        "examples": [
+          "Gloss Black",
+          "Satin Sage"
+        ]
+      },
+      {
+        "name": "Size",
+        "system": "clothing-letter",
+        "examples": [
+          "S",
+          "M",
+          "L"
+        ]
+      }
+    ],
+    "optionOrder": [
+      "Colour",
+      "Size"
+    ],
+    "notOptions": [
+      "short or long sleeve, which is its own model"
+    ],
+    "specFields": [],
+    "titleExample": "Men's Trail Short Sleeve Jersey",
+    "codeHints": "",
+    "confidence": "medium"
+  },
+  {
+    "kind": "Shorts & Bibs",
+    "supplierWords": [
+      "bib",
+      "bib short",
+      "short",
+      "baggy"
+    ],
+    "options": [
+      {
+        "name": "Colour",
+        "examples": [
+          "Gloss Black",
+          "Satin Sage"
+        ]
+      },
+      {
+        "name": "Size",
+        "system": "clothing-letter",
+        "examples": [
+          "S",
+          "M",
+          "L"
+        ]
+      }
+    ],
+    "optionOrder": [
+      "Colour",
+      "Size"
+    ],
+    "notOptions": [],
+    "specFields": [
+      {
+        "name": "Chamois",
+        "example": "Endurance"
+      }
+    ],
+    "titleExample": "Women's Classic Bib Shorts",
+    "codeHints": "",
+    "confidence": "medium"
+  },
+  {
+    "kind": "Cycling Gloves",
+    "supplierWords": [
+      "glove",
+      "gloves",
+      "mitts"
+    ],
+    "options": [
+      {
+        "name": "Colour",
+        "examples": [
+          "Gloss Black",
+          "Satin Sage"
+        ]
+      },
+      {
+        "name": "Size",
+        "system": "clothing-letter",
+        "examples": [
+          "S",
+          "M",
+          "L"
+        ]
+      }
+    ],
+    "optionOrder": [
+      "Colour",
+      "Size"
+    ],
+    "notOptions": [
+      "full or half finger, which is its own model"
+    ],
+    "specFields": [],
+    "titleExample": "Trail Full Finger Gloves",
+    "codeHints": "",
+    "confidence": "medium"
+  },
+  {
+    "kind": "Cycling Socks",
+    "supplierWords": [
+      "sock",
+      "socks"
+    ],
+    "options": [
+      {
+        "name": "Colour",
+        "examples": [
+          "Gloss Black",
+          "Satin Sage"
+        ]
+      },
+      {
+        "name": "Size",
+        "system": "sock-size",
+        "examples": [
+          "S/M",
+          "L/XL"
+        ]
+      }
+    ],
+    "optionOrder": [
+      "Colour",
+      "Size"
+    ],
+    "notOptions": [],
+    "specFields": [],
+    "titleExample": "Merino Cycling Socks",
+    "codeHints": "",
+    "confidence": "medium"
+  },
+  {
+    "kind": "Lights",
+    "supplierWords": [
+      "light",
+      "lamp",
+      "front light",
+      "rear light"
+    ],
+    "options": [],
+    "optionOrder": [],
+    "notOptions": [
+      "front and rear, which are usually separate products or a set"
+    ],
+    "specFields": [
+      {
+        "name": "Lumens",
+        "example": "800"
+      }
+    ],
+    "titleExample": "Volt 800 Front Light",
+    "codeHints": "",
+    "confidence": "medium"
+  },
+  {
+    "kind": "Wheels",
+    "supplierWords": [
+      "wheel",
+      "wheelset",
+      "WS",
+      "rim"
+    ],
+    "options": [
+      {
+        "name": "Wheel Size",
+        "system": "wheel-size",
+        "examples": [
+          "29\"",
+          "700c"
+        ]
+      },
+      {
+        "name": "Axle",
+        "examples": [
+          "Boost 110x15",
+          "12x148"
+        ]
+      }
+    ],
+    "optionOrder": [
+      "Wheel Size",
+      "Axle"
+    ],
+    "notOptions": [
+      "front or rear, which are separate products"
+    ],
+    "specFields": [
+      {
+        "name": "Freehub",
+        "example": "Shimano HG"
+      },
+      {
+        "name": "Brake Mount",
+        "example": "Centerlock"
+      }
+    ],
+    "titleExample": "Trail 30 Rear Wheel",
+    "codeHints": "",
+    "confidence": "medium"
+  },
+  {
+    "kind": "Forks",
+    "supplierWords": [
+      "fork",
+      "suspension fork"
+    ],
+    "options": [
+      {
+        "name": "Wheel Size",
+        "system": "wheel-size",
+        "examples": [
+          "29\"",
+          "27.5\""
+        ]
+      },
+      {
+        "name": "Travel",
+        "examples": [
+          "140mm",
+          "160mm"
+        ]
+      }
+    ],
+    "optionOrder": [
+      "Wheel Size",
+      "Travel"
+    ],
+    "notOptions": [],
+    "specFields": [
+      {
+        "name": "Offset",
+        "unit": "mm",
+        "example": "44"
+      },
+      {
+        "name": "Axle",
+        "example": "15x110 Boost"
+      }
+    ],
+    "titleExample": "Pike Ultimate",
+    "codeHints": "",
+    "confidence": "medium"
+  }
+]

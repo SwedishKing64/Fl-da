@@ -5,6 +5,7 @@
 
 import { GENERAL_PACK } from "./general";
 import { OUTDOOR_PACK } from "./outdoor";
+import { BIKE_PACK } from "./bike";
 import { SNOW_OUTDOOR_PACK } from "./snow-outdoor";
 import type { PackId, TradePack } from "./types";
 
@@ -14,10 +15,11 @@ export const PACKS: Record<PackId, TradePack> = {
   general: GENERAL_PACK,
   outdoor: OUTDOOR_PACK,
   "snow-outdoor": SNOW_OUTDOOR_PACK,
+  bike: BIKE_PACK,
 };
 
 /** The packs in the order setup offers them: none first. */
-export const PACK_IDS = ["general", "outdoor", "snow-outdoor"] as const satisfies readonly PackId[];
+export const PACK_IDS = ["general", "outdoor", "snow-outdoor", "bike"] as const satisfies readonly PackId[];
 
 /** The packs a shop can tick at setup: every one but none. */
 export const PICKABLE_PACKS = PACK_IDS.filter((id) => id !== "general");
@@ -70,5 +72,13 @@ function combinePacks(packs: TradePack[]): TradePack {
     // several trades is a new shop and gets the category Shopify asks for.
     fillsCategory: true,
     metafields: snow ? packs.find((p) => p.snowRules)!.metafields : packs[0].metafields,
+    ...(packs.some((p) => p.knowledge) ? {
+      knowledge: {
+        verified: packs.every((p) => p.knowledge?.verified ?? true),
+        kinds: packs.flatMap((p) => p.knowledge?.kinds ?? []),
+        sizes: packs.flatMap((p) => p.knowledge?.sizes ?? []),
+        colours: Object.assign({}, ...packs.map((p) => p.knowledge?.colours ?? {})),
+      },
+    } : {}),
   };
 }

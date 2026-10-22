@@ -1,0 +1,70 @@
+[
+  {
+    "code": "BLK",
+    "name": "Black"
+  },
+  {
+    "code": "WHT",
+    "name": "White"
+  },
+  {
+    "code": "GRY",
+    "name": "Grey"
+  },
+  {
+    "code": "GRN",
+    "name": "Green"
+  },
+  {
+    "code": "BLU",
+    "name": "Blue"
+  },
+  {
+    "code": "RED",
+    "name": "Red"
+  },
+  {
+    "code": "ORG",
+    "name": "Orange"
+  },
+  {
+    "code": "YLW",
+    "name": "Yellow"
+  },
+  {
+    "code": "SLV",
+    "name": "Silver"
+  },
+  {
+    "code": "NVY",
+    "name": "Navy"
+  },
+  {
+    "code": "OLV",
+    "name": "Olive"
+  },
+  {
+    "code": "SND",
+    "name": "Sand"
+  },
+  {
+    "code": "RAW",
+    "name": "Raw"
+  },
+  {
+    "code": "GLS",
+    "name": "Gloss"
+  },
+  {
+    "code": "MAT",
+    "name": "Matte"
+  },
+  {
+    "code": "MT",
+    "name": "Matte"
+  },
+  {
+    "code": "STN",
+    "name": "Satin"
+  }
+]

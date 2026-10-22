@@ -58,6 +58,7 @@ export function ShopForm({ profile, next }: { profile: ShopProfile; next?: strin
               <span className="min-w-0">
                 <span className="block text-[14px] font-semibold">{PACKS[id].name}</span>
                 <span className="block text-[12.5px] leading-snug text-[var(--ink-soft)]">{PACKS[id].sells}</span>
+                {PACKS[id].knowledge?.verified === false && <span className="mt-1 block text-[12px] text-[var(--passive)]">A first draft, not yet checked against real invoices from shops in this trade.</span>}
               </span>
             </label>
           ))}

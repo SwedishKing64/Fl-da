@@ -315,7 +315,7 @@ export function buildProductSetInput(p: ReviewProduct, opts: { publish: boolean;
         price: v.retailPrice.toFixed(2),
         compareAtPrice: v.compareAtPrice && v.compareAtPrice > v.retailPrice ? v.compareAtPrice.toFixed(2) : null,
         optionValues: optionNames.length ? optionNames.map((name, i) => ({ optionName: name, name: [v.option1Value, v.option2Value, v.option3Value][i] ?? "" })) : undefined,
-        inventoryItem: { cost: v.landedCostAud.toFixed(2), tracked: true, ...(v.grams > 0 ? { measurement: { weight: { unit: "GRAMS" as const, value: v.grams } } } : {}) },
+        inventoryItem: { cost: v.landedCostHome.toFixed(2), tracked: true, ...(v.grams > 0 ? { measurement: { weight: { unit: "GRAMS" as const, value: v.grams } } } : {}) },
         inventoryQuantities: quantities,
       };
     }),

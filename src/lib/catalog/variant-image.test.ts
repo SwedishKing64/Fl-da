@@ -4,7 +4,7 @@ import type { ReviewProduct, ReviewVariant } from "./review-types";
 
 const variant = (id: string, colour: string, size: string): ReviewVariant => ({
   id, sku: id, barcode: "", option1Value: colour, option2Value: size, option3Value: null, grams: 0, quantity: 1,
-  costPrice: 100, gstTreatment: "EXCLUSIVE", freightPerUnitAud: 0, landedCostAud: 100, retailPrice: 200, retailOverride: null,
+  costPrice: 100, gstTreatment: "EXCLUSIVE", freightPerUnitHome: 0, landedCostHome: 100, retailPrice: 200, retailOverride: null,
   compareAtPrice: null, pricingRuleId: null, pricingRuleName: null, marginPct: 50, profitPerUnit: 100, reconcileStatus: "NEW",
   shopifyVariantId: null, locationQuantities: {}, warningsDismissed: [], flags: [],
 } as unknown as ReviewVariant);

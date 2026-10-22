@@ -175,6 +175,11 @@ export function englishVariant(): string {
   }
 }
 
+/** The currency the shop sells and keeps its books in: costs in any other are converted into it. */
+export function homeCurrency(): string {
+  return activeProfile.currency.trim().toUpperCase() || "AUD";
+}
+
 /** What the sales tax is called in prompts and labels: "GST", "VAT", or "tax". */
 export function taxName(): string {
   return activeProfile.taxName.trim() || "tax";

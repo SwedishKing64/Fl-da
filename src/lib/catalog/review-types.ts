@@ -25,13 +25,13 @@ export interface ReviewVariant {
   costPrice: number;
   costCurrency: string;
   gstTreatment: string;
-  fxRateToAud: number;
-  freightPerUnitAud: number;
+  fxRateToHome: number;
+  freightPerUnitHome: number;
   pricingRuleId: string | null;
   pricingRuleName: string | null;
   retailOverride: number | null;
   compareAtPrice: number | null;
-  landedCostAud: number;
+  landedCostHome: number;
   retailPrice: number;
   exGstRevenue: number;
   gstComponent: number;
@@ -93,4 +93,4 @@ export interface ReviewSummary {
 /** Fields editable inline on a product row. */
 export const PRODUCT_EDITABLE = ["handle", "title", "vendor", "productType", "category", "tags", "collections", "status", "seoTitle", "seoDescription", "bodyHtml"] as const;
 /** Fields editable inline on a variant row. */
-export const VARIANT_EDITABLE = ["sku", "barcode", "option1Value", "option2Value", "option3Value", "grams", "quantity", "costPrice", "gstTreatment", "retailOverride", "compareAtPrice", "freightPerUnitAud"] as const;
+export const VARIANT_EDITABLE = ["sku", "barcode", "option1Value", "option2Value", "option3Value", "grams", "quantity", "costPrice", "gstTreatment", "retailOverride", "compareAtPrice", "freightPerUnitHome"] as const;

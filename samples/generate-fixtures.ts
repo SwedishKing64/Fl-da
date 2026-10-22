@@ -31,7 +31,7 @@ async function main() {
   }
   await fs.writeFile(
     path.join(dir, "expected", "profit.json"),
-    JSON.stringify(Object.fromEntries(Object.entries(f.results).map(([k, r]) => [k, { summary: r.summary, variants: r.products.flatMap((p) => p.variants.map((v) => ({ sku: v.sku, landedCostAud: v.landedCostAud, retailPrice: v.retailPrice, exGstRevenue: v.exGstRevenue, gstComponent: v.gstComponent, profitPerUnit: v.profitPerUnit, marginPct: v.marginPct }))), errors: r.errors, warnings: r.warnings }])), null, 2) + "\n",
+    JSON.stringify(Object.fromEntries(Object.entries(f.results).map(([k, r]) => [k, { summary: r.summary, variants: r.products.flatMap((p) => p.variants.map((v) => ({ sku: v.sku, landedCostHome: v.landedCostHome, retailPrice: v.retailPrice, exGstRevenue: v.exGstRevenue, gstComponent: v.gstComponent, profitPerUnit: v.profitPerUnit, marginPct: v.marginPct }))), errors: r.errors, warnings: r.warnings }])), null, 2) + "\n",
     "utf8",
   );
   console.log("Fixtures written to samples/");

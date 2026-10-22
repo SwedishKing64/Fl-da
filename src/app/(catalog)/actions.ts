@@ -30,6 +30,7 @@ import { answerFeedback, feedbackAvailable, withRule, type FeedbackTurn } from "
 import { describeDirectives, instructionsAvailable, parseDirectives, readInstructions, NO_DIRECTIVES } from "@/lib/catalog/instructions";
 import { lookupBatch, lookupEnabled, LOOKUP_LIMIT, REQUESTED_BUDGET_MS, type LookupOutcome } from "@/lib/catalog/enrich";
 import { SUPPORT_EMAIL } from "@/lib/catalog/support";
+import { homeCurrency } from "@/lib/catalog/shop-profile";
 
 export type ActionResult<T = undefined> = { ok: true; data?: T; message?: string } | { ok: false; error: string };
 
@@ -153,8 +154,8 @@ const batchSchema = z.object({
   newSupplierName: z.string().optional(),
   currency: z.enum(CURRENCIES as unknown as [string, ...string[]]).default("AUD"),
   gstTreatment: z.enum(["INCLUSIVE", "EXCLUSIVE", "NONE"]).default("EXCLUSIVE"),
-  fxRateToAud: z.coerce.number().positive().default(1),
-  freightTotalAud: z.coerce.number().min(0).default(0),
+  fxRateToHome: z.coerce.number().positive().default(1),
+  freightTotalHome: z.coerce.number().min(0).default(0),
   freightMode: z.enum(["PER_UNIT", "BY_VALUE"]).default("PER_UNIT"),
   splitExportBy: z.enum(["NONE", "BRAND", "PRODUCT_TYPE"]).default("BRAND"),
   // Letters only: it becomes the suffix on the shop's marker tag, and the catalogue writes it lowercase.
@@ -178,11 +179,11 @@ export async function createBatchAction(_prev: ActionResult | null, formData: Fo
       supplierId = supplier.id;
     }
     const settings = await getSettings();
-    const fx = data.currency === "AUD" ? 1 : data.fxRateToAud !== 1 ? data.fxRateToAud : settings.fxRates[data.currency] ?? 1;
+    const fx = data.currency === homeCurrency() ? 1 : data.fxRateToHome !== 1 ? data.fxRateToHome : settings.fxRates[data.currency] ?? 1;
     const batch = await prisma.importBatch.create({
       // The marker tag names whoever built the listings, so it starts as the person creating the
       // batch and can be changed in batch settings when someone builds on another's behalf.
-      data: { name: data.name, supplierId, createdById: user.id, builtBy: initialsFrom(user.name || user.email), currency: data.currency, gstTreatment: data.gstTreatment, fxRateToAud: fx, freightTotalAud: data.freightTotalAud, freightMode: data.freightMode, splitExportBy: data.splitExportBy, notes: data.notes || null },
+      data: { name: data.name, supplierId, createdById: user.id, builtBy: initialsFrom(user.name || user.email), currency: data.currency, gstTreatment: data.gstTreatment, fxRateToHome: fx, freightTotalHome: data.freightTotalHome, freightMode: data.freightMode, splitExportBy: data.splitExportBy, notes: data.notes || null },
     });
     await logAudit("batch.created", { batchId: batch.id, userId: user.id, details: { name: batch.name } });
     id = batch.id;
@@ -200,10 +201,10 @@ export async function updateBatchAction(batchId: string, patch: Partial<z.infer<
     void _n;
     await prisma.importBatch.update({ where: { id: batchId }, data: { ...rest, supplierId: rest.supplierId === undefined ? undefined : rest.supplierId || null } });
     await allocateBatchFreight(batchId);
-    if (rest.fxRateToAud !== undefined || rest.gstTreatment !== undefined || rest.currency !== undefined) {
+    if (rest.fxRateToHome !== undefined || rest.gstTreatment !== undefined || rest.currency !== undefined) {
       await prisma.variant.updateMany({
         where: { product: { batchId } },
-        data: { ...(rest.fxRateToAud !== undefined ? { fxRateToAud: rest.fxRateToAud } : {}), ...(rest.gstTreatment !== undefined ? { gstTreatment: rest.gstTreatment } : {}), ...(rest.currency !== undefined ? { costCurrency: rest.currency } : {}) },
+        data: { ...(rest.fxRateToHome !== undefined ? { fxRateToHome: rest.fxRateToHome } : {}), ...(rest.gstTreatment !== undefined ? { gstTreatment: rest.gstTreatment } : {}), ...(rest.currency !== undefined ? { costCurrency: rest.currency } : {}) },
       });
     }
     await repriceBatch(batchId);
@@ -371,7 +372,7 @@ const variantPatch = z.object({
   quantity: z.coerce.number().int().min(0).optional(),
   costPrice: z.coerce.number().min(0).optional(),
   gstTreatment: z.enum(["INCLUSIVE", "EXCLUSIVE", "NONE"]).optional(),
-  freightPerUnitAud: z.coerce.number().min(0).optional(),
+  freightPerUnitHome: z.coerce.number().min(0).optional(),
   retailOverride: z.coerce.number().min(0).nullable().optional(),
   compareAtPrice: z.coerce.number().min(0).nullable().optional(),
   pricingRuleId: z.string().nullable().optional(),

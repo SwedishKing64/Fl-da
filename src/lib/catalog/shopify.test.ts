@@ -12,8 +12,8 @@ describe("productSet input", () => {
       reconcileStatus: "NEW", shopifyProductId: null,
       images: [{ id: "i", url: "https://cdn.x.com/a.jpg", position: 1, variantId: null, source: "SUPPLIER", validated: true }],
       variants: [
-        emptyVariantView({ id: "v1", productId: "p", sku: "A-166", option1Value: "166", option2Value: "Blue", retailPrice: 899.99, compareAtPrice: 999, landedCostAud: 450, quantity: 2, grams: 3200 }),
-        emptyVariantView({ id: "v2", productId: "p", sku: "A-172", option1Value: "172", option2Value: "Blue", retailPrice: 899.99, compareAtPrice: 800, landedCostAud: 450, quantity: 1 }),
+        emptyVariantView({ id: "v1", productId: "p", sku: "A-166", option1Value: "166", option2Value: "Blue", retailPrice: 899.99, compareAtPrice: 999, landedCostHome: 450, quantity: 2, grams: 3200 }),
+        emptyVariantView({ id: "v2", productId: "p", sku: "A-172", option1Value: "172", option2Value: "Blue", retailPrice: 899.99, compareAtPrice: 800, landedCostHome: 450, quantity: 1 }),
       ],
       flags: [],
     };

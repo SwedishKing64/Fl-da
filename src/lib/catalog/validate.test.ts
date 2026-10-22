@@ -13,11 +13,11 @@ function product(partial: Partial<ReviewProduct>): ReviewProduct {
 
 describe("review validation", () => {
   it("raises errors for duplicate skus/handles/options, and warns rather than blocks on a missing price", () => {
-    const good = emptyVariantView({ id: "v1", productId: "p1", sku: "A-166", option1Value: "166", costPrice: 300, retailPrice: 550, exGstRevenue: 500, gstComponent: 50, landedCostAud: 300, profitPerUnit: 200, marginPct: 40, quantity: 2 });
+    const good = emptyVariantView({ id: "v1", productId: "p1", sku: "A-166", option1Value: "166", costPrice: 300, retailPrice: 550, exGstRevenue: 500, gstComponent: 50, landedCostHome: 300, profitPerUnit: 200, marginPct: 40, quantity: 2 });
     const noPrice = emptyVariantView({ id: "v2", productId: "p1", sku: "A-172", option1Value: "172", costPrice: 300 });
     const dupSku = emptyVariantView({ id: "v3", productId: "p1", sku: "a-166", option1Value: "166", costPrice: 300, retailPrice: 330, exGstRevenue: 300, profitPerUnit: 0, marginPct: 0 });
     const p1 = product({ variants: [good, noPrice, dupSku] });
-    const p2 = product({ id: "p2", title: "", images: [], variants: [emptyVariantView({ id: "v4", productId: "p2", sku: "B", retailPrice: 10, costPrice: 9, landedCostAud: 9, exGstRevenue: 9.09, profitPerUnit: 0.09, marginPct: 1 })] });
+    const p2 = product({ id: "p2", title: "", images: [], variants: [emptyVariantView({ id: "v4", productId: "p2", sku: "B", retailPrice: 10, costPrice: 9, landedCostHome: 9, exGstRevenue: 9.09, profitPerUnit: 0.09, marginPct: 1 })] });
     validateReview([p1, p2], { minMarginPct: 20 });
 
     expect(good.flags).toEqual([{ code: "DUPLICATE_SKU_BATCH", severity: "error", message: expect.any(String) }, { code: "DUPLICATE_OPTIONS", severity: "error", message: expect.any(String) }]);
@@ -41,14 +41,14 @@ describe("review validation", () => {
   });
 
   it("hides dismissed warnings but never dismissed errors", () => {
-    const v = emptyVariantView({ id: "v", productId: "p1", sku: "", retailPrice: 10, costPrice: 9, landedCostAud: 9, exGstRevenue: 9.09, profitPerUnit: 0.09, marginPct: 1, warningsDismissed: ["LOW_MARGIN", "MISSING_SKU"], option1Value: "160" });
+    const v = emptyVariantView({ id: "v", productId: "p1", sku: "", retailPrice: 10, costPrice: 9, landedCostHome: 9, exGstRevenue: 9.09, profitPerUnit: 0.09, marginPct: 1, warningsDismissed: ["LOW_MARGIN", "MISSING_SKU"], option1Value: "160" });
     const p = product({ variants: [v] });
     validateReview([p], { minMarginPct: 20 });
     expect(v.flags).toEqual([]);
   });
 
   it("stops the export on a bad check digit, swapped code columns, or a price below cost", () => {
-    const base = { productId: "p1", costPrice: 300, retailPrice: 550, exGstRevenue: 500, gstComponent: 50, landedCostAud: 300, profitPerUnit: 200, marginPct: 40 };
+    const base = { productId: "p1", costPrice: 300, retailPrice: 550, exGstRevenue: 500, gstComponent: 50, landedCostHome: 300, profitPerUnit: 200, marginPct: 40 };
     const badDigit = emptyVariantView({ ...base, id: "v1", sku: "A-1", option1Value: "1", barcode: "9312345000127" });
     const swapped = emptyVariantView({ ...base, id: "v2", sku: "9312345000128", option1Value: "2", barcode: "A-2" });
     const shortCode = emptyVariantView({ ...base, id: "v3", sku: "A-3", option1Value: "3", barcode: "2025101512" });
@@ -68,15 +68,15 @@ describe("review validation", () => {
   });
 
   it("still checks a duplicate SKU on a variant with no barcode when the shop requires one", () => {
-    const a = emptyVariantView({ id: "v1", productId: "p1", sku: "SAME", option1Value: "1", costPrice: 300, retailPrice: 550, exGstRevenue: 500, landedCostAud: 300, profitPerUnit: 200, marginPct: 40 });
-    const b = emptyVariantView({ id: "v2", productId: "p1", sku: "same", option1Value: "2", costPrice: 300, retailPrice: 550, exGstRevenue: 500, landedCostAud: 300, profitPerUnit: 200, marginPct: 40 });
+    const a = emptyVariantView({ id: "v1", productId: "p1", sku: "SAME", option1Value: "1", costPrice: 300, retailPrice: 550, exGstRevenue: 500, landedCostHome: 300, profitPerUnit: 200, marginPct: 40 });
+    const b = emptyVariantView({ id: "v2", productId: "p1", sku: "same", option1Value: "2", costPrice: 300, retailPrice: 550, exGstRevenue: 500, landedCostHome: 300, profitPerUnit: 200, marginPct: 40 });
     validateReview([product({ variants: [a, b] })], { minMarginPct: 20 });
     expect(a.flags.some((f) => f.code === "DUPLICATE_SKU_BATCH")).toBe(true);
     expect(b.flags.some((f) => f.code === "DUPLICATE_SKU_BATCH")).toBe(true);
   });
 
   it("stops the export while a product could be one of several the shop sells", () => {
-    const v = emptyVariantView({ id: "v", productId: "p1", sku: "A-166", option1Value: "166", retailPrice: 550, costPrice: 300, exGstRevenue: 500, landedCostAud: 300, profitPerUnit: 200, marginPct: 40 });
+    const v = emptyVariantView({ id: "v", productId: "p1", sku: "A-166", option1Value: "166", retailPrice: 550, costPrice: 300, exGstRevenue: 500, landedCostHome: 300, profitPerUnit: 200, marginPct: 40 });
     const p = product({ variants: [v], reconcileStatus: "AMBIGUOUS", matchCandidates: [{ id: "gid://1", handle: "bent-90-2026", title: "Bent 90 2026", on: ["barcode 874452900016"] }, { id: "gid://2", handle: "bent-90-2025", title: "Bent 90 2025", on: ["barcode 874452900016"] }] });
     validateReview([p], { minMarginPct: 20 });
     expect(p.flags.map((f) => `${f.code}:${f.severity}`)).toEqual(["FEW_IMAGES:warning", "AMBIGUOUS_MATCH:error"]);
@@ -84,7 +84,7 @@ describe("review validation", () => {
   });
 
   it("flags SKUs and handles that exist in the Shopify catalog", () => {
-    const v = emptyVariantView({ id: "v", productId: "p1", sku: "A-166", option1Value: "166", retailPrice: 550, costPrice: 300, exGstRevenue: 500, landedCostAud: 300, profitPerUnit: 200, marginPct: 40 });
+    const v = emptyVariantView({ id: "v", productId: "p1", sku: "A-166", option1Value: "166", retailPrice: 550, costPrice: 300, exGstRevenue: 500, landedCostHome: 300, profitPerUnit: 200, marginPct: 40 });
     const p = product({ variants: [v] });
     validateReview([p], { minMarginPct: 20, shopifySkus: new Map([["a-166", "atomic-bent-90"]]), shopifyHandles: new Set(["atomic-bent-90"]) });
     expect(v.flags.map((f) => f.code)).toEqual(["DUPLICATE_SKU_SHOPIFY"]);

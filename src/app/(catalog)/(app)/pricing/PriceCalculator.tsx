@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Field, INPUT, money, pct } from "@/app/(catalog)/ui";
-import { priceVariant, exGstCostAud } from "@/lib/catalog/pricing";
+import { priceVariant, exGstCostHome } from "@/lib/catalog/pricing";
 import { retailFor } from "@/lib/catalog/calculator";
 import type { GstTreatment } from "@/lib/catalog/types";
 
@@ -34,14 +34,14 @@ export function PriceCalculator({ settings }: Props) {
     try {
       // Typing a price asks "what margin is that?"; dragging the margin asks "what price is that?".
       // Both end up pricing a known figure, because that is the only way this engine sets a price.
-      const landed = exGstCostAud(cost || 0, gst, 1, settings.gstRate) + (freight || 0);
+      const landed = exGstCostHome(cost || 0, gst, 1, settings.gstRate) + (freight || 0);
       const retail = usingTypedPrice ? typedPrice : retailFor(landed, "MARGIN", margin, roundTo, settings);
       return priceVariant(
         {
           costPrice: cost || 0,
           gstTreatment: gst,
-          fxRateToAud: 1,
-          freightPerUnitAud: freight || 0,
+          fxRateToHome: 1,
+          freightPerUnitHome: freight || 0,
           quantity: qty || 1,
           retailOverride: retail,
         },
@@ -127,7 +127,7 @@ export function PriceCalculator({ settings }: Props) {
             <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--ink-soft)]">Retail price (inc GST)</div>
             <div className="text-4xl font-semibold tabular-nums">{money(result.retailPrice)}</div>
             <dl className="mt-4 space-y-1.5 text-sm">
-              <Row k="Landed cost (ex GST)" v={money(result.landedCostAud)} />
+              <Row k="Landed cost (ex GST)" v={money(result.landedCostHome)} />
               <Row k="Ex-GST revenue" v={money(result.exGstRevenue)} />
               <Row k="GST collected" v={money(result.gstComponent)} />
               <Row k="Profit per unit (ex GST)" v={money(result.profitPerUnit)} strong tone={result.profitPerUnit < 0 ? "bad" : undefined} />

@@ -33,19 +33,6 @@ export interface TaggingSettings {
 }
 
 /**
- * The fixed half of the marker the shop Flöda was built in writes. The other half says who built
- * the product.
- *
- * Across the 967 products in their ten exports the marker comes in eleven forms — 123abc-zb on
- * 453, -bj on 229, -js on 120, -ay on 98, and seven rarer ones — and every single export mixes
- * several. It is not per brand, per supplier or per file: it is the initials of whoever built the
- * listing. Hard-coding one of them, as this did, got 12% of the catalogue right.
- *
- * Each shop sets its own marker in setup (`Conventions.marker`); this is only that shop's.
- */
-export const HOUSE_TAG_PREFIX = "123abc";
-
-/**
  * The marker for one person's initials, on the shop's own prefix. Falls back to the prefix alone
  * when nobody is named, and to nothing at all when the shop writes no marker.
  */

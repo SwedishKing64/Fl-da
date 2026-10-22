@@ -121,7 +121,7 @@ export default async function TrainingPage() {
       <div id="house">
       <Card title="Rules: how you list" className="mb-6">
         <p className="mb-5 text-[14px] text-[var(--ink-soft)]">The choices a person makes on every listing, which no export can show: the brand in the title or not, SKUs and barcodes, what you write for weight, the tags certain products always get, and anything else the reader should always do.</p>
-        <HouseForm house={house} tagRules={tagRules} kinds={kinds} />
+        <HouseForm house={house} tagRules={tagRules} kinds={kinds} priceEnding={settings.defaultRoundTo} />
       </Card>
       </div>
 

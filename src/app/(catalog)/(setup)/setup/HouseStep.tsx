@@ -54,8 +54,17 @@ function recordedAs(choice: Recorded, id: HouseConventions["identifiers"]): Hous
   return { sku: "supplier", barcode };
 }
 
-export function HouseForm({ house: initial, tagRules: initialRules, kinds, next }: { house: HouseConventions; tagRules: TagRuleInput[]; kinds: string[]; next?: string }) {
+/** The price endings a shop can ask for, as the pricing rules spell them. */
+const ENDINGS: Array<{ key: string; title: string; text: string }> = [
+  { key: "NONE", title: "As worked out", text: "To the cent: $87.40 stays $87.40." },
+  { key: "0.99", title: "Ending in .99", text: "$87.40 becomes $87.99." },
+  { key: "0.95", title: "Ending in .95", text: "$87.40 becomes $87.95." },
+  { key: "1.00", title: "Whole dollars", text: "$87.40 becomes $88." },
+];
+
+export function HouseForm({ house: initial, tagRules: initialRules, kinds, next, priceEnding: initialEnding }: { house: HouseConventions; tagRules: TagRuleInput[]; kinds: string[]; next?: string; priceEnding: string }) {
   const [house, setHouse] = useState<HouseConventions>(initial);
+  const [ending, setEnding] = useState(ENDINGS.some((e) => e.key === initialEnding) ? initialEnding : "NONE");
   const [rules, setRules] = useState<TagRuleInput[]>(initialRules.length ? initialRules : []);
   const [pending, start] = useTransition();
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
@@ -66,7 +75,7 @@ export function HouseForm({ house: initial, tagRules: initialRules, kinds, next 
 
   const save = () => start(async () => {
     setNote(null);
-    const r = await saveHouseAction({ house, tagRules: rules });
+    const r = await saveHouseAction({ house, tagRules: rules, priceEnding: ending });
     if (!r.ok) { setNote({ ok: false, text: r.error ?? "Something went wrong." }); return; }
     setNote({ ok: true, text: r.message ?? "Kept." });
     if (next) router.push(next);
@@ -90,10 +99,19 @@ export function HouseForm({ house: initial, tagRules: initialRules, kinds, next 
           { key: "shop", title: "Mixed case", text: "A supplier’s “M7 MANTRA 88 TI” becomes “M7 Mantra 88 Ti”." },
           { key: "supplier", title: "As the supplier writes it", text: "Names go out exactly as they came in." },
         ]} />
+        <Choice<HouseConventions["naming"]["audience"]> label="Men's and women's" value={house.naming.audience} onChange={(v) => set("naming", { audience: v })} options={[
+          { key: "none", title: "In the tags only", text: "“Ridge Fleece Jacket”, tagged mens. The name stays as the supplier gives it." },
+          { key: "front", title: "On the front of the name", text: "“Men's Ridge Fleece Jacket”. Not on skis, boards or poles." },
+        ]} />
         <p className="rounded-[10px] bg-[var(--meta-tint)] px-3 py-2 text-[13.5px]">With these choices a title comes out as <strong>{previewTitle(house.naming)}</strong>.</p>
         <Field label="A typical title of yours" hint="One real product name, written the way you would list it. The reader copies its shape.">
           <input className={INPUT} value={house.naming.example} onChange={(e) => set("naming", { example: e.target.value })} placeholder="Mantra 88 2026" />
         </Field>
+      </section>
+
+      <section className="space-y-4">
+        <h3 className="text-[15px] font-bold">Prices</h3>
+        <Choice<string> label="How a retail price ends, where Flöda works it out from cost" value={ending} onChange={setEnding} options={ENDINGS} />
       </section>
 
       <section className="space-y-4">
@@ -202,7 +220,7 @@ export function HouseForm({ house: initial, tagRules: initialRules, kinds, next 
   );
 }
 
-export function HouseStep({ house, tagRules, kinds }: { house: HouseConventions; tagRules: TagRuleInput[]; kinds: string[] }) {
+export function HouseStep({ house, tagRules, kinds, priceEnding }: { house: HouseConventions; tagRules: TagRuleInput[]; kinds: string[]; priceEnding: string }) {
   const [pending, start] = useTransition();
   const router = useRouter();
   return (
@@ -210,7 +228,7 @@ export function HouseStep({ house, tagRules, kinds }: { house: HouseConventions;
       <p className="mb-5 text-[14px] text-[var(--ink-soft)]">
         Your export shows Flöda what you sell and how it is filed. It cannot show the choices a person makes on every listing — whether the brand goes in the title, what the SKU is, what you write for weight. Say them once here, and every listing Flöda builds follows them. All of it can be changed later in Settings.
       </p>
-      <HouseForm house={house} tagRules={tagRules} kinds={kinds} next="/setup?step=ai" />
+      <HouseForm house={house} tagRules={tagRules} kinds={kinds} next="/setup?step=ai" priceEnding={priceEnding} />
       <div className="mt-5 flex items-center justify-between border-t border-[var(--line-soft)] pt-4 text-[13px] text-[var(--ink-soft)]">
         <span>Not sure yet? The plainest reading applies until you say otherwise.</span>
         <Button size="sm" variant="ghost" disabled={pending} onClick={() => start(async () => { await skipSetupStepAction("house"); router.push("/setup?step=ai"); })}>Skip for now</Button>

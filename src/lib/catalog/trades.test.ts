@@ -27,8 +27,8 @@ describe("trade packs", () => {
     expect(kinds).toContain("Outdoor Clothing");
     expect(kinds).not.toContain("Skis");
     expect(kinds).not.toContain("Snow Jackets");
-    expect(PACKS.outdoor.tagSpelling["2 Person Tents"]).toBe("2 person tents");
-    expect(PACKS.outdoor.tagSpelling["Carving Skis"]).toBeUndefined();
+    // Tag spellings are the shop's own, learned from its store, never another shop's.
+    expect(PACKS.outdoor.tagSpelling).toEqual({});
   });
 
   it("knows no kinds at all on a blank shop", () => {

@@ -23,7 +23,7 @@ import { LICENCE_KEY_SETTING, licenceServer, licenceState, type Licence } from "
 import { activateConventions, type LearnedVocabulary } from "./taxonomy";
 import type { WebsiteCategories } from "./website";
 import { COUNTRIES, DEFAULT_PROFILE, type ShopProfile } from "./shop";
-import { cleanHouse, DEFAULT_HOUSE, type HouseConventions } from "./house";
+import { cleanHouse, defaultHouseFor, type HouseConventions } from "./house";
 
 export { COUNTRIES, DEFAULT_PROFILE, type ShopProfile } from "./shop";
 
@@ -58,13 +58,15 @@ export async function saveLearnedVocabulary(learned: LearnedVocabulary | null): 
   await refreshConventions();
 }
 
+/** How the shop writes a listing; what it has not said comes from its pack's starting point. */
 export async function getHouseConventions(): Promise<HouseConventions> {
-  const row = await prisma.appSetting.findUnique({ where: { key: HOUSE_KEY } });
-  return row ? cleanHouse(parseJson<Partial<HouseConventions>>(row.value, {})) : DEFAULT_HOUSE;
+  const [row, profile] = await Promise.all([prisma.appSetting.findUnique({ where: { key: HOUSE_KEY } }), getShopProfile()]);
+  const base = defaultHouseFor(profile.pack);
+  return row ? cleanHouse(parseJson<Partial<HouseConventions>>(row.value, {}), base) : base;
 }
 
 export async function saveHouseConventions(house: HouseConventions): Promise<void> {
-  const value = JSON.stringify(cleanHouse(house));
+  const value = JSON.stringify(cleanHouse(house, defaultHouseFor((await getShopProfile()).pack)));
   await prisma.appSetting.upsert({ where: { key: HOUSE_KEY }, create: { key: HOUSE_KEY, value }, update: { value } });
   await refreshConventions();
 }

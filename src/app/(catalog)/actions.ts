@@ -2098,7 +2098,7 @@ export async function saveKindsAction(input: { kinds: import("@/lib/catalog/hous
 }
 
 /** How the shop writes a listing, and the tag rules it told us, from the "How you list" form. */
-export async function saveHouseAction(input: { house: import("@/lib/catalog/house").HouseConventions; tagRules: import("@/lib/catalog/house").TagRuleInput[] }): Promise<ActionResult> {
+export async function saveHouseAction(input: { house: import("@/lib/catalog/house").HouseConventions; tagRules: import("@/lib/catalog/house").TagRuleInput[]; priceEnding?: string }): Promise<ActionResult> {
   const user = await requireUser("ADMIN");
   return safely(async () => {
     const { cleanHouse, TAG_RULE_FIELDS } = await import("@/lib/catalog/house");
@@ -2106,7 +2106,9 @@ export async function saveHouseAction(input: { house: import("@/lib/catalog/hous
     const { getHouseConventions } = await import("@/lib/catalog/shop-profile");
     const kept = await getHouseConventions();
     // The form has no say over the kinds; they are told on the catalogue step and kept here.
-    const house = { ...cleanHouse({ ...input.house, kinds: kept.kinds }), savedAt: new Date().toISOString() };
+    const house = { ...cleanHouse({ ...input.house, kinds: kept.kinds }, kept), savedAt: new Date().toISOString() };
+    // The price ending is a pricing setting; it is asked here because it is a habit like the rest.
+    if (input.priceEnding && ["NONE", "0.99", "0.95", "1.00", "5.00", "10.00"].includes(input.priceEnding)) await saveSettings({ defaultRoundTo: input.priceEnding });
     await saveHouseConventions(house);
     await materialiseKindRules(house.kinds);
     const fields = new Set(TAG_RULE_FIELDS.map((f) => f.key));

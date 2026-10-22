@@ -17,6 +17,7 @@ import { openMode } from "@/lib/catalog/open";
 import { currentLicence, getServerOverride, servers } from "@/lib/catalog/licence-store";
 import { prisma } from "@/lib/catalog/db";
 import { CANONICAL_FIELDS } from "@/lib/catalog/types";
+import { getSettings } from "@/lib/catalog/settings";
 import { Stepper, type SetupStep } from "./Stepper";
 
 export const dynamic = "force-dynamic";
@@ -53,7 +54,7 @@ export default async function SetupPage({ searchParams }: { searchParams: Promis
       {step === "plan" && <SignInStep email={user.email} next="/setup?step=shop" site={licenceServer()} servers={await servers()} override={await getServerOverride()} />}
       {step === "shop" && <ShopStep profile={profile} />}
       {step === "learn" && <LearnStep learned={learned} kinds={house.kinds} />}
-      {step === "house" && <HouseStep house={house} tagRules={tagRules} kinds={productTypes()} />}
+      {step === "house" && <HouseStep house={house} tagRules={tagRules} kinds={productTypes()} priceEnding={house.savedAt || profile.pack === "snow-outdoor" ? (await getSettings()).defaultRoundTo : "NONE"} />}
       {step === "ai" && <AiStep source={apiKeySource()} tail={keyTail(storedKey)} />}
       {step === "suppliers" && <SuppliersStep fields={CANONICAL_FIELDS.map((f) => ({ key: f.key, label: f.label, required: Boolean(f.required) }))} templates={templates} next="/setup?step=done" />}
       {step === "done" && <DoneStep shopName={profile.name} learned={Boolean(learned)} aiReady={apiKeySource() !== "none"} skipped={profile.skipped} />}

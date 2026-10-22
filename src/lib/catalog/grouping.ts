@@ -4,7 +4,7 @@ import { buildHandle } from "./handle";
 import { nameLikeSibling } from "./shop-names";
 import { csvType } from "./pipeline-pure";
 import { chooseOptions, collectionsFor, extraOptions, optionValue, type OptionKey, detectCategory, enrichFromTitle, metafieldsFor, OPTION_LABELS, snowboardType, tagsFor, type CategoryRuleLike } from "./categorize";
-import { resolveType, snowTrade } from "./taxonomy";
+import { houseConventions, resolveType, snowTrade } from "./taxonomy";
 import { withFit } from "./mapping";
 import { classifyAccessory } from "./accessories";
 import { packShelf } from "./packs";
@@ -156,7 +156,8 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
     // of its 20 snowboard bindings and 14 of its 15 boots is "Men's …" or "Women's …", and so are
     // its jackets, gloves and socks. Not a ski, board or pole, which the shop names by model alone
     // and genders in the tags. Men's and women's of one model also stop sharing a title this way.
-    const who = audience(first.gender);
+    // Only where the shop writes its names this way; otherwise the gender goes in the tags alone.
+    const who = houseConventions().naming.audience === "front" ? audience(first.gender) : null;
     // A ski boot is named by its model alone, like a ski: "Zero G Tour Pro 2027", not "Men's Zero
     // G Tour Pro Ski Boots 2027". The gender goes in the tags. (A snowboard boot keeps the shop's
     // "Men's … Snowboard Boots".)

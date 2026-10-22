@@ -35,7 +35,7 @@ describe("identifiers by convention", () => {
 
 describe("cleaning what the form sends", () => {
   it("falls back to the plainest reading on anything odd", () => {
-    const house = cleanHouse({ naming: { brandInTitle: "sometimes" as never, season: "never", casing: "shop", example: "  Mantra 88  " }, weights: { mode: "byKind", unit: "kg", fixedGrams: -4, byKind: [{ type: " Skis ", grams: 2000.4 }, { type: "", grams: 9 }] }, notes: "x".repeat(5000) } as Partial<HouseConventions>);
+    const house = cleanHouse({ naming: { brandInTitle: "sometimes" as never, season: "never", casing: "shop", audience: "front", example: "  Mantra 88  " }, weights: { mode: "byKind", unit: "kg", fixedGrams: -4, byKind: [{ type: " Skis ", grams: 2000.4 }, { type: "", grams: 9 }] }, notes: "x".repeat(5000) } as Partial<HouseConventions>);
     expect(house.naming.brandInTitle).toBe("never");
     expect(house.naming.season).toBe("never");
     expect(house.naming.example).toBe("Mantra 88");
@@ -89,5 +89,20 @@ describe("the kinds of product the shop names", () => {
   it("keeps the kinds through a clean", () => {
     expect(cleanHouse({ kinds: [{ type: "Skis", calledAs: "Skis", tags: ["ski"], titleFormat: "", count: 2 }] }).kinds).toHaveLength(1);
     expect(cleanHouse(null).kinds).toEqual([]);
+  });
+});
+
+describe("where a shop that has said nothing starts", () => {
+  it("keeps the ski shop's habits for the snow pack, and starts every other shop plain", async () => {
+    const { defaultHouseFor } = await import("./house");
+    expect(defaultHouseFor("snow-outdoor").naming).toMatchObject({ brandInTitle: "never", audience: "front" });
+    expect(defaultHouseFor("general").naming).toMatchObject({ brandInTitle: "always", audience: "none" });
+    expect(defaultHouseFor("outdoor").naming).toMatchObject({ brandInTitle: "always", audience: "none" });
+  });
+
+  it("fills what a saved form leaves out from the pack's starting point, not the ski shop's", () => {
+    const base = cleanHouse(null);
+    const plain = { ...base, naming: { ...base.naming, brandInTitle: "always" as const, audience: "none" as const } };
+    expect(cleanHouse({ naming: { season: "never" } as never }, plain).naming).toMatchObject({ brandInTitle: "always", audience: "none", season: "never" });
   });
 });

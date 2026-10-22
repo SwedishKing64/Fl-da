@@ -40,6 +40,9 @@ import type { ReviewProduct, ReviewSummary, ReviewVariant } from "./review-types
 import { hardErrors, summarise, validateReview, warningList } from "./validate";
 import { readsKnown } from "./supplier-record";
 import { supplierRecordFor } from "./supplier-score";
+import { loadTagGate, partitionTags, recordTagProposals } from "./tag-gate";
+import { scoreProduct, tallyConfidence } from "./confidence";
+import { isValidType, typesAreKnown } from "./taxonomy";
 import type { MatchCandidate } from "./match-candidates";
 import { filePath, pictureHosting, publicFileUrl, readFile, saveFile, usingBlob } from "./storage";
 import { logAudit } from "./audit";
@@ -450,6 +453,13 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
   const problems: string[] = [];
   for (const input of inputs) for (const p of mappingProblems(input.mapping)) problems.push(`${input.hash}: ${p}`);
   if (problems.length) return { products: 0, variants: 0, problems };
+  // The store, read again when its last read is a day old, so the listings and vocabulary this
+  // build places products against are the store's as it is now. See store-sync.ts.
+  {
+    const { refreshStoreIfStale } = await import("./store-sync");
+    await refreshStoreIfStale(userId);
+    phase("store");
+  }
 
   const byHash = new Map(inputs.map((i) => [i.hash, i]));
   const items: Array<{ item: CanonicalLineItem; fileId: string; rowIndex: number; raw: Record<string, string> }> = [];
@@ -732,6 +742,10 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
     }
   }
 
+  // Tags are matched, never invented: the shop's own vocabulary is the gate, and what it turns
+  // away is proposed to the shop once, with the product it was meant for. See tag-gate.ts.
+  const gate = await loadTagGate();
+  const proposedTags = new Map<string, string>();
   const grouped = enrichFromSpecs(groupLineItems(items.map((i) => i.item), categoryRules, { builtBy: batch.builtBy, listings }), specItems).map((raw) => {
     const told = directives.vendor.trim();
     // A brand filled in here, after the tags were made, never became one — and every listing the
@@ -751,7 +765,12 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
       productType: directives.productType.trim() || out.productType,
       // Through the house speller last: tag rules and batch instructions add tags after the
       // categoriser has been vetted, and theirs used to reach the column unchecked.
-      tags: houseTags([...out.tags, ...directives.addTags]),
+      tags: (() => {
+        // A tag the batch instructions asked for is the shop's own word and always stays.
+        const gated = partitionTags(houseTags([...out.tags, ...directives.addTags]), gate, directives.addTags);
+        for (const t of gated.proposed) if (!proposedTags.has(t)) proposedTags.set(t, g.title);
+        return gated.kept;
+      })(),
       collections: out.collections,
       metafields: out.metafields,
       option1Name: viaTemplate.optionNames[0] ?? g.option1Name,
@@ -762,6 +781,7 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
       variants: g.variants.map((v) => ({ ...v, item: { ...v.item, rrp: asShopPrice(v.item.rrp, g.brand, listings) } })),
     };
   });
+  if (proposedTags.size) await recordTagProposals(proposedTags);
 
   /**
    * Every flat ski is also built as its binding package — "M7 Mantra 2027 inc Marker Griffon
@@ -1042,7 +1062,7 @@ export async function noteOnFile(fileId: string, note: string): Promise<void> {
 }
 
 /** What counts as somebody having changed a batch's products by hand. A rebuild would undo it. */
-export const HAND_EDITS = ["product.edited", "variant.edited", "variant.deleted", "batch.bulk_edit", "batch.seo"];
+export const HAND_EDITS = ["product.edited", "product.checked", "variant.edited", "variant.deleted", "batch.bulk_edit", "batch.seo"];
 
 /**
  * Whether a batch's products are still exactly what the files built.
@@ -1201,6 +1221,27 @@ export async function loadReview(batchId: string): Promise<ReviewData> {
     orderBy: { sortOrder: "asc" },
     include: { variants: { orderBy: { sortOrder: "asc" } }, images: { orderBy: { position: "asc" } } },
   });
+  // What the confidence score is worked out from: the order lines each product came from (so a
+  // title's words can be checked against the paperwork), what a person set by hand, and the
+  // shop's vocabulary of tags.
+  const [lines, edits, gate] = await Promise.all([
+    prisma.extractedLineItem.findMany({ where: { batchId, variantId: { not: null } }, select: { variantId: true, raw: true } }),
+    prisma.auditLog.findMany({ where: { batchId, action: { in: ["product.edited", "product.checked", "variant.edited"] } }, select: { details: true } }),
+    loadTagGate(),
+  ]);
+  const rawByVariant = new Map<string, string>();
+  for (const l of lines) if (l.variantId) rawByVariant.set(l.variantId, Object.values(parseJson<Record<string, unknown>>(l.raw, {})).map((v) => String(v ?? "")).join(" "));
+  const touchedProducts = new Map<string, Set<string>>();
+  const touchedVariants = new Map<string, Set<string>>();
+  for (const e of edits) {
+    const d = parseJson<{ productId?: string; variantId?: string; fields?: string[] }>(e.details, {});
+    const into = d.productId ? touchedProducts : d.variantId ? touchedVariants : null;
+    const id = d.productId ?? d.variantId;
+    if (!into || !id) continue;
+    const set = into.get(id) ?? new Set<string>();
+    for (const f of d.fields ?? []) set.add(f);
+    into.set(id, set);
+  }
   const view: ReviewProduct[] = products.map((p) => ({
     id: p.id,
     handle: p.handle,
@@ -1260,11 +1301,33 @@ export async function loadReview(batchId: string): Promise<ReviewData> {
       };
     }),
     flags: [],
+    confidence: scoreProduct({
+      title: p.title,
+      vendor: p.vendor,
+      typeKnown: !typesAreKnown() || isValidType(p.productType),
+      tags: p.tags.split(",").map((t) => t.trim()).filter(Boolean),
+      tagKnown: gate.known,
+      sourceText: p.variants.map((v) => rawByVariant.get(v.id) ?? "").join(" "),
+      touched: touchedProducts.get(p.id) ?? new Set<string>(),
+      images: p.images.map((i) => ({ source: i.source, validated: i.validated })),
+      retail: (() => {
+        const priced = p.variants.filter((v) => v.retailPrice > 0);
+        const value = priced.length ? Math.min(...priced.map((v) => v.retailPrice)) : 0;
+        const person = p.variants.some((v) => touchedVariants.get(v.id)?.has("retailOverride"));
+        const paperwork = p.variants.length > 0 && p.variants.every((v) => v.retailOverride !== null && v.retailOverride > 0);
+        return {
+          value,
+          from: person ? "person" : paperwork ? "paperwork" : value > 0 ? "rule" : "none",
+          belowCost: p.variants.some((v) => v.retailPrice > 0 && v.profitPerUnit < 0),
+          underFloor: p.variants.some((v) => v.retailPrice > 0 && v.costPrice > 0 && v.marginPct < settings.minMarginPct),
+        };
+      })(),
+    }),
   }));
 
   const catalog = await shopifyLookups(view);
   validateReview(view, { minMarginPct: settings.minMarginPct, shopifySkus: catalog.skus, shopifyHandles: catalog.handles });
-  const summary = summarise(view);
+  const summary = { ...summarise(view), ...tallyConfidence(view) };
   await prisma.importBatch.update({ where: { id: batchId }, data: { summary: JSON.stringify(summary) } });
 
   return {

@@ -278,7 +278,10 @@ export async function reviewBatchAction(batchId: string, options: { audited?: bo
     if (!review) return { ok: false, error: "No API key is set, so the build cannot be checked. Add ANTHROPIC_API_KEY in Settings." };
     revalidatePath(`/batches/${batchId}`);
     revalidatePath(`/batches/${batchId}/review`);
-    const reading = review.audit ? `Files: ${review.audit.verdict === "right" ? "read right" : review.audit.verdict === "wrong" ? "read wrong" : "not sure"}${review.audit.remapped.length ? `, ${review.audit.remapped.length} column${review.audit.remapped.length === 1 ? "" : "s"} re-read${review.audit.rebuilt ? " and rebuilt" : ""}` : ""}. ` : "";
+    // After the check's fixes, what has earned it goes to the store on its own, when the shop has said to.
+    const { autoPilot } = await import("@/lib/catalog/autopilot");
+    const went = await autoPilot(batchId, user.id).catch(() => null);
+    const reading = `${review.audit ? `Files: ${review.audit.verdict === "right" ? "read right" : review.audit.verdict === "wrong" ? "read wrong" : "not sure"}${review.audit.remapped.length ? `, ${review.audit.remapped.length} column${review.audit.remapped.length === 1 ? "" : "s"} re-read${review.audit.rebuilt ? " and rebuilt" : ""}` : ""}. ` : ""}${went && went.pushed > 0 ? `${went.said} ` : ""}`;
     return { ok: true, data: { summary: `${reading}${review.summary}`, changed: review.applied.length, questions: [...(review.audit?.questions ?? []), ...review.questions] } };
   } catch (err) {
     return { ok: false, error: `The build could not be checked: ${said(err)}` };
@@ -301,6 +304,9 @@ export async function buildProductsAction(batchId: string): Promise<ActionResult
       return { ok: false, error: result.unmapped.length > 0 ? `The columns of ${result.unmapped.join(", ")} could not be read on their own. Open Column mapping and say which column is the product's name.` : "Nothing on the order has a quantity or a price against it, so there was nothing to build." };
     }
     revalidatePath(`/batches/${batchId}`);
+    // What has earned it goes to the store on its own, when the shop has said to. See autopilot.ts.
+    const { autoPilot } = await import("@/lib/catalog/autopilot");
+    await autoPilot(batchId, user.id).catch(() => null);
     const { lastBuild } = await import("@/lib/catalog/pipeline");
     const timing = lastBuild();
     return { ok: true, data: { products: result.products, drifted: result.drifted, ...(timing ? { tookMs: timing.tookMs, phases: timing.phases } : {}) } };
@@ -352,6 +358,11 @@ export async function updateProductAction(productId: string, patch: z.infer<type
     const product = await prisma.product.update({ where: { id: productId }, data: { ...rest, ...(metafields ? { metafields: JSON.stringify(metafields) } : {}), ...(rest.status ? { published: rest.status === "active" } : {}) } });
     // Recorded so a file added later does not rebuild the batch over this. See untouchedSinceBuilt.
     await logAudit("product.edited", { batchId: product.batchId, details: { productId, fields: Object.keys(data) } });
+    // A tag a person types is the shop's own word: approved as written, so the build keeps it from now on.
+    if (typeof rest.tags === "string") {
+      const { approveTypedTags, loadTagGate } = await import("@/lib/catalog/tag-gate");
+      await approveTypedTags(rest.tags.split(",").map((t) => t.trim()).filter(Boolean), await loadTagGate(), product.title);
+    }
     if (rest.category !== undefined || rest.vendor !== undefined) {
       const variants = await prisma.variant.findMany({ where: { productId }, select: { id: true } });
       for (const v of variants) await repriceVariant(v.id);
@@ -360,6 +371,20 @@ export async function updateProductAction(productId: string, patch: z.infer<type
   } catch (err) {
     return fail(err);
   }
+}
+
+/**
+ * A person looked at a field the system was unsure of and said it is right. That is the end of
+ * the question: the field scores as if they had typed it, and the product stops asking for eyes.
+ */
+export async function confirmProductFieldAction(productId: string, field: "title" | "tags" | "image" | "price"): Promise<ActionResult> {
+  const user = await requireUser();
+  return safely(async () => {
+    const product = await prisma.product.findUnique({ where: { id: productId }, select: { batchId: true } });
+    if (!product) return { ok: false, error: "That product is gone." };
+    await logAudit("product.checked", { batchId: product.batchId, userId: user.id, details: { productId, fields: [field] } });
+    return { ok: true };
+  });
 }
 
 const variantPatch = z.object({
@@ -640,6 +665,33 @@ export async function pushBatchAction(batchId: string, opts: { confirm: boolean;
   }
 }
 
+/** The one press on the quick look: everything that has earned it goes to the store as drafts. */
+export async function pushReadyAction(batchId: string): Promise<ActionResult<{ pushed: number; waiting: number; errors: string[] }>> {
+  const user = await requireUser();
+  return safely(async () => {
+    const { readyToPush, canGoAlone } = await import("@/lib/catalog/autopilot");
+    const review = await loadReview(batchId);
+    const ready = readyToPush(review.products);
+    const waiting = review.products.filter((p) => !canGoAlone(p)).length;
+    if (ready.length === 0) return { ok: false, error: waiting > 0 ? "Nothing is ready yet: settle the cards first." : "Everything is already in the store." };
+    const r = await pushBatch(batchId, user.id, { confirm: true, overrideWarnings: true, productIds: ready.map((p) => p.id) });
+    revalidatePath(`/batches/${batchId}`);
+    return { ok: true, data: { pushed: r.created + r.updated, waiting, errors: r.errors } };
+  });
+}
+
+/** Whether what has earned it goes to the store on its own after a build. */
+export async function setAutoPushAction(on: boolean): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const { saveShopProfile } = await import("@/lib/catalog/shop-profile");
+    await saveShopProfile({ autoPush: Boolean(on) });
+    await logAudit(on ? "store.autopush_on" : "store.autopush_off", { userId: user.id });
+    revalidatePath("/training");
+    return { ok: true };
+  });
+}
+
 export async function rollbackAction(batchId: string): Promise<ActionResult<{ deleted: number; restored: number; errors: string[] }>> {
   const user = await requireUser("ADMIN");
   try {
@@ -758,6 +810,69 @@ export async function lookupProductsAction(batchId: string, opts: { productIds?:
     const data = await lookupBatch(batchId, { ...opts, userId: user.id, budgetMs: REQUESTED_BUDGET_MS });
     revalidatePath(`/batches/${batchId}/review`);
     return { ok: true, data: { ...data, limit: LOOKUP_LIMIT } };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/** Keep the store connection, proved by asking the store its name. An empty token keeps the one already kept. */
+export async function saveStoreAction(input: { domain: string; token: string }): Promise<ActionResult<{ name: string }>> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const { getSettings, saveSettings } = await import("@/lib/catalog/settings");
+    const current = await getSettings();
+    const domain = String(input.domain ?? "").trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+    if (!/^[a-z0-9][a-z0-9.-]+\.[a-z]{2,}$/.test(domain)) return { ok: false, error: "That does not look like a store domain. It reads like your-shop.myshopify.com." };
+    const token = String(input.token ?? "").trim() || current.shopify.accessToken;
+    if (!token) return { ok: false, error: "The Admin API access token is needed to read the store." };
+    const before = { ...current.shopify };
+    await saveSettings({ shopify: { ...current.shopify, storeDomain: domain, accessToken: token } });
+    try {
+      const { testStore } = await import("@/lib/catalog/store-sync");
+      const shop = await testStore();
+      await logAudit("store.connected", { userId: user.id, details: { domain, shop: shop.name } });
+      revalidatePath("/training");
+      return { ok: true, data: { name: shop.name } };
+    } catch (err) {
+      await saveSettings({ shopify: before });
+      return { ok: false, error: `The store did not answer: ${err instanceof Error ? err.message : String(err)}` };
+    }
+  });
+}
+
+/** Read the store now: its listings, vocabulary, templates and the catalogue the batch check matches against. */
+export async function syncStoreAction(): Promise<ActionResult<import("@/lib/catalog/store-sync").StoreSync>> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const { syncStore } = await import("@/lib/catalog/store-sync");
+    const data = await syncStore(user.id);
+    revalidatePath("", "layout");
+    return { ok: true, data };
+  });
+}
+
+export async function forgetStoreAction(): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const { forgetStore } = await import("@/lib/catalog/store-sync");
+    await forgetStore();
+    await logAudit("store.forgotten", { userId: user.id });
+    revalidatePath("", "layout");
+    return { ok: true };
+  });
+}
+
+/**
+ * Find the pages for a batch's new products (or the ones named) without anyone pasting them: the
+ * brand's usual address shape first, then a search, each fetched and checked. See page-finder.ts.
+ */
+export async function findProductPagesAction(batchId: string, opts: { productIds?: string[] } = {}): Promise<ActionResult<import("@/lib/catalog/page-finder").FindOutcome>> {
+  const user = await requireUser();
+  try {
+    const { findProductPages, FIND_BUDGET_MS } = await import("@/lib/catalog/page-finder");
+    const data = await findProductPages(batchId, { ...opts, userId: user.id, budgetMs: FIND_BUDGET_MS });
+    revalidatePath(`/batches/${batchId}/review`);
+    return { ok: true, data };
   } catch (err) {
     return fail(err);
   }
@@ -2378,5 +2493,21 @@ export async function ruleReachAction(id: string): Promise<ActionResult<RuleReac
     const live = { ...rule, active: true };
     const hits = products.filter((p) => ruleMatches(live, { title: p.title, vendor: p.vendor, category: p.category, productType: p.productType, skus: p.variants.map((v) => v.sku), tags: p.tags.split(",").map((t) => t.trim()).filter(Boolean), collections: p.collections.split(",").map((t) => t.trim()).filter(Boolean), metafields: parseJson<Record<string, string>>(p.metafields, {}) }));
     return { ok: true, data: { batch: batch.name, matched: hits.length, of: products.length, examples: hits.slice(0, 5).map((p) => p.title) } };
+  });
+}
+
+// ---------------------------------------------------------------------------------------------
+// Tags proposed by a build: approved they are the shop's, rejected they are never proposed again
+// ---------------------------------------------------------------------------------------------
+
+export async function decideTagProposalAction(id: string, approve: boolean): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const proposal = await prisma.tagProposal.findUnique({ where: { id } });
+    if (!proposal) return { ok: false, error: "That proposal is gone." };
+    await prisma.tagProposal.update({ where: { id }, data: { status: approve ? "APPROVED" : "REJECTED", decidedAt: new Date() } });
+    await logAudit(approve ? "tag.approved" : "tag.rejected", { userId: user.id, details: { tag: proposal.tag } });
+    revalidatePath("/training");
+    return { ok: true };
   });
 }

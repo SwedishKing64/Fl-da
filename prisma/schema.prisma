@@ -332,6 +332,18 @@ model TagRule {
 
 /// Conventions learned from a Shopify export of products already built for a brand or type.
 /// New imports pick these up so they are tagged and structured the same way.
+/// A tag the build wanted to write that the shop has never used: put forward once, with the product it
+/// was meant for, for the shop to approve (it becomes one of the shop's tags) or reject (never again).
+model TagProposal {
+  id        String    @id @default(cuid())
+  tag       String    @unique
+  status    String    @default("PENDING") // PENDING | APPROVED | REJECTED
+  count     Int       @default(1)
+  example   String    @default("")
+  createdAt DateTime  @default(now())
+  decidedAt DateTime?
+}
+
 model ProductTemplate {
   id             String   @id @default(cuid())
   name           String

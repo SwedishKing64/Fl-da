@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildProductSetInput } from "./shopify";
 import { emptyVariantView } from "./validate";
 import type { ReviewProduct } from "./review-types";
+import { unscored } from "./confidence";
 
 describe("productSet input", () => {
   it("maps a reviewed product into the Admin API shape", () => {
@@ -15,7 +16,7 @@ describe("productSet input", () => {
         emptyVariantView({ id: "v1", productId: "p", sku: "A-166", option1Value: "166", option2Value: "Blue", retailPrice: 899.99, compareAtPrice: 999, landedCostHome: 450, quantity: 2, grams: 3200 }),
         emptyVariantView({ id: "v2", productId: "p", sku: "A-172", option1Value: "172", option2Value: "Blue", retailPrice: 899.99, compareAtPrice: 800, landedCostHome: 450, quantity: 1 }),
       ],
-      flags: [],
+      flags: [], confidence: unscored(),
     };
     const input = buildProductSetInput(p, { publish: false, locationId: "gid://shopify/Location/1" });
     expect(input.id).toBeUndefined();

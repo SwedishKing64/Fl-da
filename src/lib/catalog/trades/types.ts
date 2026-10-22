@@ -10,7 +10,8 @@ export type PackId = "snow-outdoor" | "outdoor" | "general";
  * corrections) is laid over the pack and wins where they disagree.
  */
 export interface TradePack {
-  id: PackId;
+  /** The pack's id, or several joined by "+" where a shop started from more than one. */
+  id: string;
   /** As setup offers it. */
   name: string;
   /** One line for setup: who should start from this pack. */

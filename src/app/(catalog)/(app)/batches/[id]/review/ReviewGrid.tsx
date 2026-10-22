@@ -618,7 +618,7 @@ export function ReviewGrid({ initial, batchId, kinds = [], categories = [] }: { 
       </div>
       </>}
 
-      {drawerProduct && <ProductDrawer key={drawerProduct.id} batchId={batchId} product={drawerProduct} unassigned={data.unassignedImages} locked={locked} publicBaseUrl={data.settings.publicBaseUrl} onClose={() => setDrawer(null)} refresh={refresh} setMessage={setMessage} />}
+      {drawerProduct && <ProductDrawer key={drawerProduct.id} batchId={batchId} product={drawerProduct} unassigned={data.unassignedImages} locked={locked} publicBaseUrl={data.settings.publicBaseUrl} onClose={() => setDrawer(null)} refresh={refresh} setMessage={setMessage} metafieldColumns={data.metafieldColumns} />}
     </div>
   );
 }
@@ -677,7 +677,7 @@ function lookupMessage(d: { attempted: number; found: number; descriptions: numb
   return { tone: "success", text: `Searched ${d.attempted}, filled in ${got.join(", ")}.${capped}` };
 }
 
-function ProductDrawer({ batchId, product, unassigned, locked, publicBaseUrl, onClose, refresh, setMessage }: { batchId: string; product: ReviewProduct; unassigned: Array<{ id: string; filename: string; url: string; hint: string }>; locked: boolean; publicBaseUrl: string; onClose: () => void; refresh: () => Promise<void>; setMessage: (m: { tone: "info" | "success" | "warning" | "danger"; text: string } | null) => void }) {
+function ProductDrawer({ batchId, product, unassigned, locked, publicBaseUrl, onClose, refresh, setMessage, metafieldColumns = [] }: { metafieldColumns?: string[]; batchId: string; product: ReviewProduct; unassigned: Array<{ id: string; filename: string; url: string; hint: string }>; locked: boolean; publicBaseUrl: string; onClose: () => void; refresh: () => Promise<void>; setMessage: (m: { tone: "info" | "success" | "warning" | "danger"; text: string } | null) => void }) {
   const [tab, setTab] = useState<"images" | "details">("images");
   const [url, setUrl] = useState("");
   const [variantForUrl, setVariantForUrl] = useState("");
@@ -794,9 +794,10 @@ function ProductDrawer({ batchId, product, unassigned, locked, publicBaseUrl, on
               {(["option1Name", "option2Name", "option3Name"] as const).map((k, i) => <label key={k} className="block"><span className="text-xs font-medium text-[var(--ink-2)]">Option {i + 1} name</span><input value={details[k]} disabled={locked} onChange={(e) => setDetails({ ...details, [k]: e.target.value })} className={INPUT} /></label>)}
             </div>
             <div>
-              <div className="mb-1 text-xs font-medium text-[var(--ink-2)]">Ski metafields</div>
+              <div className="mb-1 text-xs font-medium text-[var(--ink-2)]">Metafields</div>
               <div className="grid grid-cols-2 gap-2">
-                {["length_cm", "flex", "ability_level", "din_range", "terrain", "waist_width", "gender", "season", "model_code"].map((k) => (
+                {/* The shop's own metafields, from its pack: a ski's for the ski shop, the trade-neutral ones elsewhere. */}
+                {metafieldColumns.map((c) => /\(product\.metafields\.[^.]+\.(\w+)\)$/.exec(c)?.[1]).filter((k): k is string => Boolean(k)).map((k) => (
                   <label key={k} className="block"><span className="text-[11px] text-[var(--ink-soft)]">{k.replace(/_/g, " ")}</span><input value={details.metafields[k] ?? ""} disabled={locked} onChange={(e) => setDetails({ ...details, metafields: { ...details.metafields, [k]: e.target.value } })} className={INPUT} /></label>
                 ))}
               </div>

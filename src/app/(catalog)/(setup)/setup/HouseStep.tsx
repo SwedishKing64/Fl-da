@@ -228,10 +228,10 @@ export function HouseStep({ house, tagRules, kinds, priceEnding }: { house: Hous
       <p className="mb-5 text-[14px] text-[var(--ink-soft)]">
         Your export shows Flöda what you sell and how it is filed. It cannot show the choices a person makes on every listing — whether the brand goes in the title, what the SKU is, what you write for weight. Say them once here, and every listing Flöda builds follows them. All of it can be changed later in Settings.
       </p>
-      <HouseForm house={house} tagRules={tagRules} kinds={kinds} next="/setup?step=ai" priceEnding={priceEnding} />
+      <HouseForm house={house} tagRules={tagRules} kinds={kinds} next="/setup?step=menu" priceEnding={priceEnding} />
       <div className="mt-5 flex items-center justify-between border-t border-[var(--line-soft)] pt-4 text-[13px] text-[var(--ink-soft)]">
         <span>Not sure yet? The plainest reading applies until you say otherwise.</span>
-        <Button size="sm" variant="ghost" disabled={pending} onClick={() => start(async () => { await skipSetupStepAction("house"); router.push("/setup?step=ai"); })}>Skip for now</Button>
+        <Button size="sm" variant="ghost" disabled={pending} onClick={() => start(async () => { await skipSetupStepAction("house"); router.push("/setup?step=menu"); })}>Skip for now</Button>
       </div>
     </Card>
   );

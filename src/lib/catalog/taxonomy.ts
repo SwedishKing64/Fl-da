@@ -106,8 +106,8 @@ export interface LearnedVocabulary {
   learnedAt: string;
 }
 
-/** Which trade pack is on: a data file of what a trade sells (see trades/), or none. */
-export type RulesPack = PackId;
+/** Which trade packs are on: one id, several joined by "+", or "general" for none. See trades/. */
+export type RulesPack = PackId | (string & {});
 
 /** What decides the vocabulary: the pack, what was learned, and the shop's marker tag. */
 export interface Conventions {

@@ -5,6 +5,7 @@ import { nameLikeSibling } from "./shop-names";
 import { csvType } from "./pipeline-pure";
 import { chooseOptions, collectionsFor, extraOptions, optionValue, type OptionKey, detectCategory, enrichFromTitle, metafieldsFor, OPTION_LABELS, snowboardType, tagsFor, type CategoryRuleLike } from "./categorize";
 import { houseConventions, resolveType, snowTrade } from "./taxonomy";
+import { correctedOptionName, correctedProductType } from "./corrections";
 import { withFit } from "./mapping";
 import { classifyAccessory } from "./trades/snow/accessories";
 import { packShelf } from "./packs";
@@ -151,7 +152,8 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
       ? classifyAccessory(items.some((i) => isSnowboardBrand(i.brand) || /\bsnowboard/i.test(`${i.category} ${i.productType} ${i.title}`)) ? "Snowboard" : "Ski", title, first.description, first.category, first.productType).type
       : null;
     // A supplier's own kind word is a Type only when it is one the shop uses: "FREERIDE" is not.
-    const productType = snowboard ?? pack ?? accessory ?? group.rule?.productType ?? resolveType(first.productType) ?? "";
+    // And as the shop corrected it: a Type changed on this brand's product before is changed here too.
+    const productType = correctedProductType(snowboard ?? pack ?? accessory ?? group.rule?.productType ?? resolveType(first.productType) ?? "", brand);
     // The audience goes on the front of a gendered product's name, as the shop writes it: every one
     // of its 20 snowboard bindings and 14 of its 15 boots is "Men's …" or "Women's …", and so are
     // its jackets, gloves and socks. Not a ski, board or pole, which the shop names by model alone
@@ -181,7 +183,7 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
     // first, and a sleeping bag is size, loft, then which side the zip is on.
     // A supplier's own column joins them where two lines would otherwise be the same variant.
     const optionKeys = orderByConvention(productType, extraOptions(items, chooseOptions(group.rule, items)));
-    const names = optionKeys.map((k) => normaliseOptionName(optionLabel(k, items)));
+    const names = optionKeys.map((k) => correctedOptionName(productType, normaliseOptionName(optionLabel(k, items))));
     const seenCombos = new Set<string>();
     const variants: GroupedVariant[] = [];
     for (const e of entries) {

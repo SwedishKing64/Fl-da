@@ -137,3 +137,24 @@ describe("a ski's own fields", () => {
     expect(item.extras).toMatchObject({ Lumens: "900", Battery: "USB-C" });
   });
 });
+
+describe("a shop that sells more than one trade", () => {
+  it("starts from every pack it ticked, laid together", () => {
+    const both = packFor("outdoor+snow-outdoor");
+    expect(both.id).toBe("outdoor+snow-outdoor");
+    expect(both.snowRules).toBe(true);
+    expect(both.fillsCategory).toBe(true);
+    const tops = both.tree.map((s) => s.top);
+    expect(new Set(tops).size).toBe(tops.length);
+    expect(tops).toEqual(expect.arrayContaining(["Outdoor", "Ski"]));
+    expect(packFor("outdoor+surfboards").id).toBe("outdoor");
+  });
+
+  it("is checked as a set of known packs", async () => {
+    const { isPackSet } = await import("./trades");
+    expect(isPackSet("general")).toBe(true);
+    expect(isPackSet("outdoor+snow-outdoor")).toBe(true);
+    expect(isPackSet("outdoor+surfboards")).toBe(false);
+    expect(isPackSet("")).toBe(false);
+  });
+});

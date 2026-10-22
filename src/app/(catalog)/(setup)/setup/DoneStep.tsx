@@ -6,10 +6,11 @@ import { finishSetupAction } from "@/app/(catalog)/actions";
 import { Button, Card } from "@/app/(catalog)/ui";
 
 /** The end of setup: what is in place, what was put off, and the door into the app. */
-export function DoneStep({ shopName, learned, aiReady, skipped }: { shopName: string; learned: boolean; aiReady: boolean; skipped: { learn?: boolean; ai?: boolean } }) {
+export function DoneStep({ shopName, learned, aiReady, skipped, store = "", corrections = 0 }: { shopName: string; learned: boolean; aiReady: boolean; skipped: { learn?: boolean; ai?: boolean }; store?: string; corrections?: number }) {
   const [pending, start] = useTransition();
   const rows: Array<{ ok: boolean; text: string; href?: string }> = [
     { ok: true, text: `${shopName || "The shop"} is set up.` },
+    { ok: Boolean(store), text: store ? `Your store, ${store}, is connected and read.` : "No store connected: new products go out as a CSV to import.", href: store ? undefined : "/setup?step=store" },
     { ok: learned, text: learned ? "Flöda has learned your catalogue." : "Your catalogue has not been taught yet. Until it is, Flöda has only your supplier's paperwork to go on.", href: learned ? undefined : "/setup?step=learn" },
     { ok: aiReady, text: aiReady ? "PDFs, photos and brand pages can be read." : "No API key yet: spreadsheets work, PDFs and photos wait.", href: aiReady ? undefined : "/setup?step=ai" },
   ];
@@ -24,6 +25,12 @@ export function DoneStep({ shopName, learned, aiReady, skipped }: { shopName: st
           </li>
         ))}
       </ul>
+      <div className="mb-4 rounded-[12px] bg-[var(--meta-tint)] p-4 text-[14px]">
+        <div className="font-semibold">Fixing something once is enough</div>
+        <p className="mt-1 text-[var(--ink-soft)]">
+          What Flöda guessed rather than learned keeps being checked: the review screen shows you what it is unsure of first. When you fix something there — a renamed option, a different kind of product, a corrected line — Flöda does it that way from then on, for that supplier and that kind of product.{corrections > 0 ? ` It already holds ${corrections} correction${corrections === 1 ? "" : "s"} of yours.` : ""}
+        </p>
+      </div>
       <div className="rounded-[12px] bg-[var(--canvas)] p-4 text-[14px]">
         <div className="font-semibold">How to work in Flöda</div>
         <ol className="mt-2 list-decimal space-y-1 pl-5 text-[var(--ink-soft)]">

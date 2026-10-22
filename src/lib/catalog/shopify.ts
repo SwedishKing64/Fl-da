@@ -371,11 +371,15 @@ export interface PushResult {
  * reconcile to an existing Shopify product are updated in place (productSet with id replaces
  * the product's variant set, which is why reconcile must run first and the user must confirm).
  */
-export async function pushBatch(batchId: string, userId: string, opts: { confirm: boolean; overrideWarnings: boolean }): Promise<PushResult> {
+export async function pushBatch(batchId: string, userId: string, opts: { confirm: boolean; overrideWarnings: boolean; productIds?: string[] }): Promise<PushResult> {
   if (!opts.confirm) return { ok: false, errors: ["Push not confirmed."], created: 0, updated: 0 };
   const cfg = await shopifyConfig();
   const settings = await getSettings();
-  const review = await loadReview(batchId);
+  const whole = await loadReview(batchId);
+  // Only the products named, when some are: the ones that have earned it go, the rest wait.
+  const chosen = opts.productIds ? new Set(opts.productIds) : null;
+  const review = chosen ? { ...whole, products: whole.products.filter((p) => chosen.has(p.id)) } : whole;
+  if (review.products.length === 0) return { ok: false, errors: ["Nothing to push."], created: 0, updated: 0 };
   const errors = blockingErrors(review.products);
   if (errors.length) return { ok: false, errors, created: 0, updated: 0 };
   const hasWarnings = review.products.some((p) => p.flags.length || p.variants.some((v) => v.flags.length));
@@ -440,8 +444,10 @@ export async function pushBatch(batchId: string, userId: string, opts: { confirm
     }
   }
 
-  await logAudit("batch.pushed", { batchId, userId, details: { created, updated, failures, snapshot } });
-  if (failures.length === 0) await prisma.importBatch.update({ where: { id: batchId }, data: { status: "PUSHED", exportedAt: new Date() } });
+  await logAudit("batch.pushed", { batchId, userId, details: { created, updated, failures, snapshot, partial: Boolean(chosen) } });
+  // The batch is pushed once every product of it is in the store; a part of it going leaves the rest to come.
+  const left = chosen ? await prisma.product.count({ where: { batchId, shopifyProductId: null } }) : 0;
+  if (failures.length === 0 && left === 0) await prisma.importBatch.update({ where: { id: batchId }, data: { status: "PUSHED", exportedAt: new Date() } });
   return { ok: failures.length === 0, errors: failures, created, updated };
 }
 

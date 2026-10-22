@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { toCsvProducts } from "./pipeline-pure";
 import type { ReviewProduct, ReviewVariant } from "./review-types";
+import { unscored } from "./confidence";
 
 const variant = (id: string, colour: string, size: string): ReviewVariant => ({
   id, sku: id, barcode: "", option1Value: colour, option2Value: size, option3Value: null, grams: 0, quantity: 1,
@@ -13,7 +14,7 @@ const product = (images: ReviewProduct["images"], variants: ReviewVariant[]): Re
   id: "p1", handle: "freestyle", title: "Freestyle", bodyHtml: "", vendor: "Burton", productType: "Snowboard Bindings", category: "", tags: "", collections: "",
   status: "draft", published: false, seoTitle: "", seoDescription: "", lookupStatus: "NONE", lookupSource: "", matchCandidates: [], matchDecided: false,
   option1Name: "Colour", option2Name: "Size", option3Name: null, metafields: {}, reconcileStatus: "NEW", shopifyProductId: null,
-  images, variants, flags: [],
+  images, variants, flags: [], confidence: unscored(),
 });
 
 describe("a colour's picture on every variant of that colour", () => {

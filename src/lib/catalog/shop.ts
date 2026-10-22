@@ -26,6 +26,8 @@ export interface ShopProfile {
   setupDone: boolean;
   /** Steps a person chose to come back to. */
   skipped: { learn?: boolean; house?: boolean; ai?: boolean; suppliers?: boolean };
+  /** Push what has earned it to the store as drafts on its own, after a build. Off until the shop says so. See autopilot.ts. */
+  autoPush?: boolean;
 }
 
 export const DEFAULT_PROFILE: ShopProfile = {

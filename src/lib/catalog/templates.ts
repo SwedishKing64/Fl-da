@@ -108,8 +108,8 @@ function bump(counts: Map<string, number>, key: string) {
   counts.set(key, (counts.get(key) ?? 0) + 1);
 }
 
-/** One product as read out of an export: a handle's first row, which carries the product-level fields. */
-interface ProductRecord {
+/** One product as read out of an export (a handle's first row, which carries the product-level fields) or off the store itself. */
+export interface ProductRecord {
   vendor: string;
   productType: string;
   tags: string[];
@@ -287,7 +287,11 @@ export interface TemplateGroup {
 export function analyseShopifyCsvGroups(text: string, minProducts = MIN_GROUP): { groups: TemplateGroup[]; warnings: string[] } {
   const { products, warnings, fatal } = readProducts(text);
   if (fatal) return { groups: [], warnings: [fatal] };
+  return analyseProductGroups(products, minProducts, warnings);
+}
 
+/** The same, from product records already in hand: the store's own, read live. */
+export function analyseProductGroups(products: ProductRecord[], minProducts = MIN_GROUP, warnings: string[] = []): { groups: TemplateGroup[]; warnings: string[] } {
   const buckets = new Map<string, ProductRecord[]>();
   for (const p of products) {
     const key = `${norm(p.vendor)}\u0000${norm(p.productType)}`;

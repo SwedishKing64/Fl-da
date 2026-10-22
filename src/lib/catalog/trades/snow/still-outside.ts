@@ -73,6 +73,7 @@ export const STILL_OUTSIDE: readonly string[] = [
   "src/lib/catalog/shorthand.ts",
   "src/lib/catalog/siblings.ts",
   "src/lib/catalog/specs.ts",
+  "src/lib/catalog/store-sync.ts",
   "src/lib/catalog/tag-spelling.ts",
   "src/lib/catalog/tagging.ts",
   "src/lib/catalog/taxonomy.ts",

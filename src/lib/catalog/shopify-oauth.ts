@@ -44,6 +44,18 @@ export function shopDomain(input: string): string | null {
   return /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(bare) ? bare : null;
 }
 
+/** Where to send the person back to: a path on this site, never another site. */
+export function returnPath(next: string | null | undefined, fallback = "/settings"): string {
+  const n = (next ?? "").trim();
+  return n.startsWith("/") && !n.startsWith("//") && !n.includes("\\") ? n : fallback;
+}
+
+/** The return path with what came of the connection on it, before any #fragment. */
+export function withOutcome(path: string, outcome: string): string {
+  const [base, hash] = path.split("#");
+  return `${base}${base.includes("?") ? "&" : "?"}shopify=${encodeURIComponent(outcome)}${hash ? `#${hash}` : ""}`;
+}
+
 /** A one-off value tying Shopify's reply to the request that sent the shop owner there. */
 export function newState(): string {
   return randomBytes(16).toString("hex");

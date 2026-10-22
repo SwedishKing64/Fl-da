@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { readProductLinkAction, setProductLinkAction } from "@/app/(catalog)/actions";
+import { findProductPagesAction, readProductLinkAction, setProductLinkAction } from "@/app/(catalog)/actions";
 import { Alert, Button, Card } from "@/app/(catalog)/ui";
 import { flatHandleOf } from "@/lib/catalog/page-types";
 
@@ -24,7 +24,6 @@ const standOf = (status: string, url: string): Stand =>
 
 export function LinksPanel({ batchId, products, locked }: { batchId: string; products: Row[]; locked: boolean }) {
   const router = useRouter();
-  void batchId;
   // Packages are read from the ski they are made from, so only the ski is asked for a link; and a
   // product the shop already lists keeps the page it has, so only the new products are asked.
   const handles = new Set(products.map((p) => p.handle));
@@ -42,6 +41,26 @@ export function LinksPanel({ batchId, products, locked }: { batchId: string; pro
 
   const linked = own.filter((p) => (urls[p.id] ?? "").trim() !== "");
   const unread = linked.filter((p) => stand[p.id] === "saved" || stand[p.id] === "failed");
+  const unlinked = own.filter((p) => (urls[p.id] ?? "").trim() === "");
+  const [finding, setFinding] = useState(false);
+  const [found, setFound] = useState<string | null>(null);
+
+  /** Flöda finds the pages itself: the brand's usual address first, then a search; then reads what it found. */
+  async function findAll() {
+    if (unlinked.length === 0) return;
+    setFinding(true);
+    setFound(null);
+    const r = await findProductPagesAction(batchId);
+    setFinding(false);
+    if (!r.ok) { setFound(r.error); return; }
+    for (const x of r.data!.results) {
+      if (x.url) { saved.current[x.productId] = x.url; setUrls((u) => ({ ...u, [x.productId]: x.url })); setStand((s) => ({ ...s, [x.productId]: "saved" })); }
+      setSaid((s) => ({ ...s, [x.productId]: { tone: x.how === "none" ? "warn" : "ok", text: x.said } }));
+    }
+    const d = r.data!;
+    setFound(`${d.found} of ${d.attempted} found${d.byPattern ? ` (${d.byPattern} at the brand's usual address)` : ""}${d.capped ? "; ran out of time, press again for the rest" : ""}.`);
+    if (d.found > 0) await readAll();
+  }
 
   async function save(id: string): Promise<boolean> {
     const value = (urls[id] ?? "").trim();
@@ -129,6 +148,9 @@ export function LinksPanel({ batchId, products, locked }: { batchId: string; pro
       className="mb-4"
       title={<>Product pages <span className="font-normal text-[var(--ink-soft)]">· {linked.length} of {own.length} new product{own.length === 1 ? "" : "s"} have a link{updates > 0 ? ` · ${updates} quantity update${updates === 1 ? "" : "s"} keep the page they have` : ""}</span></>}
       actions={<>
+        {unlinked.length > 0 && <Button size="sm" variant={linked.length === 0 ? "primary" : "secondary"} disabled={locked || finding || progress !== null} onClick={() => void findAll()} title="Flöda looks for each product's page itself: the brand's usual address first, then a search; a page is kept only when it is titled like the product">
+          {finding ? `Finding ${unlinked.length} page${unlinked.length === 1 ? "" : "s"}…` : `Find ${unlinked.length} page${unlinked.length === 1 ? "" : "s"}`}
+        </Button>}
         <Button size="sm" variant="primary" icon="🔗" disabled={locked || progress !== null || linked.length === 0} onClick={() => void readAll()}>
           {progress ? `Reading ${progress.done} of ${progress.of}…` : unread.length > 0 ? `Read ${unread.length} page${unread.length === 1 ? "" : "s"}` : "Read the pages again"}
         </Button>
@@ -140,6 +162,8 @@ export function LinksPanel({ batchId, products, locked }: { batchId: string; pro
           ? <>Every product here is one the shop already lists, so each keeps the page it has. Nothing to link.</>
           : <>Paste each new product&rsquo;s own page under its name and its description, details and pictures are taken from it. A product with no link is left exactly as it is. Flöda looks at the page&rsquo;s pictures and keeps the ones in the colours you ordered, leaving the other colours&rsquo; out; where you ordered several colours, each colour&rsquo;s variants get its own picture. Opening the page with your colour selected before copying the link helps when a brand only shows one colour at a time.</>}
         {read > 0 && <> {read} read so far.</>}
+        {own.length > 0 && <> Or let Flöda find them: it tries each brand&rsquo;s usual address first, learned from the links pasted before, then searches, and keeps a page only when it is titled like the product.</>}
+        {found && <> <strong>{found}</strong></>}
       </p>
       {open && own.length > 1 && !locked && (
         <details className="mb-3 rounded-lg border border-[var(--line-soft)] p-3">

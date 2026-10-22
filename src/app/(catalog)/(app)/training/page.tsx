@@ -11,7 +11,11 @@ import { LearnPanel } from "@/app/(catalog)/(setup)/setup/LearnStep";
 import { HouseForm } from "@/app/(catalog)/(setup)/setup/HouseStep";
 import { SuppliersStep } from "@/app/(catalog)/(setup)/setup/SuppliersStep";
 import { WebsiteForm } from "./WebsiteForm";
+import { StoreForm } from "./StoreForm";
+import { storeState } from "@/lib/catalog/store-sync";
+import { oauthApp } from "@/lib/catalog/shopify-oauth";
 import { Rulebook } from "./Rulebook";
+import { TagProposals } from "./TagProposals";
 import { buildRulebook, countRules } from "@/lib/catalog/rulebook";
 import { getSettings } from "@/lib/catalog/settings";
 import { taxName } from "@/lib/catalog/shop-profile";
@@ -45,6 +49,8 @@ export default async function TrainingPage() {
     supplierRecords().catch(() => []),
     getSettings(),
   ]);
+  const store = await storeState();
+  const proposals = await prisma.tagProposal.findMany({ orderBy: [{ status: "desc" }, { count: "desc" }, { createdAt: "asc" }] }).catch(() => []);
   const kinds = productTypes();
   const rulebook = buildRulebook({
     house,
@@ -67,6 +73,12 @@ export default async function TrainingPage() {
       <div id="rulebook">
         <Card title="Your rulebook" className="mb-6">
           <Rulebook stages={rulebook} counts={countRules(rulebook)} />
+        </Card>
+      </div>
+
+      <div id="tags">
+        <Card title="Tags proposed by a build" className="mb-6">
+          <TagProposals proposals={proposals.map((t) => ({ id: t.id, tag: t.tag, status: t.status, count: t.count, example: t.example }))} />
         </Card>
       </div>
 
@@ -107,12 +119,18 @@ export default async function TrainingPage() {
       </Card>
       </div>
 
+      <div id="store">
+      <Card title="Your store: read, not told" className="mb-6">
+        <StoreForm state={store} canInstall={Boolean(oauthApp())} />
+      </Card>
+      </div>
+
       <div id="export">
       <Card title="Your Shopify export: how products are filed and tagged" className="mb-6">
         {learned ? (
           <ul className="mb-4 list-disc pl-5 text-[14px]">{describeLearned(learned).map((l) => <li key={l}>{l}</li>)}</ul>
         ) : (
-          <p className="mb-4 text-[14px] text-[var(--ink-soft)]">Nothing yet. Your export shows which tags go with each kind of product and how each brand is listed. With the website read above, it is the tags that matter here; the kinds of product come from the site.</p>
+          <p className="mb-4 text-[14px] text-[var(--ink-soft)]">Nothing yet. {store.configured ? "With the store connected above there is no need for a file: it is read from the store." : "Your export shows which tags go with each kind of product and how each brand is listed; or connect the store above and it is read from there."} With the website read above, it is the tags that matter here; the kinds of product come from the site.</p>
         )}
         <LearnPanel learned={learned} kinds={house.kinds} />
       </Card>

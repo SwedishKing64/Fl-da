@@ -183,6 +183,34 @@ This is the first step of opening how a shop's system runs to the shop; the next
 correction on the review grid into a rule, per-stage switches and notes, and a rulebook file that
 exports, imports and rolls back.
 
+**One confidence score per field.** `confidence.ts` (pure) scores a product's title, tags,
+picture and price from where each came from, and the product is the lowest of the four: a title
+is checked word by word against the order lines it came from (`titleSupport`), a tag against the
+shop's vocabulary, a picture by whether it was looked at against the colour, a price by whether
+it came from the paperwork, a rule, the brand's site or nowhere, and whether it is under cost or
+the floor. A field a person set by hand is right by definition. Above `BAR` (80) a product needs
+nobody's eyes; below it, the weakest field's sentence is what a person is shown. `loadReview`
+works it out from the products, their line items and the batch's edit log, puts it on each
+`ReviewProduct` and tallies `ready` / `needLook` into the summary; the review grid shows the
+tally as a strip and the score as a pill on each row. The push will read the same score.
+
+**Tags are matched, never invented.** `tag-gate.ts`: the shop's vocabulary of tags is its
+listings, its tag rules and templates, its kinds, the tags the rules work out per product
+(`isRuleGenerated`) and the tags it has approved; a shop with none of those yet has an open
+gate. The build (`applyMappings`) and the batch check (`batch-agent.ts`) pass every product's
+tags through it: a tag the shop has never used is taken off and recorded once as a `TagProposal`
+with the product it was meant for; a tag the batch instructions asked for always stays; a tag a
+person types on the grid is approved as written (`approveTypedTags`). Training and Rules lists
+the proposals with Approve (a tag of the shop's from then on) and Reject (never proposed again).
+
+**The quick look.** The review opens on the products that need a person, one card each, worst first: the field that pulled each down, its sentence, and that field's fix on the card (the title to retype, the tags to fix, the pictures to open, the retail to set per variant), with "Looks right" as the other answer, which scores the field as if the person had typed it. What is ready is counted and listed on request. The full table is one click away and the choice is remembered per browser; the errors pill opens the table on the rows with errors.
+
+**Pages found, not pasted.** The links people paste are the memory: from each brand's links the shape of its addresses is worked out (its template with the product's slug in it), a new product's name is put into that shape, and the address is fetched and checked against the product's name before it is believed. A brand nobody has linked yet, or a guess that does not hold, goes to one short web search, checked the same way. A page is kept only when it is titled like the product; a wrong page is worse than none. "Find the pages" on the review does the batch; "Find its page" on a card does one product and reads it.
+
+**The store, read rather than told.** With the store connected (Training and Rules → Your store: a domain and an Admin API token, proved by asking the store its name), what an export used to teach is read off the store itself: its listings, its vocabulary (kinds, tags, spelling), the conventions per brand and kind (templates filed under "store", replaced on each read), and the catalogue the batch check matches against. The store is read again before a build when the last read is a day old, and on demand. An export file still works for a shop that would rather not connect; what it taught stays and is joined.
+
+**Pushing without the person, tiered.** With the store connected and the shop opted in (Your store → "Push what is ready on its own"), a build ends with what has earned it going to the store as drafts: a product with every field above the bar, nothing wrong on it and no question of which listing it is, when its supplier has a clean record. Three tiers: auto (everything goes, nothing to do), exceptions (the ready ones go, the rest are the quick look), full (a supplier with no record or a broadly unsure batch: nothing goes on its own). Opted in or not, the quick look carries one button that sends what is ready; a batch is pushed once every product of it is in the store. Drafts only, and a push can be rolled back.
+
 **The open copy.** A desktop build made with `FLODA_OPEN=1` (`electron-builder.open.yml`, the
 "open" box on the Desktop app workflow) has no sign-in and no licence: `/open` signs whoever opens
 the window in as the copy's owner, an admin called "Shop owner" made the first time

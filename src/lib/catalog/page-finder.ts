@@ -20,18 +20,24 @@ import { parseDirectives } from "./instructions";
 import { setProductLink } from "./page-link";
 import { flatHandleOf } from "./page-types";
 import { logAudit } from "./audit";
+import { productTypes } from "./taxonomy";
 
 export interface LinkExample { vendor: string; handle: string; title: string; url: string }
 
 /** The shape of one brand's addresses: its template with {slug} where the product's slug goes, and which slug style fitted. */
 export interface BrandPattern { vendor: string; template: string; style: number; count: number }
 
-export interface FindResult { productId: string; url: string; how: "pattern" | "search" | "none"; said: string }
+export interface FindResult { productId: string; url: string; how: "pattern" | "search" | "none"; said: string; colourLinks?: Record<string, string> }
+
+/** What a search answers: the product's page, and a page per colour where the brand has those. */
+export interface SearchAnswer { url: string; colours: Record<string, string> }
+/** A search, as the finder calls it; a bare address is the product's page alone. */
+export type Searcher = (p: { title: string; vendor: string; modelCode?: string; colours?: string[] }) => Promise<SearchAnswer | string | null>;
 export interface FindOutcome { attempted: number; found: number; byPattern: number; bySearch: number; capped: boolean; results: FindResult[] }
 
 const EMPTY: FindOutcome = { attempted: 0, found: 0, byPattern: 0, bySearch: 0, capped: false, results: [] };
 export const FIND_BUDGET_MS = 50_000;
-const CONCURRENCY = 2;
+const CONCURRENCY = 3;
 const STOP = new Set(["the", "and", "with", "for", "of", "a", "an", "in", "on", "to", "inc", "mens", "womens", "kids", "men's", "women's", "unisex", "junior", "youth", "pack", "package"]);
 
 const slugOf = (s: string) => s.toLowerCase().normalize("NFKD").replace(/[^\w\s-]/g, "").replace(/[\s_]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
@@ -113,6 +119,49 @@ export function pageMatches(pageTitle: string, p: { title: string; vendor: strin
   return found / words.length >= 0.6;
 }
 
+/**
+ * Words that say what a product is rather than which one it is, and so are on its page whatever
+ * the model: the words of the shop's own product types, and a few no product is named by.
+ */
+const COMMON_WORDS = ["black", "white", "colour", "color", "women", "wide", "camber", "rocker", "flat"];
+const genericWords = (): Set<string> => new Set([...COMMON_WORDS, ...productTypes().flatMap((t) => slugOf(t).split("-")).flatMap((w) => [w, w.replace(/s$/, "")])]);
+
+/**
+ * Whether a page a search found for this product is it, by a looser test than a guessed address
+ * gets: the search was for exactly this product, so the page needs only every number in the name
+ * and one of the name's own words: the model's name on the brand's page, where the order wrote the
+ * rest in shorthand and the shop's title has words the brand's page does not.
+ */
+export function looselyMatches(pageTitle: string, p: { title: string; vendor: string }): boolean {
+  if (pageMatches(pageTitle, p)) return true;
+  const brand = new Set(slugOf(p.vendor).split("-").filter(Boolean));
+  const words = slugOf(p.title).split("-").filter((w) => w.length >= 2 && !brand.has(w) && !STOP.has(w) && !/^(19|20)\d{2}$/.test(w));
+  const hay = ` ${slugOf(pageTitle).replace(/-/g, " ")} `;
+  const flat = hay.replace(/\s+/g, "");
+  const present = (w: string) => hay.includes(` ${w} `) || (w.length >= 4 && flat.includes(w));
+  if (!words.filter((w) => /^\d+$/.test(w)).every(present)) return false;
+  const generic = genericWords();
+  return words.some((w) => w.length >= 4 && !/^\d+$/.test(w) && !generic.has(w) && !generic.has(w.replace(/s$/, "")) && present(w));
+}
+
+/** Ask the light model whether a page is this product's, for a page the word tests cannot settle. */
+export async function judgedSame(pageTitle: string, url: string, p: { title: string; vendor: string; modelCode?: string }): Promise<boolean> {
+  if (!aiAvailable() || !pageTitle.trim()) return false;
+  const ask = [
+    "Is this web page the manufacturer's page for this product? A different year, colour, size, gender wording or the brand's own way of naming it does not matter; a different model does. Reply YES or NO only.",
+    `Page title: ${pageTitle}`,
+    `Page address: ${url}`,
+    `Product: ${p.title}${p.vendor ? `, by ${p.vendor}` : ""}${p.modelCode ? `, code ${p.modelCode}` : ""}`,
+  ].join("\n");
+  try {
+    const reply = await anthropicClient(1).messages.create({ model: LIGHT_MODEL, max_tokens: 5, messages: [{ role: "user", content: ask }] });
+    const text = reply.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("");
+    return /^\s*yes/i.test(text);
+  } catch {
+    return false;
+  }
+}
+
 /** Fetch an address and say whether the page there is this product's. A page that cannot be fetched is not. */
 export async function verifyUrl(url: string, p: { title: string; vendor: string }, fetcher: typeof fetch = fetch): Promise<{ ok: boolean; url: string; pageTitle: string }> {
   try {
@@ -126,10 +175,12 @@ export async function verifyUrl(url: string, p: { title: string; vendor: string 
 }
 
 /** Ask the web for the page: one short search by the light model, answering with an address or nothing. */
-export async function searchForPage(p: { title: string; vendor: string; modelCode?: string }): Promise<string | null> {
+export async function searchForPage(p: { title: string; vendor: string; modelCode?: string; colours?: string[] }): Promise<SearchAnswer | null> {
   if (!aiAvailable() || !p.title.trim()) return null;
+  const colours = (p.colours ?? []).filter(Boolean);
   const ask = [
-    `Find the manufacturer's own product page for this product. Reply with only the page's https address on one line, nothing else; if you cannot find the manufacturer's own page for exactly this product, reply NONE.`,
+    `Find the manufacturer's own product page for this product. A supplier's invoice names products in shorthand ("FT" for Family Tree, "M" for men's), so search for the model by its distinctive name. Reply with the page's https address on a line starting PRODUCT:, nothing else; if you cannot find the manufacturer's own page for this model, reply NONE.`,
+    colours.length ? `The shop ordered it in: ${colours.join(", ")}. Where the brand's site has a separate page or address for each colour, also give one line per colour ordered, as COLOUR <the colour as written here>: <address>.` : "",
     `Product: ${p.title}`,
     p.vendor ? `Brand: ${p.vendor}` : "",
     p.modelCode ? `Model code: ${p.modelCode}` : "",
@@ -142,11 +193,27 @@ export async function searchForPage(p: { title: string; vendor: string; modelCod
     messages: [{ role: "user", content: ask }],
   }).finalMessage());
   const text = reply.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("\n");
-  const m = /https:\/\/[^\s)"'<>]+/i.exec(text);
-  return m ? m[0].replace(/[.,;]+$/, "") : null;
+  return parseSearchAnswer(text, colours);
 }
 
-interface Target { id: string; batchId: string; handle: string; title: string; vendor: string; modelCode?: string }
+/** The addresses in a search's reply: the product's page, and each ordered colour's where given. */
+export function parseSearchAnswer(text: string, colours: string[] = []): SearchAnswer | null {
+  const urlIn = (line: string) => /https:\/\/[^\s)"'<>]+/i.exec(line)?.[0].replace(/[.,;]+$/, "") ?? null;
+  const lines = text.split(/\r?\n/);
+  const product = lines.map((l) => (/^\s*product\s*:/i.test(l) ? urlIn(l) : null)).find(Boolean) ?? lines.map(urlIn).find(Boolean) ?? null;
+  if (!product) return null;
+  const byColour: Record<string, string> = {};
+  for (const line of lines) {
+    const m = /^\s*colou?r\s+(.+?)\s*:\s*(https:\/\/\S+)/i.exec(line);
+    if (!m) continue;
+    const said = m[1].trim().toLowerCase();
+    const colour = colours.find((c) => c.trim().toLowerCase() === said) ?? m[1].trim();
+    byColour[colour] = m[2].replace(/[.,;]+$/, "");
+  }
+  return { url: product, colours: byColour };
+}
+
+interface Target { id: string; batchId: string; handle: string; title: string; vendor: string; modelCode?: string; colours?: string[] }
 
 /** The links already pasted or found, across every batch: the memory the patterns are learned from. */
 export async function knownLinks(): Promise<LinkExample[]> {
@@ -165,7 +232,7 @@ export async function knownLinks(): Promise<LinkExample[]> {
  */
 export async function productsWantingPages(batchId: string, productIds?: string[]): Promise<Target[]> {
   const batch = await prisma.importBatch.findUniqueOrThrow({ where: { id: batchId }, select: { directives: true } });
-  const products = await prisma.product.findMany({ where: { batchId }, select: { id: true, handle: true, title: true, vendor: true, lookupSource: true, lookupStatus: true, variants: { select: { sku: true }, orderBy: { sortOrder: "asc" } } }, orderBy: { sortOrder: "asc" } });
+  const products = await prisma.product.findMany({ where: { batchId }, select: { id: true, handle: true, title: true, vendor: true, lookupSource: true, lookupStatus: true, option1Name: true, option2Name: true, option3Name: true, variants: { select: { sku: true, option1Value: true, option2Value: true, option3Value: true }, orderBy: { sortOrder: "asc" } } }, orderBy: { sortOrder: "asc" } });
   const inShop = parseDirectives(batch.directives).allNew
     ? new Set<string>()
     : new Set((await prisma.shopListing.findMany({ where: { handle: { in: products.map((p) => p.handle) } }, select: { handle: true } })).map((l) => l.handle));
@@ -176,11 +243,18 @@ export async function productsWantingPages(batchId: string, productIds?: string[
     .filter((p) => !inShop.has(p.handle))
     .filter((p) => flatHandleOf(p.handle) === p.handle || !handles.has(flatHandleOf(p.handle)))
     .filter((p) => productIds || !p.lookupSource.trim() || ["NONE", "FAILED", "NOT_FOUND", "UNSURE"].includes(p.lookupStatus))
-    .map((p) => ({ id: p.id, batchId, handle: p.handle, title: p.title, vendor: p.vendor, modelCode: p.variants.map((v) => v.sku).find(Boolean) }));
+    .map((p) => ({ id: p.id, batchId, handle: p.handle, title: p.title, vendor: p.vendor, modelCode: p.variants.map((v) => v.sku).find(Boolean), colours: coloursOf(p) }));
+}
+
+/** The colours a product is ordered in: the values of whichever option is the colour. */
+function coloursOf(p: { option1Name: string | null; option2Name: string | null; option3Name: string | null; variants: Array<{ option1Value: string | null; option2Value: string | null; option3Value: string | null }> }): string[] {
+  const at = [p.option1Name, p.option2Name, p.option3Name].findIndex((n) => /colou?r/i.test(n ?? ""));
+  if (at < 0) return [];
+  return [...new Set(p.variants.map((v) => ([v.option1Value, v.option2Value, v.option3Value][at] ?? "").trim()).filter(Boolean))].slice(0, 8);
 }
 
 /** Find one product's page: the brand's shape first, then a search; each answer fetched and checked before it is kept. */
-export async function findPageFor(t: Target, patterns: BrandPattern[], deps: { fetcher?: typeof fetch; search?: typeof searchForPage } = {}): Promise<FindResult> {
+export async function findPageFor(t: Target, patterns: BrandPattern[], deps: { fetcher?: typeof fetch; search?: Searcher } = {}): Promise<FindResult> {
   const fetcher = deps.fetcher ?? fetch;
   const search = deps.search ?? searchForPage;
   const pattern = patterns.find((x) => x.vendor === vendorKey(t.vendor));
@@ -190,18 +264,34 @@ export async function findPageFor(t: Target, patterns: BrandPattern[], deps: { f
       if (v.ok) return { productId: t.id, url: v.url, how: "pattern", said: `Found at ${new URL(v.url).hostname}, where ${t.vendor}'s pages were before.` };
     }
   }
-  let candidate: string | null = null;
-  try { candidate = await search(t); } catch { candidate = null; }
+  let answer: SearchAnswer | null = null;
+  try {
+    const got = await search(t);
+    answer = typeof got === "string" ? { url: got, colours: {} } : got;
+  } catch { answer = null; }
+  const candidate = answer?.url ?? null;
   if (candidate) {
     const v = await verifyUrl(candidate, t, fetcher);
-    if (v.ok) return { productId: t.id, url: v.url, how: "search", said: `Found by search at ${new URL(v.url).hostname}.` };
+    // The search was for exactly this product: a page with its own words and numbers on it is it,
+    // and one the words cannot settle is put to the model before it is turned away.
+    const same = v.ok || (v.pageTitle !== "" && (looselyMatches(v.pageTitle, t) || await judgedSame(v.pageTitle, v.url, t)));
+    if (same) {
+      const colourLinks: Record<string, string> = {};
+      for (const [colour, url] of Object.entries(answer?.colours ?? {})) {
+        if (url === candidate || url === v.url) continue;
+        const c = await verifyUrl(url, t, fetcher);
+        if (c.ok || (c.pageTitle !== "" && looselyMatches(c.pageTitle, t))) colourLinks[colour] = c.url;
+      }
+      const each = Object.keys(colourLinks).length;
+      return { productId: t.id, url: v.url, how: "search", said: `Found by search at ${new URL(v.url).hostname}${each ? `, with a page of its own for ${each === 1 ? Object.keys(colourLinks)[0] : `${each} colours`}` : ""}.`, ...(each ? { colourLinks } : {}) };
+    }
     return { productId: t.id, url: "", how: "none", said: v.pageTitle ? `A search turned up "${v.pageTitle}", which does not look like this product, so it was not kept. Paste the page if you know it.` : "The page a search turned up could not be read. Paste the page if you know it." };
   }
   return { productId: t.id, url: "", how: "none", said: pattern ? `Not at ${t.vendor}'s usual address, and a search found nothing sure. Paste the page if you know it.` : "No page found. Paste it if you know it." };
 }
 
 /** Find the pages for a batch's new products, and save each one found as the product's link. */
-export async function findProductPages(batchId: string, opts: { productIds?: string[]; userId?: string | null; budgetMs?: number; fetcher?: typeof fetch; search?: typeof searchForPage } = {}): Promise<FindOutcome> {
+export async function findProductPages(batchId: string, opts: { productIds?: string[]; userId?: string | null; budgetMs?: number; fetcher?: typeof fetch; search?: Searcher } = {}): Promise<FindOutcome> {
   const [targets, examples] = await Promise.all([productsWantingPages(batchId, opts.productIds), knownLinks()]);
   const patterns = learnPatterns(examples);
   const out: FindOutcome = { ...EMPTY, results: [] };
@@ -217,6 +307,7 @@ export async function findProductPages(batchId: string, opts: { productIds?: str
         out.found++;
         if (r.how === "pattern") out.byPattern++; else out.bySearch++;
         await setProductLink(r.productId, r.url);
+        if (r.colourLinks) await prisma.product.update({ where: { id: r.productId }, data: { colourLinks: JSON.stringify(r.colourLinks) } });
       }
       out.results.push(r);
     }

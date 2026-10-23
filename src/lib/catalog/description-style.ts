@@ -24,12 +24,13 @@ const Shaped = z.object({
   bodyHtml: z.string().describe("The description laid out in the shop's format, as HTML using only <p>, <h2>, <h3>, <ul>, <ol>, <li>, <strong>, <em> and <br>. Only the words and facts given."),
 });
 
-const SYSTEM = (format: string, heading: string, example: string) => [
+const SYSTEM = (format: string, heading: string, example: string, sections: Array<{ heading: string; holds: string }> = []) => [
   `You lay out product copy for the Shopify store of ${retailer()}, in the shop's own format. ${englishVariant()}.`,
   "You are given the manufacturer's description and the details lines from its page or spec sheet. Use only those words and facts. Never add a specification, a claim, a comparison or a price that is not given; you may trim, reorder and lightly rephrase to fit the format, and leave out marketing filler. Where the shop's format asks for something the input does not carry, leave it out rather than invent it.",
   `The shop's instructions for every description:\n${format.trim() || "(none beyond the layout below)"}`,
   heading.trim() ? `Where the details are listed, the heading over the list is "${heading.trim()}".` : "The details are listed without a heading.",
   example.trim() ? `A description from this shop, as the shape to match:\n${example.trim()}` : "",
+  sections.length ? `After that, these sections in this order, each under its own <h2> heading, filled only from the words and details given:\n${sections.map((x) => `- ${x.heading}${x.holds ? `: ${x.holds}` : ""}`).join("\n")}\nA detail goes in the one section it belongs to, not in two. A section with nothing given for it is left out, heading and all.` : "",
   "Output HTML using only <p>, <h2>, <h3>, <ul>, <ol>, <li>, <strong>, <em> and <br>. No attributes, no other tags.",
 ].filter(Boolean).join("\n\n");
 
@@ -48,7 +49,7 @@ const askModel: Shaper = async (system, content) => {
 /** True when the shop has said anything about how descriptions should read. */
 export function hasDescriptionStyle(): boolean {
   const d = houseConventions().descriptions;
-  return Boolean(d.format.trim() || d.example.trim());
+  return Boolean(d.format.trim() || d.example.trim() || d.sections?.length);
 }
 
 /**
@@ -64,7 +65,7 @@ export async function shopBody(description: string, features: string[], deps: { 
   if (!deps.ask && !aiAvailable()) return plain;
   const ask = deps.ask ?? askModel;
   try {
-    const text = await ask(SYSTEM(d.format, d.specsHeading, d.example), JSON.stringify({ description, details: features }));
+    const text = await ask(SYSTEM(d.format, d.specsHeading, d.example, d.sections ?? []), JSON.stringify({ description, details: features }));
     if (!text) return plain;
     const parsed = Shaped.safeParse(JSON.parse(text));
     if (!parsed.success) return plain;

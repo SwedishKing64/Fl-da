@@ -104,6 +104,16 @@ export async function readProductLink(productId: string, deps: { read?: typeof r
     const r = await applyDetails(id, details);
     if (id === productId) { out.description = r.description; out.details = r.details; out.images = r.images; notes.push(...r.notes); }
   }
+  // A colour with a page of its own takes its pictures from that page, onto that colour's variant.
+  const colourPages = Object.entries(parseColourLinks(product.colourLinks)).filter(([, u]) => u && u !== url);
+  for (const [colour, colourUrl] of colourPages) {
+    try {
+      const page = await pictures(await read(colourUrl, { title: flatTitleOf(product.title), brand: product.vendor || undefined, colours: [colour] }), product.title, [colour]);
+      out.images += await addColourPictures(productId, colour, page.images);
+    } catch {
+      notes.push(`The ${colour} page could not be read, so its pictures were not taken.`);
+    }
+  }
   const got = [out.description ? "the description" : "", out.details > 0 ? `${out.details} detail${out.details === 1 ? "" : "s"}` : "", out.images > 0 ? `${out.images} picture${out.images === 1 ? "" : "s"}` : ""].filter(Boolean);
   const said = [
     got.length ? `Took ${got.join(", ")} from the page.` : "The page had nothing to take.",
@@ -113,6 +123,35 @@ export async function readProductLink(productId: string, deps: { read?: typeof r
     details.via === "basic" ? details.note : "",
   ].filter(Boolean).join(" ");
   return { ...out, said };
+}
+
+function parseColourLinks(raw: string | null | undefined): Record<string, string> {
+  try {
+    const v = JSON.parse(raw || "{}");
+    return v && typeof v === "object" ? Object.fromEntries(Object.entries(v).filter(([, u]) => typeof u === "string")) as Record<string, string> : {};
+  } catch {
+    return {};
+  }
+}
+
+/** One colour's pictures from its own page, after the product's: the first goes on that colour's variant. */
+async function addColourPictures(productId: string, colour: string, images: string[]): Promise<number> {
+  const p = await prisma.product.findUniqueOrThrow({ where: { id: productId }, select: { title: true, option1Name: true, option2Name: true, option3Name: true, variants: { select: { id: true, option1Value: true, option2Value: true, option3Value: true }, orderBy: { sortOrder: "asc" } }, images: { select: { url: true, position: true, variantId: true } } } });
+  const have = new Set(p.images.map((i) => i.url));
+  const fresh = images.filter((u) => !have.has(u)).slice(0, 8);
+  const variantId = variantByColour(p).get(colour.trim().toLowerCase());
+  // The variant's picture is this colour's own now, in place of one the main page matched to it.
+  let claimed = false;
+  let position = Math.max(0, ...p.images.map((i) => i.position)) + 1;
+  for (const url of fresh) {
+    const own = Boolean(variantId) && !claimed;
+    if (own) {
+      await prisma.productImage.updateMany({ where: { productId, variantId }, data: { variantId: null } });
+      claimed = true;
+    }
+    await prisma.productImage.create({ data: { productId, url, position: position++, source: "PAGE", altText: `${p.title} ${colour}`, validated: false, ...(own ? { variantId } : {}) } });
+  }
+  return fresh.length;
 }
 
 /** The first variant of each colour the product comes in, by the colour in lower case. */

@@ -5,6 +5,35 @@ import { useRouter } from "next/navigation";
 import { downloadCsvAction, exportBatchAction, pushBatchAction, reconcileAction, rollbackAction } from "@/app/(catalog)/actions";
 import { Alert, Button, Card, fmtDate } from "@/app/(catalog)/ui";
 import { csvFilename } from "@/lib/catalog/csv";
+import { groupIssues } from "@/lib/catalog/issue-groups";
+
+/** One kind of note, as a short list: each thing wrong once, with how many products it is on. */
+function IssueList({ tone, title, lines, review }: { tone: "warning" | "info"; title: string; lines: string[]; review?: string }) {
+  if (lines.length === 0) return null;
+  const groups = groupIssues(lines);
+  return (
+    <Alert tone={tone} className="mt-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <div className="font-semibold">{title}</div>
+        {review && <a href={review} className="text-xs font-semibold underline">Open the review grid →</a>}
+      </div>
+      <ul className="mt-1.5 space-y-1 text-[13px]">
+        {groups.map((g) => (
+          <li key={g.message}>
+            {g.products.length > 0 ? (
+              <details>
+                <summary className="cursor-pointer">
+                  {g.message} <span className="text-[var(--ink-soft)]">· {g.products.length} product{g.products.length === 1 ? "" : "s"}{g.count > g.products.length ? `, ${g.count} variants` : ""}</span>
+                </summary>
+                <ul className="mt-1 max-h-40 list-disc overflow-auto pl-5 text-xs">{g.products.map((p) => <li key={p}>{p}</li>)}</ul>
+              </details>
+            ) : g.message}
+          </li>
+        ))}
+      </ul>
+    </Alert>
+  );
+}
 
 interface ExportFileRow { id: string; filename: string; rowCount: number; sizeBytes: number; partIndex: number; partCount: number; createdAt: string }
 
@@ -88,29 +117,10 @@ export function ExportPanel(props: { batchId: string; status: string; hard: stri
     <div className="space-y-6">
       <Card title="Export gate">
         {props.productCount === 0 && <Alert tone="warning">Nothing to export yet.</Alert>}
-        {props.productCount > 0 && <Alert tone="success">Ready to export. Products are exported as DRAFT, so each one can be checked before it goes live.</Alert>}
-        {hard.length > 0 && (
-          <Alert tone="warning">
-            <div className="font-semibold">{hard.length} thing{hard.length === 1 ? "" : "s"} to check before you import the file</div>
-            <p className="mt-1 text-xs">A wrong number in the file is a wrong number on the shop, and nothing on the way out can tell which number was meant. The export goes ahead regardless; fix these on the review grid first, or in Shopify after.</p>
-            <ul className="mt-2 max-h-40 list-disc space-y-0.5 overflow-auto pl-5 text-xs">{hard.slice(0, 40).map((e, i) => <li key={i}>{e}</li>)}{hard.length > 40 && <li>…and {hard.length - 40} more</li>}</ul>
-            <a href={`/batches/${batchId}/review`} className="mt-2 inline-block text-xs font-semibold underline">Back to the review grid →</a>
-          </Alert>
-        )}
-        {errors.length > 0 && (
-          <Alert tone="info" className="mt-3">
-            <div className="font-semibold">{errors.length} thing{errors.length === 1 ? "" : "s"} the export will repair for you</div>
-            <p className="mt-1 text-xs">A supplier codes a colourway, not a size, so one code arrives on every size ordered. The export gives each variant its own SKU, merges rows that describe the same variant, and settles handles and options — then says exactly what it did. None of this stops the CSV.</p>
-            <ul className="mt-2 max-h-40 list-disc space-y-0.5 overflow-auto pl-5 text-xs">{errors.slice(0, 40).map((e, i) => <li key={i}>{e}</li>)}{errors.length > 40 && <li>…and {errors.length - 40} more</li>}</ul>
-          </Alert>
-        )}
-        {warnings.length > 0 && (
-          <Alert tone="info" className="mt-3">
-            <div className="font-semibold">{warnings.length} thing{warnings.length === 1 ? "" : "s"} to finish later — the CSV exports regardless</div>
-            <p className="mt-1 text-xs">Missing prices, images and descriptions come out as empty cells. Shopify leaves an empty cell alone on import, so they can be filled in there or here.</p>
-            <ul className="mt-2 max-h-40 list-disc space-y-0.5 overflow-auto pl-5 text-xs">{warnings.slice(0, 40).map((w, i) => <li key={i}>{w}</li>)}{warnings.length > 40 && <li>…and {warnings.length - 40} more</li>}</ul>
-          </Alert>
-        )}
+        {props.productCount > 0 && hard.length + errors.length + warnings.length === 0 && <Alert tone="success">Ready. Products export as drafts.</Alert>}
+        <IssueList tone="warning" title="Check before importing" lines={hard} review={`/batches/${batchId}/review`} />
+        <IssueList tone="info" title="Fixed automatically in the file" lines={errors} />
+        <IssueList tone="info" title="Left empty, to fill in later" lines={warnings} />
         {result && <Alert tone={result.tone} className="mt-3"><div>{result.text}</div>{result.list && <ul className="mt-1 list-disc pl-5 text-xs">{result.list.slice(0, 30).map((l, i) => <li key={i}>{l}</li>)}</ul>}</Alert>}
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <Button variant="primary" icon="📤" disabled={pending || blocked} onClick={doExport}>{pending ? "Working…" : "Generate Shopify CSV"}</Button>

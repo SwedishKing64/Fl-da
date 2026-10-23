@@ -48,6 +48,12 @@ export interface HouseConventions {
     specsHeading: string;
     /** One real description from the shop, pasted, as the shape to match. */
     example: string;
+    /**
+     * More sections after the details, in order, each under its own heading: "Specifications"
+     * with the measurements, "Features" with the technologies, "Size guide". Filled only from what
+     * the brand page or spec sheet gives; a section with nothing for it is left out.
+     */
+    sections?: Array<{ heading: string; holds: string }>;
   };
   /** Anything else, in the shop's own words. Fed to the reader on every product. */
   notes: string;
@@ -166,6 +172,7 @@ export function houseGuidance(house: HouseConventions): string {
   if (d.format.trim()) lines.push(`How a description is written here:\n${d.format.trim()}`);
   if (d.specsHeading.trim() && d.specsHeading.trim() !== "Tech Specs") lines.push(`The details list is headed "${d.specsHeading.trim()}".`);
   if (d.example.trim()) lines.push(`A description from this shop, as the shape to match:\n${d.example.trim()}`);
+  if (d.sections?.length) lines.push(`After the details, each description has these sections in order, each under its heading and only when the page gives something for it: ${d.sections.map((x) => `"${x.heading}"${x.holds ? ` (${x.holds})` : ""}`).join(", ")}.`);
   for (const k of house.kinds) {
     const name = k.calledAs || k.type;
     const parts: string[] = [];
@@ -231,10 +238,7 @@ export function cleanHouse(input: Partial<HouseConventions> | null | undefined, 
     naming: {
       brandInTitle: pick(n.brandInTitle, ["never", "always"] as const, base.naming.brandInTitle),
       season: pick(n.season, ["seasonal", "always", "never", "chosen"] as const, base.naming.season),
-      yearOn: {
-        types: listOf(n.yearOn?.types),
-        tags: listOf(n.yearOn?.tags),
-      },
+      ...(listOf(n.yearOn?.types).length || listOf(n.yearOn?.tags).length ? { yearOn: { types: listOf(n.yearOn?.types), tags: listOf(n.yearOn?.tags) } } : {}),
       casing: pick(n.casing, ["shop", "supplier"] as const, base.naming.casing),
       audience: pick(n.audience, ["front", "none"] as const, base.naming.audience),
       example: String(n.example ?? "").trim().slice(0, 160),
@@ -253,6 +257,12 @@ export function cleanHouse(input: Partial<HouseConventions> | null | undefined, 
       format: String(i.descriptions?.format ?? "").trim().slice(0, 4000),
       specsHeading: String(i.descriptions?.specsHeading ?? DEFAULT_HOUSE.descriptions.specsHeading).trim().slice(0, 60),
       example: String(i.descriptions?.example ?? "").trim().slice(0, 6000),
+      ...(() => {
+        const sections = (Array.isArray(i.descriptions?.sections) ? i.descriptions.sections : []).slice(0, 12)
+          .map((x) => ({ heading: String(x?.heading ?? "").trim().slice(0, 60), holds: String(x?.holds ?? "").trim().slice(0, 300) }))
+          .filter((x) => x.heading);
+        return sections.length ? { sections } : {};
+      })(),
     },
     notes: String(i.notes ?? "").trim().slice(0, 4000),
     kinds: cleanKinds(i.kinds),

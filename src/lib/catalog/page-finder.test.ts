@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findPageFor, guessUrls, learnPatterns, pageMatches, slugCandidates } from "./page-finder";
+import { findPageFor, guessUrls, learnPatterns, pageMatches, parseSearchAnswer, slugCandidates } from "./page-finder";
 
 const atomic = { vendor: "Atomic", handle: "atomic-bent-100-2027", title: "Atomic Bent 100 2027" };
 
@@ -60,6 +60,20 @@ describe("findPageFor", () => {
     const r = await findPageFor({ id: "p", batchId: "b", ...atomic }, patterns, { fetcher, search: async () => null });
     expect(r.how).toBe("pattern");
     expect(r.url).toBe("https://www.atomic.com/en-au/products/bent-100-2027.html");
+  });
+
+  it("keeps a searched page that names the model the brand's way", async () => {
+    const burton = (async (input: RequestInfo | URL) => String(input).includes("burton.example")
+      ? new Response(html("Burton Family Tree Alekesam Camber Snowboard"), { status: 200, headers: { "content-type": "text/html" } })
+      : new Response("", { status: 404 })) as typeof fetch;
+    const r = await findPageFor({ id: "p", batchId: "b", vendor: "Burton", handle: "ft-alekesam-2026", title: "FT Alekesam 2026" }, [], { fetcher: burton, search: async () => ({ url: "https://burton.example/alekesam", colours: { Black: "https://burton.example/alekesam?c=black" } }) });
+    expect(r.how).toBe("search");
+    expect(r.colourLinks).toEqual({ Black: "https://burton.example/alekesam?c=black" });
+  });
+
+  it("reads one address per colour out of a search's reply", () => {
+    expect(parseSearchAnswer("PRODUCT: https://a.example/p\nCOLOUR black: https://a.example/p?c=1\nCOLOUR Red: https://a.example/p?c=2.", ["Black", "Red"])).toEqual({ url: "https://a.example/p", colours: { Black: "https://a.example/p?c=1", Red: "https://a.example/p?c=2" } });
+    expect(parseSearchAnswer("NONE")).toBeNull();
   });
 
   it("does not keep a searched page that is titled like another product", async () => {

@@ -214,6 +214,18 @@ export function HouseForm({ house: initial, tagRules: initialRules, kinds, next,
             <input className={INPUT} value={house.descriptions.specsHeading} onChange={(e) => set("descriptions", { specsHeading: e.target.value })} placeholder="Tech Specs" />
           </Field>
         </div>
+        <div className="space-y-2">
+          <div className="text-[13px] font-semibold">More sections</div>
+          <p className="text-[12.5px] text-[var(--ink-soft)]">If your descriptions have more parts than the description and the details list, such as Specifications, Features or a Size guide, add each one here in the order they appear. Each is filled only from what the brand page or spec sheet gives, and left out when there is nothing for it.</p>
+          {(house.descriptions.sections ?? []).map((sec, i) => (
+            <div key={i} className="flex flex-wrap items-center gap-2">
+              <input className={cx(INPUT, "w-44")} aria-label="Section heading" value={sec.heading} placeholder="Specifications" onChange={(e) => set("descriptions", { sections: (house.descriptions.sections ?? []).map((x, j) => (j === i ? { ...x, heading: e.target.value } : x)) })} />
+              <input className={cx(INPUT, "min-w-[14rem] flex-1")} aria-label="What goes in it" value={sec.holds} placeholder="What goes in it: sidecut, radius, weight, core" onChange={(e) => set("descriptions", { sections: (house.descriptions.sections ?? []).map((x, j) => (j === i ? { ...x, holds: e.target.value } : x)) })} />
+              <button type="button" className="text-[13px] text-[var(--ink-soft)] hover:text-[var(--ink)]" onClick={() => set("descriptions", { sections: (house.descriptions.sections ?? []).filter((_, j) => j !== i) })}>Remove</button>
+            </div>
+          ))}
+          <Button size="sm" variant="ghost" onClick={() => set("descriptions", { sections: [...(house.descriptions.sections ?? []), { heading: "", holds: "" }] })}>+ Add a section</Button>
+        </div>
         <Field label="A description of yours, as the shape to match" hint="Paste one real description from your shop. Optional, and the strongest signal of all.">
           <textarea className={cx(INPUT, "min-h-[120px] font-mono text-[12.5px]")} value={house.descriptions.example} onChange={(e) => set("descriptions", { example: e.target.value })} />
         </Field>

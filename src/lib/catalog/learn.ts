@@ -132,7 +132,7 @@ export function describeLearned(v: LearnedVocabulary): string[] {
   lines.push(`${v.products.toLocaleString("en-AU")} products from ${v.file || "the export"}, ${v.vendors.length} brand${v.vendors.length === 1 ? "" : "s"}.`);
   lines.push(`${v.types.length} kind${v.types.length === 1 ? "" : "s"} of product${v.types.length ? `: ${v.types.slice(0, 8).map((t) => `${t.type} (${t.count})`).join(", ")}${v.types.length > 8 ? ", …" : ""}` : ""}.`);
   if (v.sections.length) lines.push(`${v.sections.length} menu tag${v.sections.length === 1 ? "" : "s"} that run across kinds: ${v.sections.join(", ")}.`);
-  else lines.push("No menu tags found running across kinds of product; each kind is tagged on its own.");
+  else lines.push("No menu tags found running across product types; each type is tagged on its own.");
   const spelled = Object.keys(v.spelling).length;
   if (spelled) lines.push(`How ${spelled} shelf tag${spelled === 1 ? " is" : "s are"} spelled.`);
   return lines;

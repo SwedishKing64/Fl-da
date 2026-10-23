@@ -103,7 +103,7 @@ export interface RulebookStage {
 
 const HOUSE = "/training#house";
 const SOURCE_WORDS: Record<RuleSource, string> = {
-  house: "how you list", kind: "a kind of product", tag: "tag rule", template: "template", pricing: "pricing rule", layout: "supplier layout",
+  house: "how you list", kind: "a product type", tag: "tag rule", template: "template", pricing: "pricing rule", layout: "supplier layout",
   supplier: "supplier", website: "your website", export: "your export", setting: "setting", floda: "Flöda",
 };
 
@@ -199,11 +199,11 @@ function filing(input: RulebookInput): RuleEntry[] {
   const out: RuleEntry[] = [];
   const { house, website, learned } = input;
   if (website && website.categories.length) {
-    out.push({ id: "website.types", stage: "filing", source: "website", editHref: "/training#website", sentence: `Your website's ${plural(website.categories.length, "category", "categories")} are the kinds of product; a Type outside them is flagged and never invented by a reader.` });
+    out.push({ id: "website.types", stage: "filing", source: "website", editHref: "/training#website", sentence: `Your website's ${plural(website.categories.length, "category", "categories")} are the product types; a Type outside them is flagged and never invented by a reader.` });
   } else if (learned && learned.types.length) {
     out.push({ id: "learned.types", stage: "filing", source: "export", editHref: "/training#export", sentence: `Your export taught ${plural(learned.types.length, "kind")} of product; a Type outside them is flagged.` });
   } else {
-    out.push({ id: "types.none", stage: "filing", source: "website", editHref: "/training#website", sentence: "No kinds of product yet: plug in your website or read an export, and the Type on every listing is picked from that list." });
+    out.push({ id: "types.none", stage: "filing", source: "website", editHref: "/training#website", sentence: "No product types yet: plug in your website or read an export, and the Type on every listing is picked from that list." });
   }
   if (learned?.sections.length) out.push({ id: "learned.sections", stage: "filing", source: "export", editHref: "/training#export", sentence: `Menu tags that run across kinds: ${learned.sections.join(", ")}. A product gets its kind's menu tag as well as its own.` });
   for (const k of house.kinds) {
@@ -299,7 +299,7 @@ function reading(input: RulebookInput): RuleEntry[] {
 function exporting(): RuleEntry[] {
   return [
     { id: "floda.export.drafts", stage: "export", source: "floda", editHref: "", sentence: "Products leave as drafts, so each can be checked in Shopify before it goes live." },
-    { id: "floda.export.split", stage: "export", source: "floda", editHref: "", sentence: "One CSV per brand or per kind of product, as each batch is set; split again only where Shopify's size limit needs it." },
+    { id: "floda.export.split", stage: "export", source: "floda", editHref: "", sentence: "One CSV per brand or per product type, as each batch is set; split again only where Shopify's size limit needs it." },
     { id: "floda.export.repair", stage: "export", source: "floda", editHref: "", sentence: "What Shopify would reject is repaired on the way out and listed: a missing title, a bad handle, a SKU on two variants, a picture at an address Shopify cannot fetch. Nothing stops the export." },
     { id: "floda.export.push", stage: "export", source: "floda", editHref: "/settings", sentence: "A push straight to the live store needs the warnings reviewed and a tick, and can be rolled back." },
   ];

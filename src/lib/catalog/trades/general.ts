@@ -6,7 +6,7 @@ import { GENERAL_METAFIELDS } from "../types";
 export const GENERAL_PACK: TradePack = {
   id: "general",
   name: "Nothing: learn it all from my store",
-  sells: "Any trade; Flöda learns your kinds of product, tags and options from your own store",
+  sells: "Any trade; Flöda learns your product types, tags and options from your own store",
   tree: [],
   tagSpelling: {},
   tagAlso: {},

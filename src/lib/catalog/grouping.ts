@@ -4,7 +4,7 @@ import { buildHandle } from "./handle";
 import { nameLikeSibling } from "./shop-names";
 import { csvType } from "./pipeline-pure";
 import { chooseOptions, collectionsFor, extraOptions, optionValue, type OptionKey, detectCategory, enrichFromTitle, metafieldsFor, OPTION_LABELS, snowboardType, tagsFor, type CategoryRuleLike } from "./categorize";
-import { houseConventions, packKnowledge, resolveType, snowTrade } from "./taxonomy";
+import { closestType, houseConventions, isValidType, packKnowledge, resolveType, snowTrade, typesAreKnown } from "./taxonomy";
 import { inSizeOrder } from "./size-order";
 import { correctedOptionName, correctedProductType } from "./corrections";
 import { withFit } from "./mapping";
@@ -154,7 +154,9 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
       : null;
     // A supplier's own kind word is a Type only when it is one the shop uses: "FREERIDE" is not.
     // And as the shop corrected it: a Type changed on this brand's product before is changed here too.
-    const productType = correctedProductType(snowboard ?? pack ?? accessory ?? group.rule?.productType ?? resolveType(first.productType) ?? "", brand);
+    const filedAs = correctedProductType(snowboard ?? pack ?? accessory ?? group.rule?.productType ?? resolveType(first.productType) ?? "", brand);
+    // Filed under one of the shop's own types where one is close, rather than asked about.
+    const productType = filedAs && typesAreKnown() && !isValidType(filedAs) ? closestType(filedAs) ?? filedAs : filedAs;
     // The audience goes on the front of a gendered product's name, as the shop writes it: every one
     // of its 20 snowboard bindings and 14 of its 15 boots is "Men's …" or "Women's …", and so are
     // its jackets, gloves and socks. Not a ski, board or pole, which the shop names by model alone

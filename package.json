@@ -29,6 +29,7 @@
     "exceljs": "^4.4.0",
     "heic-convert": "^2.1.0",
     "heic-to": "^1.6.5",
+    "jszip": "^3.10.2",
     "next": "16.2.12",
     "papaparse": "^5.7.0",
     "prisma": "^6.19.3",

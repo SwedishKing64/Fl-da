@@ -22,7 +22,7 @@ const STALL_MS = 330_000;
 /** How many times a read that ran out of time is tried again before it is left to the person. */
 const RETRIES = 2;
 
-export function UploadPanel({ batchId, aiEnabled, reading, productCount, pendingSince = [], buildNow = false, retryable = [], allNew = false }: { batchId: string; aiEnabled: boolean; hasProducts: boolean; reading: number; productCount: number; pendingSince?: number[]; buildNow?: boolean; retryable?: Array<{ id: string; filename: string }>; allNew?: boolean }) {
+export function UploadPanel({ batchId, aiEnabled, reading, productCount, pendingSince = [], buildNow = false, retryable = [], allNew = false, maxBytes }: { batchId: string; aiEnabled: boolean; hasProducts: boolean; reading: number; productCount: number; pendingSince?: number[]; buildNow?: boolean; retryable?: Array<{ id: string; filename: string }>; allNew?: boolean; maxBytes?: number }) {
   const router = useRouter();
   const [rereading, setRereading] = useState<{ filename: string; attempt: number } | null>(null);
   const attempts = useRef(new Map<string, number>());
@@ -144,7 +144,7 @@ export function UploadPanel({ batchId, aiEnabled, reading, productCount, pending
      */
     const { files: list, notes: shrunk } = await shrinkAll(picked);
     setNotes(shrunk);
-    const over = list.find((f) => !fitsUpload(f.size));
+    const over = list.find((f) => (maxBytes ? f.size > maxBytes : !fitsUpload(f.size)));
     if (over) {
       setError(tooBig(over, over.size));
       setBusy(false);
@@ -221,7 +221,7 @@ export function UploadPanel({ batchId, aiEnabled, reading, productCount, pending
         <div className="mt-1 text-xs">PDF, XLSX, CSV, TXT, JPG or PNG. {aiEnabled ? "PDFs, scans and photos are read by AI. A scan or photo is shrunk here before it is sent — it is read at 1568px across whatever you give it, so there is no need to scan above 300dpi." : "ANTHROPIC_API_KEY is not set: only CSV/XLSX and text-based PDFs can be read."}</div>
         <div className="mt-3">
           <Button size="sm" onClick={() => inputRef.current?.click()} disabled={busy}>Choose files</Button>
-          <input ref={inputRef} type="file" multiple accept=".pdf,.xlsx,.xlsm,.xls,.csv,.txt,image/*" className="hidden" onChange={(e) => e.target.files && upload(e.target.files)} />
+          <input ref={inputRef} type="file" multiple className="hidden" onChange={(e) => e.target.files && upload(e.target.files)} />
         </div>
         {notes.length > 0 && (
           <ul className="mx-auto mt-3 max-w-md list-none text-left text-[11px] text-[var(--ink-soft)]">

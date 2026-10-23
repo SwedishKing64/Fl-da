@@ -70,7 +70,7 @@ export async function loadTagGate(): Promise<TagGate> {
   for (const l of listings) for (const t of l.tags.split(",")) known.push(t);
   for (const r of rules) for (const t of r.addTags.split(",")) known.push(t);
   for (const t of templates) for (const x of t.addTags.split(",")) known.push(x);
-  for (const k of houseConventions().kinds) known.push(...k.tags);
+  for (const k of houseConventions().kinds) known.push(...k.tags, ...(k.variesTags ?? []));
   for (const p of approved) known.push(p.tag);
   const closed = listings.length > 0 || rules.length > 0 || templates.length > 0 || houseConventions().kinds.length > 0;
   return gateFrom(known, closed);

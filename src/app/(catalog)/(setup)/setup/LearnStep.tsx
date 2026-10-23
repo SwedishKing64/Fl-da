@@ -75,7 +75,7 @@ export function LearnPanel({ learned: before, kinds: saved = [], next, onDone }:
         const known = new Map(saved.map((k) => [k.type.toLowerCase(), k]));
         const kinds: KindRule[] = kindsFromListings(listings).map((k) => {
           const was = known.get(k.type.toLowerCase());
-          return { type: k.type, calledAs: was?.calledAs ?? k.type, tags: was?.tags ?? k.commonTags, titleFormat: was?.titleFormat ?? k.exampleTitle, count: k.count };
+          return { type: k.type, calledAs: was?.calledAs ?? k.type, tags: was?.tags ?? k.commonTags, variesTags: k.variesTags, titleFormat: was?.titleFormat ?? k.exampleTitle, count: k.count };
         });
         setOutcome({ file: file.name, lines: describeLearned(learned), templates: t.data!.templates, remembered, warnings: found.warnings, kinds });
         setChosen(null);

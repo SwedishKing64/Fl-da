@@ -35,6 +35,7 @@ export function previewTitle(naming: HouseConventions["naming"]): string {
   const name = naming.casing === "supplier" ? "M7 MANTRA 88 TI" : "M7 Mantra 88 Ti";
   const brand = naming.brandInTitle === "always" ? "Völkl " : "";
   const year = naming.season === "never" ? "" : " 2026";
+  // With "only on what I choose" the example ski shows its year as one of the chosen ones would.
   return `${brand}${name}${year}`;
 }
 
@@ -84,6 +85,7 @@ export function HouseForm({ house: initial, tagRules: initialRules, kinds, next,
 
   return (
     <div className="space-y-7">
+      <datalist id="house-kinds">{kinds.map((k) => <option key={k} value={k} />)}</datalist>
       <section className="space-y-4">
         <h3 className="text-[15px] font-bold">Names</h3>
         <Choice<HouseConventions["naming"]["brandInTitle"]> label="The brand in the product title" value={house.naming.brandInTitle} onChange={(v) => set("naming", { brandInTitle: v })} options={[
@@ -94,7 +96,18 @@ export function HouseForm({ house: initial, tagRules: initialRules, kinds, next,
           { key: "seasonal", title: "On seasonal products", text: "Products that carry a year tag get it after the name: “Mantra 88 2026”." },
           { key: "always", title: "On everything", text: "Every title ends with its year." },
           { key: "never", title: "Never", text: "Names carry no year." },
+          { key: "chosen", title: "Only on what I choose", text: "Just the product types or tags you name below, such as everything tagged snow." },
         ]} />
+        {house.naming.season === "chosen" && (
+          <div className="grid gap-3 rounded-[12px] border border-[var(--line)] bg-white p-3 sm:grid-cols-2">
+            <Field label="Product types that get the year" hint="Comma-separated, as your Type column writes them.">
+              <input className={INPUT} list="house-kinds" value={(house.naming.yearOn?.types ?? []).join(", ")} onChange={(e) => set("naming", { yearOn: { types: e.target.value.split(",").map((t) => t.trimStart()), tags: house.naming.yearOn?.tags ?? [] } })} placeholder="Skis, Snowboards, Ski Boots" />
+            </Field>
+            <Field label="Or any product with one of these tags" hint="Comma-separated. A product with any of them gets the year.">
+              <input className={INPUT} value={(house.naming.yearOn?.tags ?? []).join(", ")} onChange={(e) => set("naming", { yearOn: { types: house.naming.yearOn?.types ?? [], tags: e.target.value.split(",").map((t) => t.trimStart()) } })} placeholder="snow" />
+            </Field>
+          </div>
+        )}
         <Choice<HouseConventions["naming"]["casing"]> label="Capitals" value={house.naming.casing} onChange={(v) => set("naming", { casing: v })} options={[
           { key: "shop", title: "Mixed case", text: "A supplier’s “M7 MANTRA 88 TI” becomes “M7 Mantra 88 Ti”." },
           { key: "supplier", title: "As the supplier writes it", text: "Names go out exactly as they came in." },
@@ -166,7 +179,6 @@ export function HouseForm({ house: initial, tagRules: initialRules, kinds, next,
             <div className="border-t border-[var(--line-soft)] px-3 py-2">
               <Button size="sm" variant="ghost" onClick={() => set("weights", { byKind: [...house.weights.byKind, { type: "", grams: 0 }] })}>+ Add a product type</Button>
             </div>
-            <datalist id="house-kinds">{kinds.map((k) => <option key={k} value={k} />)}</datalist>
           </div>
         )}
       </section>

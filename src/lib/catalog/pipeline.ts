@@ -1,7 +1,7 @@
 // Server-side orchestration: ingest -> extract -> map -> group -> price -> images -> review -> export.
 
 import type { Prisma } from "@prisma/client";
-import { productTitle, seasonTagFrom, seoTitle, titledForShop } from "./titles";
+import { productTitle, seasonTagFrom, seoTitle, titleYear, titledForShop } from "./titles";
 import { isOfType, isSkipped, parseDirectives, typeKey } from "./instructions";
 import { prisma, parseJson } from "./db";
 import { extractFile, type UploadKind } from "./extract";
@@ -822,7 +822,7 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
     // First the listing the lines were placed on by barcode — the shop has these very items, and
     // the handle is known for certain — then a listing with this very name and season.
     const placedOn = [...new Set(g.variants.map((v) => v.item.shopHandle).filter((h): h is string => Boolean(h)))];
-    const handle = placedOn.length === 1 ? placedOn[0] : existingHandle({ title: productTitle(g.title, seasonTagFrom(g.tags)), brand: g.brand, season: seasonTagFrom(g.tags) ?? "" }, listings);
+    const handle = placedOn.length === 1 ? placedOn[0] : existingHandle({ title: productTitle(g.title, titleYear(g.tags, g.productType)), brand: g.brand, season: seasonTagFrom(g.tags) ?? "" }, listings);
     if (handle && handle !== g.handle) { g.handle = handle; kept.push(handle); }
     else if (handle) kept.push(handle);
   }
@@ -873,11 +873,11 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
 
   // What the person said not to build, by name or by unticking it on the batch page.
   if (directives.skip.length > 0) {
-    const left = grouped.filter((g) => isSkipped({ title: productTitle(g.title, seasonTagFrom(g.tags)), handle: g.handle }, directives.skip));
+    const left = grouped.filter((g) => isSkipped({ title: productTitle(g.title, titleYear(g.tags, g.productType)), handle: g.handle }, directives.skip));
     for (const g of left) grouped.splice(grouped.indexOf(g), 1);
     if (left.length > 0) {
       for (const fileId of [...new Set(items.map((i) => i.fileId))]) {
-        await noteOnFile(fileId, `Not built, as asked: ${left.map((g) => productTitle(g.title, seasonTagFrom(g.tags))).join(", ")}.`);
+        await noteOnFile(fileId, `Not built, as asked: ${left.map((g) => productTitle(g.title, titleYear(g.tags, g.productType))).join(", ")}.`);
       }
     }
   }
@@ -921,10 +921,10 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
   // were, so a slow brand site cannot make a build of fifty products wait on each.
   const picturesUntil = Date.now() + 90_000;
   for (const g of grouped) {
-    // A seasonal product carries its year after the name — the same products that carry a year tag.
-    // The SEO title is that title with the brand in front of it, which is the one place it appears.
-    const season = seasonTagFrom(g.tags);
-    const title = titledForShop(g.brand, productTitle(g.title, season));
+    // A seasonal product carries its year after the name — the same products that carry a year tag,
+    // or only those the shop chose (see titleYear). The SEO title is that title with the brand in
+    // front of it, which is the one place it appears.
+    const title = titledForShop(g.brand, productTitle(g.title, titleYear(g.tags, g.productType)));
     // Everything the product owns goes in with it: its variants, each with the order line it came
     // from, and its pictures. One round trip per product instead of one per row — a build on a
     // database in another region was waiting on the network a dozen times per product.

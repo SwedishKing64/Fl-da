@@ -44,6 +44,7 @@ export function KindsEditor({ kinds: initial, title, blurb, onSaved }: { kinds: 
               <th className="px-3 py-2 font-semibold">In the export</th>
               <th className="px-3 py-2 font-semibold">What you call it</th>
               <th className="px-3 py-2 font-semibold">Tags every one gets</th>
+              <th className="px-3 py-2 font-semibold">Tags that vary</th>
               <th className="px-3 py-2 font-semibold">A title reads like</th>
             </tr>
           </thead>
@@ -56,6 +57,14 @@ export function KindsEditor({ kinds: initial, title, blurb, onSaved }: { kinds: 
                 </td>
                 <td className="px-3 py-2"><input className={`${INPUT} min-w-[11rem]`} value={r.calledAs} onChange={(e) => set(i, { calledAs: e.target.value })} placeholder={r.type} /></td>
                 <td className="px-3 py-2"><input className={`${INPUT} min-w-[16rem]`} value={r.tagsText} onChange={(e) => set(i, { tagsText: e.target.value })} placeholder="ski, ski-gear, mens" /><div className="mt-0.5 text-[11.5px] text-[var(--ink-soft)]">Comma-separated. These are added on every product of this type.</div></td>
+                <td className="px-3 py-2">
+                  {r.variesTags?.length ? (
+                    <>
+                      <div className="flex max-w-[18rem] flex-wrap gap-1">{r.variesTags.map((t) => <span key={t} className="rounded-full bg-[var(--canvas)] px-2 py-0.5 text-[12px] ring-1 ring-inset ring-[var(--line)]">{t}</span>)}</div>
+                      <div className="mt-0.5 text-[11.5px] text-[var(--ink-soft)]">On some of these products and not others, so Flöda picks the ones that fit each product.</div>
+                    </>
+                  ) : <span className="text-[12px] text-[var(--ink-soft)]">None</span>}
+                </td>
                 <td className="px-3 py-2"><input className={`${INPUT} min-w-[14rem]`} value={r.titleFormat} onChange={(e) => set(i, { titleFormat: e.target.value })} placeholder="Völkl Mantra 88 2026" /><div className="mt-0.5 text-[11.5px] text-[var(--ink-soft)]">One real title, or the shape: Brand Model Year.</div></td>
               </tr>
             ))}

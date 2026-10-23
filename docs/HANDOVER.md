@@ -154,6 +154,30 @@ from its QuickBooks list, batch PDFs split into one bill per invoice) live in Ru
 
 ## Decisions and history, newest first
 
+- 2026-10-23 First run at Alpsport on the local desktop copy (v0.1.14-local). What the shop said,
+  and what changed:
+  - The website reader took Alpsport's 2,640 automated collections as kinds of product. A Shopify
+    store is now read from `/products.json`: the Product Type each listing carries, with counts.
+  - A Burton invoice was read as from Alpsport (the bill-to name), which became every line's
+    brand. The shop's own name is never the supplier or a brand (`isOwnShop`).
+  - "Product type", Shopify's word, replaces "kind of product" everywhere a person reads it.
+  - A type's "tags every one gets" are tags on 95% of its products; tags on some and not others
+    (a ski's terrain) are "tags that vary", picked per product.
+  - The model year can go on chosen product types or tags only (`naming.season = "chosen"`).
+  - Descriptions can have extra sections of the shop's own (Specifications, Features).
+  - Links: found automatically when the review grid opens, kept when the page carries the model's
+    own name ("Family Tree Alekesam" for "FT Alekesam"), one page per colour where the brand has
+    them (`Product.colourLinks`), each colour's pictures on its own variant.
+  - A type outside the shop's list is filed under its nearest type (`closestType`), not asked.
+  - The export page lists each issue once with its product count.
+  - Supplier files of any type: zips unpacked, Word read, unknown files kept; no size cap on the
+    desktop.
+  - Prices and stock takes an order form and its invoice together: quantities and cost (after
+    indent discounts) from the invoice, barcodes and RRP from the order form
+    (`order-and-invoice.ts`).
+  - The hosted Flöda answered 404 to sign-in, so a `local` desktop build (no licence, own account,
+    own key) exists: the release workflow's `local` input.
+
 - 2026-10-22 Supplier layouts are shared between shops (`shared-layouts.ts`,
   `shared-layouts-store.ts`, the `layout-share` and `layout-find` calls on the licence route). When a
   person saves a supplier's column mapping, the file's headings and the field each one is go to

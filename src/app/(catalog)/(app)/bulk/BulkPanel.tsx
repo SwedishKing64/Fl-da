@@ -17,6 +17,7 @@ import { BulkLinks } from "./BulkLinks";
 import { listingsFromCsv } from "@/lib/catalog/shop-memory";
 import type { CanonicalLineItem } from "@/lib/catalog/types";
 import type { InvoiceRead } from "@/lib/catalog/invoice";
+import { invoiceOf, joinOrderAndInvoice } from "@/lib/catalog/order-and-invoice";
 import { fitsUpload, looksLikeImage, shrinkImage, tooBig } from "@/app/(catalog)/shrink";
 import { Alert, Button, Card, INPUT, INPUT_INLINE, cx } from "@/app/(catalog)/ui";
 import { ChangedCells } from "./ChangedCells";
@@ -245,6 +246,7 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
     ? { ...invoice, lines: (narrowed ? narrowed.lines : invoice.lines).filter((l) => !brandsSetAside.includes((l.brand ?? "").trim()) && !kindsOff.includes(kindOf(l))) }
     : invoice;
   const referenceRef = useRef<HTMLInputElement>(null);
+  const orderFormRef = useRef<HTMLInputElement>(null);
   const [references, setReferences] = useState<Reference[]>([]);
 
   const [instruction, setInstruction] = useState("");
@@ -361,6 +363,16 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
       setBusy(null); setProgress("");
     }
     const readable = readings.filter((r) => r.data);
+    // An order form and its invoice, both with quantities: the invoice is what arrived and what it
+    // cost; the order form fills in the barcodes and retail prices the invoice leaves out.
+    const counted = [...readable].filter((r) => r.ordered > 0).sort((a, b) => b.ordered - a.ordered);
+    if (counted.length >= 2) {
+      const pair = invoiceOf({ name: counted[0].file.name, lines: counted[0].ordered, r: counted[0] }, { name: counted[1].file.name, lines: counted[1].ordered, r: counted[1] });
+      combine(pair.form.r.data!, pair.invoice.r.data!);
+      const rest = readings.filter((r) => r !== pair.form.r && r !== pair.invoice.r && /\.(xlsx?|csv)$/i.test(r.file.name));
+      for (const r of rest) await takeReference(r.file);
+      return;
+    }
     const order = [...readable].sort((a, b) => b.ordered - a.ordered)[0];
     if (!order) {
       setError(`None of ${files.map((f) => f.name).join(", ")} reads as an order or invoice — it needs a column identifying each line and a column of prices or quantities. Add the order form, then these as its spec sheets.`);
@@ -475,6 +487,39 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
    * other change on this page, and for the same reason: an export runs to megabytes and never
    * needs to leave the machine. Only the invoice itself goes to the server, and only to be read.
    */
+  /** An order form and its invoice as one delivery: see order-and-invoice.ts. */
+  function combine(form: Invoice, inv: Invoice) {
+    const j = joinOrderAndInvoice(form.lines, inv.lines);
+    const said = `${inv.filename} is the invoice: what arrived and what it cost. ${form.filename} is the order form: barcodes and retail prices were taken from it where the invoice has none. ${j.matched} of ${inv.lines.length} invoice line${inv.lines.length === 1 ? "" : "s"} found on the order form.${j.notShipped.length ? ` ${j.notShipped.length} ordered line${j.notShipped.length === 1 ? " is" : "s are"} not on the invoice (not shipped yet, or not coming).` : ""}`;
+    setInvoice({
+      ...inv,
+      filename: `${inv.filename} + ${form.filename}`,
+      lines: j.lines,
+      columns: { ...form.columns, ...Object.fromEntries(Object.entries(inv.columns).filter(([, v]) => v)), rrp: inv.columns.rrp || form.columns.rrp, barcode: inv.columns.barcode || form.columns.barcode },
+      warnings: [said, ...inv.warnings],
+      priceList: form.priceList ?? inv.priceList,
+    });
+    setLinks({}); setLinkNotes({}); setBrandsOff([]); setDecisions({}); setApplied(null); setAgainConfirmed(false);
+  }
+
+  /** The order form for the invoice already loaded, added after it. */
+  async function takeOrderForm(file: File) {
+    if (!invoice) return;
+    setBusy("invoice"); setError(null); setSaved(null);
+    try {
+      const sent = await shrinkImage(file);
+      if (!fitsUpload(sent.file.size)) { setError(tooBig(file, sent.file.size)); return; }
+      setProgress(`Reading ${file.name}…`);
+      const r = await readInvoiceAction({ name: file.name, type: sent.file.type, base64: await read(sent.file, file.name) });
+      if (!r.ok) { setError(r.error); return; }
+      combine({ ...r.data!, filename: file.name }, invoice);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(null); setProgress("");
+    }
+  }
+
   async function takeInvoice(file: File) {
     setBusy("invoice"); setError(null); clearPreview(); setSaved(null);
     try {
@@ -1362,6 +1407,13 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
                     : null}
                 </div>
                 {invoice.warnings.map((w, i) => <p key={i} className="mt-1.5 text-xs text-[var(--ink-soft)]">{w}</p>)}
+                {!invoice.filename.includes(" + ") && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[var(--ink-soft)]">
+                    <Button size="sm" variant="ghost" disabled={busy !== null} onClick={() => orderFormRef.current?.click()}>Add the order form for this invoice</Button>
+                    <span>Barcodes and retail prices come from the order form; what arrived and its cost, discounts and all, from the invoice.</span>
+                    <input ref={orderFormRef} type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void takeOrderForm(f); }} />
+                  </div>
+                )}
               </div>
 
               <ul className="divide-y divide-[var(--line-soft)] text-sm">

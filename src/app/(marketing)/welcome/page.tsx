@@ -71,7 +71,7 @@ export default function WelcomePage() {
               steps={[
                 { title: "Drop in what the supplier sent", text: "A spreadsheet, a PDF, or a photo off your phone, pen marks and all. Flöda reads the print and the handwriting: a price in the margin is the RRP, a percentage is the discount, a year is the season." },
                 { title: "It becomes your catalogue\u2019s shape", text: "Lines are matched to what you already sell by barcode, code or name. New products are named, categorised, tagged and priced the way your shop does it, learned from your own Shopify export." },
-                { title: "Check it, then import it", text: "Every product in a grid, every changed cell listed. Download a Shopify CSV, or only the kinds of product you\u2019re working on today, and import it yourself." },
+                { title: "Check it, then import it", text: "Every product in a grid, every changed cell listed. Download a Shopify CSV, or only the product types you\u2019re working on today, and import it yourself." },
               ]}
               panels={[
                 <div key="in" className="sp sp-in"><div className="sheet"><span className="pen">×3</span><i /><i /><i /><i /><span className="pen two">YT 27</span></div><div className="cap">What the rep sent, photographed</div></div>,
@@ -108,7 +108,7 @@ export default function WelcomePage() {
               <Reveal className="tile" delay={3}>
                 <div className="tile-shot"><Image src="/shots/learn.jpg" alt="Teach Flöda your catalogue" width={1800} height={1138} sizes="(min-width: 860px) 360px, 100vw" /></div>
                 <h3>Learns your shop</h3>
-                <p>Starts blank. Your Shopify export teaches it your kinds of product, your menus, how you spell every tag and what each brand&rsquo;s listings look like.</p>
+                <p>Starts blank. Your Shopify export teaches it your product types, your menus, how you spell every tag and what each brand&rsquo;s listings look like.</p>
               </Reveal>
               <Reveal className="tile" delay={4}>
                 <div className="tile-ui app-ui"><div className="dock"><span className="win">▣</span><span className="mac">⌘</span></div><span className="lbl">Floda-Setup.exe · Floda.dmg</span></div>
@@ -197,7 +197,7 @@ export default function WelcomePage() {
               <Faq items={[
                 { q: "Do I need an Anthropic account or an API key?", a: <p>No. Reading by AI is included in every plan. A shop that would rather have the reading billed to its own Anthropic account can paste a key of its own in Settings.</p> },
                 { q: "What happens on the first invoice from a new supplier?", a: <p>Flöda says it is a new layout and asks you to check the five things a new layout gets wrong. What you fix is remembered for that supplier. In setup you can do this for every supplier at once, from one example each.</p> },
-                { q: "Does it work for shops that are not outdoor or sports?", a: <p>Yes. Flöda starts blank and learns your kinds of product, your menus, your tags and your naming from your own Shopify export. It does not care what you sell.</p> },
+                { q: "Does it work for shops that are not outdoor or sports?", a: <p>Yes. Flöda starts blank and learns your product types, your menus, your tags and your naming from your own Shopify export. It does not care what you sell.</p> },
                 { q: "How does the free trial work?", a: <p>Every plan starts with 14 days free and no card. You pick a plan when you set up, use everything, and a person from Flöda gets in touch before the trial ends. Nothing is charged until you have said which plan you want.</p> },
               ]} />
             </Reveal>

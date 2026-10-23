@@ -91,7 +91,7 @@ export function HouseForm({ house: initial, tagRules: initialRules, kinds, next,
           { key: "always", title: "Leads the title", text: "“Völkl Mantra 88”. Many general stores write it this way." },
         ]} />
         <Choice<HouseConventions["naming"]["season"]> label="The model year" value={house.naming.season} onChange={(v) => set("naming", { season: v })} options={[
-          { key: "seasonal", title: "On seasonal kinds", text: "Products that carry a year tag get it after the name: “Mantra 88 2026”." },
+          { key: "seasonal", title: "On seasonal products", text: "Products that carry a year tag get it after the name: “Mantra 88 2026”." },
           { key: "always", title: "On everything", text: "Every title ends with its year." },
           { key: "never", title: "Never", text: "Names carry no year." },
         ]} />
@@ -134,7 +134,7 @@ export function HouseForm({ house: initial, tagRules: initialRules, kinds, next,
         <h3 className="text-[15px] font-bold">Shipping weight</h3>
         <Choice<HouseConventions["weights"]["mode"]> label="How weight is written" value={house.weights.mode} onChange={(v) => set("weights", { mode: v })} options={[
           { key: "none", title: "Not written", text: "Weight is left at zero; shipping is worked out another way." },
-          { key: "byKind", title: "A weight per kind", text: "A band per kind of product: every ski 2 kg, every snowboard 1 kg." },
+          { key: "byKind", title: "A weight per product type", text: "A band per product type: every ski 2 kg, every snowboard 1 kg." },
           { key: "fixed", title: "The same on everything", text: "One weight on every variant." },
         ]} />
         {house.weights.mode !== "none" && (
@@ -152,7 +152,7 @@ export function HouseForm({ house: initial, tagRules: initialRules, kinds, next,
         {house.weights.mode === "byKind" && (
           <div className="rounded-[12px] border border-[var(--line)] bg-white">
             <table className="w-full text-[14px]">
-              <thead className="text-left text-[12px] text-[var(--ink-soft)]"><tr><th className="px-3 py-2 font-semibold">Kind of product</th><th className="px-3 py-2 font-semibold">Weight ({unit})</th><th /></tr></thead>
+              <thead className="text-left text-[12px] text-[var(--ink-soft)]"><tr><th className="px-3 py-2 font-semibold">Product type</th><th className="px-3 py-2 font-semibold">Weight ({unit})</th><th /></tr></thead>
               <tbody>
                 {house.weights.byKind.map((k, i) => (
                   <tr key={i} className="border-t border-[var(--line-soft)]">
@@ -164,7 +164,7 @@ export function HouseForm({ house: initial, tagRules: initialRules, kinds, next,
               </tbody>
             </table>
             <div className="border-t border-[var(--line-soft)] px-3 py-2">
-              <Button size="sm" variant="ghost" onClick={() => set("weights", { byKind: [...house.weights.byKind, { type: "", grams: 0 }] })}>+ Add a kind</Button>
+              <Button size="sm" variant="ghost" onClick={() => set("weights", { byKind: [...house.weights.byKind, { type: "", grams: 0 }] })}>+ Add a product type</Button>
             </div>
             <datalist id="house-kinds">{kinds.map((k) => <option key={k} value={k} />)}</datalist>
           </div>
@@ -172,23 +172,23 @@ export function HouseForm({ house: initial, tagRules: initialRules, kinds, next,
       </section>
 
       <section className="space-y-3">
-        <h3 className="text-[15px] font-bold">Tags that go with certain products</h3>
-        <p className="text-[13.5px] text-[var(--ink-soft)]">Your export already teaches which menu tags go with each kind. Add the rules it cannot see: a tag every product of a brand gets, a tag for anything with a word in its name.</p>
+        <h3 className="text-[15px] font-bold">Extra tags by brand, product type or title</h3>
+        <p className="text-[13.5px] text-[var(--ink-soft)]">Flöda already copies the tags your existing listings use. Add a rule here only for a tag your listings don&rsquo;t show, for example: every product whose brand is Burton gets the tag <em>burton</em>.</p>
         <div className="space-y-2">
           {rules.map((r, i) => (
-            <div key={i} className="grid items-center gap-2 rounded-[12px] border border-[var(--line)] bg-white p-3 sm:grid-cols-[auto_1fr_1fr_auto_1fr_auto]">
-              <span className="text-[13px] text-[var(--ink-soft)]">When</span>
-              <select className={INPUT} value={r.field} onChange={(e) => setRules(rules.map((x, j) => (j === i ? { ...x, field: e.target.value as TagRuleInput["field"] } : x)))}>
+            <div key={i} className="flex flex-wrap items-center gap-2 rounded-[12px] border border-[var(--line)] bg-white p-3 text-[13.5px]">
+              <span>Every product whose</span>
+              <select className={cx(INPUT, "w-auto")} aria-label="Which field the rule looks at" value={r.field} onChange={(e) => setRules(rules.map((x, j) => (j === i ? { ...x, field: e.target.value as TagRuleInput["field"] } : x)))}>
                 {TAG_RULE_FIELDS.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
               </select>
-              <input className={INPUT} value={r.pattern} placeholder="contains… e.g. Burton" onChange={(e) => setRules(rules.map((x, j) => (j === i ? { ...x, pattern: e.target.value } : x)))} />
-              <span className="text-[13px] text-[var(--ink-soft)]">add tags</span>
-              <input className={INPUT} value={r.addTags} placeholder="snowboard, burton" onChange={(e) => setRules(rules.map((x, j) => (j === i ? { ...x, addTags: e.target.value } : x)))} />
+              <input className={cx(INPUT, "w-40")} aria-label="What it matches" value={r.pattern} placeholder="Burton" onChange={(e) => setRules(rules.map((x, j) => (j === i ? { ...x, pattern: e.target.value } : x)))} />
+              <span>gets the tags</span>
+              <input className={cx(INPUT, "min-w-[12rem] flex-1")} aria-label="Tags to add, separated by commas" value={r.addTags} placeholder="burton, snowboard" onChange={(e) => setRules(rules.map((x, j) => (j === i ? { ...x, addTags: e.target.value } : x)))} />
               <button type="button" className="text-[13px] text-[var(--ink-soft)] hover:text-[var(--ink)]" onClick={() => setRules(rules.filter((_, j) => j !== i))}>Remove</button>
             </div>
           ))}
         </div>
-        <Button size="sm" variant="ghost" onClick={() => setRules([...rules, { field: "any", pattern: "", addTags: "" }])}>+ Add a rule</Button>
+        <Button size="sm" variant="ghost" onClick={() => setRules([...rules, { field: "brand", pattern: "", addTags: "" }])}>+ Add a tag rule</Button>
       </section>
 
       <section className="space-y-4">

@@ -89,10 +89,10 @@ export interface TagRuleInput {
 }
 
 export const TAG_RULE_FIELDS: Array<{ key: TagRuleInput["field"]; label: string }> = [
-  { key: "any", label: "anything about it" },
-  { key: "productType", label: "its kind of product" },
-  { key: "brand", label: "its brand" },
-  { key: "title", label: "its name" },
+  { key: "brand", label: "brand (Vendor) includes" },
+  { key: "productType", label: "product type includes" },
+  { key: "title", label: "title includes" },
+  { key: "any", label: "brand, type or title includes" },
 ];
 
 const norm = (s: string) => s.trim().toLowerCase();

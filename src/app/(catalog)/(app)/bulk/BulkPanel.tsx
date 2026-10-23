@@ -224,7 +224,7 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
   const vendorNames = brandsOnOrder.find((b) => same(b, vendor));
   const brandsSetAside = [...new Set([...brandsOff, ...(vendorNames ? brandsOnOrder.filter((b) => !same(b, vendor)) : [])])];
   /**
-   * The kinds of product on the order, and which are set aside. A Burton order carries boards,
+   * The product types on the order, and which are set aside. A Burton order carries boards,
    * bindings, boots, outerwear and gloves on one form; the shop does the boards today and the
    * rest another day. Each line's kind is what the form says, or the Type of the listing its
    * barcode lands on. See kindOfLine.
@@ -896,7 +896,7 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
   const edited = sheets.filter(touched);
 
   /**
-   * Hand over a file cut down to some kinds of product.
+   * Hand over a file cut down to some product types.
    *
    * The delivery was worked as the boards alone, and the file to import is the boards alone: a
    * whole export would put every binding and glove in it through Shopify's import too, for no
@@ -924,7 +924,7 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
   const narrowedProducts = narrowedFiles.reduce((n, f) => n + f.out.products, 0);
   const kindsDownload = sheets.length > 0 && kindsInFiles.length > 1 && (
     <fieldset className="mt-4 rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2.5">
-      <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-[var(--ink-soft)]">Download only some kinds of product</legend>
+      <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-[var(--ink-soft)]">Download only some product types</legend>
       <p className="mb-2 text-xs text-[var(--ink-soft)]">
         {edited.length > 0
           ? <>Tick the kinds and the <strong>updated</strong> file comes down with those products alone, every row of each, under the same headings &mdash; so importing it touches nothing else.</>
@@ -1495,7 +1495,7 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
 
               {kindsOnOrder.length > 1 && (
                 <fieldset className="rounded-xl border border-[var(--line-soft)] px-3 py-2.5">
-                  <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-[var(--ink-soft)]">Kinds of product on this order</legend>
+                  <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-[var(--ink-soft)]">Product types on this order</legend>
                   <p className="mb-2 text-xs text-[var(--ink-soft)]">Tick the kinds to do now; the rest are set aside for another run. Or say it below: &ldquo;only the snowboards&rdquo;.</p>
                   <div className="flex flex-wrap gap-2">
                     {kindsOnOrder.map((k) => {

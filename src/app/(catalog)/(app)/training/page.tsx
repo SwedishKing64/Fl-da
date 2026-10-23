@@ -28,7 +28,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 /**
- * Everything Flöda is taught, in one place: the shop's website (its kinds of product), each
+ * Everything Flöda is taught, in one place: the shop's website (its product types), each
  * supplier's paperwork (how their invoices are laid out), the Shopify export (how products are
  * filed and tagged), and the rules a person sets for every listing. Setup walks through the same
  * things once; this is where they are come back to.
@@ -83,7 +83,7 @@ export default async function TrainingPage() {
       </div>
 
       <div id="website">
-        <Card title="Your website: the kinds of product" className="mb-6">
+        <Card title="Your website: the product types" className="mb-6">
           <WebsiteForm saved={website} />
         </Card>
       </div>
@@ -130,7 +130,7 @@ export default async function TrainingPage() {
         {learned ? (
           <ul className="mb-4 list-disc pl-5 text-[14px]">{describeLearned(learned).map((l) => <li key={l}>{l}</li>)}</ul>
         ) : (
-          <p className="mb-4 text-[14px] text-[var(--ink-soft)]">Nothing yet. {store.configured ? "With the store connected above there is no need for a file: it is read from the store." : "Your export shows which tags go with each kind of product and how each brand is listed; or connect the store above and it is read from there."} With the website read above, it is the tags that matter here; the kinds of product come from the site.</p>
+          <p className="mb-4 text-[14px] text-[var(--ink-soft)]">Nothing yet. {store.configured ? "With the store connected above there is no need for a file: it is read from the store." : "Your export shows which tags go with each product type and how each brand is listed; or connect the store above and it is read from there."} With the website read above, it is the tags that matter here; the product types come from the site.</p>
         )}
         <LearnPanel learned={learned} kinds={house.kinds} />
       </Card>

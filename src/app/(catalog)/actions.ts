@@ -1781,7 +1781,7 @@ export async function setSkippedProductsAction(batchId: string, skip: string[]):
 }
 
 /**
- * Which kinds of product this batch works with.
+ * Which product types this batch works with.
  *
  * A Burton order carries boards, bindings, boots, outerwear and gloves at once, and the person
  * wants to do the boards today. Ticking kinds here keeps the directive; products of other kinds
@@ -1933,7 +1933,7 @@ export async function learnVocabularyAction(learned: import("@/lib/catalog/taxon
 }
 
 /**
- * The conventions per brand and kind of product, read out of the export in the browser and kept as
+ * The conventions per brand and product type, read out of the export in the browser and kept as
  * product templates. Templates learned from an earlier export are replaced; ones a person made by
  * hand are left.
  */
@@ -1984,8 +1984,8 @@ export async function readWebsiteAction(url: string): Promise<ActionResult<impor
   });
 }
 
-/** Keep the categories the person ticked as the shop's kinds of product. */
-export async function saveWebsiteAction(input: { url: string; source: "shopify" | "menu"; categories: Array<{ title: string; path: string }> }): Promise<ActionResult<{ kinds: number }>> {
+/** Keep the categories the person ticked as the shop's product types. */
+export async function saveWebsiteAction(input: { url: string; source: "types" | "shopify" | "menu"; categories: Array<{ title: string; path: string; count?: number }> }): Promise<ActionResult<{ kinds: number }>> {
   const user = await requireUser("ADMIN");
   return safely(async () => {
     const { saveWebsiteCategories } = await import("@/lib/catalog/shop-profile");
@@ -1994,18 +1994,18 @@ export async function saveWebsiteAction(input: { url: string; source: "shopify" 
     if (!url) throw new Error("That is not a website address.");
     const seen = new Set<string>();
     const categories = (input.categories ?? [])
-      .map((c) => ({ title: String(c.title ?? "").trim().slice(0, 120), path: String(c.path ?? "").trim().slice(0, 300) }))
+      .map((c) => ({ title: String(c.title ?? "").trim().slice(0, 120), path: String(c.path ?? "").trim().slice(0, 300), ...(Number.isFinite(c.count) ? { count: Number(c.count) } : {}) }))
       .filter((c) => c.title && !seen.has(c.title.toLowerCase()) && seen.add(c.title.toLowerCase()))
       .slice(0, 1500);
     if (categories.length === 0) throw new Error("Tick at least one category to keep.");
-    await saveWebsiteCategories({ url, source: input.source === "menu" ? "menu" : "shopify", categories, readAt: new Date().toISOString() });
+    await saveWebsiteCategories({ url, source: input.source === "menu" || input.source === "types" ? input.source : "shopify", categories, readAt: new Date().toISOString() });
     await logAudit("shop.website", { userId: user.id, details: { url, kinds: categories.length } });
     revalidatePath("", "layout");
     return { ok: true, data: { kinds: categories.length } };
   });
 }
 
-/** Forget the website's categories; the kinds of product come from the export alone again. */
+/** Forget the website's categories; the product types come from the export alone again. */
 export async function forgetWebsiteAction(): Promise<ActionResult> {
   const user = await requireUser("ADMIN");
   return safely(async () => {
@@ -2254,7 +2254,7 @@ async function materialiseKindRules(kinds: import("@/lib/catalog/house").KindRul
 }
 
 /**
- * What the shop says about the kinds of product in an export: what each is called, the tags every
+ * What the shop says about the product types in an export: what each is called, the tags every
  * one gets, how its titles read. Merged by Type into what was said before, so an export a
  * category at a time builds the list up. A kind called something new is added to the vocabulary
  * so the name is a Type the shop has.

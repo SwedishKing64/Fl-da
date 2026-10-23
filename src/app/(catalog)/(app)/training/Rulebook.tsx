@@ -74,7 +74,7 @@ function RuleRow({ rule }: { rule: RuleEntry }) {
           <>
             <Button size="sm" variant="ghost" disabled={pending} onClick={() => start(async () => { setNote(""); const r = await ruleReachAction(rule.tagRuleId!); if (r.ok && r.data) setReach(r.data); else if (!r.ok) setNote(r.error); })}>Try it</Button>
             <Button size="sm" variant="ghost" disabled={pending} onClick={() => act(() => setTagRuleActiveAction(rule.tagRuleId!, off))}>{off ? "Switch on" : "Switch off"}</Button>
-            <Button size="sm" variant="ghost" disabled={pending} onClick={() => { if (confirm("Delete this rule? A rule from a kind of product or from How you list comes back the next time that form is kept.")) act(() => deleteTagRuleAction(rule.tagRuleId!)); }}>Delete</Button>
+            <Button size="sm" variant="ghost" disabled={pending} onClick={() => { if (confirm("Delete this rule? A rule from a product type or from How you list comes back the next time that form is kept.")) act(() => deleteTagRuleAction(rule.tagRuleId!)); }}>Delete</Button>
           </>
         )}
         {own && rule.editHref && <Link href={rule.editHref} className="text-[13px] font-semibold text-[var(--meta)]">Edit →</Link>}

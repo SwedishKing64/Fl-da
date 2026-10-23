@@ -14,7 +14,7 @@ export async function FirstInvoiceNote({ stage }: { stage: "upload" | "review" }
       <div className="text-[13.5px]">
         {stage === "upload"
           ? "Drop in the supplier's invoice or order form, then build. Flöda reads every line and shows you what it made of each."
-          : "Check each product: its name, sizes and colours, price and kind of product. Every fix you make is kept: rename an option or change a kind of product, and the next invoice from this supplier is built that way on its own."}
+          : "Check each product: its name, sizes and colours, price and product type. Every fix you make is kept: rename an option or change a product type, and the next invoice from this supplier is built that way on its own."}
       </div>
     </Alert>
   );

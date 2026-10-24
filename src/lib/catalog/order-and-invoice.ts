@@ -105,3 +105,80 @@ export function invoiceOf<T extends { name: string; lines: number }>(a: T, b: T)
     + (d.lines < other.lines ? 1 : 0);
   return score(a, b) >= score(b, a) ? { invoice: a, form: b } : { invoice: b, form: a };
 }
+
+/** The parts of a batch's line the join needs, so the same matching serves a batch and the Prices and stock page. */
+interface Fillable {
+  title: string; sku: string; barcode: string; size: string; length: string; colour: string;
+  quantity: number | null; costPrice: number | null; rrp: number | null;
+}
+
+const asLine = (i: Fillable): InvoiceLine => ({ sku: i.sku, barcode: i.barcode, title: i.title, size: i.size || i.length, colour: i.colour, quantity: i.quantity, costPrice: i.costPrice, rrp: i.rrp });
+
+/**
+ * A batch's two deliveries, when they are one: how many of the smaller file's lines are found on
+ * the other. An order form and its invoice share most of their lines; two orders from two
+ * suppliers share none.
+ */
+export function overlapOf<T extends Fillable>(a: T[], b: T[]): number {
+  const [small, big] = a.length <= b.length ? [a, b] : [b, a];
+  if (small.length === 0) return 0;
+  const lines = big.map(asLine);
+  const taken = new Set<InvoiceLine>();
+  let found = 0;
+  for (const s of small) {
+    const on = lineOnForm(asLine(s), lines, taken);
+    if (on) { taken.add(on); found++; }
+  }
+  return found / small.length;
+}
+
+/**
+ * A batch's invoice lines, each filled in from its line on the order form: the barcode, the
+ * retail price, the model code, the words and pictures, wherever the invoice has none. What
+ * arrived and what it cost stay the invoice's. Returns the lines and how many were matched.
+ */
+export function fillFromForm<T extends Fillable & { modelCode: string; description: string; imageUrls: string[]; brand: string; season: string; gender: string }>(form: T[], invoice: T[]): { lines: T[]; matched: number } {
+  const formLines = form.map(asLine);
+  const byLine = new Map(formLines.map((l, i) => [l, form[i]]));
+  const taken = new Set<InvoiceLine>();
+  let matched = 0;
+  const lines = invoice.map((item) => {
+    const on = lineOnForm(asLine(item), formLines, taken);
+    if (!on) return item;
+    taken.add(on);
+    matched++;
+    const f = byLine.get(on)!;
+    return {
+      ...item,
+      barcode: item.barcode || f.barcode,
+      rrp: item.rrp ?? f.rrp,
+      modelCode: item.modelCode || f.modelCode,
+      sku: item.sku || f.sku,
+      title: item.title || f.title,
+      description: item.description || f.description,
+      imageUrls: item.imageUrls.length ? item.imageUrls : f.imageUrls,
+      brand: item.brand || f.brand,
+      season: item.season || f.season,
+      gender: item.gender || f.gender,
+      colour: item.colour || f.colour,
+      size: item.size || f.size,
+      length: item.length || f.length,
+    };
+  });
+  return { lines, matched };
+}
+
+const ORDER_NAME = /order|confirmation|\bform\b|indent|pre-?season|booking/i;
+const INVOICE_NAME = /invoice|\binv\b|tax|packing|despatch|dispatch|delivery|shipment/i;
+
+/**
+ * Whether two files are an order form and its invoice rather than two deliveries of the same
+ * goods (two shipments of one order share their lines too). Their names say so, or the order
+ * form carries the barcodes or retail prices the invoice lacks, which is the reason to have both.
+ */
+export function formAndInvoice(form: { name: string; lines: Fillable[] }, invoice: { name: string; lines: Fillable[] }): boolean {
+  const named = ORDER_NAME.test(form.name) && !ORDER_NAME.test(invoice.name) || INVOICE_NAME.test(invoice.name) && !INVOICE_NAME.test(form.name);
+  const share = (lines: Fillable[], has: (l: Fillable) => boolean) => (lines.length ? lines.filter(has).length / lines.length : 0);
+  const gives = (has: (l: Fillable) => boolean) => share(form.lines, has) >= 0.5 && share(invoice.lines, has) < 0.2;
+  return named || gives((l) => Boolean(l.barcode)) || gives((l) => l.rrp !== null);
+}

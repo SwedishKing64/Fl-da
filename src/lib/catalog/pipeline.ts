@@ -47,6 +47,7 @@ import type { MatchCandidate } from "./match-candidates";
 import { filePath, pictureHosting, publicFileUrl, readFile, saveFile, usingBlob } from "./storage";
 import { logAudit } from "./audit";
 import { contributeLayout, findSharedLayout } from "./shared-layouts-store";
+import { fillFromForm, formAndInvoice, invoiceOf, overlapOf } from "./order-and-invoice";
 import { isReaderTable, readerMapping } from "./extract/ai";
 
 // ---------------------------------------------------------------------------
@@ -494,6 +495,38 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
   // sheet uses in full elsewhere ("Rum Raisin", "Chinchilla Gray"). See writeOutColour.
   const colourNames = [...items.map((e) => e.item.colour), ...specItems.map((s) => s.colour)].filter((c) => c.trim() && !c.includes("/"));
   for (const entry of items) if (entry.item.colour.includes("/")) entry.item = { ...entry.item, colour: writeOutColour(entry.item.colour, colourNames, /goggle/i.test(`${entry.item.category} ${entry.item.productType} ${entry.item.title}`)) };
+
+  /**
+   * An order form and its invoice in one batch are one delivery, not two. Both carry quantities,
+   * and read as two deliveries every product came out with twice the stock. Two files most of
+   * whose lines are the same goods are taken as the pair: the invoice's lines are what arrived and
+   * what it cost, indent discounts and all, and each is filled in from its order-form line with
+   * what the invoice leaves out (barcodes, retail prices). The order form adds no lines of its own.
+   */
+  {
+    const fileIds = [...new Set(items.map((i) => i.fileId))];
+    const linesOf = (id: string) => items.filter((i) => i.fileId === id);
+    const nameOf = (id: string) => batch.files.find((f) => f.id === id)?.filename ?? "";
+    const paired = new Set<string>();
+    for (let a = 0; a < fileIds.length; a++) {
+      for (let b = a + 1; b < fileIds.length; b++) {
+        const [x, y] = [fileIds[a], fileIds[b]];
+        if (paired.has(x) || paired.has(y)) continue;
+        const [lx, ly] = [linesOf(x), linesOf(y)];
+        if (overlapOf(lx.map((e) => e.item), ly.map((e) => e.item)) < 0.5) continue;
+        const { invoice, form } = invoiceOf({ name: nameOf(x), lines: lx.length, id: x }, { name: nameOf(y), lines: ly.length, id: y });
+        // Two shipments of one order share their lines as well; only a form and its invoice are joined.
+        if (!formAndInvoice({ name: form.name, lines: linesOf(form.id).map((e) => e.item) }, { name: invoice.name, lines: linesOf(invoice.id).map((e) => e.item) })) continue;
+        const invoiceEntries = linesOf(invoice.id);
+        const filled = fillFromForm(linesOf(form.id).map((e) => e.item), invoiceEntries.map((e) => e.item));
+        invoiceEntries.forEach((e, i) => { e.item = filled.lines[i]; });
+        items.splice(0, items.length, ...items.filter((e) => e.fileId !== form.id));
+        paired.add(x); paired.add(y);
+        await noteOnFile(invoice.id, `Read as the invoice for ${form.name}: what arrived and what it cost come from here, and ${filled.matched} of ${invoiceEntries.length} lines took their barcode and retail price from the order form.`);
+        await noteOnFile(form.id, `Read as the order form for ${invoice.name}, which is what arrived: its lines fill in the invoice's barcodes and retail prices and add no products of their own.`);
+      }
+    }
+  }
 
   // A spec-sheet-only batch still builds products: one variant per listed length/size, no cost yet.
   if (items.length === 0 && specItems.length > 0) {

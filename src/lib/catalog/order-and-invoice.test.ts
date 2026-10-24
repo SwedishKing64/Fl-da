@@ -33,3 +33,25 @@ describe("an order form and its invoice", () => {
     expect(invoiceOf({ name: "Tax Invoice 5521.xlsx", lines: 30 }, { name: "Indent W26.xlsx", lines: 30 }).invoice.name).toBe("Tax Invoice 5521.xlsx");
   });
 });
+
+describe("an order form and its invoice in one batch", () => {
+  const item = (p: Partial<{ title: string; sku: string; barcode: string; size: string; colour: string; quantity: number | null; costPrice: number | null; rrp: number | null }>) => ({
+    title: "", sku: "", barcode: "", size: "", length: "", colour: "", quantity: null, costPrice: null, rrp: null, modelCode: "", description: "", imageUrls: [] as string[], brand: "", season: "", gender: "", ...p,
+  });
+  const form = [item({ sku: "A1", size: "M", barcode: "9300000000017", rrp: 99.95, quantity: 4 }), item({ sku: "A1", size: "L", barcode: "9300000000024", rrp: 99.95, quantity: 4 })];
+  const invoice = [item({ sku: "A1", size: "M", costPrice: 40, quantity: 3 }), item({ sku: "A1", size: "L", costPrice: 40, quantity: 4 })];
+
+  it("are the same goods, and the invoice's lines take what the form knows", async () => {
+    const { overlapOf, fillFromForm, formAndInvoice } = await import("./order-and-invoice");
+    expect(overlapOf(form, invoice)).toBe(1);
+    expect(formAndInvoice({ name: "Summer order.xlsx", lines: form }, { name: "INV 551.pdf", lines: invoice })).toBe(true);
+    const filled = fillFromForm(form, invoice);
+    expect(filled.matched).toBe(2);
+    expect(filled.lines[0]).toMatchObject({ quantity: 3, costPrice: 40, barcode: "9300000000017", rrp: 99.95 });
+  });
+
+  it("are not two shipments of one order", async () => {
+    const { formAndInvoice } = await import("./order-and-invoice");
+    expect(formAndInvoice({ name: "INV 550.pdf", lines: invoice }, { name: "INV 551.pdf", lines: invoice })).toBe(false);
+  });
+});

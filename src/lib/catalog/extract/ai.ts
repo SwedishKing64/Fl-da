@@ -4,7 +4,7 @@
 // is visible in a product photo. Structured outputs keep the response schema-valid.
 
 import Anthropic from "@anthropic-ai/sdk";
-import { retailer, taxName } from "../shop-profile";
+import { isOwnShop, retailer, shopProfile, taxName } from "../shop-profile";
 import { anthropicClient, cachedSystem, READING_MODEL, WORKING_MODEL } from "../anthropic";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
@@ -179,7 +179,8 @@ const SHOP = () => {
     const parts = [k.options.length ? `sold by ${k.options.map((o) => o.name).join(" and ")}` : "", k.notOptions.length ? `not an option: ${k.notOptions.join("; ")}` : "", k.codeHints ? k.codeHints : ""].filter(Boolean);
     return parts.length ? `- ${k.kind}${k.supplierWords.length ? ` (${k.supplierWords.slice(0, 4).join(", ")})` : ""}: ${parts.join(". ")}` : "";
   }).filter(Boolean);
-  return `The retailer is ${retailer()}; its sales tax is called ${taxName()}.${kinds.length ? ` The shop's kinds of product, for productType: ${kinds.join(", ")}.` : ""}${examples.length ? `\n\nHow lines in this trade read:\n${examples.map((e) => `- ${e}`).join("\n")}` : ""}${known.length ? `\n\nThis trade's kinds of product and what each varies by:\n${known.join("\n")}` : ""}`;
+  const own = shopProfile().name.trim();
+  return `The retailer is ${retailer()}; its sales tax is called ${taxName()}.${own ? ` The retailer is called ${own}: it is the buyer, printed as bill to, ship to, sold to or deliver to, and it is never the supplier and never a product's brand.` : ""}${kinds.length ? ` The shop's kinds of product, for productType: ${kinds.join(", ")}.` : ""}${examples.length ? `\n\nHow lines in this trade read:\n${examples.map((e) => `- ${e}`).join("\n")}` : ""}${known.length ? `\n\nThis trade's kinds of product and what each varies by:\n${known.join("\n")}` : ""}`;
 };
 
 const getClient = (): Anthropic => anthropicClient(6);
@@ -361,6 +362,8 @@ export function aiExtractionToTable(result: AiExtraction, method: ExtractedTable
       row[key] = Array.isArray(value) ? value.map((v) => (typeof v === "string" ? v : "")).filter(Boolean).join(" | ") : value === null || value === undefined ? "" : String(value);
     }
     for (const name of specNames) row[name] = item.specs?.find((sp) => sp.name.trim().toLowerCase() === name.toLowerCase())?.value.trim() ?? "";
+    // The shop's own name, read as the brand, is the bill-to line and not a brand.
+    if (row.brand && isOwnShop(row.brand)) row.brand = "";
     return row;
   });
   const warnings: string[] = [];
@@ -375,7 +378,7 @@ export function aiExtractionToTable(result: AiExtraction, method: ExtractedTable
 export function aiDocumentMeta(result: AiExtraction) {
   return {
     documentType: result.documentType,
-    supplier: result.supplier,
+    supplier: isOwnShop(result.supplier) ? "" : result.supplier,
     invoiceNumber: result.invoiceNumber,
     currency: result.currency || result.items.find((i) => i.currency)?.currency || "",
     gstTreatment: result.gstTreatment,

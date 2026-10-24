@@ -52,3 +52,17 @@ describe("the website's categories as kinds of product", () => {
     expect(typeFlags(unchecked)).toEqual([]);
   });
 });
+
+describe("filing under the shop's nearest type", () => {
+  afterEach(() => activateConventions(ALPSPORT_CONVENTIONS));
+
+  it("finds the shop's own type for a name that is close, and nothing for one that is not", async () => {
+    const { closestType } = await import("./taxonomy");
+    activateConventions({ pack: "general", learned: null, marker: "", website: { url: "https://shop.example", source: "types", readAt: "2026-10-23T00:00:00Z", categories: ["Mens Snowboard Boots", "Snowboards", "Ski Boots", "Snowboard Bindings"].map((title) => ({ title, path: "" })) } });
+    expect(closestType("Snowboard Boots")).toBe("Mens Snowboard Boots");
+    expect(closestType("Snowboard")).toBe("Snowboards");
+    expect(closestType("snowboards")).toBe("Snowboards");
+    expect(closestType("Goggles")).toBeUndefined();
+    expect(closestType("Boots")).toBeUndefined();
+  });
+});

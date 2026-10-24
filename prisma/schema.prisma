@@ -200,6 +200,9 @@ model Product {
   // What the web lookup did about the columns the invoice left empty.
   lookupStatus    String   @default("NONE") // NONE | FOUND | UNSURE | NOT_FOUND | FAILED
   lookupSource    String   @default("") // the manufacturer page the copy was taken from
+  // A page per colour, where the brand has one: JSON { colour: url }. Each colour's pictures come
+  // from its own page, so the red binding's pictures are the red binding's.
+  colourLinks     String   @default("{}")
   lookupAt        DateTime?
   sortOrder       Int      @default(0)
   createdAt       DateTime @default(now())
@@ -342,6 +345,20 @@ model TagProposal {
   example   String    @default("")
   createdAt DateTime  @default(now())
   decidedAt DateTime?
+}
+
+/// A supplier's file layout as shops have taught it, kept on Flöda's own deployment for every
+/// shop to start from: the file's headings and which field each one is. Never a value from a file,
+/// never a price, never which supplier or shop it came from. `variants` is JSON [{ mappings, contributors: [clientId] }]: shops that read the
+/// same headings differently each keep their reading, and the one most shops agree on is offered.
+model SharedLayout {
+  id         String   @id @default(cuid())
+  headerHash String   @unique
+  headers    String
+  variants   String   @default("[]")
+  uses       Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 }
 
 model ProductTemplate {

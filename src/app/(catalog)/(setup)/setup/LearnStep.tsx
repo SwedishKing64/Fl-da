@@ -75,7 +75,7 @@ export function LearnPanel({ learned: before, kinds: saved = [], next, onDone }:
         const known = new Map(saved.map((k) => [k.type.toLowerCase(), k]));
         const kinds: KindRule[] = kindsFromListings(listings).map((k) => {
           const was = known.get(k.type.toLowerCase());
-          return { type: k.type, calledAs: was?.calledAs ?? k.type, tags: was?.tags ?? k.commonTags, titleFormat: was?.titleFormat ?? k.exampleTitle, count: k.count };
+          return { type: k.type, calledAs: was?.calledAs ?? k.type, tags: was?.tags ?? k.commonTags, variesTags: k.variesTags, titleFormat: was?.titleFormat ?? k.exampleTitle, count: k.count };
         });
         setOutcome({ file: file.name, lines: describeLearned(learned), templates: t.data!.templates, remembered, warnings: found.warnings, kinds });
         setChosen(null);
@@ -120,7 +120,7 @@ export function LearnPanel({ learned: before, kinds: saved = [], next, onDone }:
             <div className="font-semibold">Read {outcome.file}.</div>
             <ul className="mt-1 list-disc pl-5 text-[14px]">
               {outcome.lines.map((l) => <li key={l}>{l}</li>)}
-              <li>{outcome.templates} convention{outcome.templates === 1 ? "" : "s"} per brand and kind of product, kept as templates.</li>
+              <li>{outcome.templates} convention{outcome.templates === 1 ? "" : "s"} per brand and product type, kept as templates.</li>
               <li>{outcome.remembered.toLocaleString("en-AU")} listings remembered, so next season&rsquo;s product of the same model keeps its shelves, name and price.</li>
             </ul>
             {outcome.warnings.length > 0 && <div className="mt-2 text-[13px] text-[var(--ink-soft)]">{outcome.warnings.join(" ")}</div>}
@@ -130,7 +130,7 @@ export function LearnPanel({ learned: before, kinds: saved = [], next, onDone }:
         </>
       )}
       {!outcome && saved.length > 0 && (
-        <KindsEditor kinds={saved} title="The kinds of product you have told Flöda about" blurb="From the exports read so far. Change what is wrong; the next export's kinds join this list." />
+        <KindsEditor kinds={saved} title="The product types you have told Flöda about" blurb="From the exports read so far. Change what is wrong; the next export's kinds join this list." />
       )}
     </div>
   );
@@ -142,7 +142,7 @@ export function LearnStep({ learned, kinds }: { learned: LearnedVocabulary | nul
   return (
     <Card title="Teach Flöda your catalogue">
       <p className="mb-4 text-[14px] text-[var(--ink-soft)]">
-        Flöda learns how your shop files and tags products from the products you already sell, one export at a time: which kinds of product you have, which tags go with each, how each shelf tag is spelled, and the conventions each brand follows. After each file, say what each kind is called, the tags every one gets, and how its titles read. New listings are then built to match.
+        Flöda learns how your shop files and tags products from the products you already sell, one export at a time: which product types you have, which tags go with each, how each shelf tag is spelled, and the conventions each brand follows. After each file, say what each kind is called, the tags every one gets, and how its titles read. New listings are then built to match.
       </p>
       <LearnPanel learned={learned} kinds={kinds} next="/setup?step=house" />
       <div className="mt-5 flex items-center justify-between border-t border-[var(--line-soft)] pt-4 text-[13px] text-[var(--ink-soft)]">

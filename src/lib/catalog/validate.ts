@@ -45,7 +45,7 @@ export function validateReview(products: ReviewProduct[], ctx: ValidationContext
     if (!p.productType.trim()) flags.push({ code: "MISSING_TYPE", severity: "warning", message: "No product type" });
     // Once the shop has said what its kinds of product are (its website's categories, its export),
     // a Type outside that list is a place on the site that does not exist. It is never written.
-    else if (typesAreKnown() && !isValidType(p.productType)) flags.push({ code: "UNKNOWN_TYPE", severity: "error", message: `"${p.productType.trim()}" is not one of your kinds of product — pick one from the list` });
+    else if (typesAreKnown() && !isValidType(p.productType)) flags.push({ code: "UNKNOWN_TYPE", severity: "error", message: `"${p.productType.trim()}" is not one of your product types — pick one from the list` });
     const validImages = p.images.filter((i) => isPublicHttpsUrl(i.url));
     if (p.images.length === 0) flags.push({ code: "NO_IMAGE", severity: "warning", message: "No image - add one or export anyway" });
     else {

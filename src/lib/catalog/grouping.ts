@@ -4,7 +4,7 @@ import { buildHandle } from "./handle";
 import { nameLikeSibling } from "./shop-names";
 import { csvType } from "./pipeline-pure";
 import { chooseOptions, collectionsFor, extraOptions, optionValue, type OptionKey, detectCategory, enrichFromTitle, metafieldsFor, OPTION_LABELS, snowboardType, tagsFor, type CategoryRuleLike } from "./categorize";
-import { houseConventions, packKnowledge, resolveType, snowTrade } from "./taxonomy";
+import { closestType, houseConventions, isValidType, packKnowledge, resolveType, snowTrade, typesAreKnown } from "./taxonomy";
 import { inSizeOrder } from "./size-order";
 import { correctedOptionName, correctedProductType } from "./corrections";
 import { withFit } from "./mapping";
@@ -154,7 +154,9 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
       : null;
     // A supplier's own kind word is a Type only when it is one the shop uses: "FREERIDE" is not.
     // And as the shop corrected it: a Type changed on this brand's product before is changed here too.
-    const productType = correctedProductType(snowboard ?? pack ?? accessory ?? group.rule?.productType ?? resolveType(first.productType) ?? "", brand);
+    const filedAs = correctedProductType(snowboard ?? pack ?? accessory ?? group.rule?.productType ?? resolveType(first.productType) ?? "", brand);
+    // Filed under one of the shop's own types where one is close, rather than asked about.
+    const productType = filedAs && typesAreKnown() && !isValidType(filedAs) ? closestType(filedAs) ?? filedAs : filedAs;
     // The audience goes on the front of a gendered product's name, as the shop writes it: every one
     // of its 20 snowboard bindings and 14 of its 15 boots is "Men's …" or "Women's …", and so are
     // its jackets, gloves and socks. Not a ski, board or pole, which the shop names by model alone
@@ -188,7 +190,9 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
     const seenCombos = new Set<string>();
     const variants: GroupedVariant[] = [];
     for (const e of entries) {
-      const values = optionKeys.map((k) => optionValue(e.item, k) || null);
+      // A reader puts a board's "158W" under size on one line and under length on the next; a
+      // line with the one empty takes the other rather than going out with no option value.
+      const values = optionKeys.map((k) => optionValue(e.item, k) || (k === "length" ? e.item.size.trim() : k === "size" && !optionKeys.includes("length") ? e.item.length.trim() : "") || null);
       const combo = values.map((v) => (v ?? "").toLowerCase()).join("|");
       // Duplicate option combos in the same group are kept as separate variants so the
       // review grid can flag them, unless the SKUs are identical (true duplicate line).

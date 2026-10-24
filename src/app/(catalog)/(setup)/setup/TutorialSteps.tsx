@@ -29,7 +29,7 @@ export function StoreStep({ connected, canInstall, outcome }: { connected: { dom
   return (
     <Card title="Connect your store">
       <p className="mb-4 text-[14px] text-[var(--ink-soft)]">
-        Flöda reads your Shopify store to learn how you already sell: your kinds of product, your tags and how you spell them, your brands and how each is listed, and your prices. It reads, and later puts new products into your store as drafts for you to check. It never publishes or changes a listing on its own.
+        Flöda reads your Shopify store to learn how you already sell: your product types, your tags and how you spell them, your brands and how each is listed, and your prices. It reads, and later puts new products into your store as drafts for you to check. It never publishes or changes a listing on its own.
       </p>
       <ShopifyConnect connected={connected} canInstall={canInstall} outcome={outcome} next="/setup?step=store" intro={false} />
       {connected && (
@@ -69,7 +69,7 @@ export function FoundStep({ summary, kinds, read }: { summary: string[]; kinds: 
         </div>
       )}
       {read && kinds.length > 0 && (
-        <KindsEditor kinds={kinds} title="Your kinds of product" blurb="Check each one: what you call it, the tags every one of them gets, and how their titles read. Leave any you are happy with as they are." onSaved={() => router.push("/setup?step=house")} />
+        <KindsEditor kinds={kinds} title="Your product types" blurb="Check each one: what you call it, the tags every one of them gets, and how their titles read. Leave any you are happy with as they are." onSaved={() => router.push("/setup?step=house")} />
       )}
       {read && (
         <div className="mt-4">
@@ -80,17 +80,17 @@ export function FoundStep({ summary, kinds, read }: { summary: string[]; kinds: 
   );
 }
 
-/** Screen 5: the shop's website menu, so the kinds of product are filed where its shoppers look. */
+/** Screen 5: the shop's website menu, so the product types are filed where its shoppers look. */
 export function MenuStep({ saved }: { saved: WebsiteCategories | null }) {
   const router = useRouter();
   return (
     <Card title="Your menu, roughly">
       <p className="mb-4 text-[14px] text-[var(--ink-soft)]">
-        Your website&rsquo;s menu is where your shoppers look for things, so it is where Flöda files new products. Paste your shop&rsquo;s address and Flöda reads the menu; fix anything it reads wrongly.
+        Your website&rsquo;s menu is where your shoppers look for things, so it is where Flöda files new products. Paste your shop&rsquo;s address. On a Shopify store Flöda reads the Product Type each listing already has, so the list is your own words; on any other site it reads the menu. Untick anything that is not a product type.
       </p>
       <WebsiteForm saved={saved} />
       {saved && <div className="mt-4"><Button variant="primary" onClick={() => router.push("/setup?step=ai")}>Continue →</Button></div>}
-      <Later step="menu" next="/setup?step=ai" text="Flöda can file products by the kinds of product in your store instead." />
+      <Later step="menu" next="/setup?step=ai" text="Flöda can file products by the product types in your store instead." />
     </Card>
   );
 }
@@ -106,10 +106,10 @@ export function FirstStep() {
   return (
     <Card title="Your first invoice, together">
       <p className="mb-3 text-[14px] text-[var(--ink-soft)]">
-        Drop in one real invoice or order form from a supplier. Flöda reads it, builds the products, and shows you each one: its name, its sizes and colours, its price, its kind of product and its picture.
+        Drop in one real invoice or order form from a supplier. Flöda reads it, builds the products, and shows you each one: its name, its sizes and colours, its price, its product type and its picture.
       </p>
       <p className="mb-4 rounded-[12px] bg-[var(--meta-tint)] px-3 py-2.5 text-[13.5px]">
-        <strong>Every fix you make is kept.</strong> Rename an option, change a kind of product or correct a line, and Flöda does it that way from then on, for that supplier and that kind of product. The second invoice needs fewer fixes than the first, and the third fewer again.
+        <strong>Every fix you make is kept.</strong> Rename an option, change a product type or correct a line, and Flöda does it that way from then on, for that supplier and that product type. The second invoice needs fewer fixes than the first, and the third fewer again.
       </p>
       <Button variant="primary" icon="📄" disabled={pending} onClick={() => start(async () => {
         setError(null);

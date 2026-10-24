@@ -154,6 +154,40 @@ from its QuickBooks list, batch PDFs split into one bill per invoice) live in Ru
 
 ## Decisions and history, newest first
 
+- 2026-10-23 First run at Alpsport on the local desktop copy (v0.1.14-local). What the shop said,
+  and what changed:
+  - The website reader took Alpsport's 2,640 automated collections as kinds of product. A Shopify
+    store is now read from `/products.json`: the Product Type each listing carries, with counts.
+  - A Burton invoice was read as from Alpsport (the bill-to name), which became every line's
+    brand. The shop's own name is never the supplier or a brand (`isOwnShop`).
+  - "Product type", Shopify's word, replaces "kind of product" everywhere a person reads it.
+  - A type's "tags every one gets" are tags on 95% of its products; tags on some and not others
+    (a ski's terrain) are "tags that vary", picked per product.
+  - The model year can go on chosen product types or tags only (`naming.season = "chosen"`).
+  - Descriptions can have extra sections of the shop's own (Specifications, Features).
+  - Links: found automatically when the review grid opens, kept when the page carries the model's
+    own name ("Family Tree Alekesam" for "FT Alekesam"), one page per colour where the brand has
+    them (`Product.colourLinks`), each colour's pictures on its own variant.
+  - A type outside the shop's list is filed under its nearest type (`closestType`), not asked.
+  - The export page lists each issue once with its product count.
+  - Supplier files of any type: zips unpacked, Word read, unknown files kept; no size cap on the
+    desktop.
+  - Prices and stock takes an order form and its invoice together: quantities and cost (after
+    indent discounts) from the invoice, barcodes and RRP from the order form
+    (`order-and-invoice.ts`).
+  - The hosted Flöda answered 404 to sign-in, so a `local` desktop build (no licence, own account,
+    own key) exists: the release workflow's `local` input.
+
+- 2026-10-22 Supplier layouts are shared between shops (`shared-layouts.ts`,
+  `shared-layouts-store.ts`, the `layout-share` and `layout-find` calls on the licence route). When a
+  person saves a supplier's column mapping, the file's headings and the field each one is go to
+  Flöda's deployment under the shop's licence key. Values, prices, the supplier's name and the
+  shop's never go, and which shops taught a layout is never sent back. A file in a layout the shop
+  has never seen starts from the reading most other shops agree on ("Taught by N other shops" on
+  the mapping screen). Their choices stand where they differ from Flöda's own guess, unless the
+  data rules them out. A shop can turn it off under Settings → Licence, which also stops it asking.
+  Each build that used one is logged as `layout.shared-used`.
+
 - 2026-10-13 Repository moved to `RubinAlp/Rubin`; the business has its own Vercel project, Neon
   database and Blob store, with the old data copied in. Settings gained "Copy from the old site"
   to bring the old Blob files across. Packs carry `backpacks`. The Burton RRP problem is fixed.
@@ -207,6 +241,7 @@ Open at handover:
 | Pages and pictures | `src/lib/catalog/extract/page.ts`, `shopify-store.ts`, `pictures.ts`, `colour-match.ts` |
 | Categorising and tagging | `src/lib/catalog/grouping.ts`, `categorize.ts`, `accessories.ts`, `packs.ts`, `product-tags.ts`, `tagging.ts`, `taxonomy.ts` (the vocabulary in force), `tag-spelling.ts`, `learn.ts` (from the shop's export), `shop-profile.ts` |
 | Setup, clients, licences, desktop | `src/app/(catalog)/(setup)/setup/`, `(app)/clients/`, `src/lib/catalog/licence.ts`, `licence-store.ts`, `desktop/`, `scripts/desktop-build.mjs` |
+| Supplier layouts | `src/lib/catalog/mapping.ts`, `layout.ts`, `shared-layouts.ts` (shared between shops) |
 | Invoice reading | `src/lib/catalog/invoice.ts` (spreadsheets), `extract/ai.ts` (PDF and photo), `extract/transcribe.ts` (Tidy) |
 | Prices and stock page | `src/app/(catalog)/(app)/bulk/BulkPanel.tsx` |
 | Batch page | `src/app/(catalog)/(app)/batches/[id]/` (`BuildList`, `TypeList`, `LinksPanel`) |

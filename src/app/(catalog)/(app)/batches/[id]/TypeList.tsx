@@ -7,7 +7,7 @@ import { Alert, Button, Card } from "@/app/(catalog)/ui";
 import { typeKey } from "@/lib/catalog/kinds";
 
 /**
- * Which kinds of product this batch works with.
+ * Which product types this batch works with.
  *
  * A Burton order arrives with boards, bindings, boots, outerwear, gloves and bags on one form,
  * and nobody wants to review a hundred and twenty products in one sitting. Each kind the order
@@ -53,7 +53,7 @@ export function TypeList({ batchId, built, seen, chosen, locked }: { batchId: st
   return (
     <Card
       className="mb-4"
-      title={<>Kinds of product to work with <span className="font-normal text-[var(--ink-soft)]">· {chosen.length === 0 ? "all of them" : `${working} of ${kinds.length}`}</span></>}
+      title={<>Product types to work with <span className="font-normal text-[var(--ink-soft)]">· {chosen.length === 0 ? "all of them" : `${working} of ${kinds.length}`}</span></>}
       actions={<>
         {!locked && chosen.length > 0 && <Button size="sm" icon="📦" disabled={pending} onClick={() => change([])}>Work with all of them</Button>}
       </>}

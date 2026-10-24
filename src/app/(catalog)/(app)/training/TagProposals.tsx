@@ -25,7 +25,7 @@ export function TagProposals({ proposals }: { proposals: TagProposal[] }) {
   return (
     <div className="space-y-3">
       <p className="text-[14px] text-[var(--ink-soft)]">
-        A build only writes tags your shop already uses: the ones on your listings, the ones your rules add, the ones your kinds of product carry. A tag it wanted that none of those know is listed here instead, with the product it was meant for. Approve it and it is one of yours from now on; reject it and it is never put forward again.
+        A build only writes tags your shop already uses: the ones on your listings, the ones your rules add, the ones your product types carry. A tag it wanted that none of those know is listed here instead, with the product it was meant for. Approve it and it is one of yours from now on; reject it and it is never put forward again.
       </p>
       {pending.length === 0 ? (
         <p className="text-[13px] text-[var(--ink-soft)]">Nothing waiting. Every tag on the latest build is one your shop uses.</p>

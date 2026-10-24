@@ -120,7 +120,7 @@ function ProductCard({ p, kinds, locked, busy, commitProduct, commitVariant, ope
             <Fix p={p} field={weakest} locked={locked} busy={busy} commitProduct={commitProduct} commitVariant={commitVariant} openDrawer={openDrawer} confirm={confirm} findPage={findPage} />
             {typeUnknown && !locked && (
               <label className="flex flex-wrap items-center gap-2 text-[12.5px]">
-                <span className="text-[var(--ink-soft)]">Kind of product</span>
+                <span className="text-[var(--ink-soft)]">Product type</span>
                 <select className={`${INPUT_INLINE} w-56`} value={kinds.includes(p.productType) ? p.productType : ""} disabled={busy} onChange={(e) => e.target.value && commitProduct(p.id, "productType", e.target.value)}>
                   <option value="">{p.productType ? `"${p.productType}" is not one of yours: pick one…` : "Pick one…"}</option>
                   {kinds.map((k) => <option key={k} value={k}>{k}</option>)}

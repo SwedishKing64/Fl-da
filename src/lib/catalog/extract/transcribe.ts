@@ -15,7 +15,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { anthropicClient, READING_MODEL, aiAvailable } from "../anthropic";
-import { retailer } from "../shop-profile";
+import { isOwnShop, retailer, shopProfile } from "../shop-profile";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 
 import { retrying } from "../api-errors";
@@ -28,6 +28,7 @@ export { CSV_COLUMNS, brandOf, csvCells, csvNameFor, transcriptToCsv, unitCostOf
 const SYSTEM = () => `You transcribe a supplier's order confirmation, invoice or packing list for ${retailer()}. The document is often a photo of a printed page that the shop's staff have written on in pen, and both the print and the pen matter.
 
 Rules:
+- The supplier is who the document is FROM: the company whose logo, letterhead or "remit to" it carries. The shop itself${shopProfile().name.trim() ? ` (${shopProfile().name.trim()})` : ""} is the buyer, printed as bill to, ship to or sold to, and is never the supplier.
 - Transcribe every printed line. Copy codes, names, colours, sizes, quantities and prices exactly as printed; do not round, tidy or rename.
 - A line printed with several sizes or lengths is one row per size, each with its own quantity. A size is whatever the line is sold in: a length, a clothing or shoe size (US 9.5), a pack size (S/M), a capacity or volume (2P, 65L).
 - Skis and bindings: where a binding line sits directly under a ski line and the pen brackets them, prices them together, or writes one retail against the pair, they are ONE package: one row, the ski's code in sku, the binding's in bindingSku, the description as the ski's printed name then " inc " then the binding's printed name then " Binding Package", the ski's price in unitPrice and the binding's in bindingUnitPrice. A binding on its own stays its own row.
@@ -66,5 +67,8 @@ export async function transcribeDocument(pages: Page[], hint = "", deps: { ask?:
   content.push({ type: "text", text: `Transcribe this document into rows.${hint.trim() ? ` What the person says about the handwriting: ${hint.trim()}` : ""}` });
   const text = await (deps.ask ?? askModel)(SYSTEM(), content);
   if (!text) throw new Error("The reader gave no answer for the document.");
-  return TranscriptSchema.parse(JSON.parse(text));
+  const transcript = TranscriptSchema.parse(JSON.parse(text));
+  // The shop is the buyer on its own paperwork: its name read as the supplier would become the
+  // brand of every line (see transcriptToCsv).
+  return isOwnShop(transcript.supplier) ? { ...transcript, supplier: "" } : transcript;
 }

@@ -36,7 +36,7 @@ import { quote, verifyOnlyIntended, type Change } from "./adjust";
 import { csvType, productCategoryFor, spellType } from "./pipeline-pure";
 import { houseBody } from "./body";
 import { enrichFromSpecs } from "./specs";
-import { productTitle, seasonTagFrom, seoTitle } from "./titles";
+import { productTitle, seoTitle, titleYear } from "./titles";
 import { buildHandle } from "./handle";
 import { applyInvoice, reconcile, sameSizeText, type InvoiceFields, type InvoiceLine, type Match, type Reconciliation } from "./reconcile";
 import { resolveAgainstReference } from "./reference-match";
@@ -667,7 +667,7 @@ function appendFresh(
     // Nothing in this product's own wording said what it is; only the rest of the delivery did.
     const unrecognised = grouped.filter((g) => g.variants.every((v) => !detectCategory(v.item, rules)));
     if (unrecognised.length > 0) {
-      warnings.push(`${unrecognised.length === 1 ? "One new product was" : `${unrecognised.length} new products were`} filed as ${fallback.productType} because that is what everything else in this delivery is — ${unrecognised.slice(0, 4).map((g) => productTitle(g.title, seasonTagFrom(g.tags))).join(", ")}${unrecognised.length > 4 ? `, and ${unrecognised.length - 4} more` : ""}. An order form seldom says what a thing is, so check ${unrecognised.length === 1 ? "it is" : "they are"} not something else that came in the same order.`);
+      warnings.push(`${unrecognised.length === 1 ? "One new product was" : `${unrecognised.length} new products were`} filed as ${fallback.productType} because that is what everything else in this delivery is — ${unrecognised.slice(0, 4).map((g) => productTitle(g.title, titleYear(g.tags, g.productType))).join(", ")}${unrecognised.length > 4 ? `, and ${unrecognised.length - 4} more` : ""}. An order form seldom says what a thing is, so check ${unrecognised.length === 1 ? "it is" : "they are"} not something else that came in the same order.`);
     }
   }
   if (!fallback && grouped.some((g) => !g.productType.trim())) {
@@ -814,7 +814,7 @@ function typeFromCarryOver(
  * taken is the one reported, because that is the product somebody has to go and look at.
  */
 function handlesFor(product: GroupedProduct, vendor: string): string[] {
-  const title = productTitle(product.title, seasonTagFrom(product.tags));
+  const title = productTitle(product.title, titleYear(product.tags, product.productType));
   const brand = product.brand || vendor;
   return [...new Set([product.handle, buildHandle({ title }), buildHandle({ brand, title })])].filter(Boolean);
 }
@@ -943,7 +943,7 @@ function canonical(line: InvoiceLine, vendor: string, season: string): Canonical
  * Compare At is left empty: a product on the shelf at its recommended retail is not on sale.
  */
 function toProduct(g: GroupedProduct, vendor: string): CsvProduct {
-  const title = productTitle(g.title, seasonTagFrom(g.tags));
+  const title = productTitle(g.title, titleYear(g.tags, g.productType));
   const brand = g.brand || vendor;
   return {
     handle: g.handle,

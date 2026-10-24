@@ -1,7 +1,7 @@
 // Server-side orchestration: ingest -> extract -> map -> group -> price -> images -> review -> export.
 
 import type { Prisma } from "@prisma/client";
-import { productTitle, seasonTagFrom, seoTitle, titledForShop } from "./titles";
+import { productTitle, seasonTagFrom, seoTitle, titleYear, titledForShop } from "./titles";
 import { isOfType, isSkipped, parseDirectives, typeKey } from "./instructions";
 import { prisma, parseJson } from "./db";
 import { extractFile, type UploadKind } from "./extract";
@@ -46,6 +46,8 @@ import { isValidType, typesAreKnown } from "./taxonomy";
 import type { MatchCandidate } from "./match-candidates";
 import { filePath, pictureHosting, publicFileUrl, readFile, saveFile, usingBlob } from "./storage";
 import { logAudit } from "./audit";
+import { contributeLayout, findSharedLayout } from "./shared-layouts-store";
+import { fillFromForm, formAndInvoice, invoiceOf, overlapOf } from "./order-and-invoice";
 import { isReaderTable, readerMapping } from "./extract/ai";
 
 // ---------------------------------------------------------------------------
@@ -332,6 +334,8 @@ export interface HeaderGroup {
   confident: boolean; // safe to apply without showing the mapping screen
   /** Set when the supplier has a remembered layout and this file's columns differ from it. */
   drift: LayoutDrift | null;
+  /** How many other shops taught the reading in use, where it came from them rather than this shop. */
+  sharedBy: number | null;
 }
 
 export async function mappingState(batchId: string): Promise<HeaderGroup[]> {
@@ -354,9 +358,12 @@ export async function mappingState(batchId: string): Promise<HeaderGroup[]> {
       const template = exact ?? near?.template ?? null;
       const saved = template ? parseJson<SavedOptions>(template.options, {}) : null;
       const fresh = suggestMapping(headers, rows);
+      // A layout this shop has never seen may be one other shops buying from the same supplier
+      // have: their reading stands where it differs from the fresh one, unless the data rules it out.
+      const shared = !template && !isCanonical ? await findSharedLayout(headers) : null;
       const suggestion = template
         ? repairTemplate(trimToHeaders(parseJson<Mapping>(template.mappings, {}), headers) ?? {}, fresh, rows, trimToHeaders(saved?.suggestedAtSave, headers))
-        : isCanonical ? readerMapping(headers) : fresh;
+        : isCanonical ? readerMapping(headers) : shared ? repairTemplate(shared.mappings, fresh, rows, fresh) : fresh;
       group = {
         hash,
         headers,
@@ -375,10 +382,11 @@ export async function mappingState(batchId: string): Promise<HeaderGroup[]> {
             }
           : { ...(isCanonical ? {} : suggestOptions(fresh)), ...(batch.supplier?.defaultBrand ? { fixed: { brand: batch.supplier.defaultBrand } } : {}) },
         templateId: exact?.id ?? null,
-        templateName: template?.name ?? null,
+        templateName: template?.name ?? (shared ? `Taught by ${shared.shops} other ${shared.shops === 1 ? "shop" : "shops"}` : null),
         isCanonical,
         confident: false,
         drift: near?.drift ?? null,
+        sharedBy: shared?.shops ?? null,
       };
       groups.set(hash, group);
     }
@@ -412,6 +420,9 @@ export async function autoApplyMappings(batchId: string, userId: string | null):
   const unmapped = groups.filter((g) => !usable.includes(g) && !g.drift).flatMap((g) => g.filenames);
   if (usable.length === 0) return { applied: false, products: 0, variants: 0, unmapped, drifted };
   const result = await applyMappings(batchId, usable.map((g) => ({ hash: g.hash, mapping: g.suggestion, options: g.options, saveTemplate: null })), userId);
+  for (const g of usable.filter((x) => x.sharedBy)) {
+    await logAudit("layout.shared-used", { batchId, userId, details: { files: g.filenames.length, shops: g.sharedBy } }).catch(() => undefined);
+  }
   return { applied: result.problems.length === 0 && drifted.length === 0, products: result.products, variants: result.variants, unmapped, drifted };
 }
 
@@ -484,6 +495,38 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
   // sheet uses in full elsewhere ("Rum Raisin", "Chinchilla Gray"). See writeOutColour.
   const colourNames = [...items.map((e) => e.item.colour), ...specItems.map((s) => s.colour)].filter((c) => c.trim() && !c.includes("/"));
   for (const entry of items) if (entry.item.colour.includes("/")) entry.item = { ...entry.item, colour: writeOutColour(entry.item.colour, colourNames, /goggle/i.test(`${entry.item.category} ${entry.item.productType} ${entry.item.title}`)) };
+
+  /**
+   * An order form and its invoice in one batch are one delivery, not two. Both carry quantities,
+   * and read as two deliveries every product came out with twice the stock. Two files most of
+   * whose lines are the same goods are taken as the pair: the invoice's lines are what arrived and
+   * what it cost, indent discounts and all, and each is filled in from its order-form line with
+   * what the invoice leaves out (barcodes, retail prices). The order form adds no lines of its own.
+   */
+  {
+    const fileIds = [...new Set(items.map((i) => i.fileId))];
+    const linesOf = (id: string) => items.filter((i) => i.fileId === id);
+    const nameOf = (id: string) => batch.files.find((f) => f.id === id)?.filename ?? "";
+    const paired = new Set<string>();
+    for (let a = 0; a < fileIds.length; a++) {
+      for (let b = a + 1; b < fileIds.length; b++) {
+        const [x, y] = [fileIds[a], fileIds[b]];
+        if (paired.has(x) || paired.has(y)) continue;
+        const [lx, ly] = [linesOf(x), linesOf(y)];
+        if (overlapOf(lx.map((e) => e.item), ly.map((e) => e.item)) < 0.5) continue;
+        const { invoice, form } = invoiceOf({ name: nameOf(x), lines: lx.length, id: x }, { name: nameOf(y), lines: ly.length, id: y });
+        // Two shipments of one order share their lines as well; only a form and its invoice are joined.
+        if (!formAndInvoice({ name: form.name, lines: linesOf(form.id).map((e) => e.item) }, { name: invoice.name, lines: linesOf(invoice.id).map((e) => e.item) })) continue;
+        const invoiceEntries = linesOf(invoice.id);
+        const filled = fillFromForm(linesOf(form.id).map((e) => e.item), invoiceEntries.map((e) => e.item));
+        invoiceEntries.forEach((e, i) => { e.item = filled.lines[i]; });
+        items.splice(0, items.length, ...items.filter((e) => e.fileId !== form.id));
+        paired.add(x); paired.add(y);
+        await noteOnFile(invoice.id, `Read as the invoice for ${form.name}: what arrived and what it cost come from here, and ${filled.matched} of ${invoiceEntries.length} lines took their barcode and retail price from the order form.`);
+        await noteOnFile(form.id, `Read as the order form for ${invoice.name}, which is what arrived: its lines fill in the invoice's barcodes and retail prices and add no products of their own.`);
+      }
+    }
+  }
 
   // A spec-sheet-only batch still builds products: one variant per listed length/size, no cost yet.
   if (items.length === 0 && specItems.length > 0) {
@@ -562,6 +605,8 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
       const data = { name: input.saveTemplate.name, mappings: JSON.stringify(input.mapping), options: JSON.stringify(options), headerHash: input.hash };
       if (existing) await prisma.mappingTemplate.update({ where: { id: existing.id }, data });
       else await prisma.mappingTemplate.create({ data: { ...data, supplierId: batch.supplierId } });
+      // A layout a person confirmed is offered to the other shops: its headings and fields only.
+      if (file) void contributeLayout(parseJson<string[]>(file.headers, []), input.mapping);
     }
   }
 
@@ -810,7 +855,7 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
     // First the listing the lines were placed on by barcode — the shop has these very items, and
     // the handle is known for certain — then a listing with this very name and season.
     const placedOn = [...new Set(g.variants.map((v) => v.item.shopHandle).filter((h): h is string => Boolean(h)))];
-    const handle = placedOn.length === 1 ? placedOn[0] : existingHandle({ title: productTitle(g.title, seasonTagFrom(g.tags)), brand: g.brand, season: seasonTagFrom(g.tags) ?? "" }, listings);
+    const handle = placedOn.length === 1 ? placedOn[0] : existingHandle({ title: productTitle(g.title, titleYear(g.tags, g.productType)), brand: g.brand, season: seasonTagFrom(g.tags) ?? "" }, listings);
     if (handle && handle !== g.handle) { g.handle = handle; kept.push(handle); }
     else if (handle) kept.push(handle);
   }
@@ -861,11 +906,11 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
 
   // What the person said not to build, by name or by unticking it on the batch page.
   if (directives.skip.length > 0) {
-    const left = grouped.filter((g) => isSkipped({ title: productTitle(g.title, seasonTagFrom(g.tags)), handle: g.handle }, directives.skip));
+    const left = grouped.filter((g) => isSkipped({ title: productTitle(g.title, titleYear(g.tags, g.productType)), handle: g.handle }, directives.skip));
     for (const g of left) grouped.splice(grouped.indexOf(g), 1);
     if (left.length > 0) {
       for (const fileId of [...new Set(items.map((i) => i.fileId))]) {
-        await noteOnFile(fileId, `Not built, as asked: ${left.map((g) => productTitle(g.title, seasonTagFrom(g.tags))).join(", ")}.`);
+        await noteOnFile(fileId, `Not built, as asked: ${left.map((g) => productTitle(g.title, titleYear(g.tags, g.productType))).join(", ")}.`);
       }
     }
   }
@@ -909,10 +954,10 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
   // were, so a slow brand site cannot make a build of fifty products wait on each.
   const picturesUntil = Date.now() + 90_000;
   for (const g of grouped) {
-    // A seasonal product carries its year after the name — the same products that carry a year tag.
-    // The SEO title is that title with the brand in front of it, which is the one place it appears.
-    const season = seasonTagFrom(g.tags);
-    const title = titledForShop(g.brand, productTitle(g.title, season));
+    // A seasonal product carries its year after the name — the same products that carry a year tag,
+    // or only those the shop chose (see titleYear). The SEO title is that title with the brand in
+    // front of it, which is the one place it appears.
+    const title = titledForShop(g.brand, productTitle(g.title, titleYear(g.tags, g.productType)));
     // Everything the product owns goes in with it: its variants, each with the order line it came
     // from, and its pictures. One round trip per product instead of one per row — a build on a
     // database in another region was waiting on the network a dozen times per product.

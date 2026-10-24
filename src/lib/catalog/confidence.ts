@@ -93,7 +93,7 @@ export function scoreProduct(input: ConfidenceInput): Confidence {
       else if (support < 0.85) { title = 70; reasons.title = "Some of the title's words are not on the paperwork: check the name against the invoice."; }
     }
     if (!input.vendor.trim()) { title = Math.min(title, 55); reasons.title = reasons.title ?? "No brand: the title and the SEO title cannot carry one."; }
-    if (!input.typeKnown) { title = Math.min(title, 60); reasons.title = reasons.title ?? "The Type is not one of your kinds of product: pick one from the list."; }
+    if (!input.typeKnown) { title = Math.min(title, 60); reasons.title = reasons.title ?? "The Type is not one of your product types: pick one from the list."; }
   }
 
   // Tags: all from the shop's own vocabulary.
@@ -103,7 +103,7 @@ export function scoreProduct(input: ConfidenceInput): Confidence {
   else {
     const unknown = input.tags.filter((t) => !input.tagKnown(t));
     if (unknown.length) { tags = 40; reasons.tags = `${unknown.length === 1 ? "A tag" : `${unknown.length} tags`} your shop has never used: ${unknown.slice(0, 3).join(", ")}${unknown.length > 3 ? ", …" : ""}.`; }
-    if (!input.typeKnown) { tags = Math.min(tags, 50); reasons.tags = reasons.tags ?? "The Type is not one of your kinds of product, so its shelf tags are a guess."; }
+    if (!input.typeKnown) { tags = Math.min(tags, 50); reasons.tags = reasons.tags ?? "The Type is not one of your product types, so its shelf tags are a guess."; }
   }
 
   // Image: looked at against the colour, or at least a real address; none at all is the floor.

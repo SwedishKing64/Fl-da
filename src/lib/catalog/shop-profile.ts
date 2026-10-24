@@ -168,6 +168,19 @@ export function shopName(): string {
   return activeProfile.name.trim() || "our shop";
 }
 
+const nameKey = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "");
+
+/**
+ * Whether a name read off a document is the shop's own. An invoice names the shop as the buyer
+ * (bill to, ship to, sold to), often in larger type than the supplier, and a reader took Alpsport
+ * for the supplier of a Burton invoice; the shop's own name is never the supplier or the brand.
+ */
+export function isOwnShop(name: string, shop = activeProfile.name): boolean {
+  const own = nameKey(shop);
+  const read = nameKey(name);
+  return own.length >= 3 && read.length > 0 && (read === own || (own.length >= 5 && read.includes(own)));
+}
+
 /**
  * The retailer, as the prompts describe it: "a ski and snowboard retailer in Australia". Built
  * from the profile so a bike shop in Leeds is read as one.

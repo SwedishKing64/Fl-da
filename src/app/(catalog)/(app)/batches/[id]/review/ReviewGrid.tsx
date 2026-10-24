@@ -111,7 +111,7 @@ const FLAG_LABELS: Record<string, string> = {
   DUPLICATE_SKU_BATCH: "Duplicate SKU (batch)", DUPLICATE_SKU_SHOPIFY: "SKU exists in Shopify", DUPLICATE_HANDLE: "Duplicate handle",
   INVALID_HANDLE: "Invalid handle", DUPLICATE_OPTIONS: "Duplicate option values", MISSING_OPTION_VALUE: "Missing option value",
   NO_IMAGE: "No image", INVALID_IMAGE_URL: "Bad image URL", LOW_MARGIN: "Low margin", NEGATIVE_PROFIT: "Negative profit",
-  MISSING_VENDOR: "No vendor", MISSING_TYPE: "No product type", UNKNOWN_TYPE: "Not one of your kinds of product", UPDATE_EXISTING: "Updates existing Shopify product",
+  MISSING_VENDOR: "No vendor", MISSING_TYPE: "No product type", UNKNOWN_TYPE: "Not one of your product types", UPDATE_EXISTING: "Updates existing Shopify product",
   INVALID_BARCODE: "Barcode fails its check digit", ODD_BARCODE: "Barcode of an odd length", SWAPPED_CODES: "SKU and barcode swapped", AMBIGUOUS_MATCH: "Fits several shop products",
 };
 

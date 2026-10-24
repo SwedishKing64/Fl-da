@@ -246,6 +246,8 @@ export interface AppSettings {
   publicBaseUrl: string; // where uploaded images are served for the CSV, e.g. https://tools.example.com
   seoTone: string; // tone instructions for AI-written descriptions
   houseRules: string; // free text: how this shop builds products, fed to the AI on every product
+  /** Offer confirmed supplier layouts (headings only) to other shops, and start from theirs. */
+  shareLayouts: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -260,6 +262,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   seoTone:
     "Friendly, knowledgeable specialist shop. Plain English, no hype, mention who the product suits and key specs.",
   houseRules: "",
+  shareLayouts: true,
 };
 
 // ---------------------------------------------------------------------------

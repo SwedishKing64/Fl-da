@@ -7,6 +7,11 @@
 # licence, and the FLODA_ANTHROPIC_API_KEY repository secret baked in as the reading key when
 # one is set. That goes to a pre-release of its own, v1.2.3-open, with no latest.yml, so an
 # ordinary copy's updater never installs it over itself.
+#
+# With "local" ticked (or a tag ending in -local) it builds a copy that checks no licence: the
+# shop makes its own account on the computer and reads on its own key, with nothing asked of the
+# hosted Flöda. It installs over the ordinary app, keeping its data, and goes to a pre-release
+# of its own, v1.2.3-local, again with no latest.yml.
 name: Desktop app
 
 on:
@@ -23,12 +28,18 @@ on:
         type: boolean
         required: false
         default: false
+      local:
+        description: "Build a copy with no licence: its own account on the computer, the shop's own key"
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: write
 
 env:
   OPEN: ${{ (inputs.open == true || endsWith(github.ref, '-open')) && '1' || '' }}
+  LOCAL: ${{ (inputs.local == true || endsWith(github.ref, '-local')) && '1' || '' }}
 
 jobs:
   build:
@@ -48,10 +59,28 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Which version this is
+        id: version
+        shell: bash
+        run: |
+          v="${{ github.event.inputs.version }}"
+          if [ -z "$v" ]; then
+            if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then v="${GITHUB_REF#refs/tags/v}"; else v="$(node -p "require('./package.json').version")"; fi
+          fi
+          v="${v%-open}"; v="${v%-local}"
+          # The app reports the version it is released as, and its updater compares against it.
+          npm version "$v" --no-git-tag-version --allow-same-version > /dev/null
+          if [ "$OPEN" = "1" ]; then
+            echo "tag=v${v}-open" >> "$GITHUB_OUTPUT"; echo "name=Flöda v${v} open copy" >> "$GITHUB_OUTPUT"
+          elif [ "$LOCAL" = "1" ]; then
+            echo "tag=v${v}-local" >> "$GITHUB_OUTPUT"; echo "name=Flöda v${v} local copy" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=v${v}" >> "$GITHUB_OUTPUT"; echo "name=Flöda v${v}" >> "$GITHUB_OUTPUT"
+          fi
       - name: Build the server for the desktop
         run: npm run desktop:build
         env:
-          FLODA_LICENCE_SERVER: ${{ vars.FLODA_LICENCE_SERVER || 'https://fl-da.vercel.app' }}
+          FLODA_LICENCE_SERVER: ${{ env.LOCAL == '1' && 'none' || vars.FLODA_LICENCE_SERVER || 'https://fl-da.vercel.app' }}
           FLODA_OPEN: ${{ env.OPEN }}
           NEXT_PUBLIC_FLODA_SUPPORT_EMAIL: ${{ vars.FLODA_SUPPORT_EMAIL || '' }}
           # Only an open build takes the key; the ordinary app reads through its licence.
@@ -63,8 +92,8 @@ jobs:
         env:
           # No code signing yet. Windows shows a SmartScreen notice; macOS needs right-click → Open.
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-      - name: Keep the open copy out of the updater's sight
-        if: env.OPEN == '1'
+      - name: Keep the open and local copies out of the updater's sight
+        if: env.OPEN == '1' || env.LOCAL == '1'
         shell: bash
         run: rm -f dist-desktop/latest*.yml
       - uses: actions/upload-artifact@v4
@@ -77,27 +106,13 @@ jobs:
             dist-desktop/*.blockmap
             dist-desktop/latest*.yml
           if-no-files-found: error
-      - name: Which version this is
-        id: version
-        shell: bash
-        run: |
-          v="${{ github.event.inputs.version }}"
-          if [ -z "$v" ]; then
-            if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then v="${GITHUB_REF#refs/tags/v}"; else v="$(node -p "require('./package.json').version")"; fi
-          fi
-          v="${v%-open}"
-          if [ "$OPEN" = "1" ]; then
-            echo "tag=v${v}-open" >> "$GITHUB_OUTPUT"; echo "name=Flöda v${v} open copy" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=v${v}" >> "$GITHUB_OUTPUT"; echo "name=Flöda v${v}" >> "$GITHUB_OUTPUT"
-          fi
       - name: Attach to the release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           name: ${{ steps.version.outputs.name }}
           # The open copy is a pre-release: the updater and the download page look past those.
-          prerelease: ${{ env.OPEN == '1' }}
+          prerelease: ${{ env.OPEN == '1' || env.LOCAL == '1' }}
           target_commitish: ${{ github.sha }}
           # The yml files are what an installed copy reads to learn a newer version exists; the
           # blockmaps let Windows download only what changed.

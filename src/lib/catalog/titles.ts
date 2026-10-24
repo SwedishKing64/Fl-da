@@ -125,6 +125,20 @@ export function withoutVendor(vendor: string, title: string): string {
 }
 
 /**
+ * The year a product's title carries: its season, unless the shop puts the year only on the
+ * product types and tags it chose and this product is none of them.
+ */
+export function titleYear(tags: string[], productType = ""): string | null {
+  const season = seasonTagFrom(tags);
+  const { naming } = houseConventions();
+  if (!season || naming.season !== "chosen") return season;
+  const norm = (s: string) => s.trim().toLowerCase();
+  const types = new Set((naming.yearOn?.types ?? []).map(norm));
+  const wanted = new Set((naming.yearOn?.tags ?? []).map(norm));
+  return types.has(norm(productType)) || tags.some((t) => wanted.has(norm(t))) ? season : null;
+}
+
+/**
  * The season a product belongs to, read off its tags.
  *
  * The year tag is where the season is decided, so both the name and the URL handle are built from

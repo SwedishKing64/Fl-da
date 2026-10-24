@@ -121,7 +121,26 @@ describe("the kinds an export shows", () => {
     expect(road.exampleTitle).toMatch(/^road bike \d+$/);
     expect(kinds[2].commonTags).toEqual(["accessories", "helmets", "Size_M"]);
   });
+  it("keeps tags that differ from one product to the next out of the tags every one gets", () => {
+    const skis: Listing[] = [];
+    for (let i = 0; i < 10; i++) skis.push(listing(`ski-${i}`, "Skis", ["skis", i < 7 ? "all-mountain" : "freeride", ...(i < 4 ? ["carving"] : [])], i % 2 ? "Atomic" : "Volkl"));
+    const [type] = kindsFromListings(skis);
+    expect(type.commonTags).toEqual(["skis"]);
+    expect(type.variesTags).toEqual(["all-mountain", "carving", "freeride"]);
+  });
   it("skips rows with no Type", () => {
     expect(kindsFromListings([listing("a", "", ["x"]), listing("b", "Pumps", ["pumps"])]).map((k) => k.type)).toEqual(["Pumps"]);
+  });
+});
+
+describe("which titles carry the model year", () => {
+  it("is every product with a year tag, or only the product types and tags the shop chose", async () => {
+    const { titleYear } = await import("./titles");
+    expect(titleYear(["skis", "2026"], "Skis")).toBe("2026");
+    activateConventions({ ...ALPSPORT_CONVENTIONS, house: { ...ALPSPORT_CONVENTIONS.house!, naming: { ...ALPSPORT_CONVENTIONS.house!.naming, season: "chosen", yearOn: { types: ["Ski Boots"], tags: ["snow"] } } } });
+    expect(titleYear(["snow", "2026"], "Jackets")).toBe("2026");
+    expect(titleYear(["2026"], "ski boots")).toBe("2026");
+    expect(titleYear(["camping", "2026"], "Tents")).toBeNull();
+    expect(titleYear(["snow"], "Jackets")).toBeNull();
   });
 });

@@ -18,7 +18,8 @@ const run = (cmd, env = {}) => {
 };
 
 const pkg = JSON.parse(readFileSync("package.json", "utf8"));
-const licenceServer = (process.env.FLODA_LICENCE_SERVER ?? "https://fl-da.vercel.app").replace(/\/+$/, "");
+// "none" builds a copy that checks no licence: its own account on the computer, the shop's own key.
+const licenceServer = process.env.FLODA_LICENCE_SERVER === "none" ? "" : (process.env.FLODA_LICENCE_SERVER ?? "https://fl-da.vercel.app").replace(/\/+$/, "");
 const open = process.env.FLODA_OPEN === "1";
 const anthropicApiKey = open ? (process.env.FLODA_ANTHROPIC_API_KEY ?? "").trim() : "";
 // An open copy has no licence to send pictures through, so it keeps them in Flöda's own picture

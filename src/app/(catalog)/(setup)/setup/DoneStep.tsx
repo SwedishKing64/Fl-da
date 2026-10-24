@@ -28,7 +28,7 @@ export function DoneStep({ shopName, learned, aiReady, skipped, store = "", corr
       <div className="mb-4 rounded-[12px] bg-[var(--meta-tint)] p-4 text-[14px]">
         <div className="font-semibold">Fixing something once is enough</div>
         <p className="mt-1 text-[var(--ink-soft)]">
-          What Flöda guessed rather than learned keeps being checked: the review screen shows you what it is unsure of first. When you fix something there — a renamed option, a different kind of product, a corrected line — Flöda does it that way from then on, for that supplier and that kind of product.{corrections > 0 ? ` It already holds ${corrections} correction${corrections === 1 ? "" : "s"} of yours.` : ""}
+          What Flöda guessed rather than learned keeps being checked: the review screen shows you what it is unsure of first. When you fix something there — a renamed option, a different product type, a corrected line — Flöda does it that way from then on, for that supplier and that product type.{corrections > 0 ? ` It already holds ${corrections} correction${corrections === 1 ? "" : "s"} of yours.` : ""}
         </p>
       </div>
       <div className="rounded-[12px] bg-[var(--canvas)] p-4 text-[14px]">

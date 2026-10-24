@@ -39,7 +39,7 @@ export function StoreForm({ state, canInstall = false }: { state: StoreState; ca
       if (!s.ok) return setNote({ tone: "danger", text: s.error });
       setToken("");
       setEditing(false);
-      setNote({ tone: "success", text: `Read ${s.data!.products} products: ${s.data!.types} kinds of product, ${s.data!.templates} conventions per brand and kind, and every listing for placing orders on.` });
+      setNote({ tone: "success", text: `Read ${s.data!.products} products: ${s.data!.types} product types, ${s.data!.templates} conventions per brand and kind, and every listing for placing orders on.` });
       router.refresh();
     });
 
@@ -48,7 +48,7 @@ export function StoreForm({ state, canInstall = false }: { state: StoreState; ca
       setNote(null);
       const s = await syncStoreAction();
       if (!s.ok) return setNote({ tone: "danger", text: s.error });
-      setNote({ tone: "success", text: `Read ${s.data!.products} products: ${s.data!.types} kinds of product, ${s.data!.templates} conventions per brand and kind.` });
+      setNote({ tone: "success", text: `Read ${s.data!.products} products: ${s.data!.types} product types, ${s.data!.templates} conventions per brand and kind.` });
       router.refresh();
     });
 
@@ -65,7 +65,7 @@ export function StoreForm({ state, canInstall = false }: { state: StoreState; ca
   return (
     <div className="space-y-4 text-[14px]">
       <p className="text-[var(--ink-soft)]">
-        Connect the store once and Flöda reads it instead of being told: which kinds of product it has, which tags go with each, how each brand is listed, and every listing an order line can be placed on. It reads the store again before a batch when the last read is a day old, so a product added in the store last week is known to this week&rsquo;s batch. The connection reads, and on the export page pushes drafts; it never changes a listing on its own.
+        Connect the store once and Flöda reads it instead of being told: which product types it has, which tags go with each, how each brand is listed, and every listing an order line can be placed on. It reads the store again before a batch when the last read is a day old, so a product added in the store last week is known to this week&rsquo;s batch. The connection reads, and on the export page pushes drafts; it never changes a listing on its own.
       </p>
 
       {state.configured && !editing && (

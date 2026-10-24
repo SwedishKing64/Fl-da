@@ -12,8 +12,14 @@ export interface HouseConventions {
   naming: {
     /** Whether the Title column leads with the brand. The SEO title always does. */
     brandInTitle: "never" | "always";
-    /** Whether a product's model year goes after its name: for the kinds that carry a year tag, always, or never. */
-    season: "seasonal" | "always" | "never";
+    /**
+     * Whether a product's model year goes after its name: on everything that carries a year tag
+     * ("seasonal" and "always" read the same), never, or only on the product types and tags the
+     * shop chose ("chosen": every product tagged snow, say).
+     */
+    season: "seasonal" | "always" | "never" | "chosen";
+    /** For "chosen": the product types, and the tags, whose products carry the year. */
+    yearOn?: { types: string[]; tags: string[] };
     /** Case a supplier's capitals back into the shop's mixed case, or keep names as the supplier writes them. */
     casing: "shop" | "supplier";
     /** "Men's" or "Women's" on the front of a gendered product's name, or the name as the supplier gives it. */
@@ -42,6 +48,12 @@ export interface HouseConventions {
     specsHeading: string;
     /** One real description from the shop, pasted, as the shape to match. */
     example: string;
+    /**
+     * More sections after the details, in order, each under its own heading: "Specifications"
+     * with the measurements, "Features" with the technologies, "Size guide". Filled only from what
+     * the brand page or spec sheet gives; a section with nothing for it is left out.
+     */
+    sections?: Array<{ heading: string; holds: string }>;
   };
   /** Anything else, in the shop's own words. Fed to the reader on every product. */
   notes: string;
@@ -64,10 +76,25 @@ export interface KindRule {
   calledAs: string;
   /** Tags every product of this kind gets. */
   tags: string[];
+  /** Tags some of its products carry and others do not, chosen for each product by what it is. */
+  variesTags?: string[];
   /** How a title of this kind reads, as one real example or a pattern: "Völkl Mantra 88 2026". */
   titleFormat: string;
   /** How many products the export had of it, for the person's bearings. */
   count: number;
+}
+
+/** A comma list as clean entries, at most forty, each once. */
+function listOf(input: unknown): string[] {
+  const raw = Array.isArray(input) ? input : String(input ?? "").split(",");
+  return [...new Set(raw.map((x) => String(x).trim().slice(0, 80)).filter(Boolean))].slice(0, 40);
+}
+
+/** Which products carry the year, in words: "Skis, Snowboards and anything tagged snow". */
+export function yearOnWords(on: { types: string[]; tags: string[] } | undefined): string {
+  const parts = [...(on?.types ?? []), ...(on?.tags ?? []).map((t) => `anything tagged ${t}`)];
+  if (parts.length === 0) return "no products yet (choose some)";
+  return parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
 }
 
 export const DEFAULT_HOUSE: HouseConventions = {
@@ -89,10 +116,10 @@ export interface TagRuleInput {
 }
 
 export const TAG_RULE_FIELDS: Array<{ key: TagRuleInput["field"]; label: string }> = [
-  { key: "any", label: "anything about it" },
-  { key: "productType", label: "its kind of product" },
-  { key: "brand", label: "its brand" },
-  { key: "title", label: "its name" },
+  { key: "brand", label: "brand (Vendor) includes" },
+  { key: "productType", label: "product type includes" },
+  { key: "title", label: "title includes" },
+  { key: "any", label: "brand, type or title includes" },
 ];
 
 const norm = (s: string) => s.trim().toLowerCase();
@@ -134,6 +161,7 @@ export function houseGuidance(house: HouseConventions): string {
   lines.push(n.brandInTitle === "always" ? "Product titles lead with the brand." : "Product titles do not include the brand; it is in the Vendor column and the SEO title.");
   if (n.season === "always") lines.push("Every product title ends with its model year.");
   if (n.season === "never") lines.push("Product titles never carry a model year.");
+  if (n.season === "chosen") lines.push(`Only these products carry the model year at the end of the title: ${yearOnWords(n.yearOn)}. Every other title has no year.`);
   if (n.casing === "supplier") lines.push("Names are written exactly as the supplier writes them, capitals included.");
   lines.push(n.audience === "front" ? "A gendered product's title starts with Men's, Women's or Kids'." : "Titles do not start with Men's or Women's; the gender goes in the tags.");
   if (n.example.trim()) lines.push(`A typical title here reads: "${n.example.trim()}". Match that shape.`);
@@ -144,11 +172,13 @@ export function houseGuidance(house: HouseConventions): string {
   if (d.format.trim()) lines.push(`How a description is written here:\n${d.format.trim()}`);
   if (d.specsHeading.trim() && d.specsHeading.trim() !== "Tech Specs") lines.push(`The details list is headed "${d.specsHeading.trim()}".`);
   if (d.example.trim()) lines.push(`A description from this shop, as the shape to match:\n${d.example.trim()}`);
+  if (d.sections?.length) lines.push(`After the details, each description has these sections in order, each under its heading and only when the page gives something for it: ${d.sections.map((x) => `"${x.heading}"${x.holds ? ` (${x.holds})` : ""}`).join(", ")}.`);
   for (const k of house.kinds) {
     const name = k.calledAs || k.type;
     const parts: string[] = [];
     if (k.calledAs && k.calledAs !== k.type) parts.push(`the shop files what an export calls "${k.type}" as "${k.calledAs}"`);
     if (k.tags.length) parts.push(`every one is tagged ${k.tags.join(", ")}`);
+    if (k.variesTags?.length) parts.push(`each also gets whichever of these fit that product, and never all of them: ${k.variesTags.join(", ")}`);
     if (k.titleFormat.trim()) parts.push(`its titles read like "${k.titleFormat.trim()}"`);
     if (parts.length) lines.push(`${name}: ${parts.join("; ")}.`);
   }
@@ -160,7 +190,7 @@ export function houseGuidance(house: HouseConventions): string {
 export function describeHouse(house: HouseConventions): string[] {
   const out: string[] = [];
   const n = house.naming;
-  out.push(`Titles ${n.brandInTitle === "always" ? "lead with the brand" : "leave the brand to the Vendor column"}${n.season === "always" ? " and always end with the year" : n.season === "never" ? " and never carry a year" : "; seasonal kinds carry their year"}${n.casing === "supplier" ? ", written as the supplier writes them" : ", in the shop's own case"}${n.audience === "front" ? ", with Men's or Women's on the front of a gendered product" : ""}.`);
+  out.push(`Titles ${n.brandInTitle === "always" ? "lead with the brand" : "leave the brand to the Vendor column"}${n.season === "always" ? " and always end with the year" : n.season === "never" ? " and never carry a year" : n.season === "chosen" ? `; the year goes on ${yearOnWords(n.yearOn)}` : "; seasonal products carry their year"}${n.casing === "supplier" ? ", written as the supplier writes them" : ", in the shop's own case"}${n.audience === "front" ? ", with Men's or Women's on the front of a gendered product" : ""}.`);
   const id = house.identifiers;
   out.push(`SKU: ${id.sku === "supplier" ? "the supplier's code" : id.sku === "barcode" ? "the barcode" : "not used"}. Barcodes: ${id.barcode === "keep" ? "kept when the paperwork has them" : id.barcode === "required" ? "required on every variant" : "not used"}.`);
   const w = house.weights;
@@ -181,7 +211,8 @@ export function cleanKinds(input: unknown): KindRule[] {
     if (!type || seen.has(type.toLowerCase())) continue;
     seen.add(type.toLowerCase());
     const tags = (Array.isArray(k?.tags) ? k.tags : String(k?.tags ?? "").split(",")).map((t) => String(t).trim().slice(0, 80)).filter(Boolean).slice(0, 40);
-    out.push({ type, calledAs: String(k?.calledAs ?? "").trim().slice(0, 120) || type, tags: [...new Set(tags)], titleFormat: String(k?.titleFormat ?? "").trim().slice(0, 200), count: Math.max(0, Math.round(Number(k?.count) || 0)) });
+    const varies = (Array.isArray(k?.variesTags) ? k.variesTags : []).map((t) => String(t).trim().slice(0, 80)).filter(Boolean).slice(0, 40);
+    out.push({ type, calledAs: String(k?.calledAs ?? "").trim().slice(0, 120) || type, tags: [...new Set(tags)], ...(varies.length ? { variesTags: [...new Set(varies)] } : {}), titleFormat: String(k?.titleFormat ?? "").trim().slice(0, 200), count: Math.max(0, Math.round(Number(k?.count) || 0)) });
   }
   return out;
 }
@@ -206,7 +237,8 @@ export function cleanHouse(input: Partial<HouseConventions> | null | undefined, 
   return {
     naming: {
       brandInTitle: pick(n.brandInTitle, ["never", "always"] as const, base.naming.brandInTitle),
-      season: pick(n.season, ["seasonal", "always", "never"] as const, base.naming.season),
+      season: pick(n.season, ["seasonal", "always", "never", "chosen"] as const, base.naming.season),
+      ...(listOf(n.yearOn?.types).length || listOf(n.yearOn?.tags).length ? { yearOn: { types: listOf(n.yearOn?.types), tags: listOf(n.yearOn?.tags) } } : {}),
       casing: pick(n.casing, ["shop", "supplier"] as const, base.naming.casing),
       audience: pick(n.audience, ["front", "none"] as const, base.naming.audience),
       example: String(n.example ?? "").trim().slice(0, 160),
@@ -225,6 +257,12 @@ export function cleanHouse(input: Partial<HouseConventions> | null | undefined, 
       format: String(i.descriptions?.format ?? "").trim().slice(0, 4000),
       specsHeading: String(i.descriptions?.specsHeading ?? DEFAULT_HOUSE.descriptions.specsHeading).trim().slice(0, 60),
       example: String(i.descriptions?.example ?? "").trim().slice(0, 6000),
+      ...(() => {
+        const sections = (Array.isArray(i.descriptions?.sections) ? i.descriptions.sections : []).slice(0, 12)
+          .map((x) => ({ heading: String(x?.heading ?? "").trim().slice(0, 60), holds: String(x?.holds ?? "").trim().slice(0, 300) }))
+          .filter((x) => x.heading);
+        return sections.length ? { sections } : {};
+      })(),
     },
     notes: String(i.notes ?? "").trim().slice(0, 4000),
     kinds: cleanKinds(i.kinds),

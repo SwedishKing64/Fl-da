@@ -2,6 +2,7 @@ import { extractCsv, extractXlsx } from "./tabular";
 import { extractPdfText } from "./pdf";
 import { extractHeuristic } from "./heuristic";
 import { aiAvailable } from "../anthropic";
+import { docxText } from "../archive";
 import { aiDocumentMeta, aiExtractionToTable, extractFromImage, extractFromPdf, extractFromText, type DocumentType, type ReadOptions } from "./ai";
 import type { ExtractedTable } from "./types";
 import { layoutOf, layoutOfHeaders, sameLayout } from "../layout";
@@ -39,13 +40,14 @@ export function readFor(read: ReadOptions, history: SupplierHistory, layout: str
   };
 }
 
-export function detectKind(filename: string, mimeType: string): "csv" | "xlsx" | "pdf" | "image" | "text" | "unknown" {
+export function detectKind(filename: string, mimeType: string): "csv" | "xlsx" | "pdf" | "image" | "text" | "docx" | "unknown" {
   const ext = filename.toLowerCase().split(".").pop() ?? "";
   if (ext === "csv" || mimeType === "text/csv") return "csv";
   if (["xlsx", "xlsm", "xls"].includes(ext) || mimeType.includes("spreadsheet") || mimeType.includes("excel")) return "xlsx";
   if (ext === "pdf" || mimeType === "application/pdf") return "pdf";
   if (["png", "jpg", "jpeg", "gif", "webp", "heic", "heif"].includes(ext) || mimeType.startsWith("image/")) return "image";
-  if (ext === "txt" || mimeType.startsWith("text/")) return "text";
+  if (ext === "docx" || mimeType.includes("wordprocessingml")) return "docx";
+  if (["txt", "tsv", "json", "xml", "html", "htm", "md", "rtf"].includes(ext) || mimeType.startsWith("text/") || mimeType === "application/json" || mimeType === "application/xml") return "text";
   return "unknown";
 }
 
@@ -71,6 +73,8 @@ export async function extractFile(buffer: Buffer, filename: string, mimeType: st
     }
     case "text":
       return fromText(buffer.toString("utf8"), "AI_TEXT", hint, read, history);
+    case "docx":
+      return fromText(await docxText(buffer), "AI_TEXT", hint, read, history);
     case "pdf": {
       const pdf = await extractPdfText(buffer);
       if (!pdf.looksScanned && kind !== "PRODUCT_PHOTO") return fromText(pdf.text, "PDF_TEXT", hint, read, history);
@@ -91,7 +95,8 @@ export async function extractFile(buffer: Buffer, filename: string, mimeType: st
       return { table: aiExtractionToTable(result, "IMAGE_AI"), meta: aiDocumentMeta(result) };
     }
     default:
-      throw new Error(`Unsupported file type: ${filename} (${mimeType}). Upload PDF, XLSX, CSV, TXT or an image.`);
+      // Kept with the batch all the same: a supplier's file is the shop's record of what was sent.
+      return { table: { headers: [], rows: [], method: "HEURISTIC", warnings: [`Kept with the batch, but ${filename} is not a kind of file Flöda can read (it reads PDFs, spreadsheets, CSVs, Word documents, text and pictures). Nothing was taken from it.`] } };
   }
 }
 

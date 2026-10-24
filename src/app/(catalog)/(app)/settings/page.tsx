@@ -10,6 +10,7 @@ import { getShopProfile, getStoredApiKey } from "@/lib/catalog/shop-profile";
 import { ShopForm } from "@/app/(catalog)/(setup)/setup/ShopStep";
 import { ApiKeyForm } from "@/app/(catalog)/(setup)/setup/AiStep";
 import { LicenceForm } from "./LicenceForm";
+import { ShareLayouts } from "./ShareLayouts";
 import { Backups } from "./Backups";
 import { ShopifyConnect } from "./ShopifyConnect";
 import { getSettings } from "@/lib/catalog/settings";
@@ -50,7 +51,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         </Card>
         <div className="grid gap-6">
           <Card title="Training and Rules">
-            <p className="text-[14px] text-[var(--ink-soft)]">What Flöda is taught lives on its own page: your website&apos;s categories as the kinds of product, each supplier&apos;s paperwork, your Shopify export, and the rules for every listing. <Link href="/training" className="font-semibold text-[var(--meta)]">Open Training and Rules →</Link></p>
+            <p className="text-[14px] text-[var(--ink-soft)]">What Flöda is taught lives on its own page: your website&apos;s categories as the product types, each supplier&apos;s paperwork, your Shopify export, and the rules for every listing. <Link href="/training" className="font-semibold text-[var(--meta)]">Open Training and Rules →</Link></p>
           </Card>
           <div id="shopify">
             <Card title="Your Shopify store">
@@ -63,6 +64,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           {licenceServer() && (
             <Card title="Licence">
               <LicenceForm state={await currentLicence()} use={await monthUse()} reading={await readingUsage()} servers={await servers()} override={await getServerOverride()} />
+              <ShareLayouts on={settings.shareLayouts !== false} />
             </Card>
           )}
         </div>

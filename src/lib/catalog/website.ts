@@ -1,5 +1,5 @@
 /**
- * The shop's own website as the list of kinds of product.
+ * The shop's own website as the list of product types.
  *
  * A product has a place it must appear on the shop's site, and that place is a category the site
  * already has. So the categories are read off the site itself, once, and become the kinds of
@@ -7,9 +7,12 @@
  * reader proposes that is not on it is an error on the review grid rather than a word nobody put
  * there. Nothing is invented.
  *
- * Two ways to read a site. A Shopify store answers `/collections.json` with every collection it
- * has, which is exactly the list of places a product can be filed. Any other site is read from
- * the links in its menu. Either way the person sees the list before it is kept and can leave
+ * A Shopify store is read from `/products.json`: the Product Type every listing already carries is
+ * the shop's own list of kinds, word for word, with how many products each holds. Its collections
+ * are not: a store's automated collections run to thousands (each brand, each gender, each season,
+ * each brand-and-type), and only where a store's listings carry no Product Type are they read, and
+ * then from the store's menu where the list is that long. Any other site is read from the links in
+ * its menu. Either way the person sees the list before it is kept and can leave
  * entries out. Merchandising entries — Sale, Brands, Gift cards, New in — are not kinds of
  * product and are left out up front.
  *
@@ -22,11 +25,14 @@ export interface WebsiteCategory {
   title: string;
   /** Where it lives on the site, for the person to recognise it. */
   path: string;
+  /** How many of the store's products carry it, where it was read off the products themselves. */
+  count?: number;
 }
 
 export interface WebsiteCategories {
   url: string;
-  source: "shopify" | "menu";
+  /** "types": a Shopify store's Product Types; "shopify": its collections; "menu": its menu links. */
+  source: "types" | "shopify" | "menu";
   categories: WebsiteCategory[];
   readAt: string;
 }
@@ -93,9 +99,47 @@ export function parseShopifyCollections(json: unknown): WebsiteCategory[] {
   return dedupe(out);
 }
 
+/** The Product Types and vendors on one page of a Shopify store's `/products.json`. */
+export function parseShopifyProducts(json: unknown): { types: Map<string, number>; vendors: Set<string>; products: number } | null {
+  const list = (json as { products?: unknown })?.products;
+  if (!Array.isArray(list)) return null;
+  const types = new Map<string, number>();
+  const vendors = new Set<string>();
+  for (const entry of list) {
+    const p = entry as { product_type?: unknown; vendor?: unknown };
+    const type = cleanTitle(String(p.product_type ?? ""));
+    if (type) types.set(type, (types.get(type) ?? 0) + 1);
+    const vendor = String(p.vendor ?? "").trim();
+    if (vendor) vendors.add(vendor);
+  }
+  return { types, vendors, products: list.length };
+}
+
+/** A store's Product Types as product types, the most used first. */
+export function kindsFromTypes(types: Map<string, number>): WebsiteCategory[] {
+  const merged = new Map<string, WebsiteCategory>();
+  for (const [title, count] of types) {
+    if (!isKindOfProduct(title)) continue;
+    const key = title.toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, " ").trim();
+    const had = merged.get(key);
+    if (had) had.count = (had.count ?? 0) + count;
+    else merged.set(key, { title, path: "", count });
+  }
+  return [...merged.values()].sort((a, b) => (b.count ?? 0) - (a.count ?? 0) || a.title.localeCompare(b.title));
+}
+
+/**
+ * A store's collections with the ones that are not kinds left out: a brand's own collection, and a
+ * season's ("Winter 2026", "25/26 Skis").
+ */
+export function withoutBrandsAndSeasons(list: WebsiteCategory[], vendors: Set<string>): WebsiteCategory[] {
+  const brands = new Set([...vendors].map((v) => v.toLowerCase().trim()));
+  return list.filter((c) => !brands.has(c.title.toLowerCase().trim()) && !/\b(19|20)\d{2}\b|\b\d{2}\s*\/\s*\d{2}\b/.test(c.title));
+}
+
 /**
  * The categories linked from a page's menus. Every link on the page is looked at; one counts when
- * it points at the same site, names a kind of product, and is not a product, a page or a post.
+ * it points at the same site, names a product type, and is not a product, a page or a post.
  * On a Shopify site only collection links count, which is a much better signal.
  */
 export function parseMenuLinks(html: string, origin: string): WebsiteCategory[] {
@@ -133,6 +177,10 @@ export function parseMenuLinks(html: string, origin: string): WebsiteCategory[] 
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36 Floda/1.0";
 const PAGE_LIMIT = 250;
 const MAX_PAGES = 12;
+/** 10,000 products: enough to see every Product Type a store uses. */
+const MAX_PRODUCT_PAGES = 40;
+/** More collections than this is a store's automated ones, not its menu. */
+const TOO_MANY_COLLECTIONS = 150;
 
 async function get(url: string, accept: string): Promise<Response> {
   return fetch(url, { headers: { accept, "user-agent": UA }, redirect: "follow", signal: AbortSignal.timeout(20_000) });
@@ -147,7 +195,26 @@ export async function readWebsite(input: string): Promise<WebsiteCategories> {
   if (!origin) throw new Error("That is not a website address. Something like aussieskier.com.au.");
   const readAt = new Date().toISOString();
 
-  // Shopify first: the list is complete and nothing has to be guessed from a menu.
+  // A Shopify store's own Product Types first: the exact words its Type column already holds.
+  const types = new Map<string, number>();
+  const vendors = new Set<string>();
+  for (let page = 1; page <= MAX_PRODUCT_PAGES; page++) {
+    let found: ReturnType<typeof parseShopifyProducts> = null;
+    try {
+      const res = await get(`${origin}/products.json?limit=${PAGE_LIMIT}&page=${page}`, "application/json");
+      if (res.ok && /json/i.test(res.headers.get("content-type") ?? "")) found = parseShopifyProducts(await res.json());
+    } catch {
+      found = null;
+    }
+    if (!found) break;
+    for (const [t, n] of found.types) types.set(t, (types.get(t) ?? 0) + n);
+    for (const v of found.vendors) vendors.add(v);
+    if (found.products < PAGE_LIMIT) break;
+  }
+  const kinds = kindsFromTypes(types);
+  if (kinds.length > 0) return { url: origin, source: "types", categories: kinds, readAt };
+
+  // No Product Types to go on: the store's collections, which name every place a product is filed.
   const fromShopify: WebsiteCategory[] = [];
   let shopify = false;
   for (let page = 1; page <= MAX_PAGES; page++) {
@@ -172,20 +239,29 @@ export async function readWebsite(input: string): Promise<WebsiteCategories> {
     if (list.length < PAGE_LIMIT) break;
   }
   if (shopify) {
-    const categories = dedupe(fromShopify);
-    if (categories.length === 0) throw new Error(`${origin} is a Shopify store but lists no collections that name a kind of product.`);
+    const categories = withoutBrandsAndSeasons(dedupe(fromShopify), vendors);
+    // Thousands of collections are the store's automated ones; its menu is the shorter, truer list.
+    if (categories.length > TOO_MANY_COLLECTIONS) {
+      const menu = await readMenu(origin).catch(() => []);
+      if (menu.length >= 3) return { url: origin, source: "menu", categories: withoutBrandsAndSeasons(menu, vendors), readAt };
+    }
+    if (categories.length === 0) throw new Error(`${origin} is a Shopify store but lists no collections that name a product type.`);
     return { url: origin, source: "shopify", categories, readAt };
   }
 
-  let html: string;
+  let categories: WebsiteCategory[];
   try {
-    const res = await get(origin, "text/html,application/xhtml+xml");
-    if (!res.ok) throw new Error(`the site answered ${res.status}`);
-    html = await res.text();
+    categories = await readMenu(origin);
   } catch (err) {
     throw new Error(`${origin} could not be read: ${err instanceof Error ? err.message.replace(/^fetch failed:?\s*/i, "") || "no answer" : "no answer"}.`);
   }
-  const categories = parseMenuLinks(html, origin);
   if (categories.length === 0) throw new Error(`No categories were found in the menus at ${origin}. If the menu is built by a script after the page loads, type the categories in by hand below.`);
   return { url: origin, source: "menu", categories, readAt };
+}
+
+/** The categories in the menus of a site's home page. */
+async function readMenu(origin: string): Promise<WebsiteCategory[]> {
+  const res = await get(origin, "text/html,application/xhtml+xml");
+  if (!res.ok) throw new Error(`the site answered ${res.status}`);
+  return parseMenuLinks(await res.text(), origin);
 }

@@ -132,7 +132,7 @@ export function describeLearned(v: LearnedVocabulary): string[] {
   lines.push(`${v.products.toLocaleString("en-AU")} products from ${v.file || "the export"}, ${v.vendors.length} brand${v.vendors.length === 1 ? "" : "s"}.`);
   lines.push(`${v.types.length} kind${v.types.length === 1 ? "" : "s"} of product${v.types.length ? `: ${v.types.slice(0, 8).map((t) => `${t.type} (${t.count})`).join(", ")}${v.types.length > 8 ? ", …" : ""}` : ""}.`);
   if (v.sections.length) lines.push(`${v.sections.length} menu tag${v.sections.length === 1 ? "" : "s"} that run across kinds: ${v.sections.join(", ")}.`);
-  else lines.push("No menu tags found running across kinds of product; each kind is tagged on its own.");
+  else lines.push("No menu tags found running across product types; each type is tagged on its own.");
   const spelled = Object.keys(v.spelling).length;
   if (spelled) lines.push(`How ${spelled} shelf tag${spelled === 1 ? " is" : "s are"} spelled.`);
   return lines;
@@ -171,15 +171,24 @@ export function mergeVocabulary(before: LearnedVocabulary, next: LearnedVocabula
 export interface KindSummary {
   type: string;
   count: number;
-  /** Tags on most of the kind's products, the vendor's own name and Shopify's own tags left out. */
+  /** Tags on all but the odd one of the type's products, the vendor's own name and Shopify's own tags left out. */
   commonTags: string[];
+  /**
+   * Tags the type's products carry some of and not others: a ski's terrain, a jacket's gender, the
+   * season. Picked for each product by what it is, never put on all of them.
+   */
+  variesTags: string[];
   /** One real title of the kind, as the shape its titles take. */
   exampleTitle: string;
   vendors: string[];
 }
 
-/** How much of a kind's products a tag must sit on to be offered as "every one gets it". */
-const KIND_TAG_SHARE = 0.6;
+/**
+ * How much of a type's products a tag must sit on to be offered as "every one gets it". It was 60%,
+ * and a ski shop's terrain and gender tags, each on most but not all of its skis, were offered as
+ * tags for every ski. A tag every one gets is on very nearly every one.
+ */
+const KIND_TAG_SHARE = 0.95;
 
 /** The kinds of product in an export's rows, biggest first, with what their rows have in common. */
 export function kindsFromListings(listings: Listing[]): KindSummary[] {
@@ -200,10 +209,12 @@ export function kindsFromListings(listings: Listing[]): KindSummary[] {
       if (ignorable(tag, vendorSlugs)) continue;
       counts.set(tag, (counts.get(tag) ?? 0) + 1);
     }
-    const commonTags = [...counts.entries()].filter(([, n]) => n / rows.length >= KIND_TAG_SHARE).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([tag]) => tag);
+    const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+    const commonTags = ranked.filter(([, n]) => n / rows.length >= KIND_TAG_SHARE).map(([tag]) => tag);
+    const variesTags = ranked.filter(([, n]) => n >= 2 && n / rows.length < KIND_TAG_SHARE).slice(0, 30).map(([tag]) => tag);
     // The example is a title of middling length: the shortest is often a one-word oddity, the longest a package.
     const titles = rows.map((l) => l.title.trim()).filter(Boolean).sort((a, b) => a.length - b.length);
-    out.push({ type: rows[0].productType.trim(), count: rows.length, commonTags, exampleTitle: titles[Math.floor(titles.length / 2)] ?? "", vendors: [...new Set(rows.map((l) => l.vendor.trim()).filter(Boolean))] });
+    out.push({ type: rows[0].productType.trim(), count: rows.length, commonTags, variesTags, exampleTitle: titles[Math.floor(titles.length / 2)] ?? "", vendors: [...new Set(rows.map((l) => l.vendor.trim()).filter(Boolean))] });
   }
   return out.sort((a, b) => b.count - a.count || a.type.localeCompare(b.type));
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { findProductPagesAction, readProductLinkAction, setProductLinkAction } from "@/app/(catalog)/actions";
 import { Alert, Button, Card } from "@/app/(catalog)/ui";
@@ -45,22 +45,35 @@ export function LinksPanel({ batchId, products, locked }: { batchId: string; pro
   const [finding, setFinding] = useState(false);
   const [found, setFound] = useState<string | null>(null);
 
-  /** Flöda finds the pages itself: the brand's usual address first, then a search; then reads what it found. */
+  /**
+   * Flöda finds the pages itself: the brand's usual address first, then a search; then reads what
+   * it found. One request has a time limit, so it goes again by itself until every product has
+   * been tried, rather than asking to be pressed again.
+   */
   async function findAll() {
     if (unlinked.length === 0) return;
     setFinding(true);
     setFound(null);
-    const r = await findProductPagesAction(batchId);
-    setFinding(false);
-    if (!r.ok) { setFound(r.error); return; }
-    for (const x of r.data!.results) {
-      if (x.url) { saved.current[x.productId] = x.url; setUrls((u) => ({ ...u, [x.productId]: x.url })); setStand((s) => ({ ...s, [x.productId]: "saved" })); }
-      setSaid((s) => ({ ...s, [x.productId]: { tone: x.how === "none" ? "warn" : "ok", text: x.said } }));
+    let found = 0;
+    let tried = 0;
+    for (let round = 0; round < 12; round++) {
+      const r = await findProductPagesAction(batchId);
+      if (!r.ok) { setFinding(false); setFound(r.error); return; }
+      const d = r.data!;
+      for (const x of d.results) {
+        if (x.url) { saved.current[x.productId] = x.url; setUrls((u) => ({ ...u, [x.productId]: x.url })); setStand((s) => ({ ...s, [x.productId]: "saved" })); }
+        setSaid((s) => ({ ...s, [x.productId]: { tone: x.how === "none" ? "warn" : "ok", text: x.said } }));
+      }
+      found += d.found;
+      tried += d.attempted;
+      setFound(`Finding pages: ${found} of ${tried} found so far…`);
+      if (!d.capped || d.attempted === 0) break;
     }
-    const d = r.data!;
-    setFound(`${d.found} of ${d.attempted} found${d.byPattern ? ` (${d.byPattern} at the brand's usual address)` : ""}${d.capped ? "; ran out of time, press again for the rest" : ""}.`);
-    if (d.found > 0) await readAll();
+    setFinding(false);
+    setFound(`${found} of ${tried} found.${tried > found ? " For the rest, paste the page if you know it." : ""}`);
+    if (found > 0) await readAll();
   }
+
 
   async function save(id: string): Promise<boolean> {
     const value = (urls[id] ?? "").trim();
@@ -103,6 +116,22 @@ export function LinksPanel({ batchId, products, locked }: { batchId: string; pro
     setProgress(null);
     router.refresh();
   }
+
+  // Once the products are built, their pages are looked for without being asked, once per batch.
+  const started = useRef(false);
+  useEffect(() => {
+    if (started.current || locked || unlinked.length === 0) return;
+    const key = `floda.links.${batchId}`;
+    try { if (sessionStorage.getItem(key)) return; } catch { /* storage off: run anyway */ }
+    const t = setTimeout(() => {
+      started.current = true;
+      try { sessionStorage.setItem(key, "1"); } catch { /* storage off */ }
+      void findAll();
+    }, 0);
+    return () => clearTimeout(t);
+    // findAll reads the rows as they stand when the page first shows; it is not re-run on edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const read = linked.filter((p) => stand[p.id] === "read").length;
   const [bulk, setBulk] = useState("");

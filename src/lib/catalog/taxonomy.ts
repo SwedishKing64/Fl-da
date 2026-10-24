@@ -433,6 +433,32 @@ export function resolveType(value: string): string | undefined {
   return called ? active.productTypes.find((t) => norm(t) === norm(called.kind)) : undefined;
 }
 
+/**
+ * The shop's own Type nearest to a name the build or a reader came up with, so a product is filed
+ * under one of the shop's types without anyone picking it: "Snowboard Boots" is a shop's "Mens
+ * Snowboard Boots", "Snowboard" its "Snowboards". The last word (what the thing is) must match,
+ * and more than half the words: a bare "Boots" is not a shop's "Apres Boots". Then the one sharing
+ * most words wins, the shorter on a tie. Undefined when nothing is close.
+ */
+export function closestType(value: string): string | undefined {
+  const exact = resolveType(value);
+  if (exact) return exact;
+  const singular = (w: string) => (w.length > 3 && w.endsWith("s") && !w.endsWith("ss") ? w.slice(0, -1) : w);
+  const words = (s: string) => norm(s).split(" ").filter((w) => w.length > 1).map(singular);
+  const want = words(value);
+  if (want.length === 0) return undefined;
+  const head = want[want.length - 1];
+  let best: { type: string; score: number } | null = null;
+  for (const type of active.productTypes) {
+    const have = words(type);
+    if (!have.includes(head)) continue;
+    const shared = want.filter((w) => have.includes(w)).length;
+    const score = shared / Math.max(want.length, have.length);
+    if (score > 0.5 && (!best || score > best.score || (score === best.score && type.length < best.type.length))) best = { type, score };
+  }
+  return best?.type;
+}
+
 /** True when this names a place a product can legitimately be filed. */
 export function isValidType(value: string): boolean {
   return resolveType(value) !== undefined;

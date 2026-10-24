@@ -5,12 +5,14 @@ import { after } from "next/server";
 import { extractStoredFile, noteOnFile, storeFile, untouchedSinceBuilt } from "@/lib/catalog/pipeline";
 import type { UploadKind } from "@/lib/catalog/extract";
 import { logAudit } from "@/lib/catalog/audit";
+import { allPictures, filesInArchive, isArchive } from "@/lib/catalog/archive";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-// Vercel serverless functions accept request bodies up to ~4.5MB; elsewhere allow 40MB.
-const MAX_BYTES = process.env.VERCEL ? 4 * 1024 * 1024 : 40 * 1024 * 1024;
+// Vercel serverless functions accept request bodies up to ~4.5MB. A desktop copy, or any server of
+// the shop's own, takes a supplier's files whatever their size.
+const MAX_BYTES = process.env.VERCEL ? 4 * 1024 * 1024 : 2 * 1024 * 1024 * 1024;
 
 /** Multipart upload of one or more invoices/spec sheets; each is stored and extracted. */
 export async function POST(req: NextRequest, ctx: RouteContext<"/api/catalog/batches/[id]/upload">) {
@@ -40,9 +42,20 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/catalog/bat
     }
     try {
       const buffer = Buffer.from(await file.arrayBuffer());
-      const { id: fileId } = await storeFile(id, { filename: file.name, mimeType: file.type, buffer, kind });
-      stored.push({ id: fileId, filename: file.name });
-      results.push({ filename: file.name, rows: 0, method: null, kind, warnings: [] });
+      // A zip is the files in it, each taken as if added on its own; a zip of nothing but pictures
+      // is the supplier's product photos.
+      const inside = isArchive(file.name, file.type) ? await filesInArchive(buffer) : null;
+      if (inside && inside.length === 0) {
+        results.push({ filename: file.name, rows: 0, method: null, kind, warnings: [`${file.name} has no files in it.`] });
+        continue;
+      }
+      const each = inside ?? [{ filename: file.name, mimeType: file.type, buffer }];
+      const asKind: UploadKind = inside && kind === "AUTO" && allPictures(inside) ? "PRODUCT_PHOTO" : kind;
+      for (const f of each) {
+        const { id: fileId } = await storeFile(id, { filename: f.filename, mimeType: f.mimeType, buffer: f.buffer, kind: asKind });
+        stored.push({ id: fileId, filename: f.filename });
+        results.push({ filename: inside ? `${file.name} → ${f.filename}` : f.filename, rows: 0, method: null, kind: asKind, warnings: [] });
+      }
     } catch (err) {
       results.push({ filename: file.name, rows: 0, method: null, kind, warnings: [`Could not store the file: ${err instanceof Error ? err.message : String(err)}`] });
     }

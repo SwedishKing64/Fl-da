@@ -35,6 +35,7 @@ export function previewTitle(naming: HouseConventions["naming"]): string {
   const name = naming.casing === "supplier" ? "M7 MANTRA 88 TI" : "M7 Mantra 88 Ti";
   const brand = naming.brandInTitle === "always" ? "Völkl " : "";
   const year = naming.season === "never" ? "" : " 2026";
+  // With "only on what I choose" the example ski shows its year as one of the chosen ones would.
   return `${brand}${name}${year}`;
 }
 
@@ -84,6 +85,7 @@ export function HouseForm({ house: initial, tagRules: initialRules, kinds, next,
 
   return (
     <div className="space-y-7">
+      <datalist id="house-kinds">{kinds.map((k) => <option key={k} value={k} />)}</datalist>
       <section className="space-y-4">
         <h3 className="text-[15px] font-bold">Names</h3>
         <Choice<HouseConventions["naming"]["brandInTitle"]> label="The brand in the product title" value={house.naming.brandInTitle} onChange={(v) => set("naming", { brandInTitle: v })} options={[
@@ -91,10 +93,21 @@ export function HouseForm({ house: initial, tagRules: initialRules, kinds, next,
           { key: "always", title: "Leads the title", text: "“Völkl Mantra 88”. Many general stores write it this way." },
         ]} />
         <Choice<HouseConventions["naming"]["season"]> label="The model year" value={house.naming.season} onChange={(v) => set("naming", { season: v })} options={[
-          { key: "seasonal", title: "On seasonal kinds", text: "Products that carry a year tag get it after the name: “Mantra 88 2026”." },
+          { key: "seasonal", title: "On seasonal products", text: "Products that carry a year tag get it after the name: “Mantra 88 2026”." },
           { key: "always", title: "On everything", text: "Every title ends with its year." },
           { key: "never", title: "Never", text: "Names carry no year." },
+          { key: "chosen", title: "Only on what I choose", text: "Just the product types or tags you name below, such as everything tagged snow." },
         ]} />
+        {house.naming.season === "chosen" && (
+          <div className="grid gap-3 rounded-[12px] border border-[var(--line)] bg-white p-3 sm:grid-cols-2">
+            <Field label="Product types that get the year" hint="Comma-separated, as your Type column writes them.">
+              <input className={INPUT} list="house-kinds" value={(house.naming.yearOn?.types ?? []).join(", ")} onChange={(e) => set("naming", { yearOn: { types: e.target.value.split(",").map((t) => t.trimStart()), tags: house.naming.yearOn?.tags ?? [] } })} placeholder="Skis, Snowboards, Ski Boots" />
+            </Field>
+            <Field label="Or any product with one of these tags" hint="Comma-separated. A product with any of them gets the year.">
+              <input className={INPUT} value={(house.naming.yearOn?.tags ?? []).join(", ")} onChange={(e) => set("naming", { yearOn: { types: house.naming.yearOn?.types ?? [], tags: e.target.value.split(",").map((t) => t.trimStart()) } })} placeholder="snow" />
+            </Field>
+          </div>
+        )}
         <Choice<HouseConventions["naming"]["casing"]> label="Capitals" value={house.naming.casing} onChange={(v) => set("naming", { casing: v })} options={[
           { key: "shop", title: "Mixed case", text: "A supplier’s “M7 MANTRA 88 TI” becomes “M7 Mantra 88 Ti”." },
           { key: "supplier", title: "As the supplier writes it", text: "Names go out exactly as they came in." },
@@ -134,7 +147,7 @@ export function HouseForm({ house: initial, tagRules: initialRules, kinds, next,
         <h3 className="text-[15px] font-bold">Shipping weight</h3>
         <Choice<HouseConventions["weights"]["mode"]> label="How weight is written" value={house.weights.mode} onChange={(v) => set("weights", { mode: v })} options={[
           { key: "none", title: "Not written", text: "Weight is left at zero; shipping is worked out another way." },
-          { key: "byKind", title: "A weight per kind", text: "A band per kind of product: every ski 2 kg, every snowboard 1 kg." },
+          { key: "byKind", title: "A weight per product type", text: "A band per product type: every ski 2 kg, every snowboard 1 kg." },
           { key: "fixed", title: "The same on everything", text: "One weight on every variant." },
         ]} />
         {house.weights.mode !== "none" && (
@@ -152,7 +165,7 @@ export function HouseForm({ house: initial, tagRules: initialRules, kinds, next,
         {house.weights.mode === "byKind" && (
           <div className="rounded-[12px] border border-[var(--line)] bg-white">
             <table className="w-full text-[14px]">
-              <thead className="text-left text-[12px] text-[var(--ink-soft)]"><tr><th className="px-3 py-2 font-semibold">Kind of product</th><th className="px-3 py-2 font-semibold">Weight ({unit})</th><th /></tr></thead>
+              <thead className="text-left text-[12px] text-[var(--ink-soft)]"><tr><th className="px-3 py-2 font-semibold">Product type</th><th className="px-3 py-2 font-semibold">Weight ({unit})</th><th /></tr></thead>
               <tbody>
                 {house.weights.byKind.map((k, i) => (
                   <tr key={i} className="border-t border-[var(--line-soft)]">
@@ -164,31 +177,30 @@ export function HouseForm({ house: initial, tagRules: initialRules, kinds, next,
               </tbody>
             </table>
             <div className="border-t border-[var(--line-soft)] px-3 py-2">
-              <Button size="sm" variant="ghost" onClick={() => set("weights", { byKind: [...house.weights.byKind, { type: "", grams: 0 }] })}>+ Add a kind</Button>
+              <Button size="sm" variant="ghost" onClick={() => set("weights", { byKind: [...house.weights.byKind, { type: "", grams: 0 }] })}>+ Add a product type</Button>
             </div>
-            <datalist id="house-kinds">{kinds.map((k) => <option key={k} value={k} />)}</datalist>
           </div>
         )}
       </section>
 
       <section className="space-y-3">
-        <h3 className="text-[15px] font-bold">Tags that go with certain products</h3>
-        <p className="text-[13.5px] text-[var(--ink-soft)]">Your export already teaches which menu tags go with each kind. Add the rules it cannot see: a tag every product of a brand gets, a tag for anything with a word in its name.</p>
+        <h3 className="text-[15px] font-bold">Extra tags by brand, product type or title</h3>
+        <p className="text-[13.5px] text-[var(--ink-soft)]">Flöda already copies the tags your existing listings use. Add a rule here only for a tag your listings don&rsquo;t show, for example: every product whose brand is Burton gets the tag <em>burton</em>.</p>
         <div className="space-y-2">
           {rules.map((r, i) => (
-            <div key={i} className="grid items-center gap-2 rounded-[12px] border border-[var(--line)] bg-white p-3 sm:grid-cols-[auto_1fr_1fr_auto_1fr_auto]">
-              <span className="text-[13px] text-[var(--ink-soft)]">When</span>
-              <select className={INPUT} value={r.field} onChange={(e) => setRules(rules.map((x, j) => (j === i ? { ...x, field: e.target.value as TagRuleInput["field"] } : x)))}>
+            <div key={i} className="flex flex-wrap items-center gap-2 rounded-[12px] border border-[var(--line)] bg-white p-3 text-[13.5px]">
+              <span>Every product whose</span>
+              <select className={cx(INPUT, "w-auto")} aria-label="Which field the rule looks at" value={r.field} onChange={(e) => setRules(rules.map((x, j) => (j === i ? { ...x, field: e.target.value as TagRuleInput["field"] } : x)))}>
                 {TAG_RULE_FIELDS.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
               </select>
-              <input className={INPUT} value={r.pattern} placeholder="contains… e.g. Burton" onChange={(e) => setRules(rules.map((x, j) => (j === i ? { ...x, pattern: e.target.value } : x)))} />
-              <span className="text-[13px] text-[var(--ink-soft)]">add tags</span>
-              <input className={INPUT} value={r.addTags} placeholder="snowboard, burton" onChange={(e) => setRules(rules.map((x, j) => (j === i ? { ...x, addTags: e.target.value } : x)))} />
+              <input className={cx(INPUT, "w-40")} aria-label="What it matches" value={r.pattern} placeholder="Burton" onChange={(e) => setRules(rules.map((x, j) => (j === i ? { ...x, pattern: e.target.value } : x)))} />
+              <span>gets the tags</span>
+              <input className={cx(INPUT, "min-w-[12rem] flex-1")} aria-label="Tags to add, separated by commas" value={r.addTags} placeholder="burton, snowboard" onChange={(e) => setRules(rules.map((x, j) => (j === i ? { ...x, addTags: e.target.value } : x)))} />
               <button type="button" className="text-[13px] text-[var(--ink-soft)] hover:text-[var(--ink)]" onClick={() => setRules(rules.filter((_, j) => j !== i))}>Remove</button>
             </div>
           ))}
         </div>
-        <Button size="sm" variant="ghost" onClick={() => setRules([...rules, { field: "any", pattern: "", addTags: "" }])}>+ Add a rule</Button>
+        <Button size="sm" variant="ghost" onClick={() => setRules([...rules, { field: "brand", pattern: "", addTags: "" }])}>+ Add a tag rule</Button>
       </section>
 
       <section className="space-y-4">
@@ -201,6 +213,18 @@ export function HouseForm({ house: initial, tagRules: initialRules, kinds, next,
           <Field label="Heading over the details list" hint="Leave empty for a list with no heading.">
             <input className={INPUT} value={house.descriptions.specsHeading} onChange={(e) => set("descriptions", { specsHeading: e.target.value })} placeholder="Tech Specs" />
           </Field>
+        </div>
+        <div className="space-y-2">
+          <div className="text-[13px] font-semibold">More sections</div>
+          <p className="text-[12.5px] text-[var(--ink-soft)]">If your descriptions have more parts than the description and the details list, such as Specifications, Features or a Size guide, add each one here in the order they appear. Each is filled only from what the brand page or spec sheet gives, and left out when there is nothing for it.</p>
+          {(house.descriptions.sections ?? []).map((sec, i) => (
+            <div key={i} className="flex flex-wrap items-center gap-2">
+              <input className={cx(INPUT, "w-44")} aria-label="Section heading" value={sec.heading} placeholder="Specifications" onChange={(e) => set("descriptions", { sections: (house.descriptions.sections ?? []).map((x, j) => (j === i ? { ...x, heading: e.target.value } : x)) })} />
+              <input className={cx(INPUT, "min-w-[14rem] flex-1")} aria-label="What goes in it" value={sec.holds} placeholder="What goes in it: sidecut, radius, weight, core" onChange={(e) => set("descriptions", { sections: (house.descriptions.sections ?? []).map((x, j) => (j === i ? { ...x, holds: e.target.value } : x)) })} />
+              <button type="button" className="text-[13px] text-[var(--ink-soft)] hover:text-[var(--ink)]" onClick={() => set("descriptions", { sections: (house.descriptions.sections ?? []).filter((_, j) => j !== i) })}>Remove</button>
+            </div>
+          ))}
+          <Button size="sm" variant="ghost" onClick={() => set("descriptions", { sections: [...(house.descriptions.sections ?? []), { heading: "", holds: "" }] })}>+ Add a section</Button>
         </div>
         <Field label="A description of yours, as the shape to match" hint="Paste one real description from your shop. Optional, and the strongest signal of all.">
           <textarea className={cx(INPUT, "min-h-[120px] font-mono text-[12.5px]")} value={house.descriptions.example} onChange={(e) => set("descriptions", { example: e.target.value })} />

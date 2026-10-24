@@ -190,7 +190,9 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
     const seenCombos = new Set<string>();
     const variants: GroupedVariant[] = [];
     for (const e of entries) {
-      const values = optionKeys.map((k) => optionValue(e.item, k) || null);
+      // A reader puts a board's "158W" under size on one line and under length on the next; a
+      // line with the one empty takes the other rather than going out with no option value.
+      const values = optionKeys.map((k) => optionValue(e.item, k) || (k === "length" ? e.item.size.trim() : k === "size" && !optionKeys.includes("length") ? e.item.length.trim() : "") || null);
       const combo = values.map((v) => (v ?? "").toLowerCase()).join("|");
       // Duplicate option combos in the same group are kept as separate variants so the
       // review grid can flag them, unless the SKUs are identical (true duplicate line).

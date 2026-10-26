@@ -127,6 +127,17 @@ equally leave the tent alone, with a note. The option may be written "Tent + Foo
 Only" or as an option named Footprint, Yes / No. A freight, postage or handling line without a
 barcode is a charge and is dropped when the invoice is read.
 
+**A sheet's product group is found among the tags (asked 2026-10-26).** The buyer's sheet says
+"gloves", "apres", "snow socks", "ski and board bags"; the export keeps those shelves in tags
+("ski-gloves", "apres-boots", "socks", "ski-and-snowboard-bags") with a heading Type ("Ski
+Accessories"). `categoryIn` (adjust-plan.ts) resolves the group: a Type of that name; else the ski
+shelf "ski <name>" (gloves are the 181 ski-gloves, not the 17 tagged plain "gloves"); else a tag of
+that name; else the Type or tag whose words hold every word asked for ("snowboard" holds "board",
+not "snow"); else the same without "snow"/"adult"/"other"; and a Type plus a tag ("snow clothing
+midlayer" is Snow Clothing's midlayers, "kids snow cloth" Snow Clothing + kids). Nothing near
+enough still blocks the row. The planner passes the sheet's own word for the group, never a
+broader heading Type.
+
 **The buyer's sale sheet on Prices and stock (2026-10-26).** Nothing was applied from a sale sheet,
 for three reasons now fixed. (1) A blank year tag skipped the row; the shop leaves it blank for
 shelves whose products carry no year (socks, poles, apres, midlayers), so a blank year is every

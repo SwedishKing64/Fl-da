@@ -19,7 +19,7 @@ import { describeApiError, isTransient, retrying } from "./api-errors";
 
 const ScopeSchema = z.object({
   vendors: z.array(z.string()).describe("Vendor names exactly as the file spells them. Empty unless the instruction names a brand."),
-  types: z.array(z.string()).describe("Shopify Type values exactly as the file spells them. Empty unless the instruction names one."),
+  types: z.array(z.string()).describe("The product group the instruction names, in the instruction's own words — \"gloves\", \"apres\", \"ski poles\", \"snow socks\", \"snowboard bindings\". It is matched afterwards to the file's Type or, where the shop keeps that shelf in tags, to its tag (gloves are the tag ski-gloves, apres the tag apres-boots). Do not replace it with a broader heading Type such as \"Ski Accessories\" or \"Snow Clothing\" unless the instruction names that heading. Empty unless the instruction names a group."),
   tags: z.array(z.string()).describe("Tags the product must ALL carry at once, exactly as the file spells them. Use this only for 'X and Y'. Empty otherwise."),
   anyTags: z.array(z.string()).describe("Tags where carrying ANY ONE is enough. This is what a list means: 'items tagged 2024 or 2025 or 2999' goes here, never in tags. Empty otherwise."),
   excludeTags: z.array(z.string()).describe("Tags that rule a product out however well it matches. 'but not the 2027s', 'except anything tagged clearance'. Empty otherwise."),
@@ -193,6 +193,89 @@ function editDistance(a: string, b: string): number {
 }
 
 /**
+ * A buyer's category as the shop's file has it (asked 2026-10-26). The sheet names a shelf the way
+ * a person says it — "gloves", "apres", "snow socks", "ski and board bags" — and the export keeps
+ * most of those shelves in tags, not in Type ("ski-gloves", "apres-boots", "socks",
+ * "ski-and-snowboard-bags"). In order:
+ *
+ *  1. a Type of that name;
+ *  2. the ski shelf of that name, a tag "ski <name>": this is a ski shop, and "gloves" on its sheet
+ *     means its ski gloves (181 products), not the few tagged plain "gloves";
+ *  3. a tag of that name;
+ *  4. the Type, then the tag, whose words hold every word asked for — "apres" is apres-boots — with
+ *     a word like "snowboard" holding "board"; an audience word that is a tag of its own ("kids",
+ *     "mens") is matched as that tag beside it;
+ *  5. the same without the words that only describe the shelf ("snow", "adult", "other"): "snow
+ *     socks" is socks.
+ *
+ * Null where nothing fits, which still blocks the instruction rather than widening it.
+ */
+export function categoryIn(
+  wanted: string,
+  file: { types: string[]; tags: string[] },
+): { type?: string; tags: string[]; said: string } | null {
+  const norm = (value: string): string => value.toLowerCase().replace(/[-_\s&]+/g, " ").trim();
+  const asked = wanted.trim();
+  const w = norm(asked);
+  if (!w) return null;
+  const type = file.types.find((t) => norm(t) === w);
+  if (type) return { type, tags: [], said: "" };
+  const ski = file.tags.find((t) => norm(t) === `ski ${w}`);
+  if (ski) return { tags: [ski], said: `matched "${asked}" on the shop's ski shelf, the tag "${ski}"` };
+  const tag = file.tags.find((t) => norm(t) === w);
+  if (tag) return { tags: [tag], said: `matched "${asked}" on the tag rather than the type` };
+
+  const AUDIENCE = new Set(["kids", "kid", "youth", "junior", "mens", "womens", "men", "women"]);
+  const SOFT = new Set(["snow", "adult", "adults", "other", "all"]);
+  const STOP = new Set(["and", "the", "of"]);
+  // A plural is its singular ("gloves", "glove"), but not a short word: "skis" is not "ski" bags.
+  const stem = (x: string) => (x.length > 5 ? x.replace(/s$/, "") : x);
+  // A word holds another when it is the same, or — for a word of five letters or more — starts or
+  // ends with it: "accessories" holds "acces", "snowboard" holds "board". "snowboard" does not hold
+  // "snow", which is a different shelf.
+  const holds = (have: string, word: string) => {
+    const words = norm(have).split(" ");
+    const sw = stem(word);
+    return words.some((h) => {
+      const sh = stem(h);
+      return sh === sw || (sw.length >= 5 && (sh.startsWith(sw) || sh.endsWith(sw)));
+    });
+  };
+  const all = w.split(" ").filter((x) => x && !STOP.has(x));
+  const audience = all.filter((x) => AUDIENCE.has(x)).map((x) => file.tags.find((t) => norm(t) === x) ?? "").filter(Boolean);
+  const rest = all.filter((x) => !AUDIENCE.has(x));
+  const pick = (words: string[]): { type?: string; tag?: string } | null => {
+    if (words.length === 0) return null;
+    const t = file.types.filter((c) => words.every((x) => holds(c, x))).sort((a, b) => a.length - b.length)[0];
+    if (t) return { type: t };
+    const fits = file.tags.filter((c) => !/^\d{4}$/.test(c) && words.every((x) => holds(c, x)));
+    // The ski shelf first, then the one whose name says least beyond what was asked.
+    const g = fits.sort((a, b) => Number(/^ski\b/i.test(b)) - Number(/^ski\b/i.test(a)) || a.length - b.length)[0];
+    return g ? { tag: g } : null;
+  };
+  // A Type for some of the words and a tag for the rest: "snow clothing midlayer" is the Snow
+  // Clothing type's midlayers.
+  const split = (words: string[]): { type?: string; tag?: string } | null => {
+    for (const t of [...file.types].sort((a, b) => b.length - a.length)) {
+      const covered = words.filter((x) => holds(t, x));
+      const left = words.filter((x) => !holds(t, x));
+      // The Type has to account for most of the name: "snowboard boots" is not Snowboard Accessories'
+      // boot bags.
+      if (covered.length < 2 || left.length === 0) continue;
+      const tg = pick(left);
+      if (tg?.tag) return { type: t, tag: tg.tag };
+    }
+    return null;
+  };
+  const soft = rest.filter((x) => !SOFT.has(x));
+  const got = pick(rest) ?? pick(soft) ?? split(rest) ?? split(soft);
+  if (!got) return null;
+  const tags = [...audience, ...(got.tag ? [got.tag] : [])];
+  const named = [got.type ? `the type "${got.type}"` : "", got.tag ? `the tag "${got.tag}"` : "", ...audience.map((a) => `the tag "${a}"`)].filter(Boolean).join(" and ");
+  return { ...(got.type ? { type: got.type } : {}), tags, said: `read "${asked}" as ${named}` };
+}
+
+/**
  * Keep only the scope values the file really has.
  *
  * Two rules do the work here. A value the file has never heard of is dropped, so a typo narrows to
@@ -279,7 +362,18 @@ export function groundScope(
   };
 
   const vendors = keepVendors(scope.vendors, file.vendors);
-  let tags = keep(scope.tags, file.tags, "tag");
+  // A shelf named as a tag is found the same way as one named as a type: "gloves" is the ski
+  // gloves, "apres" is apres-boots. A year, an audience or any tag the file has under a ski shelf
+  // of its own name is taken as it is.
+  const shelfTags = scope.tags.map((t) => {
+    const plainTag = t.trim();
+    if (!plainTag || /^\d{4}$/.test(plainTag) || /^(kids?|youth|junior|mens|womens|men|women|unisex)$/i.test(plainTag)) return [plainTag];
+    const found = categoryIn(plainTag, { types: [], tags: file.tags });
+    if (!found || (found.tags.length === 1 && norm(found.tags[0]) === norm(plainTag))) return [plainTag];
+    dropped.push(found.said);
+    return found.tags;
+  }).flat();
+  let tags = keep(shelfTags, file.tags, "tag");
   let anyTags = keep(scope.anyTags, file.tags, "tag");
 
   // The category column of a buyer's sheet names a shelf in the shop's menu, and this shop keeps
@@ -290,11 +384,12 @@ export function groundScope(
   let category = "";
   for (const wanted of scope.types) {
     if (!wanted.trim()) continue;
-    const asType = file.types.find((t) => norm(t) === norm(wanted));
-    if (asType) { types.push(asType); category ||= asType; continue; }
-    const asTag = file.tags.find((t) => norm(t) === norm(wanted));
-    if (asTag) { tags.push(asTag); category ||= asTag; dropped.push(`matched "${wanted.trim()}" on the tag rather than the type`); continue; }
-    dropped.push(`type "${wanted.trim()}" is not in this file`);
+    const found = categoryIn(wanted, file);
+    if (!found) { dropped.push(`type "${wanted.trim()}" is not in this file`); continue; }
+    if (found.type) { types.push(found.type); category ||= found.type; }
+    for (const t of found.tags) if (!tags.includes(t)) tags.push(t);
+    if (!found.type) category ||= found.tags[found.tags.length - 1] ?? "";
+    if (found.said) dropped.push(found.said);
   }
 
   // An exclusion the file has never heard of is harmless — it simply excludes nothing — so it is
@@ -615,7 +710,7 @@ const SCREEN_SYSTEM = `You are matching a sheet of seasonal changes from a shop 
 For each numbered instruction, say whether any product in those exports could possibly match it.
 
 Judge it on the product group and the brand, and nothing else:
-- The group an instruction names must exist in the loaded files, either as a Type or as a tag. This shop keeps some shelves in Type ("Snowboard Bindings") and others in tags ("ski-helmets", "goggles", "ski poles"), and spells them with spaces where a tag uses hyphens — "snow goggles" and "goggles", "ski helmets" and "ski-helmets", "snowboard bindings" and "snowboard-bindings" are the same shelf. Match across that.
+- The group an instruction names must exist in the loaded files, either as a Type or as a tag. This shop keeps some shelves in Type ("Snowboard Bindings") and others in tags ("ski-helmets", "goggles", "ski poles"), and spells them with spaces where a tag uses hyphens — "snow goggles" and "goggles", "ski helmets" and "ski-helmets", "snowboard bindings" and "snowboard-bindings" are the same shelf. Match across that. A shelf name on the sheet is often the short form of the shop's tag: "gloves" is the tag "ski-gloves", "apres" is "apres-boots", "snow socks" is "socks", "ski and board bags" is "ski-and-snowboard-bags" or "ski-and-boot-bags", "midlayer" is "midlayers". A group is in the files when its words are in a Type or a tag.
 - If the group is nowhere in either list, the instruction is not relevant. Say so in "why" naming the group: "no ski bindings in the loaded files".
 - If the instruction names a brand and that brand is in neither the vendor list nor the tags, it is not relevant either.
 - Always fill in "group" with the word the loaded files use, so rows about the same shelf can be worked through together. Where the files have both a Type and a tag for it, use the Type.

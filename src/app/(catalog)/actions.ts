@@ -10,6 +10,7 @@ import { prisma, parseJson, createTables, databaseStatus } from "@/lib/catalog/d
 import { createSession, destroySession, hashPassword, recoveryUser, requireUser, usersExist, verifyPassword } from "@/lib/catalog/auth";
 import { allocateBatchFreight, applyMappings, autoApplyMappings, applyRulesToBatch, attachUnassignedPhotos, extractStoredFile, loadReview, repriceBatch, repriceVariant, verifyBatchImages, exportBatch, exportFileText, type ApplyMappingInput, type ReviewData } from "@/lib/catalog/pipeline";
 import { logAudit } from "@/lib/catalog/audit";
+import { saveRun } from "@/lib/catalog/work-runs";
 import { getSettings, saveSettings } from "@/lib/catalog/settings";
 import { checkImageUrl, recordLibraryImages } from "@/lib/catalog/images";
 import { backupNow, restoreBackup } from "@/lib/catalog/backup";
@@ -2634,4 +2635,27 @@ export async function decideTagProposalAction(id: string, approve: boolean): Pro
     revalidatePath("/training");
     return { ok: true };
   });
+}
+// ---------------------------------------------------------------------------
+// History of Prices and stock and of Bills
+// ---------------------------------------------------------------------------
+
+const runInput = z.object({
+  kind: z.enum(["PRICES", "BILLS"]),
+  title: z.string().max(2000),
+  summary: z.object({ lines: z.array(z.string()), documents: z.array(z.string()), counts: z.record(z.string(), z.number()) }),
+  files: z.array(z.object({ filename: z.string().min(1).max(500), gzipBase64: z.string(), sizeBytes: z.number().nonnegative() })).max(20),
+  tooLarge: z.boolean().optional(),
+});
+
+export async function saveRunAction(input: z.infer<typeof runInput>): Promise<ActionResult<{ id: string; keptFiles: boolean }>> {
+  const user = await requireUser();
+  try {
+    const parsed = runInput.parse(input);
+    const saved = await saveRun({ ...parsed, userId: user.id });
+    revalidatePath("/bulk");
+    return { ok: true, data: saved };
+  } catch (err) {
+    return fail(err);
+  }
 }

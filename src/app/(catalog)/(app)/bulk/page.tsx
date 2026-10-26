@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/catalog/auth";
 import { initialsFrom } from "@/lib/catalog/tagging";
 import { BulkPanel } from "./BulkPanel";
 import { getBindingList } from "@/lib/catalog/trades/snow/binding-store";
+import { RunHistory } from "../RunHistory";
 
 /**
  * Reading an instruction sheet is a vision call over a multi-page document, and Server Actions on
@@ -24,6 +25,7 @@ export default async function BulkPage() {
         subtitle="Change products already in the shop: prices through the season, moves into clearance, a delivery added to stock. Export them from Shopify, say what to change in plain words, check every cell that moves, and import the file back."
       />
       <BulkPanel aiEnabled={planningAvailable()} builtBy={builtBy} bindings={bindings} />
+      <div className="mt-4"><RunHistory kind="PRICES" /></div>
     </>
   );
 }

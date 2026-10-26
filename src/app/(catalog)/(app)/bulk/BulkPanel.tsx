@@ -22,6 +22,7 @@ import type { InvoiceRead } from "@/lib/catalog/invoice";
 import { fitsUpload, looksLikeImage, shrinkImage, tooBig } from "@/app/(catalog)/shrink";
 import { Alert, Button, Card, INPUT, INPUT_INLINE, cx } from "@/app/(catalog)/ui";
 import { ChangedCells } from "./ChangedCells";
+import { recordRun } from "@/app/(catalog)/run-record";
 
 /**
  * Bulk changes to products the shop already sells.
@@ -1110,6 +1111,31 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
       changes: feed.reduce((n, f) => n + f.changes, 0),
       filename: names.join(", "),
     });
+    keepRun(sheets.filter((s) => appliedTo(s.name) > 0).map((s, i) => ({ filename: names[i], data: s.csv })), "");
+  }
+
+  /** The run, kept in the page's history with the files just handed over. */
+  function keepRun(files: Array<{ filename: string; data: string }>, only: string) {
+    const changes = feed.reduce((n, f) => n + f.changes, 0);
+    const rowsAdded = feed.reduce((n, f) => n + f.perFile.reduce((k, p) => k + (p.rowsAdded ?? 0), 0), 0);
+    const titles = feed.map((f) => f.title);
+    const documents = [
+      ...sheets.map((s) => s.name),
+      ...(sheetNote?.source ? [sheetNote.source] : []),
+      ...invoiceDocs.map((d) => d.filename),
+      ...(orderSheet ? [orderSheet.filename] : []),
+      ...references.map((r) => r.filename),
+    ];
+    void recordRun({
+      kind: "PRICES",
+      title: `${titles.length === 0 ? "Files as loaded" : titles.length === 1 ? titles[0] : `${titles.length} changes: ${titles.slice(0, 3).join("; ")}${titles.length > 3 ? "; …" : ""}`}${only}`,
+      summary: {
+        lines: feed.flatMap((f) => [`${f.title} — ${f.changes} cell${f.changes === 1 ? "" : "s"}`, ...f.lines.map((l) => `  ${l}`)]),
+        documents: [...new Set(documents)],
+        counts: { changes, products: sheets.reduce((n, s) => n + s.products, 0), ...(rowsAdded > 0 ? { rowsAdded } : {}) },
+      },
+      files,
+    });
   }
 
   // How many cells have actually been written into each file. Derived from the feed rather than
@@ -1149,7 +1175,9 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
   }
   function downloadOnlyAll() {
     if (narrowedFiles.length === 0) { setError(`None of the loaded files has a product of ${downloadKinds.join(" or ")}.`); return; }
-    setSaved(narrowedFiles.map((n) => downloadOnly(n.sheet, n.out.csv)).join(", "));
+    const names = narrowedFiles.map((n) => downloadOnly(n.sheet, n.out.csv));
+    setSaved(names.join(", "));
+    keepRun(narrowedFiles.map((n, i) => ({ filename: names[i], data: n.out.csv })), ` — only ${downloadKinds.join(" and ")}`);
   }
   const narrowedProducts = narrowedFiles.reduce((n, f) => n + f.out.products, 0);
   const kindsDownload = sheets.length > 0 && kindsInFiles.length > 1 && (

@@ -138,6 +138,17 @@ progress bar ("Applying 12 of 73…"), keeps nothing until the last is done, wor
 at a time (Apply all waits for them), and no longer re-reads every export on each redraw (`keptFor`).
 73 real changes on a 2,850-product file: 61s before, about 14s now, without freezing.
 
+**History on Prices and stock and on Bills (asked 2026-10-26).** "A history similar to New
+Products." Each download of the updated files (whole, or only some kinds) and each download of the
+bills sheet is kept as a run (`WorkRun`): who, when, a title, what was done (each change and its
+lines; each bill's supplier, number, dates, total and any discrepancy), the documents it came from,
+and counts. The files handed over are kept with it (`WorkRunFile`), gzipped in the browser and stored
+in the database — not the file store, which can be public, since the exports and the sheet carry the
+shop's costs. Only the newest 40 runs of each kind keep their files (older runs keep their summary);
+a run whose files come to more than about 7MB compressed is kept without them. The list is at the
+foot of each page, files downloadable again from `/api/catalog/runs/<file id>` (signed-in only).
+Saving the run never gets in the way of the download: a failure is logged in the browser console.
+
 **A sheet's product group is found among the tags (asked 2026-10-26).** The buyer's sheet says
 "gloves", "apres", "snow socks", "ski and board bags"; the export keeps those shelves in tags
 ("ski-gloves", "apres-boots", "socks", "ski-and-snowboard-bags") with a heading Type ("Ski

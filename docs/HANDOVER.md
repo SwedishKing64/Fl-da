@@ -127,6 +127,15 @@ equally leave the tent alone, with a note. The option may be written "Tent + Foo
 Only" or as an option named Footprint, Yes / No. A freight, postage or handling line without a
 barcode is a charge and is dropped when the invoice is read.
 
+**The buyer's sale sheet on Prices and stock (2026-10-26).** Nothing was applied from a sale sheet,
+for three reasons now fixed. (1) A blank year tag skipped the row; the shop leaves it blank for
+shelves whose products carry no year (socks, poles, apres, midlayers), so a blank year is every
+year, as "all" is. (2) The sheet dropped beside the export, or in the Order form / Invoices boxes,
+went to the invoice reader; `classifyDocumentAction` now tells a sale sheet by its columns and sends
+it to the sheet reader wherever it is dropped. (3) Loading an export cleared a sheet already given;
+the last sheet is now re-read against the files as they stand (and a sheet given before any export
+waits for one). The sheet's changes are still approved on screen ("Apply all").
+
 **An invoice and its order sheet together, on Prices and stock (asked 2026-10-22).** What arrived and
 what it cost often differ from what was ordered, so both can be loaded with the exports. The card
 has two boxes (asked again 2026-10-22): "Order form" (one; usually the one with the barcodes) and

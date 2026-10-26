@@ -3,7 +3,7 @@
 import { appliedBefore, fingerprint, forgetApplied, rememberApplied } from "@/lib/catalog/applied-memory";
 
 import { useRef, useState } from "react";
-import { joinOrderAction, readPageAction, rememberListingsAction, logAdjustmentAction, planAdjustmentAction, readInstructionSheetAction, readInvoiceAction, readReferenceAction, readSheetAgainstFilesAction } from "@/app/(catalog)/actions";
+import { classifyDocumentAction, joinOrderAction, readPageAction, rememberListingsAction, logAdjustmentAction, planAdjustmentAction, readInstructionSheetAction, readInvoiceAction, readReferenceAction, readSheetAgainstFilesAction } from "@/app/(catalog)/actions";
 import { applyPlan, describeFile, foldPlans, isWholeFile, whyNoMatch, type AdjustResult, type FoldStep, type Plan } from "@/lib/catalog/adjust";
 import { csvFilename, escapeCsvField } from "@/lib/catalog/csv";
 import { reconcile, type InvoiceFields, type InvoiceLine, type Reconciliation } from "@/lib/catalog/reconcile";
@@ -168,6 +168,12 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
   const [packagePicks, setPackagePicks] = useState<Record<number, string[]>>({});
   const csvRef = useRef<HTMLInputElement>(null);
   const sheetRef = useRef<HTMLInputElement>(null);
+  /**
+   * The buyer's sheet last given, kept so loading another export re-reads it against the files as
+   * they now stand rather than throwing its rows away (2026-10-26: a sheet added before the export
+   * was cleared by it, and nothing was applied).
+   */
+  const lastSheet = useRef<File | null>(null);
   const [sheets, setSheets] = useState<Sheet[]>([]);
   const [feed, setFeed] = useState<Applied[]>([]);
   const [rows, setRows] = useState<Row[]>([]);
@@ -346,6 +352,15 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
       }
       if (rejected.length) setError(`Skipped ${rejected.join(", ")} — no products in ${rejected.length === 1 ? "it" : "them"}.`);
       // Replacing a file already loaded rather than holding two copies of it.
+      // A buyer's sheet dropped here beside the export is the sheet, not an order form: told apart by
+      // its columns before anything goes to the invoice reader.
+      const saleSheets: File[] = [];
+      for (const file of [...misplaced]) {
+        if (!/\.(xlsx?|csv)$/i.test(file.name)) continue;
+        const kind = await classifyDocumentAction({ name: file.name, type: file.type, base64: await read(file, file.name) }).catch(() => null);
+        if (kind?.ok && kind.data?.kind === "sale-sheet") { saleSheets.push(file); misplaced.splice(misplaced.indexOf(file), 1); }
+      }
+      const nextSheets = [...sheets.filter((x) => !added.some((a) => a.name === x.name)), ...added];
       if (added.length > 0) {
         // Remembered, so a model listed here keeps its shelves next season. Not waited on: the
         // page works the same whether or not it lands.
@@ -358,6 +373,10 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
       // Anything that is not an export goes to the reader that wants it, rather than being
       // refused for being in the wrong box.
       if (misplaced.length > 0) await routeToInvoice(misplaced);
+      // The buyer's sheet, read against the files as they now stand: one dropped with them, or the
+      // one already given, which the new export would otherwise have thrown away.
+      const sheetFile = saleSheets[0] ?? (added.length > 0 ? lastSheet.current : null);
+      if (sheetFile) await takeSheet(sheetFile, nextSheets);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -443,18 +462,18 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
    * Sequential on purpose: Next runs one action at a time per page anyway, and sending them one
    * after another is gentler on a service that has just said it is overloaded.
    */
-  async function planInChunks(instructions: string[], ids?: number[]): Promise<Row[]> {
+  async function planInChunks(instructions: string[], ids?: number[], against: Sheet[] = sheets): Promise<Row[]> {
     const CHUNK = 8;
-    const merge = (pick: (s: Sheet) => string[]) => [...new Set(sheets.flatMap(pick))].sort();
+    const merge = (pick: (s: Sheet) => string[]) => [...new Set(against.flatMap(pick))].sort();
     const file = {
-      products: sheets.reduce((n, s) => n + s.products, 0),
+      products: against.reduce((n, s) => n + s.products, 0),
       vendors: merge((s) => s.vendors), types: merge((s) => s.types), tags: merge((s) => s.tags),
     };
     const out: Row[] = [];
     for (let start = 0; start < instructions.length; start += CHUNK) {
       const part = instructions.slice(start, start + CHUNK);
       const end = Math.min(start + CHUNK, instructions.length);
-      setProgress(`Reading rows ${start + 1}–${end} of ${instructions.length} against your ${sheets.length === 1 ? "file" : `${sheets.length} files`}…`);
+      setProgress(`Reading rows ${start + 1}–${end} of ${instructions.length} against your ${against.length === 1 ? "file" : `${against.length} files`}…`);
       const idOf = (i: number) => ids?.[start + i] ?? start + i;
       const lost = (why: string): Row[] => part.map((instruction, i) => ({
         id: idOf(i), instruction, group: "", relevant: true, why: "", plan: null, understood: "", unclear: "",
@@ -499,8 +518,15 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
    * client, so planning a row at a time from here would be a queue of round trips however quick
    * each one is.
    */
-  async function takeSheet(file: File) {
+  async function takeSheet(file: File, against: Sheet[] = sheets) {
+    lastSheet.current = file;
     setBusy("sheet"); setError(null); clearPreview(); setRows([]); setSheetNote(null); setOpen(null); setConfirmedWhole([]);
+    if (against.length === 0) {
+      // Kept, and read the moment an export is loaded: the sheet is matched against the products.
+      setSheetNote({ source: `${file.name} · waiting for your Shopify export — load it above and the sheet is read against it`, ignored: [], unclear: "" });
+      setBusy(null);
+      return;
+    }
     try {
       const sent = await shrinkImage(file);
       if (!fitsUpload(sent.file.size)) { setError(tooBig(file, sent.file.size)); return; }
@@ -511,9 +537,9 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
       setSheetNote({ source: `${file.name} · ${r.data!.source}`, ignored: r.data!.ignored, unclear: r.data!.unclear });
       if (instructions.length === 0) return;
 
-      const built = await planInChunks(instructions);
+      const built = await planInChunks(instructions, undefined, against);
       setProgress("Working out what each one would change…");
-      setRows(built.map((row) => ({ ...row, results: measure(row, sheets) })));
+      setRows(built.map((row) => ({ ...row, results: measure(row, against) })));
       const lost = built.filter((r) => r.failed).length;
       if (lost > 0) setError(`${lost} of ${instructions.length} rows could not be read this time — they are marked below and nothing was changed for them. Use "Read those rows again" once the service has settled.`);
     } catch (err) {
@@ -540,7 +566,15 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
    * retail an invoice leaves out (asked 2026-10-22). On its own it is the delivery, as before; with
    * invoices it fills in what they do not say. See invoice-merge.
    */
+  /** True when a spreadsheet given to the delivery boxes is really the buyer's sale sheet. */
+  async function isSaleSheet(file: File): Promise<boolean> {
+    if (!/\.(xlsx?|csv)$/i.test(file.name)) return false;
+    const r = await classifyDocumentAction({ name: file.name, type: file.type, base64: await read(file, file.name) }).catch(() => null);
+    return Boolean(r?.ok && r.data?.kind === "sale-sheet");
+  }
+
   async function takeOrderForm(file: File) {
+    if (await isSaleSheet(file)) return takeSheet(file);
     setBusy("invoice"); setError(null); clearPreview(); setSaved(null);
     try {
       const doc = await readDocument(file);
@@ -559,6 +593,11 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
    * one, and the lot against the exports.
    */
   async function addInvoices(files: File[]) {
+    const sale: File[] = [];
+    for (const file of files) if (await isSaleSheet(file)) sale.push(file);
+    if (sale.length > 0) await takeSheet(sale[0]);
+    files = files.filter((f) => !sale.includes(f));
+    if (files.length === 0) return;
     setBusy("invoice"); setError(null); clearPreview(); setSaved(null);
     try {
       const read_: Invoice[] = [];
@@ -1302,8 +1341,11 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
       {sheets.length === 0 && (
         <Card title="The buyer's sheet">
           <p className="text-sm text-[var(--ink-soft)]">
-            The sale sheet is read <em>against</em> the products in your exports — that is what tells a row about ski bindings from a row about goggles — so load the exports above first and this opens up.
+            The sale sheet is read <em>against</em> the products in your exports — that is what tells a row about ski bindings from a row about goggles. Load the export above; a sheet given first is kept and read as soon as it is.
           </p>
+          {sheetNote && <p className="mt-2 text-xs text-[var(--ink-soft)]">{sheetNote.source}</p>}
+          <Button className="mt-3" icon="📋" size="sm" disabled={busy !== null} onClick={() => sheetRef.current?.click()}>Add the sale sheet</Button>
+          <input ref={sheetRef} type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void takeSheet(f); e.target.value = ""; }} />
         </Card>
       )}
 

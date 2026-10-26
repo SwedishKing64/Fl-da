@@ -1224,6 +1224,29 @@ export async function readSheetAgainstFilesAction(
 }
 
 /**
+ * What a spreadsheet dropped on Prices and stock is, read off its columns with no model: a Shopify
+ * export, the shop's sale sheet, or anything else (an order form, an invoice). The buyer's sheet used
+ * to be taken for an order form when it was dropped beside the export or in the invoice boxes, so
+ * no sale was ever applied (2026-10-26). PDFs and pictures are "other": they cannot be told apart
+ * without reading them.
+ */
+export async function classifyDocumentAction(file: { name: string; type: string; base64: string }): Promise<ActionResult<{ kind: "sale-sheet" | "export" | "other" }>> {
+  return safely(async () => {
+    await requireUser();
+    const isWorkbook = /\.xlsx?$/i.test(file.name) || /spreadsheet|excel/i.test(file.type);
+    const isCsv = /\.csv$/i.test(file.name) || file.type === "text/csv";
+    if (!isWorkbook && !isCsv) return { ok: true, data: { kind: "other" as const } };
+    const buffer = Buffer.from(file.base64, "base64");
+    const grids = isWorkbook
+      ? await (await import("@/lib/catalog/extract/tabular")).sheetGrids(buffer)
+      : [{ name: file.name, grid: (await import("@/lib/catalog/csv")).parseCsv(buffer.toString("utf8")) }];
+    const { readSaleSheet, looksLikeProductExport } = await import("@/lib/catalog/sale-sheet");
+    if (grids.some((g) => looksLikeProductExport((g.grid[0] ?? []).map(String)))) return { ok: true, data: { kind: "export" as const } };
+    return { ok: true, data: { kind: readSaleSheet(grids) ? ("sale-sheet" as const) : ("other" as const) } };
+  });
+}
+
+/**
  * Read a sheet of instructions and break it into the separate changes it asks for.
  *
  * The buyer's list for a season is a document, not a sentence: many rules about many products.

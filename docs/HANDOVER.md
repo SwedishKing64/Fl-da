@@ -127,6 +127,17 @@ equally leave the tent alone, with a note. The option may be written "Tent + Foo
 Only" or as an option named Footprint, Yes / No. A freight, postage or handling line without a
 barcode is a charge and is dropped when the invoice is read.
 
+**Large exports on Prices and stock (2026-10-26).** A 2,500-product export with a 73-row sheet made
+the browser call the page unresponsive: one change took 1.8s and Apply all ran every change, then
+every preview, in one go (about two minutes frozen). Now: `parseCsv` reads in runs instead of a
+character at a time (identical output, fuzz-checked); `applyPlan` keeps the last few files it has
+read (the file one change writes is what the next reads) and skips writing and re-checking a file it
+did not change; previews (`{ preview: true }`) list the changes without writing the file — the file
+is written and proved when applied. The page applies one change at a time with a pause between and a
+progress bar ("Applying 12 of 73…"), keeps nothing until the last is done, works out previews a row
+at a time (Apply all waits for them), and no longer re-reads every export on each redraw (`keptFor`).
+73 real changes on a 2,850-product file: 61s before, about 14s now, without freezing.
+
 **A sheet's product group is found among the tags (asked 2026-10-26).** The buyer's sheet says
 "gloves", "apres", "snow socks", "ski and board bags"; the export keeps those shelves in tags
 ("ski-gloves", "apres-boots", "socks", "ski-and-snowboard-bags") with a heading Type ("Ski

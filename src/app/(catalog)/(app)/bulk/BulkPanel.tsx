@@ -105,11 +105,40 @@ const read = (file: File | Blob, name = "that file") => new Promise<string>((res
   r.readAsDataURL(file);
 });
 
-/** What a row would do to the files as they stand right now. */
+/**
+ * What a row would do to the files as they stand right now: the changes, for the preview. Worked
+ * out without writing the file — that, and the check that nothing else moved, happen when the
+ * change is applied.
+ */
 const measure = (row: Row, csvs: Array<{ name: string; csv: string }>): Array<{ name: string; result: AdjustResult }> =>
   row.plan && row.state === "ready" && row.blocked.length === 0
-    ? csvs.map((s) => ({ name: s.name, result: applyPlan(s.csv, row.plan as Plan) }))
+    ? csvs.map((s) => ({ name: s.name, result: applyPlan(s.csv, row.plan as Plan, { preview: true }) }))
     : [];
+
+/**
+ * A moment for the browser between two pieces of work. A sheet of seventy changes against a
+ * 2,500-product export is a minute of work done in one go, and the browser called the page
+ * unresponsive (2026-10-26); done a change at a time with this between, the page stays live and
+ * says how far it has got.
+ */
+const breathe = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+/**
+ * Work done on a loaded file, kept with that file until it changes. The page redraws on every
+ * progress tick, and each redraw used to read every loaded export again — listings, matches, the
+ * delivery preview — which on a 2,500-product export was the freeze itself (2026-10-26). A file
+ * that changes is a new object, so nothing kept here can outlive the file it was worked out from.
+ */
+const workedOut = new WeakMap<object, Map<string, unknown>>();
+function keptFor<T>(file: object, key: string, work: () => T): T {
+  let kept = workedOut.get(file);
+  if (!kept) { kept = new Map(); workedOut.set(file, kept); }
+  if (kept.has(key)) return kept.get(key) as T;
+  const value = work();
+  if (kept.size > 12) kept.clear();
+  kept.set(key, value);
+  return value;
+}
 
 /**
  * How many of an invoice's lines were placed, counted once each.
@@ -174,6 +203,30 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
    * was cleared by it, and nothing was applied).
    */
   const lastSheet = useRef<File | null>(null);
+  /** The previews still being worked out, a row at a time: "12 of 73". Null when none are. */
+  const [measuring, setMeasuring] = useState<{ done: number; of: number } | null>(null);
+  const measureRun = useRef(0);
+  /**
+   * Work out each row's preview against these files, one row at a time with a breath between, so
+   * the page stays live on a big export. A later run supersedes an earlier one still going.
+   */
+  async function remeasure(against: Sheet[], list: Row[]) {
+    const run = ++measureRun.current;
+    const todo = list.filter((r) => r.plan && r.state === "ready" && r.blocked.length === 0);
+    if (todo.length === 0) { setMeasuring(null); return; }
+    setMeasuring({ done: 0, of: todo.length });
+    for (let k = 0; k < todo.length; k++) {
+      if (run !== measureRun.current) return;
+      const row = todo[k];
+      {
+        const results = measure(row, against);
+        setRows((current) => current.map((r) => (r.id === row.id ? { ...r, results } : r)));
+      }
+      setMeasuring({ done: k + 1, of: todo.length });
+      await breathe();
+    }
+    if (run === measureRun.current) setMeasuring(null);
+  }
   const [sheets, setSheets] = useState<Sheet[]>([]);
   const [feed, setFeed] = useState<Applied[]>([]);
   const [rows, setRows] = useState<Row[]>([]);
@@ -287,7 +340,7 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
    * the line as the invoice gave it, so the key holds through the join and the filters above.
    */
   const [decisions, setDecisions] = useState<Record<string, MatchDecision>>({});
-  const typeByBarcode = typesByBarcode(sheets.flatMap((x) => listingsFromCsv(x.csv)));
+  const typeByBarcode = typesByBarcode(sheets.flatMap((x) => keptFor(x, "listings", () => listingsFromCsv(x.csv))));
   const kindOf = (l: InvoiceLine) => kindOfLine(l, typeByBarcode);
   const kindsOnOrder = [...new Set((invoice?.lines ?? []).map(kindOf))].sort();
   const kindCount = (k: string) => (invoice?.lines ?? []).filter((l) => kindOf(l) === k).length;
@@ -539,7 +592,10 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
 
       const built = await planInChunks(instructions, undefined, against);
       setProgress("Working out what each one would change…");
-      setRows(built.map((row) => ({ ...row, results: measure(row, against) })));
+      const listed = built.map((row) => ({ ...row, results: [] as Row["results"] }));
+      setRows(listed);
+      setBusy(null); setProgress("");
+      await remeasure(against, listed);
       const lost = built.filter((r) => r.failed).length;
       if (lost > 0) setError(`${lost} of ${instructions.length} rows could not be read this time — they are marked below and nothing was changed for them. Use "Read those rows again" once the service has settled.`);
     } catch (err) {
@@ -851,7 +907,7 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
       steps: 1,
       perFile: results.map((r) => ({ name: r.name, changes: r.result.refused ? 0 : r.result.changes.length, rowsAdded: r.result.appended })),
     }]);
-    setRows((current) => current.map((r) => ({ ...r, results: measure(r, nextSheets) })));
+    void remeasure(nextSheets, rows);
     setBusy(null);
   }
 
@@ -918,7 +974,7 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
    */
   const applyRows = (ids: number[], title: string) => guarded("Applying those changes", () => applyRowsNow(ids, title));
 
-  function applyRowsNow(ids: number[], title: string) {
+  async function applyRowsNow(ids: number[], title: string) {
     const wanted = rows.filter((r) => ids.includes(r.id) && r.state === "ready" && r.plan && r.blocked.length === 0
       && (!isWholeFile((r.plan as Plan).scope) || confirmedWhole.includes(r.id)));
     if (wanted.length === 0) {
@@ -927,8 +983,25 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
     }
 
     setBusy("applying"); setError(null); setSaved(null);
+    measureRun.current++; setMeasuring(null);
     const steps: FoldStep[] = wanted.map((r) => ({ id: r.id, plan: r.plan as Plan, label: r.understood || r.instruction }));
-    const out = foldPlans(sheets.map((s) => ({ name: s.name, csv: s.csv })), steps);
+    // A change at a time, each still checked on its own, with a breath between so the page stays
+    // live and says how far it has got. Nothing is kept until the last one is done: the files on
+    // screen change once, at the end, so a run stopped part-way leaves them exactly as they were.
+    const out = { files: sheets.map((s) => ({ name: s.name, csv: s.csv, changes: 0 })), applied: [] as number[], refused: [] as number[], changes: 0, matched: 0, lines: [] as string[] };
+    for (const [k, step] of steps.entries()) {
+      setProgress(`Applying ${k + 1} of ${steps.length}…`);
+      await breathe();
+      const one = foldPlans(out.files.map((f) => ({ name: f.name, csv: f.csv })), [step]);
+      out.refused.push(...one.refused);
+      if (one.applied.length === 0) continue;
+      one.files.forEach((f, i) => { out.files[i].csv = f.csv; out.files[i].changes += f.changes; });
+      out.applied.push(...one.applied);
+      out.changes += one.changes;
+      out.matched = Math.max(out.matched, one.matched);
+      out.lines.push(...one.lines);
+    }
+    setProgress("");
 
     if (out.applied.length === 0) {
       setBusy(null);
@@ -944,15 +1017,14 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
     }]);
     // Everything still to come is re-measured against the files as they now stand, so a later row
     // sees what an earlier one did and a row made redundant by it reports nothing left to change.
-    setRows((current) => {
-      const marked = current.map((r) => (out.applied.includes(r.id) ? { ...r, state: "applied" as const, results: [] } : r));
-      return marked.map((r) => ({ ...r, results: measure(r, nextSheets) }));
-    });
+    const marked = rows.map((r) => (out.applied.includes(r.id) ? { ...r, state: "applied" as const, results: [] as Row["results"] } : r));
+    setRows(marked);
     if (out.refused.length) {
       setError(`${out.refused.length} change${out.refused.length === 1 ? " was" : "s were"} left out — ${out.refused.length === 1 ? "it" : "they"} failed the check that nothing moves except what was asked for. Everything else in the group was applied.`);
     }
     setBusy(null);
     clearPreview();
+    await remeasure(nextSheets, marked);
   }
 
   function apply() {
@@ -980,7 +1052,7 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
       steps: 1,
       perFile: preview.results.map((r) => ({ name: r.name, changes: r.result.changes.length })),
     }]);
-    setRows((current) => current.map((r) => ({ ...r, results: measure(r, nextSheets) })));
+    void remeasure(nextSheets, rows);
     setInstruction("");
     clearPreview();
     setConfirmWholeFile(false);
@@ -1001,7 +1073,7 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
     if (order && typeof localStorage !== "undefined") forgetApplied(localStorage, fingerprint(order.lines));
     // The files are what was undone. Rows already marked applied stay marked — reading the sheet
     // again is the clean way to start it over.
-    setRows((current) => current.map((r) => ({ ...r, results: measure(r, nextSheets) })));
+    void remeasure(nextSheets, rows);
     clearPreview();
     setSaved(null);
   }
@@ -1159,11 +1231,14 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
     : [];
   // The joined lines keep the order's order, so a joined line's key is its order line's.
   const keyOfJoined = (l: InvoiceLine) => lineKey(order?.lines[invoiceLines.indexOf(l)] ?? l);
+  // The invoice's lines as a key, so each file's matching is worked out once per invoice and
+  // season rather than on every redraw. See keptFor.
+  const linesKey = invoice ? JSON.stringify(invoiceLines) : "";
   const seasonedAgainst: Against = invoice
-    ? sheets.map((s) => ({ name: s.name, reconciliation: reconcile(s.csv, invoiceLines, { season }) }))
+    ? sheets.map((s) => ({ name: s.name, reconciliation: keptFor(s, `matched|${season}|${linesKey}`, () => reconcile(s.csv, invoiceLines, { season })) }))
     : [];
   // The same without the season, for the lines whose name is on a listing of another year.
-  const looseAgainst: Against = seasonedAgainst.map((a, i) => (season.trim() && a.reconciliation.unmatched.length > 0 ? { name: a.name, reconciliation: reconcile(sheets[i].csv, invoiceLines, {}) } : a));
+  const looseAgainst: Against = seasonedAgainst.map((a, i) => (season.trim() && a.reconciliation.unmatched.length > 0 ? { name: a.name, reconciliation: keptFor(sheets[i], `matched||${linesKey}`, () => reconcile(sheets[i].csv, invoiceLines, {})) } : a));
   /** Every line placed by its name, once, for the person to confirm: first the file that placed it. */
   const toConfirm = (() => {
     const seen = new Set<string>();
@@ -1201,13 +1276,18 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
   // The delivery as it would go on, file by file, so what it would build and what it would add can
   // be shown before anything is written. New products go on the home file only; a new colourway
   // goes on whichever file holds its listing.
+  // Worked out once per set of inputs, not on every redraw: the key is everything it reads,
+  // including the other loaded files (their listings name the shop's products).
+  const previewKey = order && homeSheet
+    ? JSON.stringify([order.lines, decisions, season, vendor, references.map((r) => r.filename), order.priceList ?? [], fields, stock, toDraft, homeSheet.name, builtBy, bindings, packagePicks, sheets.map((x) => `${x.name}:${x.csv.length}:${x.history.length}`), loadedSpecs.length])
+    : "";
   const previewed = order && homeSheet
-    ? sheets.map((s) => buildDelivery(s.csv, order.lines, { decisions,
+    ? sheets.map((s) => keptFor(s, `delivery|${previewKey}`, () => buildDelivery(s.csv, order.lines, { decisions,
         season, vendor, specs: loadedSpecs, sourceOf: specSources(references),
-        listings: sheets.flatMap((x) => listingsFromCsv(x.csv)), priceList: order.priceList ?? [],
+        listings: sheets.flatMap((x) => keptFor(x, "listings", () => listingsFromCsv(x.csv))), priceList: order.priceList ?? [],
         fields: { ...fields, stock, draft: toDraft }, reorderOnly: s.name !== homeSheet.name, builtBy,
         bindingList: bindings, packagePicks,
-      }))
+      })))
     : [];
   const seenLines = new Set<number>();
   const newProducts: FreshProduct[] = buildNew && toBuild > 0
@@ -1353,7 +1433,7 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
         <Card
           title="The buyer's sheet"
           actions={allReady.length > 0
-            ? <Button size="sm" variant="primary" icon="✅" disabled={busy !== null} onClick={() => applyRows(allReady.map((r) => r.id), `Everything that matched — ${allReady.length} change${allReady.length === 1 ? "" : "s"}`)}>Apply all {allReady.length}</Button>
+            ? <Button size="sm" variant="primary" icon="✅" disabled={busy !== null || measuring !== null} onClick={() => applyRows(allReady.map((r) => r.id), `Everything that matched — ${allReady.length} change${allReady.length === 1 ? "" : "s"}`)}>{busy === "applying" ? progress || "Applying…" : measuring ? `Checking ${measuring.done} of ${measuring.of}…` : `Apply all ${allReady.length}`}</Button>
             : undefined}
         >
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1364,6 +1444,15 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
             <Button icon="📋" size="sm" disabled={busy !== null} onClick={() => sheetRef.current?.click()}>{busy === "sheet" ? "Reading…" : rows.length > 0 ? "Use a different sheet" : "Add the sale sheet"}</Button>
             <input ref={sheetRef} type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void takeSheet(f); e.target.value = ""; }} />
           </div>
+
+          {(measuring || (busy === "applying" && progress)) && (
+            <div className="mt-3">
+              <div className="h-1.5 overflow-hidden rounded-full bg-[var(--line-soft)]">
+                <div className="h-full rounded-full bg-[var(--violet)] transition-all" style={{ width: `${measuring ? Math.round((measuring.done / Math.max(1, measuring.of)) * 100) : 100}%` }} />
+              </div>
+              <p className="mt-1.5 text-xs text-[var(--ink-soft)]">{busy === "applying" && progress ? `${progress} The page stays usable; nothing is kept until every change is done.` : `Working out what each change would do — ${measuring!.done} of ${measuring!.of}. Apply all opens when it is done.`}</p>
+            </div>
+          )}
 
           {busy === "sheet" && progress && (
             <div className="mt-3">

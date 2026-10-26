@@ -191,9 +191,10 @@ export interface AdjustResult {
  * function rewrote the apostrophe in every description it passed through: a bulk price change
  * would have quietly reworded 140 products. A cell nobody asked about comes back byte for byte.
  */
+const NEEDS_QUOTES = /[",\r\n]|^\s|\s$/;
 export function quote(value: string): string {
   if (value === "") return "";
-  return /[",\r\n]/.test(value) || /^\s|\s$/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+  return NEEDS_QUOTES.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
 /**
@@ -372,13 +373,32 @@ export function openExport(text: string): { grid: string[][]; preamble: string[]
 }
 
 /**
+ * The last few files read, as read, so the same export is not parsed again for every change on a
+ * sheet (2026-10-26: a 2,500-product export and a sheet of seventy changes froze the page — every
+ * change, and every preview, read the five-megabyte file afresh). A file's grid is only ever read
+ * here, never written: applyPlan copies the rows it changes.
+ */
+const opened = new Map<string, { grid: string[][]; preamble: string[][] }>();
+function openCached(text: string): { grid: string[][]; preamble: string[][] } {
+  const hit = opened.get(text);
+  if (hit) { opened.delete(text); opened.set(text, hit); return hit; }
+  const got = openExport(text);
+  remember(text, got);
+  return got;
+}
+function remember(text: string, got: { grid: string[][]; preamble: string[][] }): void {
+  opened.set(text, got);
+  while (opened.size > 4) opened.delete(opened.keys().next().value as string);
+}
+
+/**
  * Apply a plan to a Shopify product export.
  *
  * Returns the whole file back, changed only where the plan said, plus a list of every cell that
  * moved so a person can read the diff before importing it.
  */
-export function applyPlan(text: string, plan: Plan): AdjustResult {
-  const { grid, preamble } = openExport(text);
+export function applyPlan(text: string, plan: Plan, options: { preview?: boolean } = {}): AdjustResult {
+  const { grid, preamble } = openCached(text);
   const warnings: string[] = [];
   if (preamble.length > 0) {
     // Dropped rather than carried through: carrying it would hand back a file Shopify still will
@@ -663,10 +683,17 @@ export function applyPlan(text: string, plan: Plan): AdjustResult {
     }
   }
 
+  // Nothing changed and nothing to drop: the file as it came, with nothing to write or to prove.
+  // A preview — what a change WOULD do, shown before anyone applies it — needs the list of changes
+  // and not the rewritten file; the file is written, and proved, when the change is applied.
+  if ((changes.length === 0 && preamble.length === 0) || options.preview) {
+    return { csv: text, changes, matched: inScope.size, products: firstRowOf.size, variantRows: rows.length, warnings };
+  }
+
   const csv = [header, ...rows].map((row) => header.map((_, i) => quote(row[i] ?? "")).join(",")).join("\r\n") + "\r\n";
 
   // Prove it before handing it over. See verifyOnlyIntended.
-  const unintended = verifyOnlyIntended(grid, csv, changes);
+  const unintended = verifyOnlyIntended(grid, csv, changes, {}, (parsed) => remember(csv, { grid: parsed, preamble: [] }));
   if (unintended.length > 0) {
     return {
       csv: text,
@@ -709,6 +736,8 @@ export function verifyOnlyIntended(
   after: string,
   changes: Change[],
   options: { appended?: number } = {},
+  /** Given the file as read back, when it passes: the next change reads it from here, not again. */
+  readBack?: (parsed: string[][]) => void,
 ): string[] {
   const parsed = parseCsv(after).filter((r) => r.some((c) => c.trim() !== ""));
   const header = before[0];
@@ -748,6 +777,8 @@ export function verifyOnlyIntended(
       if (problems.length >= 20) return problems;
     }
   }
+  // Read back clean, with its heading on the first row: what the next change will open.
+  if (problems.length === 0 && readBack && (parsed[0] ?? []).includes("Handle") && (parsed[0] ?? []).includes("Title")) readBack(parsed);
   return problems;
 }
 

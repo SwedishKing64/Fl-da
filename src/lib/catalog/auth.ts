@@ -101,7 +101,7 @@ export async function usersExist(): Promise<boolean> {
  *
  *   FLODA_RECOVERY_EMAILS     owner@example.com, manager@example.com
  *   FLODA_RECOVERY_PASSWORD   (a password of at least 12 characters)
- * (RUBIN_RECOVERY_EMAILS and RUBIN_RECOVERY_PASSWORD, the ski shop's names for them, also work.)
+ * (RUBIN_RECOVERY_EMAILS and RUBIN_RECOVERY_PASSWORD, the first shop's names for them, also work.)
  *
  * Signing in that way makes sure the account exists, as an admin, with that password, in the
  * database the site is using. Remove the two values once the accounts work again.

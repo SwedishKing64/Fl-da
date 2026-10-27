@@ -50,7 +50,7 @@ describe("snow clothing, by gender", () => {
   });
 
   it("leaves anything else without a gender, and a snow garment for everyone without one", async () => {
-    const { genderedTitle, genderOf } = await import("./gender-title");
+    const { genderedTitle, genderOf } = await import("./trades/snow/gender-title");
     expect(genderedTitle("Cyclic Jacket", { productType: "Snow Jackets", gender: "womens" })).toBe("Women's Cyclic Jacket");
     expect(genderedTitle("Men's Cyclic Jacket", { productType: "Snow Jackets", gender: "mens" })).toBe("Men's Cyclic Jacket");
     expect(genderedTitle("Exos 58", { productType: "Hiking Packs", gender: "mens" })).toBe("Exos 58");

@@ -50,13 +50,6 @@ when it is not the configured one.
 tag — replaces the file's year rather than sitting beside it, and the title and handle carry it
 too (`oneYearTag` in product-tags.ts; the chat's year is set as the lines' season in pipeline.ts).
 
-**Bills take the shop's terms with each supplier (asked 2026-10-16).** The QuickBooks supplier
-contact list's Terms column is kept with the names (still never phones, emails or addresses). A
-bill matched to a supplier on the list takes the list's terms over the invoice's, and its Due date
-is worked from them: "Net 30 EOM" (or "EOM 30") is the end of the bill's month plus 30 days — a
-bill of 13 October is due 30 November; "Net 7" is seven days; "Due on receipt" is the bill date.
-Loading a newer list keeps the names learned from bills since.
-
 **A new product is titled as the supplier's page titles it (asked 2026-10-16), for search.** When
 a product link is read and the page is surely that product, the title becomes the page's own name
 (`page-title.ts`): the site's name after a bar or dash dropped, no brand in front (the SEO title
@@ -138,8 +131,8 @@ progress bar ("Applying 12 of 73…"), keeps nothing until the last is done, wor
 at a time (Apply all waits for them), and no longer re-reads every export on each redraw (`keptFor`).
 73 real changes on a 2,850-product file: 61s before, about 14s now, without freezing.
 
-**History on Prices and stock and on Bills (asked 2026-10-26).** "A history similar to New
-Products." Each download of the updated files (whole, or only some kinds) and each download of the
+**History on Prices and stock (asked 2026-10-26).** "A history similar to New Products." (Rubin
+keeps one for its Bills page too; Flöda has no Bills page.) Each download of the updated files (whole, or only some kinds) and each download of the
 bills sheet is kept as a run (`WorkRun`): who, when, a title, what was done (each change and its
 lines; each bill's supplier, number, dates, total and any discrepancy), the documents it came from,
 and counts. The files handed over are kept with it (`WorkRunFile`), gzipped in the browser and stored
@@ -404,9 +397,32 @@ blank. The ski shop keeps its habit of filling only boards, downhill skis and sl
 
 **QuickBooks (Rubin only).** Rubin reads supplier invoices into QuickBooks bill sheets. Flöda
 removed that section; the rules the shop gave for it (its one-row-per-bill sheet, supplier names
-from its QuickBooks list, batch PDFs split into one bill per invoice) live in Rubin's handover.
+from its QuickBooks list, batch PDFs split into one bill per invoice, each supplier's payment
+terms and the due dates worked from them, PAID stamps) live in Rubin's handover.
 
 ## Decisions and history, newest first
+
+- 2026-10-27 The store's changes from 14–26 October brought into Flöda (everything but Bills and
+  "Copy from the old site", which this copy does not have). Where a rule was Alpsport's, it is the
+  snow pack's default, not every shop's:
+  - Uploads go to a private Blob store where the store is private; reading supplier files tells
+    every column by what is in it (`columns.ts`); PDF and boot order forms with size grids; size-grid
+    forms with no item codes (`grid-form.ts`); freight lines as charges.
+  - No gender in titles — the snow pack's `naming.audience` is now "none" — except snow clothing,
+    split and named by gender (`trades/snow/gender-title.ts`). No colour, no brand in titles; a new
+    product takes the supplier page's title plus the year; one year tag; a page per colour, its
+    pictures full size; a rebuild keeps links, page copy and pictures.
+  - Ski packages: bindings picked per ski from the shop's binding list (`trades/snow/binding-*`),
+    shown only for the snow pack. Tents with footprints (`footprints.ts`).
+  - Prices and stock: price and compare-at in the preview; an Order form box and an Invoices box
+    (`invoice-merge.ts`, which replaces Flöda's own pairing on that page); the buyer's sale sheet;
+    big exports no longer freeze the page; a history of each download (`WorkRun`).
+  - Cheaper reading (Opus for documents, the light model for colour matching, SEO and
+    instructions), larger `max_tokens`, invoice photos at standard speed unless
+    `CATALOG_FAST_READS=1`; recovery sign-in reads `FLODA_RECOVERY_*` (or the store's `RUBIN_*`).
+  - A page left open across an update says so and offers a reload (`UpdateBanner`, `/api/version`).
+  - Flöda's clothing, footwear and pack size grids headed "Style #"/"SKU" (`isSizeHeading`) are kept
+    on top of the store's order-form reader.
 
 - 2026-10-23 First run at Alpsport on the local desktop copy (v0.1.14-local). What the shop said,
   and what changed:

@@ -7,9 +7,9 @@
  * gender goes on the front, the way the shop writes it; Kids' is unchanged everywhere.
  */
 
-import { headingsFor, resolveType } from "./taxonomy";
-import { withoutGender } from "./mapping";
-import { asShopWritesIt } from "./titles";
+import { headingsFor, resolveType } from "../../taxonomy";
+import { withoutGender } from "../../mapping";
+import { asShopWritesIt } from "../../titles";
 
 const LABEL: Record<string, string> = { mens: "Men's", womens: "Women's" };
 

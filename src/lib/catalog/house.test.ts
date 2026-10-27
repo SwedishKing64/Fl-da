@@ -95,7 +95,7 @@ describe("the kinds of product the shop names", () => {
 describe("where a shop that has said nothing starts", () => {
   it("keeps the ski shop's habits for the snow pack, and starts every other shop plain", async () => {
     const { defaultHouseFor } = await import("./house");
-    expect(defaultHouseFor("snow-outdoor").naming).toMatchObject({ brandInTitle: "never", audience: "front" });
+    expect(defaultHouseFor("snow-outdoor").naming).toMatchObject({ brandInTitle: "never", audience: "none" });
     expect(defaultHouseFor("general").naming).toMatchObject({ brandInTitle: "always", audience: "none" });
     expect(defaultHouseFor("outdoor").naming).toMatchObject({ brandInTitle: "always", audience: "none" });
   });

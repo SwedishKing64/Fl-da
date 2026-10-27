@@ -9,7 +9,7 @@ import { inSizeOrder } from "./size-order";
 import { correctedOptionName, correctedProductType } from "./corrections";
 import { withFit, withoutGender } from "./mapping";
 import { classifyAccessory } from "./trades/snow/accessories";
-import { genderedTitle } from "./gender-title";
+import { genderedTitle } from "./trades/snow/gender-title";
 import { packShelf } from "./packs";
 import { integratedBinding } from "./trades/snow/packages";
 import { isSnowBag } from "./packs";

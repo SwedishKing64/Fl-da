@@ -22,7 +22,7 @@ import { cleanProductUrl, colourLinksOf, coloursOfProduct, fitlessOf, flatHandle
 import { readProductPage, PageError } from "./extract/page";
 import { picturesForColour } from "./picture-colour";
 import { pageProductTitle } from "./page-title";
-import { genderOf, genderedTitle } from "./gender-title";
+import { genderOf, genderedTitle } from "./trades/snow/gender-title";
 import { withoutGender } from "./mapping";
 import { seoTitle, titleYear, titledForShop } from "./titles";
 

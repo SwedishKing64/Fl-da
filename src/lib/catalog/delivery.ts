@@ -35,7 +35,7 @@ import { writeOutSize } from "./options";
 import { quote, verifyOnlyIntended, type Change } from "./adjust";
 import { csvType, productCategoryFor, spellType } from "./pipeline-pure";
 import { pageProductTitle } from "./page-title";
-import { genderedTitle } from "./gender-title";
+import { genderedTitle } from "./trades/snow/gender-title";
 import { houseBody } from "./body";
 import { enrichFromSpecs } from "./specs";
 import { productTitle, seoTitle, titleYear } from "./titles";

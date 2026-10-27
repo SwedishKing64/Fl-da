@@ -50,7 +50,7 @@ export function ShopifyConnect({ connected, canInstall, outcome, next = "/settin
         </form>
       ) : (
         <div className="space-y-3">
-          <p className="text-[13px] text-[var(--ink-soft)]">This copy has no Shopify app set up, so it connects with an Admin API token from a custom app on your store.</p>
+          <p className="text-[13px] text-[var(--ink-soft)]">This copy has no Shopify app set up, so it connects with an Admin API token from a custom app on your store (Settings → Apps → Develop apps). Give the app read_products, write_products, read_inventory, write_inventory, read_locations, read_files and write_files: the last two let your pictures be kept in your store&apos;s Files, where Shopify can always fetch them.</p>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Store domain"><input id="shopify-domain" className={INPUT} value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="your-shop.myshopify.com" /></Field>
             <Field label="Admin API access token"><input id="shopify-token" type="password" className={INPUT} value={token} onChange={(e) => setToken(e.target.value)} autoComplete="off" /></Field>

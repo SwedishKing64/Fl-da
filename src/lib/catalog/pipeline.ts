@@ -46,6 +46,7 @@ import { scoreProduct, tallyConfidence } from "./confidence";
 import { isValidType, typesAreKnown } from "./taxonomy";
 import type { MatchCandidate } from "./match-candidates";
 import { filePath, pictureHosting, publicFileUrl, readFile, saveFile, usingBlob } from "./storage";
+import { publishLocalPictures } from "./picture-publish";
 import { logAudit } from "./audit";
 import { contributeLayout, findSharedLayout } from "./shared-layouts-store";
 import { fillFromForm, formAndInvoice, invoiceOf, overlapOf } from "./order-and-invoice";
@@ -1541,6 +1542,8 @@ function planExport(review: ReviewData): { ok: true; planned: PlannedPart[]; rep
  * before they could have their file at all was the same refusal wearing a different hat.
  */
 export async function exportBatch(batchId: string, userId: string): Promise<ExportResult> {
+  // Pictures still on this computer go to the shop's Shopify Files first, where Shopify can fetch them.
+  if (pictureHosting()) await publishLocalPictures(batchId).catch((err) => console.warn("[export] local pictures not sent:", err instanceof Error ? err.message : err));
   const review = await loadReview(batchId);
   const warnings = warningList(review.products);
   if (review.products.length === 0) return { ok: false, errors: ["Nothing to export - map the files first."], warnings, files: [], repairs: [] };

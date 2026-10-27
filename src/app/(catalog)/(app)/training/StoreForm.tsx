@@ -105,7 +105,7 @@ export function StoreForm({ state, canInstall = false }: { state: StoreState; ca
           <Field label="Store domain" hint="Your Shopify admin's address, such as alpine-sports.myshopify.com.">
             <input className={INPUT} value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="your-shop.myshopify.com" autoComplete="off" />
           </Field>
-          <Field label="Admin API access token" hint={state.tokenTail ? `A token ending ${state.tokenTail} is kept; leave this empty to keep it.` : "From a custom app in Shopify admin (Settings → Apps → Develop apps) with read_products, write_products and read_inventory."}>
+          <Field label="Admin API access token" hint={state.tokenTail ? `A token ending ${state.tokenTail} is kept; leave this empty to keep it.` : "From a custom app in Shopify admin (Settings → Apps → Develop apps) with read_products, write_products, read_inventory, read_files and write_files (the files scopes keep your pictures in your store's Files)."}>
             <input className={INPUT} type="password" value={token} onChange={(e) => setToken(e.target.value)} placeholder="shpat_…" autoComplete="off" />
           </Field>
           <div className="flex flex-wrap items-center gap-2 sm:col-span-2">

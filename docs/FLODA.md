@@ -312,9 +312,13 @@ that belonged to one shop.
 
 ## Known limits
 
-- The desktop app keeps uploaded product photos on the machine, so a Shopify CSV that refers to
-  them carries local paths Shopify cannot fetch. Pictures taken from brand pages are remote URLs
-  and work. A hosted copy with a Blob store does not have this problem.
+- Pictures on the desktop app: a copy whose shop has connected its Shopify store keeps every picture
+  in that store's own Shopify Files (`shopify-files.ts`: staged upload, `fileCreate`, the
+  cdn.shopify.com address), and pictures saved before it was connected are sent the same way just
+  before a batch is exported or pushed (`picture-publish.ts`). That needs the `read_files` and
+  `write_files` scopes: the install link asks for them, and a custom-app token must be given them.
+  A copy with no store connected and no licence (the local build) still keeps pictures on the
+  machine, which Shopify cannot fetch; pictures taken from brand pages are remote URLs and work.
 - Pricing is still modelled as one home currency with one sales tax; the column names say AUD and
   GST. The profile's currency and tax name are used in prompts and labels, and the tax rate is
   the one used in pricing, but a shop in two currencies is not supported.
@@ -331,8 +335,14 @@ that belonged to one shop.
   it looks for; the shown name comes from `InfoPlist.strings`, written in after-pack, and
   `app.setName("Flöda")` in `main.cjs`. If a copy from an earlier build says damaged:
   `xattr -dr com.apple.quarantine /Applications/Floda.app`.
-- One shop per install. The conventions are process-wide state, which is right for an installed
-  copy and for one hosted copy per shop, and wrong for several shops in one deployment.
+- Several shops per desktop install, one open at a time (`desktop/shops.cjs`, `shops.ts`): each is
+  its own database and files folder, the first in the app-data folder as before, the rest under
+  `shops/<id>`. Settings → Shops on this computer, or the Shop menu, adds and opens them; opening
+  one restarts the server on its folder and shows its sign-in. A hosted deployment is still one
+  shop: the conventions are process-wide state.
+- Shopify only. Flöda reads a Shopify export and writes Shopify's CSV or pushes through its API.
+  Other platforms wait until the Shopify launch has paying shops (decided 2026-10-27; WooCommerce
+  was the first candidate).
 
 ## What is next
 

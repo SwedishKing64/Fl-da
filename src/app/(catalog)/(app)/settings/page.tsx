@@ -18,7 +18,7 @@ import { ShareLayouts } from "./ShareLayouts";
 import { Backups } from "./Backups";
 import { ShopifyConnect } from "./ShopifyConnect";
 import { ShopsCard } from "./ShopsCard";
-import { readShopList, runningShopId } from "@/lib/catalog/shops";
+import { readShopList, renameShop, runningShopId } from "@/lib/catalog/shops";
 import { getSettings } from "@/lib/catalog/settings";
 import { oauthApp } from "@/lib/catalog/shopify-oauth";
 import { backupDir, listBackups, sqliteFile } from "@/lib/catalog/backup";
@@ -49,7 +49,13 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     getBindingList().catch(() => null),
   ]);
   // Only the desktop app keeps several shops; anywhere else this is null and the card is not shown.
-  const shops = await readShopList();
+  // The shop open now goes by its own name there, once it has one, rather than "My shop".
+  let shops = await readShopList();
+  const mine = shops?.shops.find((s) => s.id === runningShopId());
+  if (shops && mine && mine.name === "My shop" && profile.name.trim()) {
+    await renameShop(mine.id, profile.name.trim()).catch(() => undefined);
+    shops = await readShopList();
+  }
   const store = settings.shopify.storeDomain && settings.shopify.accessToken ? { domain: settings.shopify.storeDomain, by: settings.shopify.connectedBy ?? "token" } : null;
   return (
     <>

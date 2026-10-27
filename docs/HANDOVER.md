@@ -402,6 +402,9 @@ terms and the due dates worked from them, PAID stamps) live in Rubin's handover.
 
 ## Decisions and history, newest first
 
+- 2026-10-27 Launch on Shopify only, the platform the owner knows; other platforms (WooCommerce
+  first) after there are paying Shopify shops. Desktop pictures go to the shop's Shopify Files once
+  its store is connected. One desktop install holds several shops, one open at a time.
 - 2026-10-27 The store's changes from 14–26 October brought into Flöda (everything but Bills and
   "Copy from the old site", which this copy does not have). Where a rule was Alpsport's, it is the
   snow pack's default, not every shop's:

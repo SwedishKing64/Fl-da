@@ -17,6 +17,8 @@ import { LicenceForm } from "./LicenceForm";
 import { ShareLayouts } from "./ShareLayouts";
 import { Backups } from "./Backups";
 import { ShopifyConnect } from "./ShopifyConnect";
+import { ShopsCard } from "./ShopsCard";
+import { readShopList, runningShopId } from "@/lib/catalog/shops";
 import { getSettings } from "@/lib/catalog/settings";
 import { oauthApp } from "@/lib/catalog/shopify-oauth";
 import { backupDir, listBackups, sqliteFile } from "@/lib/catalog/backup";
@@ -46,14 +48,25 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     searchParams,
     getBindingList().catch(() => null),
   ]);
+  // Only the desktop app keeps several shops; anywhere else this is null and the card is not shown.
+  const shops = await readShopList();
   const store = settings.shopify.storeDomain && settings.shopify.accessToken ? { domain: settings.shopify.storeDomain, by: settings.shopify.connectedBy ?? "token" } : null;
   return (
     <>
       <PageHeader title="Settings" subtitle="Admin only." />
       <div className="mb-6 grid gap-6 lg:grid-cols-2">
-        <Card title="Your shop">
-          <ShopForm profile={profile} />
-        </Card>
+        <div className="grid gap-6">
+          <Card title="Your shop">
+            <ShopForm profile={profile} />
+          </Card>
+          {shops && (
+            <div id="shops">
+              <Card title="Shops on this computer">
+                <ShopsCard list={shops} running={runningShopId()} />
+              </Card>
+            </div>
+          )}
+        </div>
         <div className="grid gap-6">
           <Card title="Training and Rules">
             <p className="text-[14px] text-[var(--ink-soft)]">What Flöda is taught lives on its own page: your website&apos;s categories as the product types, each supplier&apos;s paperwork, your Shopify export, and the rules for every listing. <Link href="/training" className="font-semibold text-[var(--meta)]">Open Training and Rules →</Link></p>

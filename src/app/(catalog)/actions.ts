@@ -2659,3 +2659,37 @@ export async function saveRunAction(input: z.infer<typeof runInput>): Promise<Ac
     return fail(err);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Shops on this computer (the desktop app; see shops.ts)
+// ---------------------------------------------------------------------------
+
+export async function addShopAction(input: { name: string }): Promise<ActionResult<{ id: string; name: string }>> {
+  return safely(async () => {
+    const user = await requireUser("ADMIN");
+    const entry = await (await import("@/lib/catalog/shops")).addShop(String(input.name ?? ""));
+    await logAudit("shops.add", { userId: user.id, details: entry }).catch(() => undefined);
+    revalidatePath("/settings");
+    return { ok: true, data: entry };
+  });
+}
+
+export async function renameShopAction(input: { id: string; name: string }): Promise<ActionResult> {
+  return safely(async () => {
+    const user = await requireUser("ADMIN");
+    await (await import("@/lib/catalog/shops")).renameShop(String(input.id ?? ""), String(input.name ?? ""));
+    await logAudit("shops.rename", { userId: user.id, details: input }).catch(() => undefined);
+    revalidatePath("/settings");
+    return { ok: true };
+  });
+}
+
+/** Open another shop. The desktop app restarts on it, and its own sign-in page opens. */
+export async function openShopAction(input: { id: string }): Promise<ActionResult> {
+  return safely(async () => {
+    const user = await requireUser();
+    await logAudit("shops.open", { userId: user.id, details: input }).catch(() => undefined);
+    await (await import("@/lib/catalog/shops")).openShop(String(input.id ?? ""));
+    return { ok: true };
+  });
+}

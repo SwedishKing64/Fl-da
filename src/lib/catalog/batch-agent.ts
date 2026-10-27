@@ -77,7 +77,7 @@ type Ask = (system: string, content: string) => Promise<string | undefined>;
 const askModel: Ask = async (system, content) => {
   const response = await retrying(() => getClient().messages.stream({
     model: READING_MODEL,
-    max_tokens: 6000,
+    max_tokens: 32_000,
     // Both prompts are fixed text, so the service keeps them between batches.
     system: cachedSystem(system),
     thinking: { type: "adaptive" },

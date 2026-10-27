@@ -122,6 +122,7 @@ Prices — the most important thing on the document:
 - When a row shows both an RRP column and a wholesale column (W/S, Price net, Your price, Cost), rrp is the RECOMMENDED RETAIL and costPrice is the WHOLESALE one. Getting these the wrong way round is the single most damaging mistake here, so read the column headings rather than assuming the larger number is either one.
 - A wholesale invoice commonly runs: Qty | RRP | W/S (ex. GST) | Disc% | Price net (ex. GST) | Total (ex. GST). Read it as: rrp is the RRP column; costPrice is Price net, the unit amount actually charged after the discount; Total is the line total and is never a unit price. Disc% describes the wholesale side only — it is NOT a retail discount and it does not change the rrp.
 - rrp is the single field this shop cannot do without: it is what the product sells for. If an RRP column exists, EVERY item you return from a row under it carries that row's rrp — including every size of the same colourway on a size grid. Do not put the price on the first size and leave the rest null.
+- A boot size printed with an X — "24X", "25X" — is the half size: 24.5, 25.5. Write it that way.
 - If the page is rotated or sideways, read it rotated. The column headings are on the same edge as the numbers and they say which column is which; never guess a column's meaning from the size of the numbers in it.
 - If, having read the headings, no RRP is stated anywhere on the document, leave rrp null. Do not put the wholesale price there — it will be looked up on the brand's website instead, and a wholesale price written into rrp would be sold at.
 
@@ -210,11 +211,12 @@ export function ranOutOfTime(message: string | null | undefined): boolean {
 /**
  * One read of a document, inside the budget.
  *
- * A photograph is read at the API's fast speed — the same model, answering up to two and a half
- * times faster — because the time a read takes is almost all the answer being written, and a
- * photographed invoice read at standard speed ran past the minute. Fast speed is a beta with its
- * own rate limit and not every model has it, so a refusal of it falls back to standard speed with
- * whatever time is left; a read that cannot finish in the time says so rather than being killed.
+ * Read at standard speed. A photograph used to be read at the API's fast speed — answering up to
+ * two and a half times faster, at twice the price — when a read had a minute; it now has four
+ * (READ_BUDGET_MS), and the shop chose the saving over the speed (2026-10-15). Setting
+ * CATALOG_FAST_READS=1 in Vercel turns fast speed back on for photographs. Fast speed is a beta
+ * with its own rate limit, so a refusal of it falls back to standard speed with whatever time is
+ * left; a read that cannot finish in the time says so rather than being killed.
  */
 /** How a document is read: a photograph at the service's fast speed, a known supplier's on the lighter model. */
 export interface ReadOptions {
@@ -264,7 +266,7 @@ async function readOnce(content: ContentBlocks, options: ReadOptions, budgetMs: 
   const left = () => Math.max(5_000, deadline - Date.now());
   const params = {
     model: options.known ? WORKING_MODEL : READING_MODEL,
-    max_tokens: 16000,
+    max_tokens: 32_000,
     system: cachedSystem(reader.system, SHOP()),
     thinking: { type: "adaptive" as const },
     output_config: { format: zodOutputFormat(reader.schema), effort: "medium" as const },
@@ -276,8 +278,9 @@ async function readOnce(content: ContentBlocks, options: ReadOptions, budgetMs: 
   let message: Anthropic.Message | Anthropic.Beta.BetaMessage;
   try {
     message = await retrying(async () => {
-      // Fast speed is the reading model's alone; the lighter model is quick as it is.
-      if (!options.visual || options.known) return standard();
+      // Standard speed, at half the price, unless CATALOG_FAST_READS=1 (the ski shop chose the
+      // saving, 2026-10-15). Fast speed is the reading model's alone; the lighter model is quick as it is.
+      if (!options.visual || options.known || process.env.CATALOG_FAST_READS !== "1") return standard();
       try {
         return await fast();
       } catch (err) {

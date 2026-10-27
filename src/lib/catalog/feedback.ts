@@ -78,7 +78,7 @@ export async function answerFeedback(context: FeedbackContext, thread: FeedbackT
 
   const response = await retrying(() => getClient().messages.stream({
     model: WORKING_MODEL,
-    max_tokens: 4000,
+    max_tokens: 32_000,
     system: SYSTEM,
     thinking: { type: "adaptive" },
     output_config: { format: zodOutputFormat(ReplySchema), effort: "low" },

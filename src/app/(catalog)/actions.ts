@@ -7,9 +7,10 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { PLAN_IDS, planOf, TRIAL_DAYS } from "@/lib/catalog/plans";
 import { prisma, parseJson, createTables, databaseStatus } from "@/lib/catalog/db";
-import { createSession, destroySession, hashPassword, requireUser, usersExist, verifyPassword } from "@/lib/catalog/auth";
+import { createSession, destroySession, hashPassword, recoveryUser, requireUser, usersExist, verifyPassword } from "@/lib/catalog/auth";
 import { allocateBatchFreight, applyMappings, autoApplyMappings, applyRulesToBatch, attachUnassignedPhotos, extractStoredFile, loadReview, repriceBatch, repriceVariant, verifyBatchImages, exportBatch, exportFileText, type ApplyMappingInput, type ReviewData } from "@/lib/catalog/pipeline";
 import { logAudit } from "@/lib/catalog/audit";
+import { saveRun } from "@/lib/catalog/work-runs";
 import { getSettings, saveSettings } from "@/lib/catalog/settings";
 import { checkImageUrl, recordLibraryImages } from "@/lib/catalog/images";
 import { backupNow, restoreBackup } from "@/lib/catalog/backup";
@@ -96,8 +97,15 @@ export async function loginAction(_prev: ActionResult | null, formData: FormData
   return safely(async () => {
     const email = String(formData.get("email") ?? "").trim().toLowerCase();
     const password = String(formData.get("password") ?? "");
-    const user = await prisma.user.findUnique({ where: { email } });
-    if (!user || !verifyPassword(password, user.passwordHash)) return { ok: false, error: "Email or password is incorrect." };
+    const found = await prisma.user.findUnique({ where: { email } });
+    const user = found && verifyPassword(password, found.passwordHash) ? found : await recoveryUser(email, password);
+    if (!user) {
+      // Which database the site is reading, so an account that "should be there" can be looked for
+      // in the right place. See databaseStatus.
+      const status = await databaseStatus();
+      const where = status.state === "ok" ? "" : ` The site is reading ${status.source ?? "no database"} (${status.state}).`;
+      return { ok: false, error: found ? `Email or password is incorrect.${where}` : `There is no account for ${email} in the database this site is using.${where}` };
+    }
     await createSession(user.id);
     redirect("/");
   });
@@ -273,7 +281,7 @@ export async function auditBatchAction(batchId: string): Promise<ActionResult<{ 
   try {
     const { auditReading } = await import("@/lib/catalog/batch-agent");
     const audit = await auditReading(batchId, user.id);
-    if (!audit) return { ok: false, error: "No API key is set, so the build cannot be checked. Add ANTHROPIC_API_KEY in Settings." };
+    if (!audit) return { ok: false, error: (await import("@/lib/catalog/extract/ai")).aiAvailable() ? "The check ran but its answer came back unreadable, so nothing was changed. Press it again." : "No API key is set, so the build cannot be checked. Add ANTHROPIC_API_KEY in the Vercel project's Environment Variables and redeploy." };
     revalidatePath(`/batches/${batchId}`);
     const verdict = audit.verdict === "right" ? "read right" : audit.verdict === "wrong" ? "read wrong" : "not sure";
     const remapped = audit.remapped.length ? `, ${audit.remapped.length} column${audit.remapped.length === 1 ? "" : "s"} re-read${audit.rebuilt ? " and rebuilt" : ""}` : "";
@@ -288,7 +296,7 @@ export async function reviewBatchAction(batchId: string, options: { audited?: bo
   try {
     const { reviewBatch } = await import("@/lib/catalog/batch-agent");
     const review = await reviewBatch(batchId, user.id, undefined, { audit: !options.audited });
-    if (!review) return { ok: false, error: "No API key is set, so the build cannot be checked. Add ANTHROPIC_API_KEY in Settings." };
+    if (!review) return { ok: false, error: (await import("@/lib/catalog/extract/ai")).aiAvailable() ? "The check ran but its answer came back unreadable, so nothing was changed. Press it again." : "No API key is set, so the build cannot be checked. Add ANTHROPIC_API_KEY in the Vercel project's Environment Variables and redeploy." };
     revalidatePath(`/batches/${batchId}`);
     revalidatePath(`/batches/${batchId}/review`);
     // After the check's fixes, what has earned it goes to the store on its own, when the shop has said to.
@@ -930,6 +938,17 @@ export async function setProductLinkAction(productId: string, url: string): Prom
   }
 }
 
+/** One colour's own page beside a product: saved, or cleared when empty. Read with the product's. */
+export async function setColourLinkAction(productId: string, colour: string, url: string): Promise<ActionResult<{ url: string }>> {
+  await requireUser();
+  try {
+    const { setColourLink } = await import("@/lib/catalog/page-link");
+    return { ok: true, data: await setColourLink(productId, colour, url) };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
 /**
  * Read a product page that is not attached to any stored product — the Bulk page's, where the
  * products are only a preview until the file is built. One page per call. A page that cannot be
@@ -1206,6 +1225,29 @@ export async function readSheetAgainstFilesAction(
 }
 
 /**
+ * What a spreadsheet dropped on Prices and stock is, read off its columns with no model: a Shopify
+ * export, the shop's sale sheet, or anything else (an order form, an invoice). The buyer's sheet used
+ * to be taken for an order form when it was dropped beside the export or in the invoice boxes, so
+ * no sale was ever applied (2026-10-26). PDFs and pictures are "other": they cannot be told apart
+ * without reading them.
+ */
+export async function classifyDocumentAction(file: { name: string; type: string; base64: string }): Promise<ActionResult<{ kind: "sale-sheet" | "export" | "other" }>> {
+  return safely(async () => {
+    await requireUser();
+    const isWorkbook = /\.xlsx?$/i.test(file.name) || /spreadsheet|excel/i.test(file.type);
+    const isCsv = /\.csv$/i.test(file.name) || file.type === "text/csv";
+    if (!isWorkbook && !isCsv) return { ok: true, data: { kind: "other" as const } };
+    const buffer = Buffer.from(file.base64, "base64");
+    const grids = isWorkbook
+      ? await (await import("@/lib/catalog/extract/tabular")).sheetGrids(buffer)
+      : [{ name: file.name, grid: (await import("@/lib/catalog/csv")).parseCsv(buffer.toString("utf8")) }];
+    const { readSaleSheet, looksLikeProductExport } = await import("@/lib/catalog/sale-sheet");
+    if (grids.some((g) => looksLikeProductExport((g.grid[0] ?? []).map(String)))) return { ok: true, data: { kind: "export" as const } };
+    return { ok: true, data: { kind: readSaleSheet(grids) ? ("sale-sheet" as const) : ("other" as const) } };
+  });
+}
+
+/**
  * Read a sheet of instructions and break it into the separate changes it asks for.
  *
  * The buyer's list for a season is a document, not a sentence: many rules about many products.
@@ -1351,6 +1393,44 @@ export async function transcribeDocumentAction(input: { files: Array<{ name: str
   });
 }
 
+/** A file sent from the page: its name, type and contents as base64. */
+type SentFile = { name: string; type: string; base64: string };
+
+/** The shop's binding list for ski packages — name, RRP, wholesale — loaded once and kept. See binding-list.ts. */
+export async function saveBindingListAction(file: SentFile): Promise<ActionResult<import("@/lib/catalog/trades/snow/binding-list").BindingList>> {
+  return safely(async () => {
+    const user = await requireUser("ADMIN");
+    const buffer = Buffer.from(file.base64, "base64");
+    const { parseBindingList } = await import("@/lib/catalog/trades/snow/binding-list");
+    const grids = /\.csv$/i.test(file.name)
+      ? [{ grid: (await import("@/lib/catalog/csv")).parseCsv(buffer.toString("utf8")) }]
+      : await (await import("@/lib/catalog/extract/tabular")).sheetGrids(buffer);
+    const entries = grids.map((g) => parseBindingList(g.grid)).find((e) => e.length > 0) ?? [];
+    if (entries.length === 0) return { ok: false, error: `${file.name} has no binding list in it: it needs a heading row with the binding's name and its RRP ("Binding Name", "RRP", "Wholesale"), then a binding a row.` };
+    const list = { entries, file: file.name, updatedAt: new Date().toISOString() };
+    await (await import("@/lib/catalog/trades/snow/binding-store")).saveBindingList(list);
+    await logAudit("packages.binding_list", { userId: user.id, details: { file: file.name, bindings: entries.length } }).catch(() => undefined);
+    revalidatePath("/settings");
+    return { ok: true, data: list };
+  });
+}
+
+/**
+ * The bindings picked for each ski of a batch, saved, and the products built again with them — a
+ * package is made at the build, so a pick only shows once the batch is rebuilt.
+ */
+export async function saveBatchPicksAction(batchId: string, picks: Record<string, string[]>): Promise<ActionResult<{ products: number }>> {
+  return safely(async () => {
+    const user = await requireUser();
+    const clean = Object.fromEntries(Object.entries(picks).filter(([k, v]) => typeof k === "string" && Array.isArray(v)).map(([k, v]) => [k, v.filter((n) => typeof n === "string").slice(0, 12)]));
+    await (await import("@/lib/catalog/trades/snow/binding-store")).saveBatchPicks(batchId, clean);
+    const rebuilt = await autoApplyMappings(batchId, user.id);
+    revalidatePath(`/batches/${batchId}/review`);
+    revalidatePath(`/batches/${batchId}`);
+    if (!rebuilt.applied) return { ok: false, error: `Saved, but the products could not be built again: ${rebuilt.unmapped.join(", ") || "a file"} still needs its columns mapped.` };
+    return { ok: true, data: { products: rebuilt.products } };
+  });
+}
 
 export async function readInvoiceAction(file: { name: string; type: string; base64: string }): Promise<ActionResult<InvoiceRead & { source: string }>> {
   return safely(async () => {
@@ -1389,6 +1469,12 @@ export async function readInvoiceAction(file: { name: string; type: string; base
       }
 
       if (!isPdf && !isImage) return { ok: false, error: `${file.name} is not a file this can read. Invoices come as a spreadsheet, a CSV, a PDF or a photograph.` };
+      // A PDF order with a size grid under each product is read by where its words sit, with no
+      // model — the quantities only mean something under the size they are printed beneath.
+      if (isPdf) {
+        const grid = await (await import("@/lib/catalog/extract/pdf-grid")).readGridPdf(buffer).catch(() => null);
+        if (grid) return { ok: true, data: { lines: grid.lines, sheet: file.name, columns: { barcode: "", sku: "SKU", rrp: "R/R", quantity: "the size grid", title: "the product's name", size: "the size row", colour: "Style" }, warnings: grid.warnings, shape: "grid" as const, sizeGrid: true, source: "read from the size grid under each product" } };
+      }
       if (!aiAvailable()) return { ok: false, error: `${file.name} has no columns to read, so it has to go to the API — set ANTHROPIC_API_KEY, or upload the order as a spreadsheet.` };
 
       const { extractFromPdf, extractFromImage } = await import("@/lib/catalog/extract/ai");
@@ -1701,27 +1787,29 @@ export async function sendInstructionAction(batchId: string, message: string): P
         // What the build found on the order is the build's to say, whatever the reading made of it.
         directives = { ...reading.directives, typesSeen: directives.typesSeen };
         await prisma.importBatch.update({ where: { id: batchId }, data: { directives: JSON.stringify(directives) } });
-        // Brand, Type, tags and packages are decided when products are BUILT, so a batch already
-        // built has to be built again for them to take — it used to only re-price, and "package
-        // them with the Griffon" changed nothing while the reply said it would.
-        const built = await prisma.product.count({ where: { batchId } });
+        // Brand, Type, tags and packages are decided when products are BUILT, so the products are
+        // built again with the instruction, there and then. The shop asked for exactly that: it
+        // used to rebuild only a batch nobody had edited, and otherwise only re-price and say to
+        // build again from Column mapping — a reply that said the change was made when it was not.
+        // A hand edit on the review page is replaced by the rebuild, and the reply says so.
         let outcome = "";
-        if (built > 0) {
-          const { untouchedSinceBuilt } = await import("@/lib/catalog/pipeline");
-          if (await untouchedSinceBuilt(batchId)) {
-            const rebuilt = await autoApplyMappings(batchId, user.id);
-            // The build check runs again from the page once it sees the rebuild — two requests of
-            // its own. It used to run here as well, after the instruction had been read and the
-            // products rebuilt: four model calls in one request, which the host cut off at its
-            // minute, and the page went down with it.
-            outcome = rebuilt.products > 0 ? ` Rebuilt the ${rebuilt.products} products with this; the build check runs again now.` : "";
-          } else {
-            await repriceBatch(batchId);
-            outcome = " The products have been edited by hand, so they were only re-priced: open Column mapping and build again to apply the rest (that replaces the edits).";
-          }
+        const { untouchedSinceBuilt } = await import("@/lib/catalog/pipeline");
+        const built = await prisma.product.count({ where: { batchId } });
+        const edited = built > 0 && !(await untouchedSinceBuilt(batchId));
+        const rebuilt = await autoApplyMappings(batchId, user.id);
+        if (rebuilt.products > 0) {
+          outcome = ` Rebuilt the ${rebuilt.products} product${rebuilt.products === 1 ? "" : "s"} with this now${edited ? " — the edits made by hand on the review page were replaced by the rebuild" : ""}.`;
+        } else if (built > 0) {
+          await repriceBatch(batchId);
+          outcome = " The products could not be rebuilt automatically (a file's columns need mapping first), so they were re-priced; open Column mapping to build them with this.";
+        } else if (rebuilt.unmapped.length > 0) {
+          outcome = ` It applies as soon as the products are built: ${rebuilt.unmapped.join(", ")} need${rebuilt.unmapped.length === 1 ? "s" : ""} its columns mapped first.`;
         }
         await prisma.batchInstruction.create({ data: { batchId, role: "ASSISTANT", body: `${reading.reply}${outcome}` } });
         await logAudit("batch.instruction", { batchId, userId: user.id, details: directives });
+      } else {
+        // Said plainly rather than nothing at all: the instruction is kept, but nothing acted on it.
+        await prisma.batchInstruction.create({ data: { batchId, role: "ASSISTANT", body: "I could not make sense of that one, so nothing was changed. Say it again, perhaps in other words." } });
       }
     }
 
@@ -2547,4 +2635,27 @@ export async function decideTagProposalAction(id: string, approve: boolean): Pro
     revalidatePath("/training");
     return { ok: true };
   });
+}
+// ---------------------------------------------------------------------------
+// History of Prices and stock and of Bills
+// ---------------------------------------------------------------------------
+
+const runInput = z.object({
+  kind: z.enum(["PRICES", "BILLS"]),
+  title: z.string().max(2000),
+  summary: z.object({ lines: z.array(z.string()), documents: z.array(z.string()), counts: z.record(z.string(), z.number()) }),
+  files: z.array(z.object({ filename: z.string().min(1).max(500), gzipBase64: z.string(), sizeBytes: z.number().nonnegative() })).max(20),
+  tooLarge: z.boolean().optional(),
+});
+
+export async function saveRunAction(input: z.infer<typeof runInput>): Promise<ActionResult<{ id: string; keptFiles: boolean }>> {
+  const user = await requireUser();
+  try {
+    const parsed = runInput.parse(input);
+    const saved = await saveRun({ ...parsed, userId: user.id });
+    revalidatePath("/bulk");
+    return { ok: true, data: saved };
+  } catch (err) {
+    return fail(err);
+  }
 }

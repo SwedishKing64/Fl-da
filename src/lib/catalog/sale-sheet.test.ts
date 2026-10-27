@@ -27,7 +27,8 @@ describe("the real template", () => {
   it("accounts for every row: an instruction, or a reason it was left alone", async () => {
     const read = readSaleSheet(await sheetGrids(readFileSync(TEMPLATE)))!;
     expect(read.instructions.length + read.ignored.length).toBe(81);
-    expect(read.instructions.length).toBe(70);
+    // The midlayer, pole, apres and sock rows have no year: they are every year (2026-10-26).
+    expect(read.instructions.length).toBe(77);
   });
 
   it("opens a workbook whose cells carry comments instead of throwing", async () => {
@@ -44,10 +45,12 @@ describe("the real template", () => {
 });
 
 describe("what each column does", () => {
-  it("skips a row with no year tag, and says so rather than guessing at every year", () => {
+  it("reads a row with no year tag as every year, as the shop writes its untagged shelves", () => {
+    // Socks, poles, apres and midlayers carry no year, and the sheet leaves the year blank for
+    // them. Skipping those rows meant their sale never went on (2026-10-26).
     const read = readSaleSheet(grid([HEAD, row("", "ski poles", "", "", "", "discount", "10")]))!;
-    expect(read.instructions).toEqual([]);
-    expect(read.ignored[0]).toContain("no year tag");
+    expect(read.instructions).toEqual(["Take 10% off the recommended retail for ski poles."]);
+    expect(read.ignored).toEqual([]);
   });
 
   it("reads 'all' as every year, which is the one way to mean it", () => {

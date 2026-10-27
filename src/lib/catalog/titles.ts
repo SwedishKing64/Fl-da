@@ -110,18 +110,48 @@ export function seoTitle(vendor: string, title: string): string {
     : `${brand} ${name}`;
 }
 
+/** A brand or a name as compared: no accents, no ® or ™, lower case. "Völkl®" is "volkl". */
+const plainBrand = (s: string): string => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[®™©]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+
+/** A gender or age word a page puts in front of the brand: "Men's Burton Cartel X". */
+const LEAD_WORD = /^(?:men['’]?s|women['’]?s|ladies['’]?|unisex|kids['’]?|youth|junior|boys['’]?|girls['’]?)\s+/i;
+
 /** True when a title names its own brand, which the shop's Title column never does. */
 export function leadsWithVendor(vendor: string, title: string): boolean {
-  const brand = vendor.trim().toLowerCase();
+  const brand = plainBrand(vendor);
   if (!brand) return false;
-  const name = title.trim().toLowerCase();
-  return name === brand || name.startsWith(`${brand} `);
+  const name = plainBrand(title).replace(LEAD_WORD, "");
+  return name === brand || name.startsWith(`${brand} `) || name.startsWith(`${brand}:`) || name.startsWith(`${brand}-`) || Boolean(brandCode(vendor, title));
 }
 
-/** Take the brand back off a title that arrived with it, since the Title column does not carry it. */
+/**
+ * A distributor's short code for the brand on the front of a line, in capitals: Outdoor Agencies
+ * writes Nemo's tents "NEM Dagger Osmo 2P Tent". Three or four letters that begin the brand's
+ * name, and not the whole of it. "" when the title has none.
+ */
+function brandCode(vendor: string, title: string): string {
+  const first = /^([A-Z]{3,4})\s+(?=\S)/.exec(title.trim())?.[1] ?? "";
+  const brand = plainBrand(vendor).replace(/\s+/g, "");
+  return first && brand.length > first.length && brand.startsWith(first.toLowerCase()) ? first : "";
+}
+
+/**
+ * Take the brand back off a title that arrived with it, since the Title column does not carry it
+ * (asked again 2026-10-22: Burton's pages write "Men's Burton Cartel X Re:Flex", and the brand stayed
+ * because it was only looked for at the very front). Any "Men's" or "Kids'" before it is kept.
+ */
 export function withoutVendor(vendor: string, title: string): string {
-  if (!leadsWithVendor(vendor, title)) return title.trim();
-  return title.trim().slice(vendor.trim().length).trim().replace(/^[-–—:,]\s*/, "");
+  const t = title.trim();
+  if (!leadsWithVendor(vendor, t)) return t;
+  const code = brandCode(vendor, t);
+  if (code) return t.slice(code.length).trim();
+  const lead = LEAD_WORD.exec(t)?.[0] ?? "";
+  const rest = t.slice(lead.length);
+  // The brand as the title spells it, accents and ® included: as many words as the vendor has.
+  const words = plainBrand(vendor).split(" ").length;
+  const m = new RegExp(`^(?:\\S+\\s+){${words - 1}}\\S+?(?=[\\s:–—-]|$)[®™]?`).exec(rest);
+  const after = (m ? rest.slice(m[0].length) : rest).trim().replace(/^[®™]?\s*[-–—:,]?\s*/, "");
+  return after ? `${lead}${after}`.trim() : t;
 }
 
 /**

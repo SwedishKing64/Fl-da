@@ -11,8 +11,11 @@ import { ReviewGrid } from "./ReviewGrid";
 import { LinksPanel } from "./LinksPanel";
 import { TotalsQuestion } from "./TotalsQuestion";
 import { offTotals } from "@/lib/catalog/totals";
+import { colourLinksOf, coloursOfProduct } from "@/lib/catalog/page-types";
 import { parseDirectives } from "@/lib/catalog/instructions";
 import { LookupPanel } from "./LookupPanel";
+import { PackagesPanel } from "./PackagesPanel";
+import { packageSkisOf } from "@/lib/catalog/trades/snow/package-skis";
 import { lookupEnabled } from "@/lib/catalog/enrich";
 import { guarded } from "@/app/(catalog)/page-failed";
 import { SupplierNote } from "./SupplierNote";
@@ -66,6 +69,8 @@ async function renderReviewPage(props: PageProps<"/batches/[id]/review">) {
     ? new Set<string>()
     : new Set((await prisma.shopListing.findMany({ where: { handle: { in: review.products.map((p) => p.handle) } }, select: { handle: true } })).map((l) => l.handle));
   const categories = (await prisma.categoryRule.findMany({ select: { category: true }, distinct: ["category"] }).catch(() => [])).map((r) => r.category);
+  // The new flat skis, each with the bindings its package offers now. See package-skis.ts.
+  const { skis, bindings } = await packageSkisOf(id, review.products.map((p) => ({ title: p.title, productType: p.productType, tags: Array.isArray(p.tags) ? p.tags.join(",") : String(p.tags ?? ""), handle: p.handle, variants: p.variants.map((v) => ({ option2Value: v.option2Value ?? null })) })));
   return (
     <>
       <PageHeader
@@ -98,8 +103,9 @@ async function renderReviewPage(props: PageProps<"/batches/[id]/review">) {
           <LinksPanel
             batchId={id}
             locked={["EXPORTED", "PUSHED"].includes(batch.status)}
-            products={review.products.map((p) => ({ id: p.id, title: p.title, handle: p.handle, url: ["LINKED", "RELINKED", "LINK_FAILED", "PAGE", "PAGE_UNSURE"].includes(p.lookupStatus) ? p.lookupSource : "", status: p.lookupStatus, inShop: inShop.has(p.handle) }))}
+            products={review.products.map((p) => ({ id: p.id, title: p.title, handle: p.handle, url: ["LINKED", "RELINKED", "LINK_FAILED", "PAGE", "PAGE_UNSURE"].includes(p.lookupStatus) ? p.lookupSource : "", status: p.lookupStatus, inShop: inShop.has(p.handle), colours: coloursOfProduct(p), colourLinks: colourLinksOf(p.colourLinks) }))}
           />
+          <PackagesPanel batchId={id} locked={["EXPORTED", "PUSHED"].includes(batch.status)} skis={skis} bindings={bindings} />
           <LookupPanel batchId={id} outstanding={outstanding} enabled={lookupEnabled()} states={states} />
           <ReviewGrid initial={review} batchId={id} kinds={typesAreKnown() ? productTypes() : []} categories={categories} />
         </>

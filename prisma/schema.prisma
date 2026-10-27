@@ -29,6 +29,7 @@ model User {
   batches   ImportBatch[]
   auditLogs AuditLog[]
   feedback  ExportFeedback[]
+  workRuns  WorkRun[]
 }
 
 model Session {
@@ -200,10 +201,9 @@ model Product {
   // What the web lookup did about the columns the invoice left empty.
   lookupStatus    String   @default("NONE") // NONE | FOUND | UNSURE | NOT_FOUND | FAILED
   lookupSource    String   @default("") // the manufacturer page the copy was taken from
-  // A page per colour, where the brand has one: JSON { colour: url }. Each colour's pictures come
-  // from its own page, so the red binding's pictures are the red binding's.
-  colourLinks     String   @default("{}")
   lookupAt        DateTime?
+  // A page for each colour, where a colour has its own: JSON [{ colour, url, status }]. See page-link.ts.
+  colourLinks     String   @default("[]")
   sortOrder       Int      @default(0)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -590,4 +590,36 @@ model ClientSession {
   client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   @@index([clientId])
+}
+
+/// A run of Prices and stock (the updated exports saved) or of Bills for QuickBooks (the bills sheet
+/// downloaded), kept so it can be looked back on and its files downloaded again — the history the
+/// New Products batches have (asked 2026-10-26).
+model WorkRun {
+  id        String   @id @default(cuid())
+  kind      String // PRICES | BILLS
+  title     String
+  summary   String   @default("{}") // JSON: what was done, from which documents, the counts
+  userId    String?
+  createdAt DateTime @default(now())
+
+  user  User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  files WorkRunFile[]
+
+  @@index([kind, createdAt])
+}
+
+/// A file a run produced, kept in the database (gzipped, base64) rather than in the file store: it
+/// carries the shop's costs, and the file store can be public.
+model WorkRunFile {
+  id        String   @id @default(cuid())
+  runId     String
+  filename  String
+  sizeBytes Int
+  content   String
+  createdAt DateTime @default(now())
+
+  run WorkRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
 }

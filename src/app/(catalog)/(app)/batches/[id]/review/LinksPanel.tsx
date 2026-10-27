@@ -2,9 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { findProductPagesAction, readProductLinkAction, setProductLinkAction } from "@/app/(catalog)/actions";
+import { findProductPagesAction, readProductLinkAction, setColourLinkAction, setProductLinkAction } from "@/app/(catalog)/actions";
 import { Alert, Button, Card } from "@/app/(catalog)/ui";
-import { flatHandleOf } from "@/lib/catalog/page-types";
+import { flatHandleOf, type ColourLink } from "@/lib/catalog/page-types";
 
 /**
  * A box for the product's own web page under every product's name.
@@ -14,8 +14,14 @@ import { flatHandleOf } from "@/lib/catalog/page-types";
  * package has no box of its own: it is the same ski, so it is read from the ski's page. Nor has a
  * product the shop already lists: that is a quantity update of a listing with a page of its own,
  * and only the new products are asked.
+ *
+ * A product in more than one colour can be given a page for each colour as well (asked
+ * 2026-10-19): each colour's page gives that colour its pictures, and the first of them becomes the
+ * picture of that colour's variants.
  */
-interface Row { id: string; title: string; handle: string; url: string; status: string; inShop: boolean }
+interface Row { id: string; title: string; handle: string; url: string; status: string; inShop: boolean; colours?: string[]; colourLinks?: ColourLink[] }
+
+const ck = (id: string, colour: string) => `${id}|${colour.toLowerCase()}`;
 
 /** Where a product's link stands, on this page as it is now. */
 type Stand = "none" | "saved" | "read" | "failed";
@@ -32,14 +38,22 @@ export function LinksPanel({ batchId, products, locked }: { batchId: string; pro
   const own = fresh.filter((p) => flatHandleOf(p.handle) === p.handle || !handles.has(flatHandleOf(p.handle)));
 
   const [urls, setUrls] = useState<Record<string, string>>(() => Object.fromEntries(own.map((p) => [p.id, p.url])));
-  const [stand, setStand] = useState<Record<string, Stand>>(() => Object.fromEntries(own.map((p) => [p.id, standOf(p.status, p.url)])));
+  const [stand, setStand] = useState<Record<string, Stand>>(() => Object.fromEntries(own.map((p) => [p.id, standOf(p.status, p.url || (p.colourLinks ?? []).find((l) => l.url)?.url || "")])));
   const [said, setSaid] = useState<Record<string, { tone: "ok" | "warn" | "bad"; text: string }>>({});
   const [reading, setReading] = useState<string | null>(null);
   const [progress, setProgress] = useState<{ done: number; of: number } | null>(null);
   const [open, setOpen] = useState(true);
   const saved = useRef<Record<string, string>>(Object.fromEntries(own.map((p) => [p.id, p.url])));
+  const startColours = Object.fromEntries(own.flatMap((p) => (p.colourLinks ?? []).map((l) => [ck(p.id, l.colour), l.url])));
+  const [colourUrls, setColourUrls] = useState<Record<string, string>>(startColours);
+  const savedColours = useRef<Record<string, string>>({ ...startColours });
+  // Each colour's own box is shown from the start: a product in several colours is asked for a
+  // separate page per colour (asked 2026-10-20), not offered one behind a link.
+  const [perColour, setPerColour] = useState<Record<string, boolean>>(() => Object.fromEntries(own.map((p) => [p.id, true])));
+  const coloursOf = (p: Row) => (p.colours ?? []);
+  const hasColourLink = (p: Row) => coloursOf(p).some((c) => (colourUrls[ck(p.id, c)] ?? "").trim() !== "");
 
-  const linked = own.filter((p) => (urls[p.id] ?? "").trim() !== "");
+  const linked = own.filter((p) => (urls[p.id] ?? "").trim() !== "" || hasColourLink(p));
   const unread = linked.filter((p) => stand[p.id] === "saved" || stand[p.id] === "failed");
   const unlinked = own.filter((p) => (urls[p.id] ?? "").trim() === "");
   const [finding, setFinding] = useState(false);
@@ -87,6 +101,26 @@ export function LinksPanel({ batchId, products, locked }: { batchId: string; pro
     return true;
   }
 
+  async function saveColour(id: string, colour: string): Promise<boolean> {
+    const k = ck(id, colour);
+    const value = (colourUrls[k] ?? "").trim();
+    if (value === (savedColours.current[k] ?? "").trim()) return true;
+    const r = await setColourLinkAction(id, colour, value);
+    if (!r.ok) { setSaid((s) => ({ ...s, [id]: { tone: "bad", text: `${colour}: ${r.error}` } })); return false; }
+    savedColours.current[k] = r.data!.url;
+    setColourUrls((u) => ({ ...u, [k]: r.data!.url }));
+    if (r.data!.url) setStand((s) => ({ ...s, [id]: "saved" }));
+    setSaid((s) => ({ ...s, [id]: { tone: "ok", text: r.data!.url ? `${colour}'s page saved — not read yet.` : "" } }));
+    return true;
+  }
+
+  /** The product's own link and every colour's, saved before a read. */
+  async function saveAll(p: Row): Promise<boolean> {
+    if (!(await save(p.id))) return false;
+    for (const c of coloursOf(p)) if (!(await saveColour(p.id, c))) return false;
+    return true;
+  }
+
   async function readAll() {
     // What is waiting; or, when everything has been read, all of it again.
     const todo = unread.length > 0 ? unread : linked;
@@ -99,7 +133,7 @@ export function LinksPanel({ batchId, products, locked }: { batchId: string; pro
       for (let i = next++; i < todo.length; i = next++) {
         const p = todo[i];
         setReading(p.id);
-        if (await save(p.id)) {
+        if (await saveAll(p)) {
           const r = await readProductLinkAction(p.id);
           const ok = r.ok && r.data!.ok;
           setStand((s) => ({ ...s, [p.id]: ok ? "read" : "failed" }));
@@ -189,7 +223,7 @@ export function LinksPanel({ batchId, products, locked }: { batchId: string; pro
       <p className="mb-3 text-xs text-[var(--ink-soft)]">
         {own.length === 0
           ? <>Every product here is one the shop already lists, so each keeps the page it has. Nothing to link.</>
-          : <>Paste each new product&rsquo;s own page under its name and its description, details and pictures are taken from it. A product with no link is left exactly as it is. Flöda looks at the page&rsquo;s pictures and keeps the ones in the colours you ordered, leaving the other colours&rsquo; out; where you ordered several colours, each colour&rsquo;s variants get its own picture. Opening the page with your colour selected before copying the link helps when a brand only shows one colour at a time.</>}
+          : <>Paste each new product&rsquo;s own page under its name and its description, details and pictures are taken from it. <strong>Where a product comes in more than one colour, paste a separate page for each colour</strong> in that colour&rsquo;s box &mdash; open the brand&rsquo;s page with that colour selected and copy that link &mdash; so each colour gets its own pictures. Flöda looks for each page itself when this opens, and each colour&rsquo;s too where the brand has one. A product with no link is left exactly as it is.</>}
         {read > 0 && <> {read} read so far.</>}
         {own.length > 0 && <> Or let Flöda find them: it tries each brand&rsquo;s usual address first, learned from the links pasted before, then searches, and keeps a page only when it is titled like the product.</>}
         {found && <> <strong>{found}</strong></>}
@@ -215,12 +249,41 @@ export function LinksPanel({ batchId, products, locked }: { batchId: string; pro
                   inputMode="url"
                   value={urls[p.id] ?? ""}
                   disabled={locked || reading === p.id}
-                  placeholder="Link to this product's page, with your colour selected (optional)"
+                  placeholder={coloursOf(p).length > 1 ? "This product's page, for the description (or leave it to the colours' pages below)" : coloursOf(p).length === 1 ? `Link to the ${coloursOf(p)[0]} page — opened with ${coloursOf(p)[0]} selected` : "Link to this product's page"}
                   onChange={(e) => setUrls((u) => ({ ...u, [p.id]: e.target.value }))}
                   onBlur={() => void save(p.id)}
                   onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
                   className="mt-1 w-full rounded-lg border border-[var(--line)] bg-white px-3 py-1.5 text-sm outline-none focus:border-[var(--violet)] focus:ring-2 focus:ring-[var(--violet-soft)] disabled:bg-neutral-50"
                 />
+                {coloursOf(p).length > 1 && (
+                  <div className="mt-1">
+                    <button type="button" className="text-xs font-medium text-[var(--violet)] underline-offset-2 hover:underline" onClick={() => setPerColour((c) => ({ ...c, [p.id]: !c[p.id] }))}>
+                      {perColour[p.id] ? `${coloursOf(p).length} colours — paste a separate page for each (hide)` : `Show the ${coloursOf(p).length} colours' boxes — a separate page for each colour`}
+                    </button>
+                    {perColour[p.id] && (
+                      <ul className="mt-1 space-y-1.5 border-l-2 border-[var(--line-soft)] pl-3">
+                        {coloursOf(p).map((c) => (
+                          <li key={c}>
+                            <label className="block text-xs text-[var(--ink-soft)]" htmlFor={`link-${p.id}-${c}`}>{c}</label>
+                            <input
+                              id={`link-${p.id}-${c}`}
+                              type="url"
+                              inputMode="url"
+                              value={colourUrls[ck(p.id, c)] ?? ""}
+                              disabled={locked || reading === p.id}
+                              placeholder={`The ${c} page — opened with ${c} selected`}
+                              onChange={(e) => setColourUrls((u) => ({ ...u, [ck(p.id, c)]: e.target.value }))}
+                              onBlur={() => void saveColour(p.id, c)}
+                              onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                              className="mt-0.5 w-full rounded-lg border border-[var(--line)] bg-white px-3 py-1 text-sm outline-none focus:border-[var(--violet)] focus:ring-2 focus:ring-[var(--violet-soft)] disabled:bg-neutral-50"
+                            />
+                          </li>
+                        ))}
+                        <li className="text-xs text-[var(--ink-soft)]">Each colour&rsquo;s page gives that colour its pictures. The description comes from the product&rsquo;s own link above, or from the first colour&rsquo;s page when there is none.</li>
+                      </ul>
+                    )}
+                  </div>
+                )}
                 {reading === p.id && <div className="mt-1 text-xs text-[var(--ink-soft)]">Reading the page…</div>}
                 {reading !== p.id && note?.text && <div className={note.tone === "bad" ? "mt-1 text-xs text-red-700" : note.tone === "warn" ? "mt-1 text-xs text-amber-800" : "mt-1 text-xs text-[var(--ink-soft)]"}>{note.text}</div>}
                 {reading !== p.id && !note?.text && stand[p.id] === "failed" && <div className="mt-1 text-xs text-red-700">The link could not be read last time. Check it, or paste the description in by hand.</div>}

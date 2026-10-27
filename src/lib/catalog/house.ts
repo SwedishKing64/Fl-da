@@ -98,7 +98,7 @@ export function yearOnWords(on: { types: string[]; tags: string[] } | undefined)
 }
 
 export const DEFAULT_HOUSE: HouseConventions = {
-  naming: { brandInTitle: "never", season: "seasonal", casing: "shop", audience: "front", example: "" },
+  naming: { brandInTitle: "never", season: "seasonal", casing: "shop", audience: "none", example: "" },
   identifiers: { sku: "supplier", barcode: "keep" },
   weights: { mode: "none", unit: "g", fixedGrams: 0, byKind: [] },
   descriptions: { format: "", specsHeading: "Tech Specs", example: "" },

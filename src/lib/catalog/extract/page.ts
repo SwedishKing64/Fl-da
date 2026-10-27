@@ -18,7 +18,8 @@ import { z } from "zod";
 
 import { retrying } from "../api-errors";
 import { cleanProductUrl, type PageDetails } from "../page-types";
-import { fetchShopifyProduct, storeAsHtml, storePictures } from "./shopify-store";
+import { fetchShopifyProduct, shopifyProductAddress, storeAsHtml, storePictures } from "./shopify-store";
+import { fullSizePicture } from "../image-url";
 
 const MAX_BYTES = 3 * 1024 * 1024;
 /**
@@ -237,7 +238,9 @@ export function distillPage(html: string, url: string): Distilled {
   const found: Candidate[] = [];
   const seen = new Set<string>();
   const add = (raw: string, alt = "") => {
-    const u = resolve(raw, url);
+    // At its full size, not the cut the page shows. See image-url.ts.
+    const at = resolve(raw, url);
+    const u = at ? fullSizePicture(at) : null;
     if (!u) return;
     const key = u.replace(/\?.*$/, "");
     if (seen.has(key)) return;
@@ -330,7 +333,7 @@ export type AskPage = (system: string, content: string, deadline?: Deadline) => 
 const askModel: AskPage = async (system, content, d = deadline()) => {
   const response = await retrying(() => getClient().messages.stream({
     model: WORKING_MODEL,
-    max_tokens: 5000,
+    max_tokens: 32_000,
     system,
     output_config: { format: zodOutputFormat(ReadSchema), effort: "low" },
     messages: [{ role: "user", content }],
@@ -401,6 +404,12 @@ export async function extractFromPage(d: Distilled, hint: PageHint, ask: AskPage
     const c = d.images[Math.round(n) - 1];
     if (c && !images.includes(c.url)) images.push(c.url);
   }
+  // The model chose none, on a page that is this product: the pictures the page itself declares as
+  // the product's are taken rather than none (asked 2026-10-22, pictures fetched by hand again).
+  if (images.length === 0 && r.confident) {
+    for (const u of d.structured.images) if (!images.includes(u)) images.push(u);
+    if (images.length === 0) for (const c of d.images.filter((c) => c.alt === "declared by the page")) if (!images.includes(c.url)) images.push(c.url);
+  }
   return {
     description: r.description.trim(),
     features: r.features.map((f) => f.replace(/\s+/g, " ").trim()).filter(Boolean).slice(0, 30),
@@ -427,26 +436,32 @@ const FETCH_SYSTEM = () => `You read one product's web page for ${retailer()} wh
 
 Quote the manufacturer's wording; do not paraphrase it and do not write marketing copy of your own. The details section is often headed "Details", "Specs", "Technical specifications", "Features" or "Product information": report its lines exactly as written, keeping each label with its value. Say plainly if the page could not be fetched, if it is not for this product, or if it is a different model year.
 
-Then, under the heading "Pictures:", list the addresses of this product's own photographs that the fetched page shows — links ending .jpg, .jpeg, .png or .webp, in the colour ordered first where the page says which is which — one per line, exactly as written. Leave the heading out when the page shows none.`;
+Then the pictures, which matter as much as the words: end with a line "Pictures:" and under it every picture of this product the page carries — its gallery, in the page's order, each colour's too — one full https address per line, the largest version the page offers. Not logos, icons, banners, size charts or other products. If the page's own text gives no picture addresses and a product data address is given, fetch that as well: its "images" (or "media") list is the product's pictures, in order. Never make an address up.`;
 
 const FetchedSchema = ReadSchema.omit({ imageNumbers: true });
+
+/** A Shopify store's own data for the product, which lists every picture: "<store>/products/<handle>.json". */
+function dataAddress(link: string): string {
+  const at = shopifyProductAddress(link);
+  return at ? `${at.origin}${at.prefix}/products/${at.handle}.json` : "";
+}
 
 export async function readViaModelFetch(link: string, hint: PageHint, by: Deadline = deadline()): Promise<PageDetails | null> {
   if (!aiAvailable() || outOfTime(by)) return null;
   const research = await retrying(() => getClient().messages.stream({
     model: WORKING_MODEL,
-    max_tokens: 8000,
+    max_tokens: 32_000,
     system: FETCH_SYSTEM(),
     thinking: { type: "adaptive" },
     output_config: { effort: "low" },
-    tools: [{ type: "web_fetch_20260209", name: "web_fetch", max_uses: 2 }],
-    messages: [{ role: "user", content: `${describeHint(hint)}\n\nThe product's page: ${link}` }],
+    tools: [{ type: "web_fetch_20260209", name: "web_fetch", max_uses: 3 }],
+    messages: [{ role: "user", content: `${describeHint(hint)}\n\nThe product's page: ${link}${dataAddress(link) ? `\nThe product's data, if the page is a Shopify store's (its pictures are listed there): ${dataAddress(link)}` : ""}` }],
   }, within(by)).finalMessage(), []);
   const notes = research.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("\n").trim();
   if (!notes || outOfTime(by)) return null;
   const shaped = await retrying(() => getClient().messages.stream({
     model: LIGHT_MODEL,
-    max_tokens: 4000,
+    max_tokens: 32_000,
     system: "Turn the notes into fields. Copy what the notes establish and leave everything else empty — never fill a gap with something plausible. Keep the manufacturer's wording.",
     output_config: { format: zodOutputFormat(FetchedSchema), effort: "low" },
     messages: [{ role: "user", content: `${describeHint(hint)}\n\nNotes on the page ${link}:\n${notes}` }],
@@ -458,7 +473,10 @@ export async function readViaModelFetch(link: string, hint: PageHint, by: Deadli
   const r = parsed.data;
   // Whatever picture addresses the fetched page showed: usually none, since the fetch returns the
   // page's words, but a page that lists them in its text gives the pictures too.
-  const pictures = [...new Set((notes.split(/\bPictures:\s*/i)[1] ?? "").match(/https?:\/\/[^\s)"'<>]+\.(?:jpe?g|png|webp)(?:\?[^\s)"'<>]*)?/gi) ?? [])].slice(0, 10);
+  const listed = notes.split(/\bPictures:\s*/i).slice(1).join("\n");
+  const pictures = [...new Set((listed.match(/https?:\/\/[^\s)"'<>\]]+\.(?:jpe?g|png|webp)(?:\?[^\s)"'<>\]]*)?/gi) ?? [])
+    .map((u) => fullSizePicture(u.replace(/[.,;]+$/, "")))
+    .filter((u) => !NOT_A_PRODUCT_PICTURE.test(u)))].slice(0, 16);
   return {
     description: r.description.trim(),
     features: r.features.map((f) => f.replace(/\s+/g, " ").trim()).filter(Boolean).slice(0, 30),
@@ -469,7 +487,7 @@ export async function readViaModelFetch(link: string, hint: PageHint, by: Deadli
     via: "ai",
     note: pictures.length > 0
       ? "The site would not show its page to this server, so it was read through the API instead."
-      : "The site would not show its page to this server, so it was read through the API instead; that gives the description and details but not the pictures.",
+      : "The site would not show its page to this server, so it was read through the API instead; that gave the description and details, but the page showed no picture addresses — add the pictures in the grid, or try the brand's other site for this product.",
   };
 }
 
@@ -508,7 +526,9 @@ export async function readProductPage(link: string, hint: PageHint, deps: { fetc
     const withColour = (out: PageDetails): PageDetails => (matched ? { ...out, pictureColour: matched } : out);
     if (!aiAvailable() && !deps.ask) return withColour(basicDetails(d));
     try {
-      const out = withColour(await extractFromPage(d, hint, deps.ask, by));
+      const read = withColour(await extractFromPage(d, hint, deps.ask, by));
+      // A store's pictures are the product's own, already sorted to the colour asked for: never none.
+      const out = read.images.length > 0 ? read : { ...read, images: pictures.slice(0, 16).map((c) => c.url) };
       // No details in the store's data, and the page refused this server: the page is fetched
       // through the API, which the site may let in, for its details alone. The store's
       // description and its colour-matched pictures stay.

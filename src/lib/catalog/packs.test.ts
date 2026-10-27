@@ -52,4 +52,24 @@ describe("where a pack is filed", () => {
     expect(hikelite.tags).toEqual(expect.arrayContaining(["daypacks", "backpacks", "packs-and-bags", "outdoor"]));
     expect(exos.tags).toContain("backpacks");
   });
+
+  it("files every Dakine bag, and any boot backpack, as a Ski Accessory on the ski and boot bag shelves", () => {
+    expect(packShelf("Dakine", "Boot Backpack 50L")).toBeNull();
+    expect(packShelf("Dakine", "Heli Pro 20L")).toBeNull();
+    expect(packShelf("Salomon", "Boot Pack 45")).toBeNull();
+    const grouped = groupLineItems([
+      item({ title: "Boot Backpack 50L", brand: "Dakine", sku: "D1", colour: "Black", size: "OS", quantity: 2, costPrice: 80, rrp: 179.99, season: "2026", category: "Bags", productType: "Backpacks" }),
+      item({ title: "Heli Pro 20L", brand: "Dakine", sku: "D2", colour: "Black", size: "", quantity: 1, costPrice: 70, rrp: 159.99, season: "2026", category: "Packs", productType: "Packs" }),
+    ], DEFAULT_CATEGORY_RULES);
+    for (const g of grouped) {
+      expect(g.productType).toBe("Ski Accessories");
+      expect(g.tags).toEqual(expect.arrayContaining(["ski-and-boot-bags", "snow-bags", "ski-accessories"]));
+      expect(g.tags.filter((t) => /hiking|outdoor|daypack|packs-and-bags/.test(t))).toEqual([]);
+      expect(g.collections.filter((c) => /pack|boots/i.test(c))).toEqual([]);
+    }
+    // "OS" on the order is no size: no Size option at all.
+    const boot = grouped.find((g) => /Boot Backpack/.test(g.title))!;
+    expect([boot.option1Name, boot.option2Name, boot.option3Name]).not.toContain("Size");
+    expect(boot.variants.map((v) => v.option1Value)).toEqual(["Black"]);
+  });
 });

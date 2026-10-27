@@ -11,6 +11,7 @@
  */
 
 import type { Candidate } from "./page";
+import { fullSizePicture } from "../image-url";
 
 /** Where a product's data is, for a link into a Shopify store. Null for any other link. */
 export function shopifyProductAddress(link: string): { origin: string; prefix: string; handle: string } | null {
@@ -35,7 +36,8 @@ export interface StoreProduct {
 
 const str = (v: unknown): string => (typeof v === "string" ? v : "");
 const num = (v: unknown): number => (typeof v === "number" ? v : Number(v) || 0);
-const https = (src: string): string => (src.startsWith("//") ? `https:${src}` : src);
+// At its full size: a store's data can carry a cut-down address. See image-url.ts.
+const https = (src: string): string => (src ? fullSizePicture(src.startsWith("//") ? `https:${src}` : src) : src);
 
 /** The store's data in one shape, whichever of its two forms it came in. */
 export function parseStoreProduct(raw: unknown): StoreProduct | null {

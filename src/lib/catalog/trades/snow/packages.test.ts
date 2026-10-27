@@ -58,8 +58,8 @@ describe("building one", () => {
 
   it("adds the mount fee to the recommended retail, not to the sell price", () => {
     const v = pack.variants.find((x) => x.length === "172" && x.bindingFitting === FITTING_MOUNT);
-    expect(v?.rrp).toBe(1963.99);   // 1908.99 + 55, again the catalogue's own figure
-    expect(MOUNT_FEE).toBe(55);
+    expect(v?.rrp).toBe(1967.99);   // 1908.99 + 59, the drill-mount charge since 2026-10-20
+    expect(MOUNT_FEE).toBe(59);
   });
 
   it("carries the ski's tags and adds the one that marks a package", () => {
@@ -84,7 +84,7 @@ describe("building one", () => {
     // carrying one across would be a wrong price, not a missing one.
     const odd = buildPackage({ ...BLAZE, lengths: [{ length: "172", rrp: 1449.99 }, { length: "186", rrp: null }] }, [GRIFFON]);
     expect(odd.variants.filter((v) => v.length === "186").every((v) => v.rrp === null)).toBe(true);
-    expect(odd.variants.find((v) => v.length === "172" && v.bindingFitting === FITTING_MOUNT)?.rrp).toBe(1963.99);
+    expect(odd.variants.find((v) => v.length === "172" && v.bindingFitting === FITTING_MOUNT)?.rrp).toBe(1967.99);
   });
 
   it("refuses to build a package with no binding at all", () => {
@@ -161,13 +161,13 @@ describe("the binding's price off a supplier's price list", () => {
     expect(bindingFrom(DEFAULT_PACKAGE_BINDINGS.mens, [{ title: "GRIFFON 13 MN; 90MM", colour: "BLACK", rrp: 459, costPrice: 208.64 }])).toMatchObject({ rrp: 450, cost: 241 });
   });
 
-  it("adds 55 to the retail of Please Mount My Bindings, and not to the cost", async () => {
+  it("adds the $59 drill mount to the retail of Please Mount My Bindings, and not to the cost", async () => {
     const { buildPackage, DEFAULT_PACKAGE_BINDINGS, bindingFrom, FITTING_MOUNT, FITTING_NO_MOUNT } = await import("./packages");
     const griffon = bindingFrom(DEFAULT_PACKAGE_BINDINGS.mens, [])!;
     const pack = buildPackage({ title: "QST 94", season: "2027", brand: "Salomon", tags: [], lengths: [{ length: "174", rrp: 949.99, cost: 500 }] } as never, [griffon]);
     const by = Object.fromEntries(pack.variants.map((v) => [v.bindingFitting, v]));
     expect(by[FITTING_NO_MOUNT]).toMatchObject({ rrp: 1399.99, cost: 741 });
-    expect(by[FITTING_MOUNT]).toMatchObject({ rrp: 1454.99, cost: 741 });
+    expect(by[FITTING_MOUNT]).toMatchObject({ rrp: 1458.99, cost: 741 });
   });
 });
 
@@ -203,5 +203,51 @@ describe("a year said in the instruction chat", () => {
     const { parseDirectives, describeDirectives } = await import("../../instructions");
     expect(describeDirectives(parseDirectives(JSON.stringify({ season: "2026" })))).toContain("Year tag 2026 on every product");
     expect(describeDirectives(parseDirectives(JSON.stringify({ addTags: ["2998"] })))).not.toContain("Year tag");
+  });
+});
+
+describe("bindings picked from the shop's list", () => {
+  it("offers each picked binding on one package, with the drill or system mount charge each takes", async () => {
+    const { packageProducts } = await import("./packages");
+    const { groupLineItems } = await import("../../grouping");
+    const { DEFAULT_CATEGORY_RULES } = await import("../../categorize");
+    const { pickerFor, parseBindingList } = await import("./binding-list");
+    const ski = { ...(await import("../../types")).emptyLineItem(), title: "Test Ski", brand: "Volkl", length: "170", rrp: 1000, costPrice: 500, quantity: 1, category: "skis", season: "2027" };
+    const grouped = groupLineItems([ski], DEFAULT_CATEGORY_RULES);
+    // Made-up figures, in the shape of the shop's sheet.
+    const list = parseBindingList([["Binding Name", "RRP", "Wholesale"], ["Marker Griffon", "400", "200"], ["Atomic M 10 GW", "300", "150"]]);
+    const { packages } = packageProducts(grouped, [], [], {}, pickerFor(list, { "test ski": ["Marker Griffon", "Atomic M 10 GW"] }), list);
+    expect(packages).toHaveLength(1);
+    expect(packages[0].title).toBe("Test Ski 2027 inc Binding Package");
+    expect(packages[0].variants.map((v) => [v.option2Value, v.option3Value, v.item.rrp, v.item.costPrice])).toEqual([
+      ["Marker Griffon", "Do Not Mount My Bindings", 1400, 700],
+      ["Marker Griffon", "Please Mount My Bindings", 1459, 700],
+      ["Atomic M 10 GW", "Do Not Mount My Bindings", 1300, 650],
+      ["Atomic M 10 GW", "Please Mount My Bindings", 1349, 650],
+    ]);
+    // Nothing ticked is no package.
+    expect(packageProducts(grouped, [], [], {}, pickerFor(list, { "test ski": [] }), list).packages).toHaveLength(0);
+  });
+});
+
+describe("the shop's binding list", () => {
+  it("is built in, with every binding priced", async () => {
+    const { SHOP_BINDINGS } = await import("./binding-list");
+    expect(SHOP_BINDINGS.map((b) => b.name)).toContain("Marker Griffon");
+    expect(SHOP_BINDINGS.every((b) => b.rrp > 0 && (b.cost ?? 0) > 0)).toBe(true);
+  });
+});
+
+describe("which products are flat skis, to be packaged", () => {
+  it("takes any of the shop's ski Types, not cross-country", async () => {
+    const { isFlatSki } = await import("./packages");
+    const ski = (productType: string, title = "N Bent 100 2026") => isFlatSki({ productType, title, tags: [] });
+    expect(ski("Skis")).toBe(true);
+    expect(ski("Mens Skis")).toBe(true);
+    expect(ski("Freeride & Powder Skis")).toBe(true);
+    expect(ski("Cross-Country Skis")).toBe(false);
+    expect(ski("Ski Packages")).toBe(false);
+    expect(ski("Ski Boots")).toBe(false);
+    expect(ski("Skis", "N Bent 100 2026 inc Marker Griffon Binding Package")).toBe(false);
   });
 });

@@ -60,19 +60,33 @@ function uniqueHeaders(raw: string[]): string[] {
  * supplier writes it, and a per-length SKU — "V2610112.000.170" — which is exactly the spelling
  * the PIM export uses in its "SKU no. // LENGTH" column and what carries the barcode.
  */
-export function orderToTable(order: { lines: InvoiceLine[]; sheet: string; warnings: string[] }): ExtractedTable {
+export function orderToTable(order: { lines: InvoiceLine[]; sheet: string; warnings: string[] }, method: ExtractedTable["method"] = "XLSX"): ExtractedTable {
   // Cost and colour too: dropping them left every Volkl line with no cost, though the form prices
   // every row, and the Griffon with no colour to tell its black from its orange.
-  const headers = ["Item No.", "SKU", "Brand", "Description", "Colour", "Length", "RRP", "Cost", "Qty"];
+  // Barcode, gender and size too: the reader finds them on any supplier's form, and a form with a
+  // line per size (Osprey's S/M and L/XL) has a size where a ski has a length.
+  // The kind of thing a line is, where the form's own section says ("ALL TERRAIN SKIS", "POLES").
+  const kinds = order.lines.some((l) => (l.kind ?? "").trim());
+  // What a ski is for, where the form says — its section and waist (see grid-form.ts).
+  const terrains = order.lines.some((l) => (l.terrain ?? "").trim());
+  const headers = ["Item No.", "SKU", "Barcode", "Brand", "Description", ...(kinds ? ["Category"] : []), ...(terrains ? ["Terrain"] : []), "Gender", "Colour", "Length", "Size", "RRP", "Cost", "Qty"];
   const rows = order.lines.map((line) => {
-    const length = (line.size ?? "").trim();
+    const size = (line.size ?? "").trim();
+    // A ski or pole length is a whole number of centimetres, 60 and up; a boot's 24.5 is a size.
+    const length = /^\d{2,3}(\.\d)?$/.test(size) && Number(size) >= 60 && !(line.kind ?? "").match(/boot/i) ? size : "";
     return {
       "Item No.": line.sku,
+      // The per-length SKU the spec sheets use — but a code that is already per size stands alone.
       SKU: length ? `${line.sku}.${length}` : line.sku,
+      Barcode: (line.barcode ?? "").trim(),
       Brand: (line.brand ?? "").trim(),
       Description: line.title,
+      ...(kinds ? { Category: (line.kind ?? "").trim() } : {}),
+      ...(terrains ? { Terrain: (line.terrain ?? "").trim() } : {}),
+      Gender: (line.gender ?? "").trim(),
       Colour: (line.colour ?? "").trim(),
       Length: length,
+      Size: length ? "" : size,
       RRP: line.rrp === null ? "" : String(line.rrp),
       Cost: line.costPrice === null ? "" : String(Math.round(line.costPrice * 100) / 100),
       Qty: line.quantity === null ? "" : String(line.quantity),
@@ -81,7 +95,7 @@ export function orderToTable(order: { lines: InvoiceLine[]; sheet: string; warni
   return {
     headers,
     rows,
-    method: "XLSX",
+    method,
     warnings: [
       `Read as an order: ${rows.length} line${rows.length === 1 ? "" : "s"} from the quantities written on ${order.sheet}. The rest of the form is the supplier's price list, not this delivery, so it was left out.`,
       ...order.warnings.filter((w) => !w.startsWith("Read as an order")),

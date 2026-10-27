@@ -13,6 +13,7 @@ import { buildDelivery } from "./delivery";
 import { parseCsv } from "./csv";
 import { alignRows } from "./diff";
 import type { InvoiceLine } from "./reconcile";
+import { SHOP_BINDINGS } from "./trades/snow/binding-list";
 
 const line = (over: Partial<InvoiceLine> = {}): InvoiceLine =>
   ({ sku: "", barcode: "", title: "", costPrice: null, rrp: null, quantity: null, ...over });
@@ -28,7 +29,14 @@ describe("a delivery of carry-overs and new products", () => {
     line({ barcode: "821264800133", title: "BLAZE 94", size: "170", quantity: 3, rrp: 1499.99 }),
     line({ sku: "V2610112.000", barcode: "4064264900011", title: "M7 MANTRA", size: "170", quantity: 2, rrp: 1649 }),
     line({ sku: "V2610112.000", barcode: "4064264900028", title: "M7 MANTRA", size: "177", quantity: 1, rrp: 1649 }),
-  ], { season: "2027", vendor: "Volkl" });
+  ], { season: "2027", vendor: "Volkl", bindingList: SHOP_BINDINGS, packagePicks: { 1: ["Marker Griffon"] } });
+
+  it("builds no package for a ski nobody picked a binding for", () => {
+    const out = buildDelivery(EXPORT, [
+      line({ sku: "V2610112.000", barcode: "4064264900011", title: "M7 MANTRA", size: "170", quantity: 2, rrp: 1649 }),
+    ], { season: "2027", vendor: "Volkl", bindingList: SHOP_BINDINGS });
+    expect(out.fresh.map((f) => f.title)).toEqual(["M7 Mantra 2027"]);
+  });
 
   it("adds the arriving stock to the carry-over rather than replacing it", () => {
     const out = delivery();
@@ -41,7 +49,7 @@ describe("a delivery of carry-overs and new products", () => {
 
   it("puts the products the shop does not have on the end of the same file", () => {
     const out = delivery();
-    // The ski, and its package with the Marker Griffon: every flat ski is built both ways.
+    // The ski, and its package with the Marker Griffon picked for it.
     expect(out.fresh.map((f) => f.title)).toEqual(["M7 Mantra 2027", "M7 Mantra 2027 inc Marker Griffon Binding Package"]);
     expect(out.fresh[0].title).toBe("M7 Mantra 2027");
     expect(out.fresh[0].handle).toBe("m7-mantra-2027");
@@ -51,7 +59,7 @@ describe("a delivery of carry-overs and new products", () => {
     expect(out.fresh[0].variants.map((v) => v.barcode)).toEqual(["4064264900011", "4064264900028"]);
     // Two rows for the ski, and two lengths × Do Not Mount / Please Mount for the package.
     expect(out.appended).toBe(6);
-    expect(out.fresh[1].variants.map((v) => v.price)).toEqual(["2099.00", "2154.00", "2099.00", "2154.00"]);
+    expect(out.fresh[1].variants.map((v) => v.price)).toEqual(["2108.99", "2167.99", "2108.99", "2167.99"]);
   });
 
   it("leaves every row that was already there exactly as it was, bar the cells it names", () => {
@@ -94,7 +102,7 @@ describe("a delivery of carry-overs and new products", () => {
       line({ barcode: "821264800133", title: "BLAZE 94", size: "170", quantity: 3, rrp: 1499.99 }),
       line({ sku: "V2610112.000", barcode: "4064264900011", title: "M7 MANTRA", size: "170", quantity: 2, rrp: 1649 }),
       line({ sku: "V2610112.000", barcode: "4064264900028", title: "M7 MANTRA", size: "177", quantity: 1, rrp: 1649 }),
-    ], { season: "2027", vendor: "Volkl", pages });
+    ], { season: "2027", vendor: "Volkl", pages, bindingList: SHOP_BINDINGS, packagePicks: { 1: ["Marker Griffon"] } });
     const rows = parseCsv(out.csv).filter((r) => r.some((c) => c.trim()));
     const header = rows[0];
     const col = (name: string) => header.indexOf(name);
@@ -291,5 +299,41 @@ describe("what a delivery does to the products it touches", () => {
     expect(out.refused).toBeUndefined();
     const rows = parseCsv(out.csv).filter((r) => r.some((c) => c.trim()));
     expect(rows.slice(1).map((r) => `${r[0]} ${r[8]}`)).toEqual(["blaze-94-2027 170", "blaze-94-2027 177", "blaze-94-2027 184", "other-2027 163"]);
+  });
+});
+
+describe("a new product with a page for each colour", () => {
+  const HEADER = "Handle,Title,Vendor,Type,Tags,Option1 Name,Option1 Value,Option2 Name,Option2 Value,Variant SKU,Variant Inventory Qty,Variant Price,Variant Barcode,Image Src,Image Position,Image Alt Text,Variant Image";
+  const csv = [HEADER, `other-2026,Other Thing 2026,Burton,Snow Jackets,2026,Colour,Black,Size,M,,1,199.99,9020000000001,,,,`].join("\n");
+  const coat = (colour: string, size: string, barcode: string): InvoiceLine => ({ sku: "", barcode, title: "CYCLIC GORE-TEX 2L JACKET", costPrice: 300, rrp: 699.99, quantity: 1, gender: "MENS", kind: "JACKETS", colour, size });
+  const lines = [coat("True Black", "M", "9030000000001"), coat("True Black", "L", "9030000000002"), coat("Jade", "M", "9030000000003")];
+  const page = (colour: string) => ({ sourceUrl: `https://example.com/cyclic-${colour}`, description: `The Cyclic, in ${colour}.`, features: [], images: [`https://img/${colour}-1.jpg`, `https://img/${colour}-2.jpg`], confident: true, pageTitle: "Burton Men's Cyclic GORE-TEX 2L Jacket | Burton AU", via: "ai" as const, note: "" });
+
+  it("lists each colour with its first line, for a link of its own", () => {
+    const out = buildDelivery(csv, lines, { vendor: "Burton", fields: { rrp: true, quantity: true, stock: "add" } });
+    expect(out.fresh[0].colours).toEqual([{ colour: "True Black", line: 0 }, { colour: "Jade", line: 2 }]);
+  });
+
+  it("gives every size of a colour that colour's first picture, and takes the words from the first colour's page", () => {
+    const out = buildDelivery(csv, lines, { vendor: "Burton", fields: { rrp: true, quantity: true, stock: "add" }, colourPages: { 0: page("black"), 2: page("jade") } });
+    const grid = parseCsv(out.csv); const h = grid[0]; const at = (n: string) => h.indexOf(n);
+    const mine = grid.slice(1).filter((r) => r[at("Handle")] !== "other-2026");
+    expect(mine.map((r) => r[at("Image Src")]).filter(Boolean)).toEqual(["https://img/black-1.jpg", "https://img/black-2.jpg", "https://img/jade-1.jpg", "https://img/jade-2.jpg"]);
+    expect(mine.map((r) => r[at("Variant Image")]).filter(Boolean)).toEqual(["https://img/black-1.jpg", "https://img/black-1.jpg", "https://img/jade-1.jpg"]);
+    expect(out.fresh[0].described).toBe(true);
+    // Titled as the page titles it, without the brand or the site, gender on the front, year after.
+    expect(out.fresh[0].title).toBe("Men's Cyclic GORE-TEX 2L Jacket 2026");
+  });
+});
+
+describe("a boot whose order says its fit is Regular", () => {
+  it("gets no Width option: Regular is no fit at all", () => {
+    const out = buildDelivery(EXPORT, [
+      line({ sku: "B1", barcode: "9009520000017", title: "PHOTON BOA", size: "9", quantity: 1, rrp: 699.95, fit: "Regular", kind: "Snowboard Boots" }),
+      line({ sku: "B1", barcode: "9009520000024", title: "PHOTON BOA", size: "10", quantity: 1, rrp: 699.95, fit: "Regular", kind: "Snowboard Boots" }),
+    ], { season: "2027", vendor: "Burton" });
+    const boot = out.fresh.find((f) => /photon/i.test(f.title))!;
+    expect(boot.variants.map((v) => v.option)).toEqual(["9", "10"]);
+    expect(boot.title).not.toMatch(/regular/i);
   });
 });

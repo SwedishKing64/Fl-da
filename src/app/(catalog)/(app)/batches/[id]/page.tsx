@@ -16,6 +16,9 @@ import { BatchSettingsForm } from "./BatchSettingsForm";
 import { BuildProductsButton, DeleteFileButton, DeleteBatchButton, RetryExtractionButton } from "./BatchButtons";
 import { ExtractedRows } from "./ExtractedRows";
 import { LinksPanel } from "./review/LinksPanel";
+import { PackagesPanel } from "./review/PackagesPanel";
+import { packageSkisOf } from "@/lib/catalog/trades/snow/package-skis";
+import { colourLinksOf, coloursOfProduct } from "@/lib/catalog/page-types";
 import { BuildList } from "./BuildList";
 import { TypeList } from "./TypeList";
 import { guarded } from "@/app/(catalog)/page-failed";
@@ -53,13 +56,16 @@ async function renderBatchPage(props: PageProps<"/batches/[id]">) {
   // The products, for their page links: asked for here, right after the build, where the person
   // is — the review page asks too, but a step on another page was a step nobody saw.
   const products = batch._count.products > 0
-    ? await prisma.product.findMany({ where: { batchId: id }, select: { id: true, title: true, handle: true, productType: true, lookupStatus: true, lookupSource: true }, orderBy: { sortOrder: "asc" } })
+    ? await prisma.product.findMany({ where: { batchId: id }, select: { id: true, title: true, handle: true, productType: true, tags: true, lookupStatus: true, lookupSource: true, colourLinks: true, option1Name: true, option2Name: true, option3Name: true, variants: { select: { option1Value: true, option2Value: true, option3Value: true } } }, orderBy: { sortOrder: "asc" } })
     : [];
   // A product the shop already lists keeps the page it has — unless every product here is new,
   // which the person has said, and a handle that happens to match is not a listing.
   const inShop = allNew || products.length === 0
     ? new Set<string>()
     : new Set((await prisma.shopListing.findMany({ where: { handle: { in: products.map((p) => p.handle) } }, select: { handle: true } })).map((l) => l.handle));
+  // Each new ski's package bindings, picked here as well as on the review page: right after the
+  // build is where the person is (asked 2026-10-20). See package-skis.ts.
+  const packaging = products.length > 0 ? await packageSkisOf(id, products) : { skis: [], bindings: [] };
 
   return (
     <>
@@ -130,9 +136,10 @@ async function renderBatchPage(props: PageProps<"/batches/[id]">) {
             <LinksPanel
               batchId={id}
               locked={locked}
-              products={products.map((p) => ({ id: p.id, title: p.title, handle: p.handle, url: ["LINKED", "RELINKED", "LINK_FAILED", "PAGE", "PAGE_UNSURE"].includes(p.lookupStatus) ? p.lookupSource : "", status: p.lookupStatus, inShop: inShop.has(p.handle) }))}
+              products={products.map((p) => ({ id: p.id, title: p.title, handle: p.handle, url: ["LINKED", "RELINKED", "LINK_FAILED", "PAGE", "PAGE_UNSURE"].includes(p.lookupStatus) ? p.lookupSource : "", status: p.lookupStatus, inShop: inShop.has(p.handle), colours: coloursOfProduct(p), colourLinks: colourLinksOf(p.colourLinks) }))}
             />
           )}
+          {packaging.skis.length > 0 && <PackagesPanel batchId={id} locked={locked} skis={packaging.skis} bindings={packaging.bindings} />}
         </div>
         <NextStep href={`/batches/${id}/review`} label="Next: Review & price" disabledWhy={products.length === 0 ? "Build the products first; then the review grid is next." : undefined} />
         <div className="space-y-6">

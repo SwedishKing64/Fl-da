@@ -14,6 +14,7 @@
 
 const SHORTHAND: Record<string, string> = {
   SO: "STEP ON",
+  FP: "FOOTPRINT",
   JK: "JACKET", JKT: "JACKET",
   PT: "PANTS", PNT: "PANTS",
   GL: "GLOVES", GLV: "GLOVES",
@@ -42,7 +43,10 @@ const SHORTHAND: Record<string, string> = {
 };
 
 export function expandShorthand(title: string): string {
-  const text = title.trim().replace(/\s+/g, " ");
+  const said = title.trim().replace(/\s+/g, " ");
+  // FP is a footprint on any supplier's invoice, shouted or not: "NEM Dagger 2P FP" is the Dagger 2P
+  // Footprint (asked 2026-10-22).
+  const text = /[a-z]/.test(said) ? said.replace(/\bFP\b/g, "Footprint") : said;
   if (!text || /[a-z]/.test(text)) return text;
   // "GORE TEX" is one word to the shop, and "GORE-TEX" already is.
   const words = text.replace(/\bGORE[\s-]TEX\b/g, "GORE-TEX").split(" ").map((w) => SHORTHAND[w] ?? w);

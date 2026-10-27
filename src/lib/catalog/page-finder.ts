@@ -17,7 +17,7 @@ import { aiAvailable, anthropicClient, LIGHT_MODEL } from "./anthropic";
 import { retrying } from "./api-errors";
 import { distillPage, fetchHtml } from "./extract/page";
 import { parseDirectives } from "./instructions";
-import { setProductLink } from "./page-link";
+import { setColourLink, setProductLink } from "./page-link";
 import { flatHandleOf } from "./page-types";
 import { logAudit } from "./audit";
 import { productTypes } from "./taxonomy";
@@ -307,7 +307,8 @@ export async function findProductPages(batchId: string, opts: { productIds?: str
         out.found++;
         if (r.how === "pattern") out.byPattern++; else out.bySearch++;
         await setProductLink(r.productId, r.url);
-        if (r.colourLinks) await prisma.product.update({ where: { id: r.productId }, data: { colourLinks: JSON.stringify(r.colourLinks) } });
+        // Each colour's own page, kept the way a person's pasted one is (see setColourLink).
+        for (const [colour, url] of Object.entries(r.colourLinks ?? {})) await setColourLink(r.productId, colour, url);
       }
       out.results.push(r);
     }

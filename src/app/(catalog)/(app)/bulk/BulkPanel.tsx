@@ -3,7 +3,7 @@
 import { appliedBefore, fingerprint, forgetApplied, rememberApplied } from "@/lib/catalog/applied-memory";
 
 import { useRef, useState } from "react";
-import { joinOrderAction, readPageAction, rememberListingsAction, logAdjustmentAction, planAdjustmentAction, readInstructionSheetAction, readInvoiceAction, readReferenceAction, readSheetAgainstFilesAction } from "@/app/(catalog)/actions";
+import { classifyDocumentAction, joinOrderAction, readPageAction, rememberListingsAction, logAdjustmentAction, planAdjustmentAction, readInstructionSheetAction, readInvoiceAction, readReferenceAction, readSheetAgainstFilesAction } from "@/app/(catalog)/actions";
 import { applyPlan, describeFile, foldPlans, isWholeFile, whyNoMatch, type AdjustResult, type FoldStep, type Plan } from "@/lib/catalog/adjust";
 import { csvFilename, escapeCsvField } from "@/lib/catalog/csv";
 import { reconcile, type InvoiceFields, type InvoiceLine, type Reconciliation } from "@/lib/catalog/reconcile";
@@ -14,13 +14,15 @@ import { kindsSuffix, onlyKinds } from "@/lib/catalog/narrow-export";
 import { brandsAsked } from "@/lib/catalog/brands";
 import { fitlessOf, type PageDetails } from "@/lib/catalog/page-types";
 import { BulkLinks } from "./BulkLinks";
+import { describeMerge, invoiceFirst, mergeInvoiceWithOrder, withoutCharges } from "@/lib/catalog/invoice-merge";
+import { isFlatSki } from "@/lib/catalog/trades/snow/packages";
 import { listingsFromCsv } from "@/lib/catalog/shop-memory";
 import type { CanonicalLineItem } from "@/lib/catalog/types";
 import type { InvoiceRead } from "@/lib/catalog/invoice";
-import { invoiceOf, joinOrderAndInvoice } from "@/lib/catalog/order-and-invoice";
 import { fitsUpload, looksLikeImage, shrinkImage, tooBig } from "@/app/(catalog)/shrink";
 import { Alert, Button, Card, INPUT, INPUT_INLINE, cx } from "@/app/(catalog)/ui";
 import { ChangedCells } from "./ChangedCells";
+import { recordRun } from "@/app/(catalog)/run-record";
 
 /**
  * Bulk changes to products the shop already sells.
@@ -90,6 +92,13 @@ type Against = Array<{ name: string; reconciliation: Reconciliation }>;
 interface Reference { filename: string; rows: CanonicalLineItem[]; columns: string[]; warnings: string[] }
 interface Preview { instruction: string; plan: Plan; understood: string; unclear: string; blocked: string[]; described: string[]; results: Array<{ name: string; result: AdjustResult }> }
 
+/**
+ * A colour's own link is kept beside the product links, under a key of its own: the first line of
+ * that colour, made negative so it never meets the product's key (which is often the same line).
+ */
+const colourKey = (line: number): number => -1 - line;
+const lineOfColourKey = (key: number): number => -1 - key;
+
 const read = (file: File | Blob, name = "that file") => new Promise<string>((resolve, reject) => {
   const r = new FileReader();
   r.onload = () => resolve(String(r.result).split(",", 2)[1] ?? "");
@@ -97,11 +106,40 @@ const read = (file: File | Blob, name = "that file") => new Promise<string>((res
   r.readAsDataURL(file);
 });
 
-/** What a row would do to the files as they stand right now. */
+/**
+ * What a row would do to the files as they stand right now: the changes, for the preview. Worked
+ * out without writing the file — that, and the check that nothing else moved, happen when the
+ * change is applied.
+ */
 const measure = (row: Row, csvs: Array<{ name: string; csv: string }>): Array<{ name: string; result: AdjustResult }> =>
   row.plan && row.state === "ready" && row.blocked.length === 0
-    ? csvs.map((s) => ({ name: s.name, result: applyPlan(s.csv, row.plan as Plan) }))
+    ? csvs.map((s) => ({ name: s.name, result: applyPlan(s.csv, row.plan as Plan, { preview: true }) }))
     : [];
+
+/**
+ * A moment for the browser between two pieces of work. A sheet of seventy changes against a
+ * 2,500-product export is a minute of work done in one go, and the browser called the page
+ * unresponsive (2026-10-26); done a change at a time with this between, the page stays live and
+ * says how far it has got.
+ */
+const breathe = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+/**
+ * Work done on a loaded file, kept with that file until it changes. The page redraws on every
+ * progress tick, and each redraw used to read every loaded export again — listings, matches, the
+ * delivery preview — which on a 2,500-product export was the freeze itself (2026-10-26). A file
+ * that changes is a new object, so nothing kept here can outlive the file it was worked out from.
+ */
+const workedOut = new WeakMap<object, Map<string, unknown>>();
+function keptFor<T>(file: object, key: string, work: () => T): T {
+  let kept = workedOut.get(file);
+  if (!kept) { kept = new Map(); workedOut.set(file, kept); }
+  if (kept.has(key)) return kept.get(key) as T;
+  const value = work();
+  if (kept.size > 12) kept.clear();
+  kept.set(key, value);
+  return value;
+}
 
 /**
  * How many of an invoice's lines were placed, counted once each.
@@ -150,9 +188,46 @@ const byName = (r: Reconciliation) => r.matched.filter((m) => m.key === "name");
 const countChanges = (results: Array<{ result: AdjustResult }>) => results.reduce((n, r) => n + r.result.changes.length, 0);
 const countMatched = (results: Array<{ result: AdjustResult }>) => results.reduce((n, r) => n + r.result.matched, 0);
 
-export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; builtBy?: string }) {
+
+/** A new flat ski, whatever Type the shop files it under, which is asked for its package bindings. */
+const isPickableSki = (p: FreshProduct): boolean => isFlatSki({ productType: p.type, title: p.title, tags: p.tags });
+
+export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnabled: boolean; builtBy?: string; bindings?: Array<{ name: string; rrp: number; cost: number | null }> }) {
+  // The bindings picked for each new ski's package, by the ski's first line (asked 2026-10-20).
+  // A ski nobody has ticked a binding for has no package: nothing is picked for it. See binding-list.ts.
+  const [packagePicks, setPackagePicks] = useState<Record<number, string[]>>({});
   const csvRef = useRef<HTMLInputElement>(null);
   const sheetRef = useRef<HTMLInputElement>(null);
+  /**
+   * The buyer's sheet last given, kept so loading another export re-reads it against the files as
+   * they now stand rather than throwing its rows away (2026-10-26: a sheet added before the export
+   * was cleared by it, and nothing was applied).
+   */
+  const lastSheet = useRef<File | null>(null);
+  /** The previews still being worked out, a row at a time: "12 of 73". Null when none are. */
+  const [measuring, setMeasuring] = useState<{ done: number; of: number } | null>(null);
+  const measureRun = useRef(0);
+  /**
+   * Work out each row's preview against these files, one row at a time with a breath between, so
+   * the page stays live on a big export. A later run supersedes an earlier one still going.
+   */
+  async function remeasure(against: Sheet[], list: Row[]) {
+    const run = ++measureRun.current;
+    const todo = list.filter((r) => r.plan && r.state === "ready" && r.blocked.length === 0);
+    if (todo.length === 0) { setMeasuring(null); return; }
+    setMeasuring({ done: 0, of: todo.length });
+    for (let k = 0; k < todo.length; k++) {
+      if (run !== measureRun.current) return;
+      const row = todo[k];
+      {
+        const results = measure(row, against);
+        setRows((current) => current.map((r) => (r.id === row.id ? { ...r, results } : r)));
+      }
+      setMeasuring({ done: k + 1, of: todo.length });
+      await breathe();
+    }
+    if (run === measureRun.current) setMeasuring(null);
+  }
   const [sheets, setSheets] = useState<Sheet[]>([]);
   const [feed, setFeed] = useState<Applied[]>([]);
   const [rows, setRows] = useState<Row[]>([]);
@@ -161,7 +236,36 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
   const [confirmedWhole, setConfirmedWhole] = useState<number[]>([]);
 
   const invoiceRef = useRef<HTMLInputElement>(null);
-  const [invoice, setInvoice] = useState<Invoice | null>(null);
+  const orderSheetRef = useRef<HTMLInputElement>(null);
+  /**
+   * The invoices of this delivery — what arrived and what it cost. Several can be added: one
+   * order is often shipped, and invoiced, in parts (asked 2026-10-22).
+   */
+  const [invoiceDocs, setInvoiceDocs] = useState<Invoice[]>([]);
+  const setInvoice = (doc: Invoice | null) => setInvoiceDocs(doc ? [doc] : []);
+  const delivered: Invoice | null = invoiceDocs.length === 0 ? null : invoiceDocs.length === 1 ? invoiceDocs[0] : {
+    ...invoiceDocs[0],
+    filename: invoiceDocs.map((d) => d.filename).join(" + "),
+    lines: invoiceDocs.flatMap((d) => d.lines),
+    priceList: invoiceDocs.flatMap((d) => d.priceList ?? []),
+    warnings: invoiceDocs.flatMap((d) => d.warnings),
+    source: `${invoiceDocs.length} invoices read together`,
+  };
+  /**
+   * The order sheet the invoice was shipped against, where both were given (asked 2026-10-22): the
+   * invoice says what arrived and what it cost, the order sheet fills in the rest. See invoice-merge.
+   */
+  const [orderSheet, setOrderSheet] = useState<Invoice | null>(null);
+  const merging = delivered && orderSheet ? mergeInvoiceWithOrder(delivered.lines, orderSheet.lines) : null;
+  const invoice: Invoice | null = delivered && orderSheet && merging
+    ? {
+        ...delivered,
+        lines: merging.lines,
+        priceList: [...(delivered.priceList ?? []), ...(orderSheet.priceList ?? [])],
+        source: `${delivered.source}, with ${orderSheet.filename} for what the invoice does not say`,
+        warnings: [...delivered.warnings, ...describeMerge(merging, delivered.filename, orderSheet.filename)],
+      }
+    : delivered ?? orderSheet;
   /**
    * Which of an invoice's numbers to write.
    *
@@ -237,7 +341,7 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
    * the line as the invoice gave it, so the key holds through the join and the filters above.
    */
   const [decisions, setDecisions] = useState<Record<string, MatchDecision>>({});
-  const typeByBarcode = typesByBarcode(sheets.flatMap((x) => listingsFromCsv(x.csv)));
+  const typeByBarcode = typesByBarcode(sheets.flatMap((x) => keptFor(x, "listings", () => listingsFromCsv(x.csv))));
   const kindOf = (l: InvoiceLine) => kindOfLine(l, typeByBarcode);
   const kindsOnOrder = [...new Set((invoice?.lines ?? []).map(kindOf))].sort();
   const kindCount = (k: string) => (invoice?.lines ?? []).filter((l) => kindOf(l) === k).length;
@@ -246,7 +350,6 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
     ? { ...invoice, lines: (narrowed ? narrowed.lines : invoice.lines).filter((l) => !brandsSetAside.includes((l.brand ?? "").trim()) && !kindsOff.includes(kindOf(l))) }
     : invoice;
   const referenceRef = useRef<HTMLInputElement>(null);
-  const orderFormRef = useRef<HTMLInputElement>(null);
   const [references, setReferences] = useState<Reference[]>([]);
 
   const [instruction, setInstruction] = useState("");
@@ -303,6 +406,15 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
       }
       if (rejected.length) setError(`Skipped ${rejected.join(", ")} — no products in ${rejected.length === 1 ? "it" : "them"}.`);
       // Replacing a file already loaded rather than holding two copies of it.
+      // A buyer's sheet dropped here beside the export is the sheet, not an order form: told apart by
+      // its columns before anything goes to the invoice reader.
+      const saleSheets: File[] = [];
+      for (const file of [...misplaced]) {
+        if (!/\.(xlsx?|csv)$/i.test(file.name)) continue;
+        const kind = await classifyDocumentAction({ name: file.name, type: file.type, base64: await read(file, file.name) }).catch(() => null);
+        if (kind?.ok && kind.data?.kind === "sale-sheet") { saleSheets.push(file); misplaced.splice(misplaced.indexOf(file), 1); }
+      }
+      const nextSheets = [...sheets.filter((x) => !added.some((a) => a.name === x.name)), ...added];
       if (added.length > 0) {
         // Remembered, so a model listed here keeps its shelves next season. Not waited on: the
         // page works the same whether or not it lands.
@@ -315,6 +427,10 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
       // Anything that is not an export goes to the reader that wants it, rather than being
       // refused for being in the wrong box.
       if (misplaced.length > 0) await routeToInvoice(misplaced);
+      // The buyer's sheet, read against the files as they now stand: one dropped with them, or the
+      // one already given, which the new export would otherwise have thrown away.
+      const sheetFile = saleSheets[0] ?? (added.length > 0 ? lastSheet.current : null);
+      if (sheetFile) await takeSheet(sheetFile, nextSheets);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -353,7 +469,7 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
         if (!fitsUpload(sent.file.size)) { setError(tooBig(file, sent.file.size)); return; }
         setProgress(`Reading ${file.name}…`);
         const r = await readInvoiceAction({ name: file.name, type: sent.file.type, base64: await read(sent.file, file.name) });
-        const data = r.ok && r.data ? { ...r.data, filename: file.name } : null;
+        const data = r.ok && r.data ? withoutCharges({ ...r.data, filename: file.name }) : null;
         readings.push({ file, data, ordered: data ? data.lines.filter((l) => (l.quantity ?? 0) > 0).length : 0 });
       }
     } catch (err) {
@@ -363,23 +479,23 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
       setBusy(null); setProgress("");
     }
     const readable = readings.filter((r) => r.data);
-    // An order form and its invoice, both with quantities: the invoice is what arrived and what it
-    // cost; the order form fills in the barcodes and retail prices the invoice leaves out.
-    const counted = [...readable].filter((r) => r.ordered > 0).sort((a, b) => b.ordered - a.ordered);
-    if (counted.length >= 2) {
-      const pair = invoiceOf({ name: counted[0].file.name, lines: counted[0].ordered, r: counted[0] }, { name: counted[1].file.name, lines: counted[1].ordered, r: counted[1] });
-      combine(pair.form.r.data!, pair.invoice.r.data!);
-      const rest = readings.filter((r) => r !== pair.form.r && r !== pair.invoice.r && /\.(xlsx?|csv)$/i.test(r.file.name));
-      for (const r of rest) await takeReference(r.file);
-      return;
-    }
-    const order = [...readable].sort((a, b) => b.ordered - a.ordered)[0];
+    const ranked = [...readable].sort((a, b) => b.ordered - a.ordered);
+    let order = ranked[0];
     if (!order) {
       setError(`None of ${files.map((f) => f.name).join(", ")} reads as an order or invoice — it needs a column identifying each line and a column of prices or quantities. Add the order form, then these as its spec sheets.`);
       return;
     }
-    setInvoice(order.data); setLinks({}); setLinkNotes({}); setBrandsOff([]); setDecisions({}); setApplied(null); setAgainConfirmed(false);
-    const rest = readings.filter((r) => r !== order);
+    // Two documents with counts on them: the invoice (what arrived) and the order sheet it was
+    // shipped against, read as one delivery. See invoice-merge.
+    const second = ranked[1] && ranked[1].ordered > 0 && order.ordered > 0 ? ranked[1] : undefined;
+    let sheet: typeof order | undefined;
+    if (second) {
+      const [inv, ord] = invoiceFirst({ ...order, filename: order.file.name, lines: order.data!.lines }, { ...second, filename: second.file.name, lines: second.data!.lines });
+      order = readings.find((r) => r.file === inv.file)!;
+      sheet = readings.find((r) => r.file === ord.file)!;
+    }
+    setInvoice(sheet ? order.data : null); setOrderSheet(sheet?.data ?? (sheet ? null : order.data)); setLinks({}); setLinkNotes({}); setBrandsOff([]); setDecisions({}); setApplied(null); setAgainConfirmed(false);
+    const rest = readings.filter((r) => r !== order && r !== sheet);
     const sheetsOnly = rest.filter((r) => /\.(xlsx?|csv)$/i.test(r.file.name));
     const skipped = rest.filter((r) => !sheetsOnly.includes(r));
     for (const r of sheetsOnly) await takeReference(r.file);
@@ -400,18 +516,18 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
    * Sequential on purpose: Next runs one action at a time per page anyway, and sending them one
    * after another is gentler on a service that has just said it is overloaded.
    */
-  async function planInChunks(instructions: string[], ids?: number[]): Promise<Row[]> {
+  async function planInChunks(instructions: string[], ids?: number[], against: Sheet[] = sheets): Promise<Row[]> {
     const CHUNK = 8;
-    const merge = (pick: (s: Sheet) => string[]) => [...new Set(sheets.flatMap(pick))].sort();
+    const merge = (pick: (s: Sheet) => string[]) => [...new Set(against.flatMap(pick))].sort();
     const file = {
-      products: sheets.reduce((n, s) => n + s.products, 0),
+      products: against.reduce((n, s) => n + s.products, 0),
       vendors: merge((s) => s.vendors), types: merge((s) => s.types), tags: merge((s) => s.tags),
     };
     const out: Row[] = [];
     for (let start = 0; start < instructions.length; start += CHUNK) {
       const part = instructions.slice(start, start + CHUNK);
       const end = Math.min(start + CHUNK, instructions.length);
-      setProgress(`Reading rows ${start + 1}–${end} of ${instructions.length} against your ${sheets.length === 1 ? "file" : `${sheets.length} files`}…`);
+      setProgress(`Reading rows ${start + 1}–${end} of ${instructions.length} against your ${against.length === 1 ? "file" : `${against.length} files`}…`);
       const idOf = (i: number) => ids?.[start + i] ?? start + i;
       const lost = (why: string): Row[] => part.map((instruction, i) => ({
         id: idOf(i), instruction, group: "", relevant: true, why: "", plan: null, understood: "", unclear: "",
@@ -456,8 +572,15 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
    * client, so planning a row at a time from here would be a queue of round trips however quick
    * each one is.
    */
-  async function takeSheet(file: File) {
+  async function takeSheet(file: File, against: Sheet[] = sheets) {
+    lastSheet.current = file;
     setBusy("sheet"); setError(null); clearPreview(); setRows([]); setSheetNote(null); setOpen(null); setConfirmedWhole([]);
+    if (against.length === 0) {
+      // Kept, and read the moment an export is loaded: the sheet is matched against the products.
+      setSheetNote({ source: `${file.name} · waiting for your Shopify export — load it above and the sheet is read against it`, ignored: [], unclear: "" });
+      setBusy(null);
+      return;
+    }
     try {
       const sent = await shrinkImage(file);
       if (!fitsUpload(sent.file.size)) { setError(tooBig(file, sent.file.size)); return; }
@@ -468,9 +591,12 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
       setSheetNote({ source: `${file.name} · ${r.data!.source}`, ignored: r.data!.ignored, unclear: r.data!.unclear });
       if (instructions.length === 0) return;
 
-      const built = await planInChunks(instructions);
+      const built = await planInChunks(instructions, undefined, against);
       setProgress("Working out what each one would change…");
-      setRows(built.map((row) => ({ ...row, results: measure(row, sheets) })));
+      const listed = built.map((row) => ({ ...row, results: [] as Row["results"] }));
+      setRows(listed);
+      setBusy(null); setProgress("");
+      await remeasure(against, listed);
       const lost = built.filter((r) => r.failed).length;
       if (lost > 0) setError(`${lost} of ${instructions.length} rows could not be read this time — they are marked below and nothing was changed for them. Use "Read those rows again" once the service has settled.`);
     } catch (err) {
@@ -480,61 +606,76 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
     }
   }
 
+  /** One document read as an order or invoice, without its freight and other charge lines. */
+  async function readDocument(file: File): Promise<Invoice | null> {
+    const sent = await shrinkImage(file);
+    if (!fitsUpload(sent.file.size)) { setError(tooBig(file, sent.file.size)); return null; }
+    setProgress(sent.note ? `Reading ${file.name} — ${sent.note}` : `Reading ${file.name}…`);
+    const r = await readInvoiceAction({ name: file.name, type: sent.file.type, base64: await read(sent.file, file.name) });
+    if (!r.ok) { setError(`${file.name}: ${r.error}`); return null; }
+    return withoutCharges({ ...r.data!, filename: file.name });
+  }
+
+  const freshDelivery = () => { setLinks({}); setLinkNotes({}); setBrandsOff([]); setDecisions({}); setApplied(null); setAgainConfirmed(false); };
+
   /**
-   * Take a supplier's invoice and match it against every loaded file.
-   *
-   * The matching runs here, in the browser, against the files as they stand — the same as every
-   * other change on this page, and for the same reason: an export runs to megabytes and never
-   * needs to leave the machine. Only the invoice itself goes to the server, and only to be read.
+   * The order form: what was ordered, usually with the barcodes, sizes, colours and recommended
+   * retail an invoice leaves out (asked 2026-10-22). On its own it is the delivery, as before; with
+   * invoices it fills in what they do not say. See invoice-merge.
    */
-  /** An order form and its invoice as one delivery: see order-and-invoice.ts. */
-  function combine(form: Invoice, inv: Invoice) {
-    const j = joinOrderAndInvoice(form.lines, inv.lines);
-    const said = `${inv.filename} is the invoice: what arrived and what it cost. ${form.filename} is the order form: barcodes and retail prices were taken from it where the invoice has none. ${j.matched} of ${inv.lines.length} invoice line${inv.lines.length === 1 ? "" : "s"} found on the order form.${j.notShipped.length ? ` ${j.notShipped.length} ordered line${j.notShipped.length === 1 ? " is" : "s are"} not on the invoice (not shipped yet, or not coming).` : ""}`;
-    setInvoice({
-      ...inv,
-      filename: `${inv.filename} + ${form.filename}`,
-      lines: j.lines,
-      columns: { ...form.columns, ...Object.fromEntries(Object.entries(inv.columns).filter(([, v]) => v)), rrp: inv.columns.rrp || form.columns.rrp, barcode: inv.columns.barcode || form.columns.barcode },
-      warnings: [said, ...inv.warnings],
-      priceList: form.priceList ?? inv.priceList,
-    });
-    setLinks({}); setLinkNotes({}); setBrandsOff([]); setDecisions({}); setApplied(null); setAgainConfirmed(false);
+  /** True when a spreadsheet given to the delivery boxes is really the buyer's sale sheet. */
+  async function isSaleSheet(file: File): Promise<boolean> {
+    if (!/\.(xlsx?|csv)$/i.test(file.name)) return false;
+    const r = await classifyDocumentAction({ name: file.name, type: file.type, base64: await read(file, file.name) }).catch(() => null);
+    return Boolean(r?.ok && r.data?.kind === "sale-sheet");
   }
 
-  /** The order form for the invoice already loaded, added after it. */
   async function takeOrderForm(file: File) {
-    if (!invoice) return;
-    setBusy("invoice"); setError(null); setSaved(null);
-    try {
-      const sent = await shrinkImage(file);
-      if (!fitsUpload(sent.file.size)) { setError(tooBig(file, sent.file.size)); return; }
-      setProgress(`Reading ${file.name}…`);
-      const r = await readInvoiceAction({ name: file.name, type: sent.file.type, base64: await read(sent.file, file.name) });
-      if (!r.ok) { setError(r.error); return; }
-      combine({ ...r.data!, filename: file.name }, invoice);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(null); setProgress("");
-    }
-  }
-
-  async function takeInvoice(file: File) {
+    if (await isSaleSheet(file)) return takeSheet(file);
     setBusy("invoice"); setError(null); clearPreview(); setSaved(null);
     try {
-      const sent = await shrinkImage(file);
-      if (!fitsUpload(sent.file.size)) { setError(tooBig(file, sent.file.size)); return; }
-      setProgress(sent.note ? `Reading ${file.name} — ${sent.note}` : `Reading ${file.name}…`);
-      const r = await readInvoiceAction({ name: file.name, type: sent.file.type, base64: await read(sent.file, file.name) });
-      if (!r.ok) { setError(r.error); setInvoice(null); setLinks({}); setLinkNotes({}); return; }
-      const data = r.data!;
-      setInvoice({ ...data, filename: file.name }); setLinks({}); setLinkNotes({}); setBrandsOff([]); setDecisions({}); setApplied(null); setAgainConfirmed(false);
+      const doc = await readDocument(file);
+      if (!doc) return;
+      setOrderSheet(doc); freshDelivery();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(null); setProgress("");
     }
+  }
+
+  /**
+   * One or more invoices — what arrived, and what it cost. Added to those already loaded, so a
+   * delivery invoiced in parts is one delivery. Each is matched against the order form, if there is
+   * one, and the lot against the exports.
+   */
+  async function addInvoices(files: File[]) {
+    const sale: File[] = [];
+    for (const file of files) if (await isSaleSheet(file)) sale.push(file);
+    if (sale.length > 0) await takeSheet(sale[0]);
+    files = files.filter((f) => !sale.includes(f));
+    if (files.length === 0) return;
+    setBusy("invoice"); setError(null); clearPreview(); setSaved(null);
+    try {
+      const read_: Invoice[] = [];
+      for (const file of files) {
+        const doc = await readDocument(file);
+        if (doc) read_.push(doc);
+      }
+      if (read_.length === 0) return;
+      setInvoiceDocs((now) => [...now.filter((d) => !read_.some((x) => x.filename === d.filename)), ...read_]);
+      freshDelivery();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(null); setProgress("");
+    }
+  }
+
+  /** A single dropped document: an invoice when an order form is loaded, the order form when not. */
+  async function takeInvoice(file: File) {
+    if (orderSheet) return addInvoices([file]);
+    return takeOrderForm(file);
   }
 
   /**
@@ -567,7 +708,26 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
    * a file or is new to all of them — and a product is only built onto a file that the delivery
    * actually touched, so a Volkl order never appends skis to the goggles export.
    */
-  async function applyDeliveryNow() {
+  /**
+   * Whatever goes wrong while a delivery or a group of changes is applied is said, and the page is
+   * given back. An error part-way used to leave it marked busy for good: every button greyed out,
+   * nothing applied, so nothing to download either (2026-10-19).
+   */
+  async function guarded(what: string, run: () => void | Promise<void>) {
+    try {
+      await run();
+    } catch (err) {
+      console.error(err);
+      setError(`${what} stopped part-way with an error, and the page has been given back to you: ${err instanceof Error ? err.message : String(err)}. Check the changes listed before downloading.`);
+    } finally {
+      setBusy(null);
+      setProgress("");
+    }
+  }
+
+  const applyDeliveryNow = () => guarded("Applying the delivery", applyDelivery);
+
+  async function applyDelivery() {
     if (!order) return;
     // Asked by what is on the delivery, not by its name, and remembered across reloads: a file
     // saved again under another name, or dropped in after the page was reopened, is the same
@@ -627,9 +787,11 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
       const from = newProducts.find((q) => q !== p && (links[q.lines[0]] ?? "").trim() && fitlessOf(q.title) === fitlessOf(p.title));
       if (from) implied[key] = links[from.lines[0]].trim();
     }
-    const asked = Object.entries({ ...implied, ...links }).map(([k, url]) => ({ key: Number(k), url: url.trim() })).filter((l) => l.url && (buildNew || colourwayKeys.has(l.key)));
+    const asked = Object.entries({ ...implied, ...links }).map(([k, url]) => ({ key: Number(k), url: url.trim() })).filter((l) => l.url && (buildNew || colourwayKeys.has(l.key)) && (l.key >= 0 || colourOfKey(l.key)));
     if (asked.length > 0) {
       const nameOf = (key: number) => {
+        const own = colourOfKey(key);
+        if (own) return `${own.product.title} in ${own.colour}`;
         const colourway = newColourways.find((c) => c.key === key);
         if (colourway) return `${colourway.title} in ${colourway.colour}`;
         return newProducts.find((p) => p.lines.includes(key))?.title ?? order.lines[key]?.title ?? "a product";
@@ -637,6 +799,8 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
       // The colours the order has for the product, so the page's pictures are of those and not of
       // whichever colour the page happens to open on.
       const coloursOf = (key: number): string[] => {
+        const own = colourOfKey(key);
+        if (own) return [own.colour];
         const colourway = newColourways.find((c) => c.key === key);
         if (colourway) return [colourway.colour];
         const lines = newProducts.find((p) => p.lines.includes(key))?.lines ?? [key];
@@ -657,7 +821,8 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
             const colourNote = r.data.pictureNote ? ` ${r.data.pictureNote}` : "";
             const noneOfColour = Boolean(r.data.pictureNote) && r.data.images.length === 0;
             const text = `${got.length ? `Took ${got.join(", ")} from the page.` : "The page had nothing to take."}${colourNote}${unsure}${r.data.via === "basic" ? ` ${r.data.note}` : ""}`;
-            notes[key] = { tone: r.data.confident && !noneOfColour ? "ok" : "warn", text };
+            const noPictures = r.data.images.length === 0 ? " No pictures came off the page — add them in Shopify, or try the brand's other site for this product." : "";
+            notes[key] = { tone: r.data.confident && !noneOfColour && !noPictures ? "ok" : "warn", text: text + (noneOfColour ? "" : noPictures) };
             linkFeed.push(`${nameOf(key)}: ${text}`);
           } else {
             const text = `${r.ok ? "The page could not be read." : r.error} Built without it.`;
@@ -690,7 +855,10 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
         season, vendor, specs, decided, sourceOf, listings, priceList: order.priceList ?? [],
         fields: { ...fields, stock, draft: toDraft },
         reorderOnly: s.name !== home, builtBy,
-        pages,
+        // A colour's own page is kept under its own key; see colourKey.
+        pages: Object.fromEntries(Object.entries(pages).filter(([k]) => Number(k) >= 0)),
+        colourPages: Object.fromEntries(Object.entries(pages).filter(([k]) => Number(k) < 0).map(([k, page]) => [lineOfColourKey(Number(k)), page])),
+        bindingList: bindings, packagePicks,
       }),
     }));
     if (results.every((r) => r.result.refused)) {
@@ -740,7 +908,7 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
       steps: 1,
       perFile: results.map((r) => ({ name: r.name, changes: r.result.refused ? 0 : r.result.changes.length, rowsAdded: r.result.appended })),
     }]);
-    setRows((current) => current.map((r) => ({ ...r, results: measure(r, nextSheets) })));
+    void remeasure(nextSheets, rows);
     setBusy(null);
   }
 
@@ -805,7 +973,9 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
    * rather than quietly taking the rest down with it. What the group buys is one approval and one
    * undo, not a weaker check.
    */
-  function applyRows(ids: number[], title: string) {
+  const applyRows = (ids: number[], title: string) => guarded("Applying those changes", () => applyRowsNow(ids, title));
+
+  async function applyRowsNow(ids: number[], title: string) {
     const wanted = rows.filter((r) => ids.includes(r.id) && r.state === "ready" && r.plan && r.blocked.length === 0
       && (!isWholeFile((r.plan as Plan).scope) || confirmedWhole.includes(r.id)));
     if (wanted.length === 0) {
@@ -814,8 +984,25 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
     }
 
     setBusy("applying"); setError(null); setSaved(null);
+    measureRun.current++; setMeasuring(null);
     const steps: FoldStep[] = wanted.map((r) => ({ id: r.id, plan: r.plan as Plan, label: r.understood || r.instruction }));
-    const out = foldPlans(sheets.map((s) => ({ name: s.name, csv: s.csv })), steps);
+    // A change at a time, each still checked on its own, with a breath between so the page stays
+    // live and says how far it has got. Nothing is kept until the last one is done: the files on
+    // screen change once, at the end, so a run stopped part-way leaves them exactly as they were.
+    const out = { files: sheets.map((s) => ({ name: s.name, csv: s.csv, changes: 0 })), applied: [] as number[], refused: [] as number[], changes: 0, matched: 0, lines: [] as string[] };
+    for (const [k, step] of steps.entries()) {
+      setProgress(`Applying ${k + 1} of ${steps.length}…`);
+      await breathe();
+      const one = foldPlans(out.files.map((f) => ({ name: f.name, csv: f.csv })), [step]);
+      out.refused.push(...one.refused);
+      if (one.applied.length === 0) continue;
+      one.files.forEach((f, i) => { out.files[i].csv = f.csv; out.files[i].changes += f.changes; });
+      out.applied.push(...one.applied);
+      out.changes += one.changes;
+      out.matched = Math.max(out.matched, one.matched);
+      out.lines.push(...one.lines);
+    }
+    setProgress("");
 
     if (out.applied.length === 0) {
       setBusy(null);
@@ -831,15 +1018,14 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
     }]);
     // Everything still to come is re-measured against the files as they now stand, so a later row
     // sees what an earlier one did and a row made redundant by it reports nothing left to change.
-    setRows((current) => {
-      const marked = current.map((r) => (out.applied.includes(r.id) ? { ...r, state: "applied" as const, results: [] } : r));
-      return marked.map((r) => ({ ...r, results: measure(r, nextSheets) }));
-    });
+    const marked = rows.map((r) => (out.applied.includes(r.id) ? { ...r, state: "applied" as const, results: [] as Row["results"] } : r));
+    setRows(marked);
     if (out.refused.length) {
       setError(`${out.refused.length} change${out.refused.length === 1 ? " was" : "s were"} left out — ${out.refused.length === 1 ? "it" : "they"} failed the check that nothing moves except what was asked for. Everything else in the group was applied.`);
     }
     setBusy(null);
     clearPreview();
+    await remeasure(nextSheets, marked);
   }
 
   function apply() {
@@ -867,7 +1053,7 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
       steps: 1,
       perFile: preview.results.map((r) => ({ name: r.name, changes: r.result.changes.length })),
     }]);
-    setRows((current) => current.map((r) => ({ ...r, results: measure(r, nextSheets) })));
+    void remeasure(nextSheets, rows);
     setInstruction("");
     clearPreview();
     setConfirmWholeFile(false);
@@ -888,7 +1074,7 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
     if (order && typeof localStorage !== "undefined") forgetApplied(localStorage, fingerprint(order.lines));
     // The files are what was undone. Rows already marked applied stay marked — reading the sheet
     // again is the clean way to start it over.
-    setRows((current) => current.map((r) => ({ ...r, results: measure(r, nextSheets) })));
+    void remeasure(nextSheets, rows);
     clearPreview();
     setSaved(null);
   }
@@ -924,6 +1110,31 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
       products: sheets.reduce((n, s) => n + s.products, 0),
       changes: feed.reduce((n, f) => n + f.changes, 0),
       filename: names.join(", "),
+    });
+    keepRun(sheets.filter((s) => appliedTo(s.name) > 0).map((s, i) => ({ filename: names[i], data: s.csv })), "");
+  }
+
+  /** The run, kept in the page's history with the files just handed over. */
+  function keepRun(files: Array<{ filename: string; data: string }>, only: string) {
+    const changes = feed.reduce((n, f) => n + f.changes, 0);
+    const rowsAdded = feed.reduce((n, f) => n + f.perFile.reduce((k, p) => k + (p.rowsAdded ?? 0), 0), 0);
+    const titles = feed.map((f) => f.title);
+    const documents = [
+      ...sheets.map((s) => s.name),
+      ...(sheetNote?.source ? [sheetNote.source] : []),
+      ...invoiceDocs.map((d) => d.filename),
+      ...(orderSheet ? [orderSheet.filename] : []),
+      ...references.map((r) => r.filename),
+    ];
+    void recordRun({
+      kind: "PRICES",
+      title: `${titles.length === 0 ? "Files as loaded" : titles.length === 1 ? titles[0] : `${titles.length} changes: ${titles.slice(0, 3).join("; ")}${titles.length > 3 ? "; …" : ""}`}${only}`,
+      summary: {
+        lines: feed.flatMap((f) => [`${f.title} — ${f.changes} cell${f.changes === 1 ? "" : "s"}`, ...f.lines.map((l) => `  ${l}`)]),
+        documents: [...new Set(documents)],
+        counts: { changes, products: sheets.reduce((n, s) => n + s.products, 0), ...(rowsAdded > 0 ? { rowsAdded } : {}) },
+      },
+      files,
     });
   }
 
@@ -964,7 +1175,9 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
   }
   function downloadOnlyAll() {
     if (narrowedFiles.length === 0) { setError(`None of the loaded files has a product of ${downloadKinds.join(" or ")}.`); return; }
-    setSaved(narrowedFiles.map((n) => downloadOnly(n.sheet, n.out.csv)).join(", "));
+    const names = narrowedFiles.map((n) => downloadOnly(n.sheet, n.out.csv));
+    setSaved(names.join(", "));
+    keepRun(narrowedFiles.map((n, i) => ({ filename: names[i], data: n.out.csv })), ` — only ${downloadKinds.join(" and ")}`);
   }
   const narrowedProducts = narrowedFiles.reduce((n, f) => n + f.out.products, 0);
   const kindsDownload = sheets.length > 0 && kindsInFiles.length > 1 && (
@@ -1012,8 +1225,8 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
 
   /** The whole list of changes as a sheet, to be gone through at leisure or kept with the run. */
   function downloadChanges() {
-    const head = ["File", "Product", "Handle", "Variant", "Column", "Now", "After"];
-    const lines = [head, ...allChanges.map((r) => [r.file, r.c.title, r.c.handle, r.c.variant ?? "", r.c.column, r.c.before, r.c.after])]
+    const head = ["File", "Product", "Handle", "Variant", "Column", "Now", "After", "Price now", "Price after", "Compare at now", "Compare at after"];
+    const lines = [head, ...allChanges.map((r) => [r.file, r.c.title, r.c.handle, r.c.variant ?? "", r.c.column, r.c.before, r.c.after, r.c.prices?.price.before ?? "", r.c.prices?.price.after ?? "", r.c.prices?.compareAt.before ?? "", r.c.prices?.compareAt.after ?? ""])]
       .map((cells) => cells.map(escapeCsvField).join(","));
     const url = URL.createObjectURL(new Blob([lines.join("\n") + "\n"], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a");
@@ -1046,11 +1259,14 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
     : [];
   // The joined lines keep the order's order, so a joined line's key is its order line's.
   const keyOfJoined = (l: InvoiceLine) => lineKey(order?.lines[invoiceLines.indexOf(l)] ?? l);
+  // The invoice's lines as a key, so each file's matching is worked out once per invoice and
+  // season rather than on every redraw. See keptFor.
+  const linesKey = invoice ? JSON.stringify(invoiceLines) : "";
   const seasonedAgainst: Against = invoice
-    ? sheets.map((s) => ({ name: s.name, reconciliation: reconcile(s.csv, invoiceLines, { season }) }))
+    ? sheets.map((s) => ({ name: s.name, reconciliation: keptFor(s, `matched|${season}|${linesKey}`, () => reconcile(s.csv, invoiceLines, { season })) }))
     : [];
   // The same without the season, for the lines whose name is on a listing of another year.
-  const looseAgainst: Against = seasonedAgainst.map((a, i) => (season.trim() && a.reconciliation.unmatched.length > 0 ? { name: a.name, reconciliation: reconcile(sheets[i].csv, invoiceLines, {}) } : a));
+  const looseAgainst: Against = seasonedAgainst.map((a, i) => (season.trim() && a.reconciliation.unmatched.length > 0 ? { name: a.name, reconciliation: keptFor(sheets[i], `matched||${linesKey}`, () => reconcile(sheets[i].csv, invoiceLines, {})) } : a));
   /** Every line placed by its name, once, for the person to confirm: first the file that placed it. */
   const toConfirm = (() => {
     const seen = new Set<string>();
@@ -1088,17 +1304,56 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
   // The delivery as it would go on, file by file, so what it would build and what it would add can
   // be shown before anything is written. New products go on the home file only; a new colourway
   // goes on whichever file holds its listing.
+  // Worked out once per set of inputs, not on every redraw: the key is everything it reads,
+  // including the other loaded files (their listings name the shop's products).
+  const previewKey = order && homeSheet
+    ? JSON.stringify([order.lines, decisions, season, vendor, references.map((r) => r.filename), order.priceList ?? [], fields, stock, toDraft, homeSheet.name, builtBy, bindings, packagePicks, sheets.map((x) => `${x.name}:${x.csv.length}:${x.history.length}`), loadedSpecs.length])
+    : "";
   const previewed = order && homeSheet
-    ? sheets.map((s) => buildDelivery(s.csv, order.lines, { decisions,
+    ? sheets.map((s) => keptFor(s, `delivery|${previewKey}`, () => buildDelivery(s.csv, order.lines, { decisions,
         season, vendor, specs: loadedSpecs, sourceOf: specSources(references),
-        listings: sheets.flatMap((x) => listingsFromCsv(x.csv)), priceList: order.priceList ?? [],
+        listings: sheets.flatMap((x) => keptFor(x, "listings", () => listingsFromCsv(x.csv))), priceList: order.priceList ?? [],
         fields: { ...fields, stock, draft: toDraft }, reorderOnly: s.name !== homeSheet.name, builtBy,
-      }))
+        bindingList: bindings, packagePicks,
+      })))
     : [];
   const seenLines = new Set<number>();
   const newProducts: FreshProduct[] = buildNew && toBuild > 0
     ? previewed.flatMap((r) => r.fresh).filter((p) => { const k = p.lines[0]; if (k === undefined || seenLines.has(k)) return false; seenLines.add(k); return true; })
     : [];
+  /**
+   * A line the delivery will build that no new product above covers — the preview could not be
+   * worked out for it, or put it under a name it has not settled. It is still asked for its page
+   * (asked 2026-10-20: a Prices and stock upload built a new product without asking for one), keyed
+   * by its place on the order like any other link, one per colour.
+   */
+  const coveredLines = new Set(newProducts.flatMap((p) => p.lines));
+  const unaskedNew = (() => {
+    if (!buildNew || toBuild === 0 || against.length === 0 || !order) return [] as Array<{ key: number; title: string; colour: string }>;
+    const out: Array<{ key: number; title: string; colour: string }> = [];
+    const seen = new Set<string>();
+    for (const line of against[0].reconciliation.unmatched) {
+      if (!against.every((a) => a.reconciliation.unmatched.includes(line))) continue;
+      const key = invoiceLines.indexOf(line);
+      if (key < 0 || coveredLines.has(key)) continue;
+      const colour = (line.colour ?? "").trim();
+      const id = `${line.title.trim().toLowerCase()}|${colour.toLowerCase()}`;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      out.push({ key, title: line.title.trim() || line.sku, colour });
+    }
+    return out;
+  })();
+  /** The new product and colour a colour's own link belongs to. See colourKey. */
+  const colourOfKey = (key: number): { product: FreshProduct; colour: string } | null => {
+    if (key >= 0) return null;
+    const line = lineOfColourKey(key);
+    for (const product of newProducts) {
+      const c = (product.colours ?? []).find((x) => x.line === line);
+      if (c) return { product, colour: c.colour };
+    }
+    return null;
+  };
   /**
    * A colour a listing has not had before, arriving on this delivery. It goes on as a variant of
    * the listing, whose pictures are of its other colours — so, like a new product, it is asked for
@@ -1194,8 +1449,11 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
       {sheets.length === 0 && (
         <Card title="The buyer's sheet">
           <p className="text-sm text-[var(--ink-soft)]">
-            The sale sheet is read <em>against</em> the products in your exports — that is what tells a row about ski bindings from a row about goggles — so load the exports above first and this opens up.
+            The sale sheet is read <em>against</em> the products in your exports — that is what tells a row about ski bindings from a row about goggles. Load the export above; a sheet given first is kept and read as soon as it is.
           </p>
+          {sheetNote && <p className="mt-2 text-xs text-[var(--ink-soft)]">{sheetNote.source}</p>}
+          <Button className="mt-3" icon="📋" size="sm" disabled={busy !== null} onClick={() => sheetRef.current?.click()}>Add the sale sheet</Button>
+          <input ref={sheetRef} type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void takeSheet(f); e.target.value = ""; }} />
         </Card>
       )}
 
@@ -1203,7 +1461,7 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
         <Card
           title="The buyer's sheet"
           actions={allReady.length > 0
-            ? <Button size="sm" variant="primary" icon="✅" disabled={busy !== null} onClick={() => applyRows(allReady.map((r) => r.id), `Everything that matched — ${allReady.length} change${allReady.length === 1 ? "" : "s"}`)}>Apply all {allReady.length}</Button>
+            ? <Button size="sm" variant="primary" icon="✅" disabled={busy !== null || measuring !== null} onClick={() => applyRows(allReady.map((r) => r.id), `Everything that matched — ${allReady.length} change${allReady.length === 1 ? "" : "s"}`)}>{busy === "applying" ? progress || "Applying…" : measuring ? `Checking ${measuring.done} of ${measuring.of}…` : `Apply all ${allReady.length}`}</Button>
             : undefined}
         >
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1214,6 +1472,15 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
             <Button icon="📋" size="sm" disabled={busy !== null} onClick={() => sheetRef.current?.click()}>{busy === "sheet" ? "Reading…" : rows.length > 0 ? "Use a different sheet" : "Add the sale sheet"}</Button>
             <input ref={sheetRef} type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void takeSheet(f); e.target.value = ""; }} />
           </div>
+
+          {(measuring || (busy === "applying" && progress)) && (
+            <div className="mt-3">
+              <div className="h-1.5 overflow-hidden rounded-full bg-[var(--line-soft)]">
+                <div className="h-full rounded-full bg-[var(--violet)] transition-all" style={{ width: `${measuring ? Math.round((measuring.done / Math.max(1, measuring.of)) * 100) : 100}%` }} />
+              </div>
+              <p className="mt-1.5 text-xs text-[var(--ink-soft)]">{busy === "applying" && progress ? `${progress} The page stays usable; nothing is kept until every change is done.` : `Working out what each change would do — ${measuring!.done} of ${measuring!.of}. Apply all opens when it is done.`}</p>
+            </div>
+          )}
 
           {busy === "sheet" && progress && (
             <div className="mt-3">
@@ -1378,16 +1645,32 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
         */}
       <Card
           title="A delivery, or a supplier's invoice"
-          actions={invoice ? <Button size="sm" onClick={() => { setInvoice(null); setLinks({}); setLinkNotes({}); setError(null); }}>Remove it</Button> : undefined}
+          actions={invoice ? <Button size="sm" onClick={() => { setInvoiceDocs([]); setOrderSheet(null); setLinks({}); setLinkNotes({}); setError(null); }}>Remove all</Button> : undefined}
         >
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="text-sm">
-              <span className="font-medium">A delivery arriving, or prices that have changed?</span>
-              <span className="ml-2 text-xs text-[var(--ink-soft)]">Add the order form and each line is matched by barcode, then by item code, then by the product&rsquo;s name — so a line that says SX-2M finds the SX-2M. A line that fits two products is never guessed at. What it matches has its stock put up; a size the product does not list arrives as a variant of it, and a product the shop does not have is built onto the end of the same file. A spreadsheet or CSV is read by its columns; a PDF or a photo of one goes to the API to be read.</span>
-            </div>
-            <Button icon="🧾" size="sm" disabled={busy !== null} onClick={() => invoiceRef.current?.click()}>{busy === "invoice" ? "Reading…" : invoice ? "Use a different invoice" : "Add the invoice"}</Button>
-            <input ref={invoiceRef} type="file" multiple className="hidden" onChange={(e) => { const f = Array.from(e.target.files ?? []); if (f.length) void takeDocuments(f); e.target.value = ""; }} />
+          <div className="text-sm">
+            <span className="font-medium">A delivery arriving, or prices that have changed?</span>
+            <span className="ml-2 text-xs text-[var(--ink-soft)]">Add the <strong>order form</strong> and the <strong>invoices</strong> for what arrived. The invoices decide what arrived and what it cost; the order form fills in what they leave out &mdash; the barcodes, sizes, colours and recommended retail. Every line is then matched to your exports by barcode, then item code, then name, and a line that fits two products is never guessed at. Either one works on its own too. A spreadsheet or CSV is read by its columns; a PDF or a photo goes to the API to be read.</span>
           </div>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <div className="rounded-xl border border-[var(--line-soft)] px-3 py-2.5 text-sm">
+              <div className="text-xs font-semibold uppercase tracking-wide text-[var(--ink-soft)]">Order form</div>
+              {orderSheet
+                ? <div className="mt-1 flex items-center justify-between gap-2"><span className="truncate">{orderSheet.filename} <span className="text-xs text-[var(--ink-soft)]">· {orderSheet.lines.length} lines</span></span><button type="button" className="text-xs text-[var(--violet)] hover:underline" disabled={busy !== null} onClick={() => { setOrderSheet(null); freshDelivery(); }}>Remove</button></div>
+                : <div className="mt-1 text-xs text-[var(--ink-soft)]">None yet. Usually has the barcodes.</div>}
+              <Button className="mt-2" icon="📋" size="sm" disabled={busy !== null} onClick={() => orderSheetRef.current?.click()}>{busy === "invoice" ? "Reading…" : orderSheet ? "Use a different order form" : "Add the order form"}</Button>
+            </div>
+            <div className="rounded-xl border border-[var(--line-soft)] px-3 py-2.5 text-sm">
+              <div className="text-xs font-semibold uppercase tracking-wide text-[var(--ink-soft)]">Invoices</div>
+              {invoiceDocs.length > 0
+                ? <ul className="mt-1 space-y-0.5">{invoiceDocs.map((d) => (
+                    <li key={d.filename} className="flex items-center justify-between gap-2"><span className="truncate">{d.filename} <span className="text-xs text-[var(--ink-soft)]">· {d.lines.length} lines</span></span><button type="button" className="text-xs text-[var(--violet)] hover:underline" disabled={busy !== null} onClick={() => { setInvoiceDocs((now) => now.filter((x) => x.filename !== d.filename)); freshDelivery(); }}>Remove</button></li>
+                  ))}</ul>
+                : <div className="mt-1 text-xs text-[var(--ink-soft)]">None yet. What actually arrived, and what it cost.</div>}
+              <Button className="mt-2" icon="🧾" size="sm" disabled={busy !== null} onClick={() => invoiceRef.current?.click()}>{busy === "invoice" ? "Reading…" : invoiceDocs.length > 0 ? "Add another invoice" : "Add an invoice"}</Button>
+            </div>
+          </div>
+          <input ref={invoiceRef} type="file" multiple className="hidden" onChange={(e) => { const f = Array.from(e.target.files ?? []); if (f.length) void addInvoices(f); e.target.value = ""; }} />
+          <input ref={orderSheetRef} type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void takeOrderForm(f); e.target.value = ""; }} />
 
           {busy === "invoice" && progress && (
             <div className="mt-3">
@@ -1399,7 +1682,7 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
           {invoice && (
             <div className="mt-4 space-y-3">
               <div className="rounded-xl border border-[var(--line-soft)] px-3 py-2.5 text-sm">
-                <div className="font-medium">{invoice.filename}</div>
+                <div className="font-medium">{delivered ? delivered.filename : invoice.filename}{delivered && orderSheet && <span className="font-normal text-[var(--ink-soft)]"> · with the order form {orderSheet.filename}</span>}</div>
                 <div className="mt-0.5 text-xs text-[var(--ink-soft)]">
                   {(order ?? invoice).lines.length} line{(order ?? invoice).lines.length === 1 ? "" : "s"}, {invoice.source}.
                   {invoice.columns.rrp || invoice.columns.quantity
@@ -1407,13 +1690,6 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
                     : null}
                 </div>
                 {invoice.warnings.map((w, i) => <p key={i} className="mt-1.5 text-xs text-[var(--ink-soft)]">{w}</p>)}
-                {!invoice.filename.includes(" + ") && (
-                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[var(--ink-soft)]">
-                    <Button size="sm" variant="ghost" disabled={busy !== null} onClick={() => orderFormRef.current?.click()}>Add the order form for this invoice</Button>
-                    <span>Barcodes and retail prices come from the order form; what arrived and its cost, discounts and all, from the invoice.</span>
-                    <input ref={orderFormRef} type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void takeOrderForm(f); }} />
-                  </div>
-                )}
               </div>
 
               <ul className="divide-y divide-[var(--line-soft)] text-sm">
@@ -1642,20 +1918,59 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
                 <span>Put every product this delivery touches into <strong>draft</strong>.<span className="block text-xs text-[var(--ink-soft)]">The carry-overs as well as the new products, so each is looked over before it is live for the new season. Any &ldquo;snow sale&rdquo; tag comes off them either way.</span></span>
               </label>
 
-              {((buildNew && newProducts.length > 0) || newColourways.length > 0) && (
+              {((buildNew && (newProducts.length > 0 || unaskedNew.length > 0)) || newColourways.length > 0) && (
                 <BulkLinks
                   products={[
-                    ...(buildNew ? newProducts.map((p) => {
+                    ...(buildNew ? newProducts.flatMap((p) => {
                       const from = !(links[p.lines[0]] ?? "").trim() ? newProducts.find((q) => q !== p && (links[q.lines[0]] ?? "").trim() && fitlessOf(q.title) === fitlessOf(p.title)) : undefined;
-                      return { key: p.lines[0], title: p.title, ...(from ? { note: `takes the page under ${from.title}` } : {}) };
+                      const colours = p.colours ?? [];
+                      return [
+                        { key: p.lines[0], title: p.title, ...(from ? { note: `takes the page under ${from.title}` } : colours.length > 1 ? { note: `${colours.length} colours — paste a separate page for each colour below, so each gets its own pictures. This box is for the description, if no colour's page has one.` } : colours.length === 1 ? { note: `the ${colours[0].colour} page` } : {}) },
+                        // A separate page for each colour, so its own pictures go with it (asked 2026-10-19, again 2026-10-20).
+                        ...(colours.length > 1 ? colours.map((c) => ({ key: colourKey(c.line), title: `${p.title} — ${c.colour}`, note: `paste the ${c.colour} page here, with ${c.colour} selected`, indent: true, colour: c.colour })) : []),
+                      ];
                     }) : []),
-                    ...newColourways.map((c) => ({ key: c.key, title: `${c.title} — ${c.colour}`, note: "a new colour on a listing you have; its pictures come from this page" })),
+                    // New on the order, not yet shown above: asked for its page all the same.
+                    ...(buildNew ? unaskedNew.map((u) => ({ key: u.key, title: u.colour ? `${u.title} — ${u.colour}` : u.title, note: u.colour ? `new on this invoice — paste the ${u.colour} page` : "new on this invoice", ...(u.colour ? { colour: u.colour } : {}) })) : []),
+                    ...newColourways.map((c) => ({ key: c.key, title: `${c.title} — ${c.colour}`, note: `a new colour on a listing you have — paste the ${c.colour} page, so its pictures come from it`, colour: c.colour })),
                   ]}
                   links={links}
                   onChange={(key, url) => setLinks((l) => { const { [key]: _gone, ...rest } = l; void _gone; return url ? { ...rest, [key]: url } : rest; })}
                   notes={linkNotes}
                   disabled={busy !== null}
                 />
+              )}
+
+              {buildNew && newProducts.some(isPickableSki) && (
+                <fieldset className="rounded-xl border border-[var(--line-soft)] px-3 py-2.5">
+                  <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-[var(--ink-soft)]">Bindings for each ski&rsquo;s package</legend>
+                  {bindings.length === 0
+                    ? <p className="py-1 text-xs text-[var(--ink-soft)]">Load the binding list in Settings to pick each ski&rsquo;s bindings. No ski is packaged until a binding is picked for it.</p>
+                    : <p className="py-1 text-xs text-[var(--ink-soft)]">Pick which bindings each ski&rsquo;s package offers, one or several, from your binding list. Nothing is picked for you: a ski with no binding ticked is built on its own, with no package.</p>}
+                  {bindings.length > 0 && (
+                    <ul className="mt-1 space-y-2">
+                      {newProducts.filter(isPickableSki).map((p) => {
+                        const key = p.lines[0];
+                        const picked = packagePicks[key];
+                        const set = (next: string[] | undefined) => setPackagePicks((all) => { const { [key]: _gone, ...rest } = all; void _gone; return next ? { ...rest, [key]: next } : rest; });
+                        return (
+                          <li key={key}>
+                            <div className="text-sm font-medium">{p.title}</div>
+                            <div className="mt-0.5 flex flex-wrap gap-x-4 gap-y-1">
+                              {bindings.map((b) => (
+                                <label key={b.name} className="flex items-center gap-1.5 text-sm">
+                                  <input type="checkbox" disabled={busy !== null} checked={(picked ?? []).includes(b.name)} onChange={() => { const now = picked ?? []; const next = now.includes(b.name) ? now.filter((n) => n !== b.name) : [...now, b.name]; set(next.length > 0 ? next : undefined); }} />
+                                  {b.name}
+                                </label>
+                              ))}
+                              {(picked ?? []).length === 0 && <span className="text-xs text-[var(--ink-soft)]">no package yet</span>}
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </fieldset>
               )}
 
               <div className="flex flex-wrap items-center gap-2">
@@ -1804,6 +2119,8 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
                           <th className="px-2.5 py-1.5 font-medium">Column</th>
                           <th className="px-2.5 py-1.5 font-medium">Now</th>
                           <th className="px-2.5 py-1.5 font-medium">After</th>
+                          <th className="px-2.5 py-1.5 font-medium">Price</th>
+                          <th className="px-2.5 py-1.5 font-medium">Compare at</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1814,6 +2131,8 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
                             <td className="whitespace-nowrap px-2.5 py-1.5 text-[var(--ink-soft)]">{row.c.column}</td>
                             <td className="px-2.5 py-1.5"><span className="line-clamp-2 text-[var(--ink-soft)]">{row.c.before || "—"}</span></td>
                             <td className={cx("px-2.5 py-1.5 font-medium", row.c.column === "Variant Price" && "text-[var(--violet)]")}><span className="line-clamp-2">{row.c.after || "—"}</span></td>
+                            <td className="whitespace-nowrap px-2.5 py-1.5 tabular-nums"><PriceMove move={row.c.prices?.price} /></td>
+                            <td className="whitespace-nowrap px-2.5 py-1.5 tabular-nums"><PriceMove move={row.c.prices?.compareAt} /></td>
                           </tr>
                         ))}
                       </tbody>
@@ -1831,5 +2150,17 @@ export function BulkPanel({ aiEnabled, builtBy = "" }: { aiEnabled: boolean; bui
         </Card>
       )}
     </div>
+  );
+}
+
+/** One price on a preview line: as it is, or as it was and as it becomes, the new figure marked. */
+function PriceMove({ move }: { move?: { before: string; after: string } }) {
+  if (!move) return <span className="text-[var(--ink-soft)]">—</span>;
+  if (move.before === move.after) return <span>{move.after || <span className="text-[var(--ink-soft)]">—</span>}</span>;
+  return (
+    <span>
+      <span className="text-[var(--ink-soft)] line-through">{move.before || "—"}</span>{" "}
+      <span aria-hidden>→</span> <span className="font-semibold text-[var(--meta)]">{move.after || "none"}</span>
+    </span>
   );
 }

@@ -13,7 +13,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { retailer } from "./shop-profile";
-import { anthropicClient, WORKING_MODEL, aiAvailable } from "./anthropic";
+import { anthropicClient, LIGHT_MODEL, aiAvailable } from "./anthropic";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import sharp from "sharp";
@@ -62,8 +62,8 @@ const getClient = (): Anthropic => anthropicClient(1);
 export type Looker = (system: string, content: Anthropic.MessageParam["content"]) => Promise<string | undefined>;
 const askModel: Looker = async (system, content) => {
   const response = await getClient().messages.stream({
-    model: WORKING_MODEL,
-    max_tokens: 2000,
+    model: LIGHT_MODEL,
+    max_tokens: 32_000,
     system,
     output_config: { format: zodOutputFormat(Verdict), effort: "low" },
     messages: [{ role: "user", content }],

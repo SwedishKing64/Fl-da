@@ -24,9 +24,21 @@ import type { GroupedProduct } from "../../grouping";
 import { asShopWritesIt, productTitle, seasonTagFrom } from "../../titles";
 import { rememberedBinding, type Listing } from "../../shop-memory";
 import { COLOUR_WORDS } from "../../types";
+import { isSystemBinding } from "./mount";
 
-/** What the shop charges to mount a binding, before any discount. */
-export const MOUNT_FEE = 55;
+/**
+ * What the shop charges to mount a binding, before any discount (changed 2026-10-20): a drill mount
+ * is $59, a system binding on its rail or plate $49. Which kind a binding is, mount.ts decides.
+ */
+export const DRILL_MOUNT_FEE = 59;
+export const SYSTEM_MOUNT_FEE = 49;
+/** The drill charge, the one most packages carry. Kept under its old name for the callers that want one figure. */
+export const MOUNT_FEE = DRILL_MOUNT_FEE;
+
+/** The mounting charge for a package on this binding. */
+export function mountFeeFor(binding: string): number {
+  return isSystemBinding(binding) ? SYSTEM_MOUNT_FEE : DRILL_MOUNT_FEE;
+}
 
 /** The two fittings, spelled as the catalogue spells them. Do-not-mount is always first. */
 export const FITTING_NO_MOUNT = "Do Not Mount My Bindings";
@@ -93,10 +105,13 @@ export interface SkiPackage {
  * 2027 inc Marker Griffon Binding Package". The newer one is used: with more than one binding on
  * offer a name that does not say which is ambiguous the moment a second package exists.
  */
-export function packageTitle(skiTitle: string, season: string, binding: BindingChoice): string {
-  const name = binding.shortName ?? binding.label.replace(/\s*-\s*\w+$/, "");
+export function packageTitle(skiTitle: string, season: string, binding: BindingChoice | BindingChoice[]): string {
+  const all = Array.isArray(binding) ? binding : [binding];
   const base = skiTitle.trim().replace(/\s+/g, " ");
   const withSeason = season && !new RegExp(`\\b${season}\\b`).test(base) ? `${base} ${season}` : base;
+  // A package offering several bindings is named for none of them, as the catalogue's older ones are.
+  if (all.length !== 1) return `${withSeason} inc Binding Package`;
+  const name = all[0].shortName ?? all[0].label.replace(/\s*-\s*\w+$/, "");
   return `${withSeason} inc ${name} Binding Package`;
 }
 
@@ -123,7 +138,7 @@ export function buildPackage(ski: FlatSki, bindings: BindingChoice[]): SkiPackag
       const base = rrp === null ? null : money(rrp + binding.rrp);
       const both = cost === null || cost === undefined || binding.cost === null || binding.cost === undefined ? null : money(cost + binding.cost);
       variants.push({ length, bindingOption: binding.label, bindingFitting: FITTING_NO_MOUNT, rrp: base, cost: both, quantity, barcode: code });
-      variants.push({ length, bindingOption: binding.label, bindingFitting: FITTING_MOUNT, rrp: base === null ? null : money(base + MOUNT_FEE), cost: both, quantity, barcode: code });
+      variants.push({ length, bindingOption: binding.label, bindingFitting: FITTING_MOUNT, rrp: base === null ? null : money(base + mountFeeFor(binding.label)), cost: both, quantity, barcode: code });
     }
   }
 
@@ -229,7 +244,10 @@ export function integratedBinding(skiTitle: string, season: string): { title: st
 
 /** Is this grouped product a flat ski — the thing a package is built from? */
 export function isFlatSki(g: { productType: string; title: string; tags: string[] }): boolean {
-  return /^skis?$/i.test(g.productType.trim()) && !/\binc\b|\bpackage\b|\bsystem\b/i.test(g.title) && !g.tags.includes("ski packages");
+  // Any of the shop's ski Types: "Skis", "Mens Skis", "Freeride & Powder Skis" — a model the shop
+  // listed before keeps the Type it was filed under. Not cross-country skis (asked 2026-10-20: a
+  // Bent 100 had no binding picker while the Bent 110 beside it had one).
+  return /\bskis?$/i.test(g.productType.trim()) && !/cross[- ]?country|\bnordic\b/i.test(g.productType) && !/\binc\b|\bpackage\b|\bsystem\b/i.test(g.title) && !g.tags.includes("ski packages");
 }
 
 /**
@@ -278,6 +296,15 @@ export function packageProducts(
   priceList: Array<{ title: string; colour?: string; rrp: number | null; costPrice: number | null }>,
   listings: Listing[] = [],
   chosen: ChosenBindings = {},
+  /**
+   * The bindings somebody picked for this ski from the shop's binding list (asked 2026-10-20): one
+   * Binding Option each. An empty pick or none at all is no package.
+   */
+  picked?: (ski: GroupedProduct) => BindingChoice[] | undefined,
+  /** The shop's own binding list: where a default binding is on it, its price and cost come from it. */
+  shopList: Array<{ name: string; rrp: number; cost: number | null }> = [],
+  /** Package an unpicked ski with the usual binding. Off: the shop picks every ski's bindings. */
+  useDefaults = false,
 ): { packages: GroupedProduct[]; skipped: PackageSkip[] } {
   const packages: GroupedProduct[] = [];
   const skipped: PackageSkip[] = [];
@@ -285,41 +312,57 @@ export function packageProducts(
     if (!isFlatSki(g)) continue;
     const season = seasonTagFrom(g.tags);
     const flatTitle = productTitle(g.title, season);
+    const picks = picked?.(g);
+    if (picks && picks.length === 0) continue;
+    if (picks && picks.length > 0) { packages.push(packageOf(g, flatTitle, season ?? "", picks)); continue; }
     const gender = g.tags.find((t) => /^(mens|womens|kids)$/.test(t)) ?? "";
     // A kids' ski takes the binding the shop packaged the model with last time, if it ever did.
     const who = gender === "womens" ? "womens" : gender === "kids" || !bindingSpecFor(gender, flatTitle) ? "kids" : "mens";
+    // No binding is chosen for a ski on its own (asked 2026-10-20): a ski is packaged only with the
+    // bindings somebody picked for it, or that an instruction named. Unpicked, it has no package
+    // until one is picked under it. The old defaults (men's Griffon, women's Squire) are kept only
+    // where a caller asks for them.
+    if (!chosen[who] && !useDefaults) continue;
     const spec = chosen[who] ?? bindingSpecFor(gender, flatTitle) ?? specFromLabel(rememberedBinding({ title: g.title, brand: g.brand }, listings));
     if (!spec) { skipped.push({ title: flatTitle, reason: "a kids' ski takes a junior binding, and neither the order nor the shop's earlier packages of it say which" }); continue; }
-    const binding = bindingFrom(spec, priceList);
+    const listed = shopList.find((e) => new RegExp(`^${spec.shortName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i").test(e.name.trim()));
+    const binding = listed ? { label: spec.label, shortName: spec.shortName, rrp: listed.rrp, cost: listed.cost } : bindingFrom(spec, priceList);
     if (!binding) { skipped.push({ title: flatTitle, reason: `no ${spec.label} with one price on the supplier's price list` }); continue; }
-    const title = packageTitle(flatTitle, season ?? "", binding);
-    const variants = g.variants.flatMap((v) => {
-      const length = v.item.length || v.item.size || v.option1Value || "";
+    packages.push(packageOf(g, flatTitle, season ?? "", [binding]));
+  }
+  return { packages, skipped };
+}
+
+/** A flat ski as its package on these bindings: every length × every binding × both fittings. */
+function packageOf(g: GroupedProduct, flatTitle: string, season: string, bindings: BindingChoice[]): GroupedProduct {
+  const title = packageTitle(flatTitle, season, bindings);
+  const variants = g.variants.flatMap((v) => {
+    const length = v.item.length || v.item.size || v.option1Value || "";
+    return bindings.flatMap((binding) => {
       const rrp = v.item.rrp === null ? null : money(v.item.rrp + binding.rrp);
       const cost = v.item.costPrice === null || binding.cost === null || binding.cost === undefined ? null : money(v.item.costPrice + binding.cost);
       return [FITTING_NO_MOUNT, FITTING_MOUNT].map((fitting) => ({
         ...v,
-        item: { ...v.item, rrp: rrp === null ? null : fitting === FITTING_MOUNT ? money(rrp + MOUNT_FEE) : rrp, costPrice: cost },
+        item: { ...v.item, rrp: rrp === null ? null : fitting === FITTING_MOUNT ? money(rrp + mountFeeFor(binding.label)) : rrp, costPrice: cost },
         option1Value: length,
         option2Value: binding.label,
         option3Value: fitting,
       }));
     });
-    const tags = [...g.tags];
-    for (const t of ["ski packages", "ski", "skis"]) if (!tags.includes(t)) tags.push(t);
-    packages.push({
-      ...g,
-      key: `${g.key}|package`,
-      handle: slugify(title),
-      title,
-      tags,
-      option1Name: "Length",
-      option2Name: "Binding Option",
-      option3Name: "Binding Fitting",
-      variants,
-    });
-  }
-  return { packages, skipped };
+  });
+  const tags = [...g.tags];
+  for (const t of ["ski packages", "ski", "skis"]) if (!tags.includes(t)) tags.push(t);
+  return {
+    ...g,
+    key: `${g.key}|package`,
+    handle: slugify(title),
+    title,
+    tags,
+    option1Name: "Length",
+    option2Name: "Binding Option",
+    option3Name: "Binding Fitting",
+    variants,
+  };
 }
 
 /**

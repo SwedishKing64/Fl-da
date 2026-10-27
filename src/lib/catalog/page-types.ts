@@ -63,3 +63,30 @@ export function fitlessOf(title: string): string {
 export function flatHandleOf(handle: string): string {
   return handle.replace(/-inc-.*binding-package(-\d+)?$/, "").replace(/-inc-.*$/, "");
 }
+
+/** A colour's own page beside a product, and where its read stands: LINKED, PAGE, PAGE_UNSURE, LINK_FAILED. */
+export interface ColourLink { colour: string; url: string; status: string }
+export const sameColour = (a: string, b: string): boolean => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+/** The colour links kept on a product. */
+export function colourLinksOf(raw: string | null | undefined): ColourLink[] {
+  try {
+    const list = JSON.parse(raw || "[]");
+    return Array.isArray(list) ? list.filter((l) => l && typeof l.colour === "string" && typeof l.url === "string").map((l) => ({ colour: l.colour, url: l.url, status: typeof l.status === "string" ? l.status : "LINKED" })) : [];
+  } catch {
+    return [];
+  }
+}
+
+
+/** The colours a product comes in: the values of whichever option is its colour, in variant order. */
+export function coloursOfProduct(p: { option1Name: string | null; option2Name: string | null; option3Name: string | null; variants: Array<{ option1Value: string | null; option2Value: string | null; option3Value: string | null }> }): string[] {
+  const at = [p.option1Name, p.option2Name, p.option3Name].findIndex((n) => /colou?r/i.test(n ?? ""));
+  if (at < 0) return [];
+  const out: string[] = [];
+  for (const v of p.variants) {
+    const value = ([v.option1Value, v.option2Value, v.option3Value][at] ?? "").trim();
+    if (value && !out.some((c) => sameColour(c, value))) out.push(value);
+  }
+  return out;
+}

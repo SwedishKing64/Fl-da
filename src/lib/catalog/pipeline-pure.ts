@@ -65,15 +65,14 @@ export function toCsvProducts(products: ReviewProduct[]): CsvProduct[] {
   return products.map((p) => {
     const productImages = p.images; // every image belongs to the product gallery; variant images also link via Variant Image
     const variantImage = new Map(p.images.filter((i) => i.variantId).map((i) => [i.variantId!, i.url]));
-    // A picture put on one variant of a colour is that colour's picture: the other sizes of the
-    // same colour show it too, so every black binding in the drop-down is the black one.
+    // A colour's picture is every variant of that colour's: one picture is tied to the colour's
+    // first variant (see applyColourPictures), and its other sizes show it too.
     const colourAt = [p.option1Name, p.option2Name, p.option3Name].findIndex((n) => /colou?r/i.test(n ?? ""));
-    const colourOf = (v: { option1Value: string | null; option2Value: string | null; option3Value: string | null }) => (colourAt < 0 ? "" : ([v.option1Value, v.option2Value, v.option3Value][colourAt] ?? "").trim().toLowerCase());
-    const byColour = new Map<string, string>();
-    for (const v of p.variants) {
-      const url = variantImage.get(v.id);
-      const colour = colourOf(v);
-      if (url && colour && !byColour.has(colour)) byColour.set(colour, url);
+    if (colourAt >= 0) {
+      const colourOf = (v: (typeof p.variants)[number]) => ([v.option1Value, v.option2Value, v.option3Value][colourAt] ?? "").trim().toLowerCase();
+      const byColour = new Map<string, string>();
+      for (const v of p.variants) { const url = variantImage.get(v.id); if (url && colourOf(v) && !byColour.has(colourOf(v))) byColour.set(colourOf(v), url); }
+      for (const v of p.variants) if (!variantImage.has(v.id) && byColour.has(colourOf(v))) variantImage.set(v.id, byColour.get(colourOf(v))!);
     }
     return {
       handle: p.handle,
@@ -104,7 +103,7 @@ export function toCsvProducts(products: ReviewProduct[]): CsvProduct[] {
         price: v.retailPrice,
         compareAtPrice: v.compareAtPrice,
         costPerItem: v.landedCostHome,
-        imageUrl: variantImage.get(v.id) ?? byColour.get(colourOf(v)) ?? null,
+        imageUrl: variantImage.get(v.id) ?? null,
       })),
     };
   });

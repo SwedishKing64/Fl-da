@@ -31,6 +31,7 @@ import { allocateFreight, exGstCostHome, priceVariant } from "./pricing";
 import { getSettings } from "./settings";
 import { checkImageUrl, findLibraryImages, recordLibraryImages } from "./images";
 import { framePicture, hostPictures } from "./pictures";
+import { keeper } from "./rebuild-keep";
 import { generateCsvParts, validateCsvFile, validateProducts } from "./csv";
 import { toCsvProducts } from "./pipeline-pure";
 import { repairForExport, type Repair } from "./repair";
@@ -629,15 +630,30 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
 
   // A year said in the instruction chat wins over whatever the supplier's file calls the season:
   // Burton's "27WIN" is 2027, and an April order for the 2026 range is still tagged 2026.
-  if (/^20\d{2}$/.test(directives.season.trim())) {
-    for (const entry of items) entry.item = { ...entry.item, season: directives.season.trim() };
+  // A year given as a tag in the chat is the season too (asked 2026-10-19): it is the product's one
+  // year tag, not a second beside the file's, and the title and handle carry it.
+  const toldYear = /^20\d{2}$/.test(directives.season.trim()) ? directives.season.trim() : [...directives.addTags].reverse().map((t) => t.trim()).find((t) => /^20\d{2}$/.test(t)) ?? "";
+  if (toldYear) {
+    for (const entry of items) entry.item = { ...entry.item, season: toldYear };
   } else if (items.length > 0 && items.every((entry) => !/^20\d{2}$/.test(entry.item.season))) {
     // No season on any line: the file's own name says it, where it does — Burton's confirmation
     // sheet is "Alpsport_W27_Burton_Confirmed…" and its lines carry no season column at all.
-    const fromName = batch.files.flatMap((f) => f.filename.split(/[^A-Za-z0-9/]+/)).map(seasonFrom).find((y) => /^20[2-3]\d$/.test(y));
+    // The latest year the name gives: "…_NOV_2026_boot_pole_-2027-Retail" is the 2027 range,
+    // delivered in November 2026.
+    const fromName = batch.files.flatMap((f) => f.filename.split(/[^A-Za-z0-9/]+/)).map(seasonFrom).filter((y) => /^20[2-3]\d$/.test(y)).sort().at(-1);
     if (fromName) {
       for (const entry of items) entry.item = { ...entry.item, season: fromName };
       for (const fileId of [...new Set(items.map((i) => i.fileId))]) await noteOnFile(fileId, `No column on this sheet says the season, so it was taken from the file's name: ${fromName}. Say "year tags 2026" in the chat if that is wrong.`);
+    }
+  }
+
+  // No brand on any line, none said in the chat and no supplier to go by: the file's own name says
+  // it, where it does — Dalbello's order form never names Dalbello, "Dalbello_MAY_2027_Order_.xlsx" does.
+  if (!directives.vendor.trim() && !supplierBrand && items.length > 0 && items.every((entry) => !entry.item.brand.trim())) {
+    const fromName = brandIn(batch.files.map((f) => f.filename.replace(/\.[a-z0-9]+$/i, "").replace(/[_.\-]+/g, " ")).join(" "), knownVendors);
+    if (fromName) {
+      for (const entry of items) entry.item = { ...entry.item, brand: fromName };
+      for (const fileId of [...new Set(items.map((i) => i.fileId))]) await noteOnFile(fileId, `No column on this sheet says the brand, so it was taken from the file's name: ${fromName}. Say "the brand is …" in the chat if that is wrong.`);
     }
   }
 
@@ -846,7 +862,12 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
     if (!spec) continue;
     for (const who of b.for === "all" ? (["mens", "womens", "kids"] as const) : [b.for]) chosen[who] = spec;
   }
-  const { packages, skipped } = directives.packages === "none" ? { packages: [], skipped: [] } : packageProducts(grouped, priceList, listings, chosen);
+  // The bindings picked for each ski on the review page, from the shop's binding list. See binding-list.ts.
+  const { getBindingList, getBatchPicks } = await import("./trades/snow/binding-store");
+  const { pickerFor } = await import("./trades/snow/binding-list");
+  const bindingList = (await getBindingList().catch(() => null))?.entries ?? [];
+  const picks = await getBatchPicks(batchId).catch(() => ({}));
+  const { packages, skipped } = directives.packages === "none" ? { packages: [], skipped: [] } : packageProducts(grouped, priceList, listings, chosen, pickerFor(bindingList, picks), bindingList);
   grouped.push(...(packages as typeof grouped));
   // A product the shop already sells keeps the handle it sells it under, so importing the file
   // updates it rather than listing it twice. See existingHandle.
@@ -943,6 +964,25 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
 
   // Rebuild the batch's products from scratch (mapping is re-runnable until export).
   phase("placed against the shop");
+  // What the products had gathered since they were built — a link, its page's description and
+  // pictures, pictures added by hand — goes back onto the products made in their place.
+  const keep = keeper((await prisma.product.findMany({
+    where: { batchId },
+    select: {
+      handle: true, title: true, tags: true, bodyHtml: true, lookupStatus: true, lookupSource: true, lookupAt: true, colourLinks: true,
+      option1Name: true, option2Name: true, option3Name: true,
+      variants: { select: { id: true, option1Value: true, option2Value: true, option3Value: true } },
+      images: { select: { url: true, source: true, altText: true, position: true, validated: true, variantId: true } },
+    },
+  })).map((p) => {
+    // A picture tied to a variant is kept as the colour that variant is, to be tied again after.
+    const at = [p.option1Name, p.option2Name, p.option3Name].findIndex((n) => /colou?r/i.test(n ?? ""));
+    const colourOf = (variantId: string | null) => {
+      const v = variantId && at >= 0 ? p.variants.find((x) => x.id === variantId) : undefined;
+      return v ? ([v.option1Value, v.option2Value, v.option3Value][at] ?? "").trim() : "";
+    };
+    return { ...p, images: p.images.map(({ variantId, ...i }) => ({ ...i, colour: colourOf(variantId) || undefined })) };
+  }));
   await prisma.$transaction([
     prisma.extractedLineItem.deleteMany({ where: { batchId } }),
     prisma.product.deleteMany({ where: { batchId } }),
@@ -956,8 +996,10 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
   for (const g of grouped) {
     // A seasonal product carries its year after the name — the same products that carry a year tag,
     // or only those the shop chose (see titleYear). The SEO title is that title with the brand in
-    // front of it, which is the one place it appears.
-    const title = titledForShop(g.brand, productTitle(g.title, titleYear(g.tags, g.productType)));
+    // front of it, which is the one place it appears. A rebuild gives back the title a page gave it.
+    const built = titledForShop(g.brand, productTitle(g.title, titleYear(g.tags, g.productType)));
+    const kept = keep({ handle: g.handle, title: built, tags: g.tags.join(", ") });
+    const title = kept?.title ?? built;
     // Everything the product owns goes in with it: its variants, each with the order line it came
     // from, and its pictures. One round trip per product instead of one per row — a build on a
     // database in another region was waiting on the network a dozen times per product.
@@ -984,8 +1026,14 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
         }
       }
     }
+    for (const { colour: _colour, ...img } of kept?.images ?? []) {
+      void _colour;
+      if (urls.has(img.url)) continue;
+      urls.add(img.url);
+      images.push(img);
+    }
     let vsort = 0;
-    await prisma.product.create({
+    const created = await prisma.product.create({
       data: {
         batchId,
         handle: g.handle,
@@ -993,7 +1041,8 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
         seoTitle: seoTitle(g.brand, title),
         // A body the spec sheet already laid out in the house format is used as it is. Wrapping it
         // again — in a <p>, escaped — turned its <h2> and <li> into text a customer would read.
-        bodyHtml: /^\s*</.test(g.description) ? g.description : await shopBody(g.description, []),
+        bodyHtml: kept?.bodyHtml ?? (/^\s*</.test(g.description) ? g.description : await shopBody(g.description, [])),
+        ...(kept ? { lookupStatus: kept.lookupStatus, lookupSource: kept.lookupSource, lookupAt: kept.lookupAt, ...(kept.colourLinks ? { colourLinks: kept.colourLinks } : {}) } : {}),
         vendor: g.brand,
         productType: g.productType,
         category: g.category,
@@ -1034,10 +1083,18 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
             };
           }),
         },
-        // Supplier URLs first, then the library.
+        // Supplier URLs first, then the library, then what the product had gathered before this build.
         images: { create: images.map((img, i) => ({ ...img, position: i + 1 })) },
       },
+      select: { id: true, variants: { select: { id: true, option1Value: true, option2Value: true, option3Value: true }, orderBy: { sortOrder: "asc" } }, images: { select: { id: true, url: true } } },
     });
+    // A colour's picture tied again to the first variant of that colour, as it was before the rebuild.
+    const colourAt = [g.option1Name, g.option2Name, g.option3Name].findIndex((n) => /colou?r/i.test(n ?? ""));
+    for (const img of colourAt >= 0 ? (kept?.images ?? []).filter((i) => i.colour) : []) {
+      const v = created.variants.find((x) => ([x.option1Value, x.option2Value, x.option3Value][colourAt] ?? "").trim().toLowerCase() === img.colour!.toLowerCase());
+      const row = created.images.find((x) => x.url === img.url);
+      if (v && row) await prisma.productImage.update({ where: { id: row.id }, data: { variantId: v.id } });
+    }
   }
 
   await attachUnassignedPhotos(batchId);
@@ -1303,6 +1360,7 @@ export async function loadReview(batchId: string): Promise<ReviewData> {
     seoDescription: p.seoDescription,
     lookupStatus: p.lookupStatus,
     lookupSource: p.lookupSource,
+    colourLinks: p.colourLinks,
     option1Name: p.option1Name,
     option2Name: p.option2Name,
     option3Name: p.option3Name,

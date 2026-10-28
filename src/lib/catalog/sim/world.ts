@@ -180,11 +180,12 @@ export function makeShop(tradeId: string, seed: number): Shop {
   const rng = new Rng(seed * 7919 + tradeId.length);
   const name = rng.pick(trade.shopNames);
   const brands = rng.some(trade.brands, 3, 4);
-  // No two models in the shop share a name, whoever makes them: a name tells products apart.
+  // No two models in the shop share a name or a code, whoever makes them: a distributor's invoice
+  // mixes brands, and two brands with one code would be one SKU twice.
   const used = new Set<string>();
+  const usedCodes = new Set<string>();
   const suppliers: Supplier[] = brands.map((brand) => {
     const range: Model[] = [];
-    const usedCodes = new Set<string>();
     for (const kind of rng.some(trade.kinds, Math.min(2, trade.kinds.length), trade.kinds.length)) {
       // The names still free for this kind, a few of them: a model is a noun and a suffix.
       const free = rng.shuffle(kind.nouns.flatMap((n) => kind.suffixes.map((x) => `${n} ${x}`.trim()))).filter((n) => !used.has(n)).slice(0, rng.int(2, 4));

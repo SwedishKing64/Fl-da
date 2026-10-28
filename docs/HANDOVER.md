@@ -423,9 +423,10 @@ terms and the due dates worked from them, PAID stamps) live in Rubin's handover.
   model, prefix-stripped together, collapsed a whole range into one product (`normaliseCodes`
   groups by gender). After: 100% of lines, fields, models and variants on 87 documents, 98.9%
   exportable; `samples/sim-baseline.json` holds it and `--baseline` fails a trade that drops.
-  Still open from it: a Type is found for only 57% of products with nothing to go on but the
+  Still open from it: a Type is found for only 58% of products with nothing to go on but the
   name (a category column takes it to 98%); an option column the mapping does not know (Scent,
-  Capacity) reaches the build only as a kept column.
+  Capacity) is not a mapped field — the build takes it as an option from the kept columns, on
+  every product of the batch with a value under it.
 - 2026-10-27 Launch on Shopify only, the platform the owner knows; other platforms (WooCommerce
   first) after there are paying Shopify shops. Desktop pictures go to the shop's Shopify Files once
   its store is connected. One desktop install holds several shops, one open at a time.

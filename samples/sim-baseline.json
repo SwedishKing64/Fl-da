@@ -4,7 +4,7 @@
     "fields": 100,
     "models": 100,
     "variants": 100,
-    "typed": 50,
+    "typed": 58.1,
     "priced": 100,
     "exportable": 100
   },
@@ -13,7 +13,7 @@
     "fields": 100,
     "models": 100,
     "variants": 100,
-    "typed": 62.8,
+    "typed": 51.4,
     "priced": 100,
     "exportable": 100
   },
@@ -31,7 +31,7 @@
     "fields": 100,
     "models": 100,
     "variants": 100,
-    "typed": 47.3,
+    "typed": 50.7,
     "priced": 100,
     "exportable": 100
   },
@@ -40,8 +40,8 @@
     "fields": 100,
     "models": 100,
     "variants": 100,
-    "typed": 81.6,
+    "typed": 79.6,
     "priced": 100,
-    "exportable": 93.8
+    "exportable": 100
   }
 }

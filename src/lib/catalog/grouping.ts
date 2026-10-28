@@ -146,6 +146,15 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
     groups.set(key, group);
   });
 
+  // A supplier's own column that tells one product's lines apart — its Scent, its Capacity — is
+  // an option on every product of the batch that has a value under it, the one-line products too:
+  // a candle ordered in one scent is still sold by scent, and the next scent joins it as a variant.
+  const batchExtras = new Set<OptionKey>();
+  for (const g of groups.values()) {
+    const its = g.entries.map((e) => e.item);
+    for (const k of extraOptions(its, chooseOptions(g.rule, its))) if (String(k).startsWith("extra:")) batchExtras.add(k);
+  }
+
   const products: GroupedProduct[] = [];
   // The ski and snowboard rules below are for a shop that sells skis and snowboards. Elsewhere a
   // boot is a boot and a glove a glove, and the shop's own store says where they go.
@@ -233,7 +242,9 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
     // read in. A jacket is colour then size on forty-one of forty-three products, a ski is length
     // first, and a sleeping bag is size, loft, then which side the zip is on.
     // A supplier's own column joins them where two lines would otherwise be the same variant.
-    const optionKeys = orderByConvention(productType, extraOptions(items, chooseOptions(group.rule, items)), items);
+    const chosenKeys = extraOptions(items, chooseOptions(group.rule, items));
+    for (const k of batchExtras) if (!chosenKeys.includes(k) && chosenKeys.length < 3 && items.every((i) => optionValue(i, k))) chosenKeys.push(k);
+    const optionKeys = orderByConvention(productType, chosenKeys, items);
     const names = optionKeys.map((k) => correctedOptionName(productType, normaliseOptionName(optionLabel(k, items))));
     const seenCombos = new Set<string>();
     const variants: GroupedVariant[] = [];

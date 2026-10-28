@@ -4,7 +4,7 @@ import { buildHandle } from "./handle";
 import { nameLikeSibling } from "./shop-names";
 import { csvType } from "./pipeline-pure";
 import { chooseOptions, collectionsFor, extraOptions, optionValue, type OptionKey, detectCategory, enrichFromTitle, metafieldsFor, OPTION_LABELS, snowboardType, tagsFor, type CategoryRuleLike } from "./categorize";
-import { closestType, houseConventions, isValidType, packKnowledge, resolveType, snowTrade, typesAreKnown } from "./taxonomy";
+import { closestType, houseConventions, isValidType, learnedTypes, packKnowledge, resolveType, snowTrade, typeNamedIn, typesAreKnown } from "./taxonomy";
 import { inSizeOrder } from "./size-order";
 import { correctedOptionName, correctedProductType } from "./corrections";
 import { withFit, withoutGender } from "./mapping";
@@ -76,7 +76,10 @@ function titleCase(s: string): string {
 function normaliseCodes(items: CanonicalLineItem[]): CanonicalLineItem[] {
   const byTitle = new Map<string, CanonicalLineItem[]>();
   for (const item of items) {
-    const key = `${item.brand.trim().toLowerCase()}|${normTitle(item.title)}`;
+    // The men's and the women's of one model share a name and are two products with two codes
+    // (WS2782 and WS2725W): stripped to what those have in common, "WS27", every model of the
+    // range would share one code and be built as one product (found 2026-10-28).
+    const key = `${item.brand.trim().toLowerCase()}|${normTitle(item.title)}|${audience(item.gender)}`;
     byTitle.set(key, [...(byTitle.get(key) ?? []), item]);
   }
   for (const group of byTitle.values()) {
@@ -179,9 +182,21 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
     // Accessory on the Ski & Boot Bags shelf, whatever rule its name tripped (asked 2026-10-20).
     const snowBag = snow && isSnowBag(brand, title, first.category, first.productType) ? "Ski Accessories" : null;
     // And as the shop corrected it: a Type changed on this brand's product before is changed here too.
-    const filedAs = correctedProductType(snowBag ?? snowboard ?? pack ?? accessory ?? skin ?? group.rule?.productType ?? resolveType(first.productType) ?? "", brand);
+    // Nothing on the order said what it is: the shop's own listing of the model says, and failing
+    // that the shop's Type the name itself carries ("Down Jackets" in "Cirrus Down Jacket").
+    // Nothing on the order said what it is in the shop's words: the supplier's own category column
+    // may ("HARDTAIL MOUNTAIN BIKES"), then the shop's own listing of the model, then the shop's
+    // Type the name itself carries ("Down Jackets" in "Cirrus Down Jacket").
+    const fromShop = () => resolveType(first.category) || typeNamedIn(first.category) || rememberedType({ title, brand }, opts.listings ?? []) || typeNamedIn(title) || "";
+    const filedAs = correctedProductType(snowBag ?? snowboard ?? pack ?? accessory ?? skin ?? group.rule?.productType ?? resolveType(first.productType) ?? fromShop(), brand);
     // Filed under one of the shop's own types where one is close, rather than asked about.
-    const productType = filedAs && typesAreKnown() && !isValidType(filedAs) ? closestType(filedAs) ?? filedAs : filedAs;
+    const nearest = filedAs && typesAreKnown() && !isValidType(filedAs) ? closestType(filedAs) ?? filedAs : filedAs;
+    // A shop that has taught its own Types files under them: a pack's shelf ("Hiking Packs") is not
+    // the shop's "Backpacks". Its own listing of the model says which; failing that, the nearest.
+    const own = learnedTypes();
+    const productType = nearest && own.length > 0 && !own.some((t) => t.toLowerCase() === nearest.toLowerCase())
+      ? rememberedType({ title, brand }, opts.listings ?? []) || closestType(nearest, own) || nearest
+      : nearest;
     // Who it is for. A shop that writes "Men's …" and "Women's …" on the front of a name (house
     // naming.audience "front") gets that, on everything but hardgoods; every other shop's titles
     // carry no gender at all — the gender goes in the tags, and the handle tells men's and women's
@@ -218,7 +233,7 @@ export function groupLineItems(rawItems: CanonicalLineItem[], rules: CategoryRul
     // read in. A jacket is colour then size on forty-one of forty-three products, a ski is length
     // first, and a sleeping bag is size, loft, then which side the zip is on.
     // A supplier's own column joins them where two lines would otherwise be the same variant.
-    const optionKeys = orderByConvention(productType, extraOptions(items, chooseOptions(group.rule, items)));
+    const optionKeys = orderByConvention(productType, extraOptions(items, chooseOptions(group.rule, items)), items);
     const names = optionKeys.map((k) => correctedOptionName(productType, normaliseOptionName(optionLabel(k, items))));
     const seenCombos = new Set<string>();
     const variants: GroupedVariant[] = [];
@@ -352,9 +367,11 @@ function optionLabel(k: OptionKey, items: CanonicalLineItem[]): string {
   return OPTION_LABELS[key] ?? titleCase(key);
 }
 
-function orderByConvention(productType: string, keys: OptionKey[]): OptionKey[] {
+function orderByConvention(productType: string, keys: OptionKey[], items: CanonicalLineItem[]): OptionKey[] {
   if (keys.length < 2) return keys;
-  const label = (k: OptionKey) => normaliseOptionName(OPTION_LABELS[String(k)] ?? (String(k).startsWith("extra:") ? titleCase(String(k).slice(6).toLowerCase()) : titleCase(String(k))));
+  // By the name each option goes out under: a supplier's "variant" column is its Length or its
+  // Zip Side, not "Variant", or the type's own order of options could never place it.
+  const label = (k: OptionKey) => normaliseOptionName(optionLabel(k, items));
   const wanted = optionNamesFor(productType, keys.map(label));
   return [...keys].sort((a, b) => {
     const ia = wanted.indexOf(label(a));

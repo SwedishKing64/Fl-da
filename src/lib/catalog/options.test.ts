@@ -30,7 +30,7 @@ describe("what a product is sold by", () => {
   });
 
   it("sells a sleeping bag by size, loft and which side the zip is on", () => {
-    expect(optionPlanFor("Sleeping Bags")).toEqual(["Size", "Loft", "Zip Side"]);
+    expect(optionPlanFor("Sleeping Bags")).toEqual(["Size", "Length", "Loft", "Zip Side"]);
   });
 
   it("sells everything else by colour then size", () => {

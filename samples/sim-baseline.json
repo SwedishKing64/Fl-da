@@ -1,0 +1,47 @@
+{
+  "bike": {
+    "lines": 100,
+    "fields": 100,
+    "models": 100,
+    "variants": 100,
+    "typed": 50,
+    "priced": 100,
+    "exportable": 100
+  },
+  "outdoor": {
+    "lines": 100,
+    "fields": 100,
+    "models": 100,
+    "variants": 100,
+    "typed": 62.8,
+    "priced": 100,
+    "exportable": 100
+  },
+  "snow": {
+    "lines": 100,
+    "fields": 100,
+    "models": 100,
+    "variants": 100,
+    "typed": 55.1,
+    "priced": 100,
+    "exportable": 100
+  },
+  "surf": {
+    "lines": 100,
+    "fields": 100,
+    "models": 100,
+    "variants": 100,
+    "typed": 47.3,
+    "priced": 100,
+    "exportable": 100
+  },
+  "general": {
+    "lines": 100,
+    "fields": 100,
+    "models": 100,
+    "variants": 100,
+    "typed": 81.6,
+    "priced": 100,
+    "exportable": 93.8
+  }
+}

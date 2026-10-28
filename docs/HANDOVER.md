@@ -402,6 +402,30 @@ terms and the due dates worked from them, PAID stamps) live in Rubin's handover.
 
 ## Decisions and history, newest first
 
+- 2026-10-28 A shop simulator (`npm run eval:shops`, FLODA.md "Working on Flöda"): made-up shops in
+  five trades, each with an export and a season of deliveries in nine supplier layouts, read and
+  built and scored exactly against the truth they were rendered from. Its first run found, and
+  this fixed: a workbook with a short row crashed the no-code grid reader (`grid-form.ts`
+  `amount`); a flat invoice under a letterhead was claimed by that reader and lost every column
+  (it now declines a first heading row with a code and a quantity column, or a Size column, and
+  no sizes across); a strict "Item No." form with letter sizes (XS–XL, S/M), wetsuit sizes (MS,
+  MT), surfboard lengths (5'10) or a board's 158W lost them (`isSizeHeading`, `sectionsOf`);
+  one tab with a SKIS section and a SKI BOOTS section read every length as a Mondo size (boots
+  are now told per section, and a section's label is the line's kind); every size of a grid's
+  model shared one SKU and blocked the push (`orderToTable` puts the size, and the colour where
+  it takes that too, on the end); a workbook's Subtotal/GST/Total rows became products (a line
+  needs a name or a code); a product on a flat invoice with no category column got no Type at
+  all (now the supplier's category column, the shop's own listing of the model, then the shop's
+  Type the name carries — "Down Jackets" in "Cirrus Down Jacket"); a pack's shelf name was
+  written over the shop's own Type for the kind ("Hiking Packs" for a shop that says
+  "Backpacks"); a sleeping bag's Length was ordered after its zip side once it was typed
+  (`orderByConvention` labels the variant column by its name); and the men's and women's of one
+  model, prefix-stripped together, collapsed a whole range into one product (`normaliseCodes`
+  groups by gender). After: 100% of lines, fields, models and variants on 87 documents, 98.9%
+  exportable; `samples/sim-baseline.json` holds it and `--baseline` fails a trade that drops.
+  Still open from it: a Type is found for only 57% of products with nothing to go on but the
+  name (a category column takes it to 98%); an option column the mapping does not know (Scent,
+  Capacity) reaches the build only as a kept column.
 - 2026-10-27 Launch on Shopify only, the platform the owner knows; other platforms (WooCommerce
   first) after there are paying Shopify shops. Desktop pictures go to the shop's Shopify Files once
   its store is connected. One desktop install holds several shops, one open at a time.

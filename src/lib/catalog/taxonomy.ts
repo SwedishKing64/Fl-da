@@ -440,23 +440,46 @@ export function resolveType(value: string): string | undefined {
  * and more than half the words: a bare "Boots" is not a shop's "Apres Boots". Then the one sharing
  * most words wins, the shorter on a tie. Undefined when nothing is close.
  */
-export function closestType(value: string): string | undefined {
+export function closestType(value: string, among: readonly string[] = active.productTypes): string | undefined {
   const exact = resolveType(value);
-  if (exact) return exact;
+  if (exact && among.includes(exact)) return exact;
   const singular = (w: string) => (w.length > 3 && w.endsWith("s") && !w.endsWith("ss") ? w.slice(0, -1) : w);
   const words = (s: string) => norm(s).split(" ").filter((w) => w.length > 1).map(singular);
   const want = words(value);
   if (want.length === 0) return undefined;
   const head = want[want.length - 1];
   let best: { type: string; score: number } | null = null;
-  for (const type of active.productTypes) {
+  for (const type of among) {
     const have = words(type);
-    if (!have.includes(head)) continue;
+    // The head word, or a word that ends in it: "pack" is the head of "backpack" too.
+    if (!have.includes(head) && !(head.length >= 4 && have.some((w) => w.endsWith(head)))) continue;
     const shared = want.filter((w) => have.includes(w)).length;
     const score = shared / Math.max(want.length, have.length);
     if (score > 0.5 && (!best || score > best.score || (score === best.score && type.length < best.type.length))) best = { type, score };
   }
   return best?.type;
+}
+
+/**
+ * The shop's own Type whose every word is in a product's name — "Down Jackets" in "Cirrus Hooded
+ * Down Jacket", "Mugs" in "Speckle Mug Set of 4" — the longest where several are. A product no rule,
+ * no reading and no listing has filed is filed by its own name before it is left untyped.
+ */
+export function typeNamedIn(name: string): string | undefined {
+  const singular = (w: string) => (w.length > 3 && w.endsWith("s") && !w.endsWith("ss") ? w.slice(0, -1) : w);
+  const have = new Set(norm(name).split(" ").filter(Boolean).map(singular));
+  let best: { type: string; words: number } | null = null;
+  for (const type of active.productTypes) {
+    const words = norm(type).split(" ").filter((w) => w.length > 1).map(singular);
+    if (words.length === 0 || !words.every((w) => have.has(w))) continue;
+    if (!best || words.length > best.words) best = { type, words: words.length };
+  }
+  return best?.type;
+}
+
+/** The Types the shop itself uses, as its export taught them; none where it has taught none. */
+export function learnedTypes(): string[] {
+  return conventions.learned?.types.map((t) => t.type) ?? [];
 }
 
 /** True when this names a place a product can legitimately be filed. */

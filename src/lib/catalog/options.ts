@@ -102,7 +102,8 @@ export function optionPlanFor(type: string, context: OptionContext = {}): string
     return context.withBindings ? ["Length", "Binding Option", "Binding Size"] : ["Length"];
   }
 
-  if (resolved === "Sleeping Bags") return ["Size", "Loft", "Zip Side"];
+  // A bag's length is its size, whichever word the supplier used; it comes before the zip side.
+  if (resolved === "Sleeping Bags") return ["Size", "Length", "Loft", "Zip Side"];
   if (resolved === "Tents") return ["Add Footprint (recommended)"];
   if (resolved === "Hydration") return ["Colour", "Volume"];
 

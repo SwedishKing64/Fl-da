@@ -14,6 +14,7 @@ import type { ReviewProduct, ReviewSummary, ReviewVariant } from "./review-types
 import { unscored } from "./confidence";
 import { blockingErrors, summarise, validateReview, warningList } from "./validate";
 import type { ExtractedTable } from "./extract/types";
+import type { Listing } from "./shop-memory";
 
 export interface OfflineBatch {
   currency: string;
@@ -39,9 +40,10 @@ export function runOffline(
   batch: OfflineBatch,
   categoryRules: CategoryRuleLike[],
   settings: Pick<AppSettings, "gstRate" | "pricesIncludeGst" | "minMarginPct">,
+  extra: { listings?: Listing[] } = {},
 ): OfflineResult {
-  const items = table.rows.map((row) => applyMapping(row, mapping, mappingOptions)).filter((i) => i.title || i.sku || i.costPrice !== null);
-  const grouped = groupLineItems(items, categoryRules);
+  const items = table.rows.map((row) => applyMapping(row, mapping, mappingOptions)).filter((i) => i.title || i.sku || i.barcode || i.modelCode);
+  const grouped = groupLineItems(items, categoryRules, extra.listings ? { listings: extra.listings } : {});
 
   const products: ReviewProduct[] = grouped.map((g, pi) => ({
     id: `p${pi + 1}`,

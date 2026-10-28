@@ -358,6 +358,21 @@ that belonged to one shop.
 
 Everything in `HANDOVER.md` under "Working on it" applies. In addition:
 
+- **Shops Flöda has never seen, by the hundred.** `npm run eval:shops` makes up shops in five
+  trades (bike, outdoor, snow, surf, general — `src/lib/catalog/sim/world.ts`, the snow one in
+  `trades/snow/sim-world.ts`), each with brands, a range, an export of what it already lists, and
+  a season of deliveries rendered the ways suppliers send them (`sim/documents.ts`: three flat
+  CSV vocabularies, a barcode-led one, a size grid, a workbook under a letterhead with totals
+  below, a sectioned order form, a price list with a few boxes filled in, a distributor's
+  multi-brand invoice, and with `--ai` a printed page as text, as a PDF and as a photo). Every
+  document comes with the truth it was rendered from, so the reading is scored exactly
+  (`corpus.ts`) and so is the build (`sim/score-build.ts`: a product per model, its variants and
+  options, a Type the shop has, priced at RRP and above cost, barcodes kept, a CSV and a push
+  input Shopify would take). Scores are by trade and by layout; `--write-baseline` records them
+  and `--baseline` fails when a trade gets worse; `--out <dir>` writes every shop's export and
+  invoices so they can be loaded into the app by hand or by a script. The same seed is always the
+  same shops. It found eight reader and build bugs on its first run (HANDOVER, 2026-10-28). It
+  is a floor, not a ceiling: real suppliers' files are stranger than any of these.
 - Alpsport's Rubin and Flöda share history up to the split. A fix to a supplier reader or to the
   document reading is worth carrying to both; a change to a convention is Flöda's alone.
 - `npm run desktop:build` then `npm run desktop:check` runs the built server under plain Node

@@ -129,7 +129,8 @@ export function scoreDocument(read: CanonicalLineItem[], key: CorpusKey): Docume
       if (f === "code" && [l.sku, l.barcode, l.modelCode].some((c) => sameText(c, want) || sameText(String(c).replace(/\.[^.]+$/, ""), want))) { fields[f].right++; continue; }
       // An option is right where the reader kept it as the variant, or kept the column it came in
       // (its extras), which the build takes as an option: a scent, a capacity, a zip side.
-      const kept = f === "option" && Object.values(l.extras ?? {}).some((v) => sameText(v, want));
+      // …and a size is right wherever the reader kept it: a sleeping bag's Regular is its variant.
+      const kept = (f === "option" || f === "size") && [l.variant ?? "", ...Object.values(l.extras ?? {})].some((v) => sameText(v, want));
       const ok = kept || (typeof want === "number" ? sameNumber(typeof got === "number" ? got : got === null || got === "" ? null : Number(got), want) : sameText(got, want));
       if (ok) fields[f].right++;
       else wrong.push(`${label}: ${f} read ${JSON.stringify(got)}, key ${JSON.stringify(want)}`);

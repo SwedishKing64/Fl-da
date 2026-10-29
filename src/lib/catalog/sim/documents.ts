@@ -54,7 +54,7 @@ export interface Layout {
   render: (d: Delivery, shop: Shop, rng: Rng) => Promise<SimDocument> | SimDocument;
 }
 
-const SIZE_LIKE = ["Size", "Length", "Capacity"];
+const SIZE_LIKE = ["Size", "Length"];
 const sizeOf = (l: DeliveryLine): string => SIZE_LIKE.map((k) => l.variant.options[k]).find(Boolean) ?? "";
 const colourOf = (l: DeliveryLine): string => l.variant.options.Colour ?? "";
 const otherOf = (l: DeliveryLine): string => Object.entries(l.variant.options).filter(([k]) => k !== "Colour" && !SIZE_LIKE.includes(k)).map(([, v]) => v)[0] ?? "";
@@ -155,15 +155,18 @@ function footer(d: Delivery): Array<Array<string | number>> {
 function pageText(d: Delivery): string {
   const sized = d.lines.some(sizeOf);
   const coloured = d.lines.some(colourOf);
+  // A scent, a capacity: printed in a column of its own, headed with the option's name.
+  const other = d.lines.some(otherOf);
+  const otherName = other ? Object.keys(d.lines.find(otherOf)!.variant.options).find((k) => k !== "Colour" && !SIZE_LIKE.includes(k)) ?? "Option" : "";
   const pad = (s: string | number, n: number) => String(s).padEnd(n);
   const lines = [
     `${d.suppliers[0].brand.toUpperCase()} AUSTRALIA PTY LTD`,
     `TAX INVOICE ${d.invoiceNumber}        Date ${d.date}`,
     `Bill to: ${"Customer"}             Prices AUD ex GST`,
     "",
-    `${pad("Code", 18)}${pad("Description", 38)}${coloured ? pad("Colour", 14) : ""}${sized ? pad("Size", 8) : ""}${pad("Qty", 5)}${pad("Unit", 10)}${pad("RRP", 10)}Amount`,
+    `${pad("Code", 18)}${pad("Description", 38)}${coloured ? pad("Colour", 14) : ""}${sized ? pad("Size", 8) : ""}${other ? pad(otherName, 12) : ""}${pad("Qty", 5)}${pad("Unit", 10)}${pad("RRP", 10)}Amount`,
     "-".repeat(110),
-    ...d.lines.map((l) => `${pad(l.variant.sku, 18)}${pad(printedName(l.model), 38)}${coloured ? pad(colourOf(l), 14) : ""}${sized ? pad(sizeOf(l), 8) : ""}${pad(l.quantity, 5)}${pad(money(l.variant.cost), 10)}${pad(money(l.variant.rrp), 10)}${money(l.quantity * l.variant.cost)}`),
+    ...d.lines.map((l) => `${pad(l.variant.sku, 18)}${pad(printedName(l.model), 38)}${coloured ? pad(colourOf(l), 14) : ""}${sized ? pad(sizeOf(l), 8) : ""}${other ? pad(otherOf(l), 12) : ""}${pad(l.quantity, 5)}${pad(money(l.variant.cost), 10)}${pad(money(l.variant.rrp), 10)}${money(l.quantity * l.variant.cost)}`),
     "-".repeat(110),
     ...footer(d).slice(1).map((r) => `${" ".repeat(80)}${pad(r[3], 10)}${r[4]}`),
   ];

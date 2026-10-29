@@ -423,7 +423,12 @@ terms and the due dates worked from them, PAID stamps) live in Rubin's handover.
   model, prefix-stripped together, collapsed a whole range into one product (`normaliseCodes`
   groups by gender). After: 100% of lines, fields, models and variants on 87 documents, 98.9%
   exportable; `samples/sim-baseline.json` holds it and `--baseline` fails a trade that drops.
-  Still open from it: a Type is found for only 58% of products with nothing to go on but the
+  With `--ai` (run by the owner on 2026-10-29, 30 printed pages as text, PDF and photo): every
+  line found, 99.5% of fields right, every batch exportable; the model put a tent's 2P and a
+  boardshort's 18" into the variant and so merged two tents into one product (the reader is now
+  told those are part of the name), dropped a board's W from 162W (told to keep it), and named
+  kinds in its own words ("Jerseys", "2 Person Tents"), which now map to the shop's own type that
+  ends in the same word where it has one. Still open from it: a Type is found for only 58% of products with nothing to go on but the
   name (a category column takes it to 98%); an option column the mapping does not know (Scent,
   Capacity) is not a mapped field — the build takes it as an option from the kept columns, on
   every product of the batch with a value under it.

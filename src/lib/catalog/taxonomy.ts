@@ -457,7 +457,14 @@ export function closestType(value: string, among: readonly string[] = active.pro
     const score = shared / Math.max(want.length, have.length);
     if (score > 0.5 && (!best || score > best.score || (score === best.score && type.length < best.type.length))) best = { type, score };
   }
-  return best?.type;
+  if (best) return best.type;
+  // Among the shop's own types, the one type that ends in the same word is it: "Jerseys" is the
+  // shop's "Cycling Jerseys", "2 Person Tents" its "Tents", where it has one such type.
+  if (among !== active.productTypes) {
+    const sameHead = among.filter((type) => { const have = words(type); return have.length > 0 && have[have.length - 1] === head; });
+    if (sameHead.length === 1) return sameHead[0];
+  }
+  return undefined;
 }
 
 /**

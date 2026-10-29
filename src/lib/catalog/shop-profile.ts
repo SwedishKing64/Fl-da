@@ -22,6 +22,7 @@ import { setPictureHost, setShopifyPictures, usingBlob } from "./storage";
 import { getSettings } from "./settings";
 import { LICENCE_KEY_SETTING, licenceServer, licenceState, type Licence } from "./licence";
 import { activateConventions, type LearnedVocabulary } from "./taxonomy";
+import { setPackageTerms } from "./trades/snow/terms";
 import type { WebsiteCategories } from "./website";
 import { COUNTRIES, DEFAULT_PROFILE, type ShopProfile } from "./shop";
 import { cleanHouse, defaultHouseFor, type HouseConventions } from "./house";
@@ -140,6 +141,7 @@ async function load(): Promise<void> {
   setPictureHost(standing.kind === "ok" && !usingBlob() ? { server: licenceServer(), key: standing.licence.key } : null);
   // Better still, a shop that has connected its store keeps them in its own Shopify Files.
   setShopifyPictures(!usingBlob() && Boolean(settings.shopify.storeDomain && settings.shopify.accessToken));
+  setPackageTerms(settings.packages);
   loadedAt = Date.now();
 }
 
@@ -176,7 +178,7 @@ const nameKey = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "");
 
 /**
  * Whether a name read off a document is the shop's own. An invoice names the shop as the buyer
- * (bill to, ship to, sold to), often in larger type than the supplier, and a reader took Alpsport
+ * (bill to, ship to, sold to), often in larger type than the supplier, and a reader took the shop
  * for the supplier of a Burton invoice; the shop's own name is never the supplier or the brand.
  */
 export function isOwnShop(name: string, shop = activeProfile.name): boolean {

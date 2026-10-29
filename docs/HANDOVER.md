@@ -402,6 +402,20 @@ terms and the due dates worked from them, PAID stamps) live in Rubin's handover.
 
 ## Decisions and history, newest first
 
+- 2026-10-29 **Blank slate.** Nothing of the first shop's own is built into a new copy any more:
+  the built-in binding list (with its wholesale costs) is gone, so are the default packages (men's
+  Griffon, women's Squire), the $59/$49 mount charges and the "Please Mount My Bindings" wording,
+  the seeded tag rules, and the brand and distributor lists outside the packs. A shop lists its own
+  bindings on Settings → Bindings for ski packages (typed in a row at a time, or a sheet), sets
+  its own mounting charges and fitting wording there (`settings.packages`, in force through
+  `trades/snow/terms.ts`), and writes its own tag rules on Teach Flöda. A ski is packaged only with
+  bindings picked for it or named in an instruction; with no list, every ski is built flat. The
+  snow trade's brand knowledge (`trades/snow/brands.ts`) moved into the snow pack as
+  `pack.brands`, `pack.distributors` and `pack.snowboardBrands`; a shop on no trade knows only its
+  own vendors. The snow pack itself (its menu, tag spellings, reading rules) stays as a starting
+  point a shop can tick at setup; the first shop's own database keeps whatever it had. Tests use
+  `SNOW_TEST_CONVENTIONS` (was `ALPSPORT_CONVENTIONS`). The Teach Flöda areas now fold shut and
+  open on a click.
 - 2026-10-29 Training and Rules became **Teach Flöda** (`/training`): three source tiles (export,
   website, a supplier's paperwork) and then what Flöda believes, in seven areas, every belief a
   sentence with a Change beside it and Add a rule under each area (`teaching.ts`, `Teach.tsx`,

@@ -25,7 +25,7 @@
  * a Type that has nowhere to live on the website.
  */
 
-import { packFor, type PackId } from "./trades";
+import { packFor, type PackId, type TradePack } from "./trades";
 import type { PackKnowledge } from "./trades/knowledge";
 import { setTradeColours } from "./colour";
 import { DEFAULT_HOUSE, type HouseConventions } from "./house";
@@ -141,7 +141,8 @@ interface Vocabulary {
 export const BLANK_CONVENTIONS: Conventions = { pack: "general", learned: null, marker: "", house: DEFAULT_HOUSE };
 
 /** The conventions of the shop Flöda was built in; the tests are written against them. */
-export const ALPSPORT_CONVENTIONS: Conventions = { pack: "snow-outdoor", learned: null, marker: "123abc", house: DEFAULT_HOUSE };
+/** A snow shop that has taught nothing yet, for tests. */
+export const SNOW_TEST_CONVENTIONS: Conventions = { pack: "snow-outdoor", learned: null, marker: "123abc", house: DEFAULT_HOUSE };
 
 /**
  * The menu draws an ampersand and the catalogue spells it out, so the two have to meet: without
@@ -230,7 +231,7 @@ let active: Vocabulary = build(conventions);
 
 /**
  * Put a shop's conventions in force for this process. Called by `shop-profile.ts` with what the
- * shop chose and learned, and by tests with `ALPSPORT_CONVENTIONS`. The vocabulary is process-wide:
+ * shop chose and learned, and by tests with `SNOW_TEST_CONVENTIONS`. The vocabulary is process-wide:
  * Flöda runs one shop per install.
  */
 export function activateConventions(next: Conventions): void {
@@ -240,6 +241,11 @@ export function activateConventions(next: Conventions): void {
 }
 
 /** What the shop's trade pack knows beyond its menu: kinds, sizes, colour shorthand. None for most packs. */
+/** The trade pack in force: the one the shop ticked at setup, or the blank one. */
+export function packInForce(): TradePack {
+  return packFor(conventions.pack);
+}
+
 export function packKnowledge(): PackKnowledge | null {
   return packFor(conventions.pack).knowledge ?? null;
 }

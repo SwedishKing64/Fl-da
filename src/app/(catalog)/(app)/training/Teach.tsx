@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, type ReactNode } from "react";
+import { useEffect, useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -54,33 +54,50 @@ export function Teach({ areas, lists }: { areas: Area[]; lists: TeachLists }) {
   );
 }
 
+/**
+ * One area, folded shut: its name, what it covers and how much of it the shop has taught. Open,
+ * every belief in it and Add a rule. A link to the area (#house, #pricing-rules) opens it.
+ */
 function AreaCard({ area, lists }: { area: Area; lists: TeachLists }) {
   const [adding, setAdding] = useState(false);
-  const taught = area.beliefs.filter((b) => b.source !== "floda").length;
   const anchor = area.key === "titles" ? "house" : area.key === "pricing" ? "pricing-rules" : area.key;
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const follow = () => { if (window.location.hash === `#${anchor}`) setOpen(true); };
+    follow();
+    window.addEventListener("hashchange", follow);
+    return () => window.removeEventListener("hashchange", follow);
+  }, [anchor]);
+  const taught = area.beliefs.filter((b) => b.source !== "floda").length;
+  const off = area.beliefs.filter((b) => b.off).length;
   return (
     <section id={anchor} className="card scroll-mt-6">
-      <header className="card-head">
-        <div>
-          <h2>{area.title}</h2>
-          <p className="mt-0.5 text-[13px] font-normal text-[var(--ink-soft)]">{area.blurb}</p>
-        </div>
-        <div className="flex items-center gap-2 text-[12px] text-[var(--ink-soft)]">
-          <span>{taught} from your shop · {area.beliefs.length - taught} Flöda&rsquo;s own</span>
-        </div>
-      </header>
-      <ol className="divide-y divide-[var(--line-soft)]">
-        {area.beliefs.map((b) => <BeliefRow key={b.id} belief={b} lists={lists} />)}
-      </ol>
-      <footer className="border-t border-[var(--line-soft)] px-5 py-3">
-        {adding ? (
-          <Composer area={area} lists={lists} onDone={() => setAdding(false)} />
-        ) : area.key === "suppliers" ? (
-          <a href="#suppliers" className="text-[13.5px] font-semibold text-[var(--meta)]">+ Teach from an invoice</a>
-        ) : (
-          <button type="button" className="text-[13.5px] font-semibold text-[var(--meta)]" onClick={() => setAdding(true)}>+ Add a rule</button>
-        )}
-      </footer>
+      <button type="button" className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+        <span className="min-w-0">
+          <span className="block text-[17px] font-bold tracking-[-0.01em]">{area.title}</span>
+          <span className="mt-0.5 block text-[13px] text-[var(--ink-soft)]">{area.blurb}</span>
+        </span>
+        <span className="flex shrink-0 items-center gap-3 text-[12.5px] text-[var(--ink-soft)]">
+          <span className="hidden sm:inline">{taught ? <><strong className="text-[var(--ink-2)]">{taught}</strong> from your shop · </> : null}{area.beliefs.length - taught} Flöda&rsquo;s own{off ? ` · ${off} off` : ""}</span>
+          <span className={cx("grid h-7 w-7 place-items-center rounded-full bg-[var(--canvas-2)] transition-transform", open && "rotate-90")} aria-hidden>›</span>
+        </span>
+      </button>
+      {open && (
+        <>
+          <ol className="divide-y divide-[var(--line-soft)] border-t border-[var(--line-soft)]">
+            {area.beliefs.map((b) => <BeliefRow key={b.id} belief={b} lists={lists} />)}
+          </ol>
+          <footer className="border-t border-[var(--line-soft)] px-5 py-3">
+            {adding ? (
+              <Composer area={area} lists={lists} onDone={() => setAdding(false)} />
+            ) : area.key === "suppliers" ? (
+              <a href="#suppliers" className="text-[13.5px] font-semibold text-[var(--meta)]">+ Teach from an invoice</a>
+            ) : (
+              <button type="button" className="text-[13.5px] font-semibold text-[var(--meta)]" onClick={() => setAdding(true)}>+ Add a rule</button>
+            )}
+          </footer>
+        </>
+      )}
     </section>
   );
 }

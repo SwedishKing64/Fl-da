@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { describeLearned, kindsFromListings, learnVocabulary, mergeVocabulary } from "./learn";
-import { ALPSPORT_CONVENTIONS, activateConventions, isValidType, productTypes, resolveType, typeSections } from "./taxonomy";
+import { SNOW_TEST_CONVENTIONS, activateConventions, isValidType, productTypes, resolveType, typeSections } from "./taxonomy";
 import { generalTags, isRuleGenerated, tagsFor } from "./tagging";
 import type { Listing } from "./shop-memory";
 
@@ -19,7 +19,7 @@ function bikeShop(): Listing[] {
   return out;
 }
 
-afterEach(() => activateConventions(ALPSPORT_CONVENTIONS));
+afterEach(() => activateConventions(SNOW_TEST_CONVENTIONS));
 
 describe("learning a shop's vocabulary from its export", () => {
   const learned = learnVocabulary(bikeShop(), "products_export.csv");
@@ -137,7 +137,7 @@ describe("which titles carry the model year", () => {
   it("is every product with a year tag, or only the product types and tags the shop chose", async () => {
     const { titleYear } = await import("./titles");
     expect(titleYear(["skis", "2026"], "Skis")).toBe("2026");
-    activateConventions({ ...ALPSPORT_CONVENTIONS, house: { ...ALPSPORT_CONVENTIONS.house!, naming: { ...ALPSPORT_CONVENTIONS.house!.naming, season: "chosen", yearOn: { types: ["Ski Boots"], tags: ["snow"] } } } });
+    activateConventions({ ...SNOW_TEST_CONVENTIONS, house: { ...SNOW_TEST_CONVENTIONS.house!, naming: { ...SNOW_TEST_CONVENTIONS.house!.naming, season: "chosen", yearOn: { types: ["Ski Boots"], tags: ["snow"] } } } });
     expect(titleYear(["snow", "2026"], "Jackets")).toBe("2026");
     expect(titleYear(["2026"], "ski boots")).toBe("2026");
     expect(titleYear(["camping", "2026"], "Tents")).toBeNull();

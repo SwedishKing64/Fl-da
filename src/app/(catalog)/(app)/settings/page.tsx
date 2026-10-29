@@ -5,7 +5,6 @@ import { Card, PageHeader, fmtDate } from "@/app/(catalog)/ui";
 import { UserForm, DeleteUserButton, Status } from "./SettingsForms";
 import { BindingListCard } from "./BindingListCard";
 import { getBindingList } from "@/lib/catalog/trades/snow/binding-store";
-import { DRILL_MOUNT_FEE, SYSTEM_MOUNT_FEE } from "@/lib/catalog/trades/snow/packages";
 import { snowTrade } from "@/lib/catalog/taxonomy";
 import { usingBlob, blobTokenSource } from "@/lib/catalog/storage";
 import { blobEnvNamesPresent } from "@/lib/catalog/blob-token";
@@ -121,7 +120,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       </div>
       {snowTrade() && (
         <Card title="Bindings for ski packages" className="mt-6">
-          <BindingListCard initial={bindingList} fees={{ drill: DRILL_MOUNT_FEE, system: SYSTEM_MOUNT_FEE }} />
+          <BindingListCard initial={bindingList} terms={settings.packages} />
         </Card>
       )}
     </>

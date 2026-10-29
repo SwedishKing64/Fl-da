@@ -120,6 +120,15 @@ standalone folder with an empty template database; `electron-builder.yml` wraps 
 `.github/workflows/desktop.yml` builds the Windows installer on a Windows runner and the Mac
 disk image on a Mac runner whenever a `v*` tag is pushed, and attaches them to the release.
 
+**Blank slate.** A new copy of Flöda carries nothing of any one shop: no binding list, no
+default packages, no mounting charges, no seeded tag rules, no brand list outside a trade pack. A
+trade pack ticked at setup is a starting point (a menu, tag spellings, reading rules, the trade's
+brands); a shop that ticks none starts from its own export, website and paperwork alone. The
+things a ski shop needs that the pack cannot know are its own, set on Settings → Bindings for ski
+packages: the bindings it packages skis with (name, RRP, wholesale), what it charges to mount
+(`settings.packages.drillMountFee` / `systemMountFee`) and how it words the two fittings. A ski is
+packaged only with the bindings picked for it on the review page or named in an instruction.
+
 **Teach Flöda.** One page (`/training`, admins) for everything Flöda is taught. At the top,
 three source tiles (`Sources.tsx`): the catalogue export (`LearnPanel`, with the store
 connection folded under it), the website, and a supplier's paperwork (`SuppliersStep` standing

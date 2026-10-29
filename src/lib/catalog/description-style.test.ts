@@ -1,13 +1,13 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { activateConventions, ALPSPORT_CONVENTIONS } from "./taxonomy";
+import { activateConventions, SNOW_TEST_CONVENTIONS } from "./taxonomy";
 import { DEFAULT_HOUSE } from "./house";
 import { hasDescriptionStyle, shopBody } from "./description-style";
 import { sanitiseBody } from "./body";
 
 const styled = (format: string, example = "", specsHeading = "Specs") =>
-  activateConventions({ ...ALPSPORT_CONVENTIONS, house: { ...DEFAULT_HOUSE, descriptions: { format, specsHeading, example } } });
+  activateConventions({ ...SNOW_TEST_CONVENTIONS, house: { ...DEFAULT_HOUSE, descriptions: { format, specsHeading, example } } });
 
-afterEach(() => activateConventions(ALPSPORT_CONVENTIONS));
+afterEach(() => activateConventions(SNOW_TEST_CONVENTIONS));
 
 const description = "The Mantra M7 is the all-mountain ski that started it all, with a titanal frame and a tapered tip and tail for easy turn initiation in every snow condition you will find on the mountain.";
 const features = ["Waist width: 88 mm", "Radius: 16 m @ 177"];

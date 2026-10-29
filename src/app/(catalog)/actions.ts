@@ -818,6 +818,7 @@ export async function saveSettingsAction(patch: Partial<AppSettings>): Promise<A
       seoTitlePattern: z.string().max(200).optional(),
       houseRules: z.string().max(8000).optional(),
       shareLayouts: z.boolean().optional(),
+      packages: z.object({ drillMountFee: z.number().min(0).max(10000), systemMountFee: z.number().min(0).max(10000), fittingMount: z.string().max(80), fittingNoMount: z.string().max(80) }).partial().optional(),
     });
     const data = schema.parse(patch);
     await saveSettings(data as Partial<AppSettings>);
@@ -1398,7 +1399,24 @@ export async function transcribeDocumentAction(input: { files: Array<{ name: str
 /** A file sent from the page: its name, type and contents as base64. */
 type SentFile = { name: string; type: string; base64: string };
 
-/** The shop's binding list for ski packages — name, RRP, wholesale — loaded once and kept. See binding-list.ts. */
+/** The shop's bindings for ski packages, typed in on Settings: name, RRP, wholesale. See binding-list.ts. */
+export async function saveBindingEntriesAction(input: { entries: Array<{ name: string; rrp: number; cost: number | null }> }): Promise<ActionResult<{ bindings: number }>> {
+  return safely(async () => {
+    const user = await requireUser("ADMIN");
+    const seen = new Set<string>();
+    const entries = (Array.isArray(input.entries) ? input.entries : []).slice(0, 200)
+      .map((e) => ({ name: String(e.name ?? "").replace(/\s+/g, " ").trim().slice(0, 120), rrp: Number(e.rrp), cost: e.cost === null || e.cost === undefined ? null : Number(e.cost) }))
+      .filter((e) => e.name && Number.isFinite(e.rrp) && e.rrp > 0 && (e.cost === null || (Number.isFinite(e.cost) && e.cost >= 0)) && !seen.has(e.name.toLowerCase()) && seen.add(e.name.toLowerCase()));
+    const list = { entries, file: "typed in", updatedAt: new Date().toISOString() };
+    await (await import("@/lib/catalog/trades/snow/binding-store")).saveBindingList(list);
+    await logAudit("packages.binding_list", { userId: user.id, details: { file: "typed in", bindings: entries.length } }).catch(() => undefined);
+    revalidatePath("/settings");
+    revalidatePath("/training");
+    return { ok: true, data: { bindings: entries.length } };
+  });
+}
+
+/** The shop's binding list for ski packages — name, RRP, wholesale — loaded from a sheet. See binding-list.ts. */
 export async function saveBindingListAction(file: SentFile): Promise<ActionResult<import("@/lib/catalog/trades/snow/binding-list").BindingList>> {
   return safely(async () => {
     const user = await requireUser("ADMIN");

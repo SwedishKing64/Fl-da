@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { extractFile } from "../extract";
 import { isReaderTable, readerMapping } from "../extract/ai";
 import { suggestMapping, type Mapping } from "../mapping";
-import { activateConventions, ALPSPORT_CONVENTIONS } from "../taxonomy";
+import { activateConventions, SNOW_TEST_CONVENTIONS } from "../taxonomy";
 import { defaultHouseFor } from "../house";
 import { learnVocabulary } from "../learn";
 import { listingsFromCsv } from "../shop-memory";
@@ -14,7 +14,7 @@ import { scoreBuild } from "./score-build";
 import { Rng } from "./rng";
 import { colourCode, ean13, makeDelivery, makeShop, shopExportCsv, sizeCode, TRADES } from "./world";
 
-afterAll(() => activateConventions(ALPSPORT_CONVENTIONS));
+afterAll(() => activateConventions(SNOW_TEST_CONVENTIONS));
 
 describe("a simulated shop", () => {
   it("is the same shop from the same seed, and another from another", () => {

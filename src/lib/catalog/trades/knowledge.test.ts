@@ -4,13 +4,13 @@ import { BIKE_PACK } from "./bike";
 import pack from "./packs/bike/pack.json";
 import kinds from "./packs/bike/kinds.json";
 import sizes from "./packs/bike/sizes.json";
-import { ALPSPORT_CONVENTIONS, BLANK_CONVENTIONS, activateConventions, categoryForKind, resolveType } from "../taxonomy";
+import { SNOW_TEST_CONVENTIONS, BLANK_CONVENTIONS, activateConventions, categoryForKind, resolveType } from "../taxonomy";
 import { colourName } from "../colour";
 import { groupLineItems } from "../grouping";
 import { emptyLineItem } from "../types";
 import { sizeRanker } from "../size-order";
 
-afterEach(() => activateConventions(ALPSPORT_CONVENTIONS));
+afterEach(() => activateConventions(SNOW_TEST_CONVENTIONS));
 
 describe("a trade pack from files", () => {
   it("loads the bike pack, every kind placed in Shopify's taxonomy, and says it is not verified yet", () => {
@@ -40,7 +40,7 @@ describe("a bike shop's pack, at work", () => {
     expect(resolveType("TLR")).toBe("Tyres");
     expect(colourName("GRY")).toBe("Grey");
     expect(categoryForKind("Dropper Posts")?.path).toBe("Sporting Goods > Outdoor Recreation > Cycling > Bicycle Parts > Bicycle Seatposts");
-    activateConventions(ALPSPORT_CONVENTIONS);
+    activateConventions(SNOW_TEST_CONVENTIONS);
     expect(colourName("GRY")).toBe("Gray");
   });
 

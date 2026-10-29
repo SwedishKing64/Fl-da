@@ -132,20 +132,9 @@ function safeParse(s: string): Record<string, string> {
   }
 }
 
-/** Sensible starting rules for a ski shop; editable on the Rules page. */
-export const DEFAULT_TAG_RULES: Array<Omit<TagRuleLike, "id">> = [
-  { name: "Women's products", matchField: "any", pattern: String.raw`\b(women'?s|womens|wmns|w'?s|ladies|female)\b`, addTags: "womens", addCollections: "Womens", setProductType: "", setMetafields: JSON.stringify({ gender: "Womens" }), priority: 50, active: true },
-  { name: "Men's products", matchField: "any", pattern: String.raw`\b(men'?s|mens|m'?s|male)\b`, addTags: "mens", addCollections: "Mens", setProductType: "", setMetafields: JSON.stringify({ gender: "Mens" }), priority: 50, active: true },
-  { name: "Kids / junior", matchField: "any", pattern: String.raw`\b(kids?|junior|jr\.?|youth|boys?|girls?)\b`, addTags: "kids", addCollections: "Kids", setProductType: "", setMetafields: JSON.stringify({ gender: "Kids" }), priority: 60, active: true },
-  // The tag this used to add, "New Season", is not one the shop has ever used — no tag in its
-  // 827 products has a capital letter, and none says "new season". The four-digit year does this
-  // job and is real: 2026 is on 189 products. The collection stays; that is a different column.
-  { name: "New season", matchField: "any", pattern: String.raw`\b20(2[6-9]|3[0-9])\b`, addTags: "", addCollections: "New Arrivals", setProductType: "", setMetafields: "{}", priority: 10, active: true },
-  // Terrain: the metafield is real and useful, the tag was not. The shop has no bare "freeride",
-  // "park" or "all-mountain" tag — its shelves name the sport too ("freeride and powder skis" on 42
-  // products, "park boards" on 12), and those come from the taxonomy, not from here.
-  { name: "Freeride skis", matchField: "any", pattern: String.raw`\b(freeride|backcountry|touring|powder)\b`, addTags: "", addCollections: "", setProductType: "", setMetafields: JSON.stringify({ terrain: "Freeride" }), priority: 20, active: true },
-  { name: "Park / freestyle", matchField: "any", pattern: String.raw`\b(park|freestyle|twin[- ]?tip|jib)\b`, addTags: "", addCollections: "", setProductType: "", setMetafields: JSON.stringify({ terrain: "Park" }), priority: 20, active: true },
-  { name: "All-mountain", matchField: "any", pattern: String.raw`\ball[- ]?mountain\b`, addTags: "", addCollections: "", setProductType: "", setMetafields: JSON.stringify({ terrain: "All-Mountain" }), priority: 20, active: true },
-  { name: "Snowboard bindings (not ski)", matchField: "any", pattern: String.raw`\b(cartel|malavita|genesis|union|flux|snowboard binding)`, addTags: "snowboard-bindings", addCollections: "Snowboard Bindings", setProductType: "Snowboard Bindings", setMetafields: "{}", priority: 70, active: true },
-];
+/**
+ * Rules every new copy starts with: none. Flöda used to seed a ski shop's own rules (gender tags,
+ * terrain, a list of binding models) into every install; a shop now writes its own on Teach Flöda,
+ * and the ones an older install was seeded with stay as the shop's to keep or delete.
+ */
+export const DEFAULT_TAG_RULES: Array<Omit<TagRuleLike, "id">> = [];

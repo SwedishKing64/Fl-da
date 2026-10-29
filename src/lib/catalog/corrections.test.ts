@@ -2,9 +2,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import { activateCorrections, correctedOptionName, correctedProductType, noteCorrection, type Correction } from "./corrections";
 import { groupLineItems } from "./grouping";
 import { emptyLineItem } from "./types";
-import { ALPSPORT_CONVENTIONS, BLANK_CONVENTIONS, activateConventions } from "./taxonomy";
+import { SNOW_TEST_CONVENTIONS, BLANK_CONVENTIONS, activateConventions } from "./taxonomy";
 
-afterEach(() => { activateCorrections([]); activateConventions(ALPSPORT_CONVENTIONS); });
+afterEach(() => { activateCorrections([]); activateConventions(SNOW_TEST_CONVENTIONS); });
 
 describe("a correction made once", () => {
   it("is kept, counted when made again, and undone by its reverse", () => {

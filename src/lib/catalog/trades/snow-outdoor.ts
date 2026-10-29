@@ -1,7 +1,7 @@
 /**
- * The snow-and-outdoor trade: the menu, tag spellings and rules of the ski shop Flöda was built in,
- * transcribed from its live site and exports. A shop that sells skis, snowboards and outdoor gear
- * can start from it; its own store then overrides whatever it disagrees with.
+ * The snow-and-outdoor trade: a menu, tag spellings and reading rules for a shop that sells skis,
+ * snowboards and outdoor gear. A starting point only, ticked at setup: the shop's own store,
+ * exports and rules override whatever it disagrees with, and a shop that ticks no trade starts blank.
  */
 
 import type { TaxonomySection } from "../taxonomy";
@@ -9,6 +9,7 @@ import { LIVE_TAG_SPELLING, TAG_ALSO } from "../tag-spelling";
 import type { TradePack } from "./types";
 import { SNOW_OUTDOOR_CATEGORIES } from "./shopify-categories";
 import { SKI_METAFIELDS } from "../types";
+import { SNOW_BRANDS, SNOW_DISTRIBUTORS, SNOWBOARD_BRANDS } from "./snow/brands";
 
 export const SNOW_OUTDOOR_TAXONOMY: TaxonomySection[] = [
   {
@@ -82,8 +83,11 @@ export const SNOW_OUTDOOR_PACK: TradePack = {
     "A binding line under a ski line, bracketed with it in pen, is a package: the ski's code in sku and the binding named in notes.",
     "A boot line \"BT2610 PRO 110 | 26.5 x1 | 27.5 x1\" is two lines: size 26.5 and size 27.5, quantity 1 each.",
   ],
-  seeds: true,
+  seeds: false,
   snowRules: true,
+  brands: SNOW_BRANDS,
+  distributors: SNOW_DISTRIBUTORS,
+  snowboardBrands: SNOWBOARD_BRANDS,
   shopifyCategories: SNOW_OUTDOOR_CATEGORIES,
   fillsCategory: false,
   metafields: SKI_METAFIELDS,

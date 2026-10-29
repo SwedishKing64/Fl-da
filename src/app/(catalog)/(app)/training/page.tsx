@@ -3,7 +3,8 @@ import { prisma, parseJson } from "@/lib/catalog/db";
 import { requireUser } from "@/lib/catalog/auth";
 import { Card, Details, PageHeader, fmtDate } from "@/app/(catalog)/ui";
 import { getHouseConventions, getLearnedVocabulary, getWebsiteCategories, shopName, taxName } from "@/lib/catalog/shop-profile";
-import { fieldsInForce, productTypes } from "@/lib/catalog/taxonomy";
+import { fieldsInForce, productTypes, snowTrade } from "@/lib/catalog/taxonomy";
+import { packagesForTeaching } from "@/lib/catalog/trades/snow/teach";
 import { optionPlanFor } from "@/lib/catalog/options";
 import { CANONICAL_FIELDS } from "@/lib/catalog/types";
 import { LearnPanel } from "@/app/(catalog)/(setup)/setup/LearnStep";
@@ -48,6 +49,7 @@ export default async function TrainingPage() {
     storeState(),
     prisma.tagProposal.findMany({ orderBy: [{ status: "desc" }, { count: "desc" }, { createdAt: "asc" }] }).catch(() => []),
   ]);
+  const packages = snowTrade() ? await packagesForTeaching(settings.packages) : null;
   const types = productTypes();
   const list = (s: string) => s.split(",").map((x) => x.trim()).filter(Boolean);
   const templateRows = templates.map((t) => ({ id: t.id, name: t.name, scope: t.scope as "BRAND" | "PRODUCT_TYPE" | "CATEGORY", matchValue: t.matchValue, matchProductType: t.matchProductType, notes: t.notes, productType: t.setProductType, tags: list(t.addTags), collections: list(t.addCollections), optionNames: list(t.optionNames), metafields: parseJson<Record<string, string>>(t.setMetafields, {}), priority: t.priority, active: t.active }));
@@ -66,6 +68,7 @@ export default async function TrainingPage() {
     fieldLabels: Object.fromEntries(CANONICAL_FIELDS.map((f) => [f.key, f.label])),
     optionPlan: (type) => optionPlanFor(type),
     shopName: shopName(),
+    packages,
   });
   const counts = countBeliefs(areas);
   const tags = [...new Set([...(learned?.sections ?? []), ...house.kinds.flatMap((k) => [...k.tags, ...(k.variesTags ?? [])]), ...templateRows.flatMap((t) => t.tags), ...tagRules.flatMap((r) => list(r.addTags))])].sort((a, b) => a.localeCompare(b));

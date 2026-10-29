@@ -12,12 +12,13 @@
 
 import type { HouseConventions, KindRule } from "./house";
 import { fromGrams } from "./house";
-import { DEFAULT_TAG_RULES, type TagRuleLike } from "./rules";
+import type { TagRuleLike } from "./rules";
 import type { ProductTemplateLike } from "./templates";
 import type { LearnedVocabulary } from "./taxonomy";
 import type { WebsiteCategories } from "./website";
 import { describeRecord, type SupplierRecord } from "./supplier-record";
 import { describeLayout, describePricingRule, describeTagRule, type LayoutLike, type PricingRuleLike, type SupplierLike } from "./rulebook";
+import { describeOffered, describeTerms, type PackageTeaching } from "./trades/snow/package-words";
 
 export type AreaKey = "filing" | "titles" | "descriptions" | "variants" | "pricing" | "seo" | "suppliers";
 export type Source = "export" | "website" | "you" | "floda" | "supplier";
@@ -74,6 +75,8 @@ export interface TeachingInput {
   /** The options a type is sold by where the shop has said nothing: the trade pack's order. */
   optionPlan: (type: string) => string[];
   shopName: string;
+  /** For a shop on the snow trade: what it packages together and its fitting charges. Null elsewhere. */
+  packages?: PackageTeaching | null;
 }
 
 export const SOURCE_LABELS: Record<Source, string> = { export: "from your export", website: "from your website", you: "you set this", floda: "Flöda's own", supplier: "from paperwork" };
@@ -120,8 +123,7 @@ function filing(input: TeachingInput): Belief[] {
   }
   for (const r of [...input.tagRules].sort((a, b) => b.priority - a.priority)) {
     if (/^kind: /.test(r.name)) continue; // said above, by the type
-    const packs = DEFAULT_TAG_RULES.some((d) => d.name === r.name && d.pattern === r.pattern);
-    out.push({ id: `tag:${r.id}`, source: packs ? "floda" : "you", off: !r.active, sentence: describeTagRule(r).replace(/ \(switched off\)$/, ""), edit: { kind: "tag-rule", rule: { id: r.id, matchField: r.matchField, pattern: r.pattern, addTags: r.addTags, setProductType: r.setProductType, active: r.active } } });
+    out.push({ id: `tag:${r.id}`, source: "you", off: !r.active, sentence: describeTagRule(r).replace(/ \(switched off\)$/, ""), edit: { kind: "tag-rule", rule: { id: r.id, matchField: r.matchField, pattern: r.pattern, addTags: r.addTags, setProductType: r.setProductType, active: r.active } } });
   }
   out.push({ id: "floda.tags.closed", source: "floda", sentence: "Tags are matched, never invented: a tag your shop has never used is taken off the product and proposed to you here; approved, it is one of yours." });
   return out;
@@ -187,6 +189,11 @@ function variants(input: TeachingInput): Belief[] {
   out.push({ id: "house.identifiers.barcode", source: own, sentence: id.barcode === "required" ? "Every variant needs a barcode; one without is flagged." : id.barcode === "keep" ? "A barcode is kept when the paperwork has it, and its check digit is checked." : "Barcodes are never written.", edit: { kind: "house-choice", path: "identifiers.barcode", label: "Barcodes", options: [{ key: "keep", title: "Kept when given", text: "From the paperwork" }, { key: "required", title: "Required", text: "Flagged when missing" }, { key: "none", title: "Never", text: "Left empty" }], current: id.barcode } });
   const w = input.house.weights;
   out.push({ id: "house.weights", source: w.mode === "none" ? "floda" : "you", sentence: w.mode === "none" ? "No shipping weight is written." : w.mode === "fixed" ? `Every variant weighs ${fromGrams(w.fixedGrams, w.unit)} ${w.unit}.` : `Weight by type: ${andList(w.byKind.filter((k) => k.type.trim()).map((k) => `${k.type} ${fromGrams(k.grams, w.unit)} ${w.unit}`)) || "none set yet"}.`, edit: { kind: "weights", weights: w } });
+  if (input.packages) {
+    const pk = input.packages;
+    out.push({ id: "packages.offered", source: pk.offered.length ? "you" : "floda", sentence: describeOffered(pk), edit: { kind: "link", href: "/settings#packages", label: "Change on Settings" } });
+    out.push({ id: "packages.terms", source: pk.terms.drillMountFee || pk.terms.systemMountFee ? "you" : "floda", sentence: describeTerms(pk), edit: { kind: "link", href: "/settings#packages", label: "Change on Settings" } });
+  }
   out.push({ id: "floda.variants.onesize", source: "floda", sentence: "One Size is no size: such a product has no Size option. A supplier's own column that tells lines apart — a scent, a capacity, a zip side — becomes an option." });
   return out;
 }

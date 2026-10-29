@@ -1,7 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { houseTags, oneYearTag } from "./product-tags";
-import { DEFAULT_TAG_RULES } from "./rules";
 
 /**
  * How a tag is spelled, settled against the shop's own catalogue.
@@ -31,14 +30,6 @@ describe("house tag spelling", () => {
   it("leaves per-tag hyphenation alone", () => {
     // Both are real: 70 products carry "snow-clothing", 24 carry "snow jackets".
     expect(houseTags(["snow-clothing", "snow jackets"])).toEqual(["snow-clothing", "snow jackets"]);
-  });
-
-  it("ships no seeded rule that adds a tag the shop does not write", () => {
-    for (const rule of DEFAULT_TAG_RULES) {
-      for (const tag of rule.addTags.split(",").map((t) => t.trim()).filter(Boolean)) {
-        expect(tag, `rule "${rule.name}" adds ${tag}`).toBe(tag.toLowerCase());
-      }
-    }
   });
 });
 

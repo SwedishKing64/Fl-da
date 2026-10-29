@@ -11,7 +11,7 @@ import { houseTags, retagForType } from "./product-tags";
 import { DEFAULT_CATEGORY_RULES, type CategoryRuleLike } from "./categorize";
 import { enrichFromSpecs, normKey } from "./specs";
 import { keepOrderedLines, resolveAgainstReference } from "./reference-match";
-import { isFlatSki, isPackageBinding, packageProducts, specFromName, type ChosenBindings } from "./trades/snow/packages";
+import { isFlatSki, isPackageBinding, packageProducts, specFromName, specsOfList, type ChosenBindings } from "./trades/snow/packages";
 import { readInvoiceGrids, type PriceRow } from "./invoice";
 import { asShopPrice, existingHandle, listingByBarcode, listingsAsReference, rememberedVendor } from "./shop-memory";
 import { dueInWindow, parseWindow } from "./deliveries";
@@ -638,7 +638,7 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
     for (const entry of items) entry.item = { ...entry.item, season: toldYear };
   } else if (items.length > 0 && items.every((entry) => !/^20\d{2}$/.test(entry.item.season))) {
     // No season on any line: the file's own name says it, where it does — Burton's confirmation
-    // sheet is "Alpsport_W27_Burton_Confirmed…" and its lines carry no season column at all.
+    // sheet is "<Shop>_W27_Burton_Confirmed…" and its lines carry no season column at all.
     // The latest year the name gives: "…_NOV_2026_boot_pole_-2027-Retail" is the 2027 range,
     // delivered in November 2026.
     const fromName = batch.files.flatMap((f) => f.filename.split(/[^A-Za-z0-9/]+/)).map(seasonFrom).filter((y) => /^20[2-3]\d$/.test(y)).sort().at(-1);
@@ -896,7 +896,7 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
     }
   }
   // The package bindings ordered with the skis go on the skis, not on the shelf. See isPackageBinding.
-  const setAside = directives.packages !== "none" && grouped.some((g) => isFlatSki(g)) ? grouped.filter((g) => isPackageBinding(g, Object.values(chosen))) : [];
+  const setAside = directives.packages !== "none" && grouped.some((g) => isFlatSki(g)) ? grouped.filter((g) => isPackageBinding(g, [...Object.values(chosen), ...specsOfList(bindingList)])) : [];
   for (const g of setAside) grouped.splice(grouped.indexOf(g), 1);
   if (setAside.length > 0) {
     for (const fileId of [...new Set(items.map((i) => i.fileId))]) {

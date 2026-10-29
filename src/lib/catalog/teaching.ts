@@ -19,6 +19,7 @@ import type { WebsiteCategories } from "./website";
 import { describeRecord, type SupplierRecord } from "./supplier-record";
 import { describeLayout, describePricingRule, describeTagRule, type LayoutLike, type PricingRuleLike, type SupplierLike } from "./rulebook";
 import { describeOffered, describeTerms, type PackageTeaching } from "./trades/snow/package-words";
+import { describeOptionTags } from "./option-tags";
 
 export type AreaKey = "filing" | "titles" | "descriptions" | "variants" | "pricing" | "seo" | "suppliers";
 export type Source = "export" | "website" | "you" | "floda" | "supplier";
@@ -106,6 +107,7 @@ function filing(input: TeachingInput): Belief[] {
     out.push({ id: "types.none", source: "floda", sentence: "No product types yet. Read your website or your catalogue export, and every listing's Type is picked from that list.", edit: { kind: "link", href: "#export", label: "Read an export" } });
   }
   if (learned?.sections.length) out.push({ id: "learned.sections", source: "export", sentence: `Menu tags that run across types: ${andList(learned.sections)}. A product gets its type's menu tag as well as its own.` });
+  if (learned?.optionTags?.length) out.push({ id: "learned.optionTags", source: "export", sentence: `Your tags carry each product's variants, ${describeOptionTags(learned.optionTags)}. Flöda writes those from the variants of every new product; nobody adds them by hand.` });
   for (const k of house.kinds) {
     const name = k.calledAs || k.type;
     if (k.calledAs && k.calledAs !== k.type) out.push({ id: `kind.calledAs.${k.type}`, source: "export", sentence: `What your export calls ${quote(k.type)} is filed as ${quote(k.calledAs)}.`, edit: { kind: "kind", type: k.type, field: "calledAs", value: k.calledAs, label: `${k.type} is filed as` } });

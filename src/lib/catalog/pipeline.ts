@@ -6,7 +6,7 @@ import { isOfType, isSkipped, parseDirectives, typeKey } from "./instructions";
 import { prisma, parseJson } from "./db";
 import { extractFile, type UploadKind } from "./extract";
 import { applyMapping, headerHash, looksLikeReference, mappingProblems, repairTemplate, seasonFrom, suggestMapping, suggestOptions, type Mapping, type MappingOptions, type SavedOptions, nearestTemplate, trimToHeaders, type LayoutDrift } from "./mapping";
-import { groupLineItems } from "./grouping";
+import { groupLineItems, productOptions } from "./grouping";
 import { houseTags, retagForType } from "./product-tags";
 import { DEFAULT_CATEGORY_RULES, type CategoryRuleLike } from "./categorize";
 import { enrichFromSpecs, normKey } from "./specs";
@@ -24,7 +24,8 @@ import { repairCategoryRules, repairProductTags, repairTagRuleSpelling } from ".
 import { applyTagRules, type TagRuleLike } from "./rules";
 import { conventionGrams, conventionIdentifiers } from "./house";
 import { shopBody } from "./description-style";
-import { houseConventions, metafieldDefs } from "./taxonomy";
+import { houseConventions, metafieldDefs, optionTagPatterns } from "./taxonomy";
+import { optionTagsFor } from "./option-tags";
 import { homeCurrency } from "./shop-profile";
 import { applyTemplates, type ProductTemplateLike } from "./templates";
 import { allocateFreight, exGstCostHome, priceVariant } from "./pricing";
@@ -828,8 +829,10 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
       // Through the house speller last: tag rules and batch instructions add tags after the
       // categoriser has been vetted, and theirs used to reach the column unchecked.
       tags: (() => {
-        // A tag the batch instructions asked for is the shop's own word and always stays.
-        const gated = partitionTags(houseTags([...out.tags, ...directives.addTags]), gate, directives.addTags);
+        // The tags the shop's export showed it keeps for each size and colour, written from the variants.
+        const mirrored = optionTagsFor(productOptions({ ...g, option1Name: viaTemplate.optionNames[0] ?? g.option1Name, option2Name: viaTemplate.optionNames[1] ?? g.option2Name, option3Name: viaTemplate.optionNames[2] ?? g.option3Name }), optionTagPatterns());
+        // A tag the batch instructions asked for is the shop's own word and always stays; so does a mirrored one.
+        const gated = partitionTags(houseTags([...out.tags, ...directives.addTags, ...mirrored]), gate, [...directives.addTags, ...mirrored]);
         for (const t of gated.proposed) if (!proposedTags.has(t)) proposedTags.set(t, g.title);
         return gated.kept;
       })(),

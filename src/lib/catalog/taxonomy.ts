@@ -30,6 +30,7 @@ import type { PackKnowledge } from "./trades/knowledge";
 import { setTradeColours } from "./colour";
 import { DEFAULT_HOUSE, type HouseConventions } from "./house";
 import type { WebsiteCategories } from "./website";
+import type { OptionTagPattern } from "./option-tags";
 import { categoryById, resolveCategory, type TaxonomyCategory } from "./shopify-taxonomy";
 import { CANONICAL_FIELDS, type CanonicalFieldDef, type MetafieldDef } from "./types";
 
@@ -106,6 +107,8 @@ export interface LearnedVocabulary {
   products: number;
   file: string;
   learnedAt: string;
+  /** How the shop's tags mirror its variants ("Size_54", "Colour_Black"), per option, where they do. See option-tags.ts. */
+  optionTags?: OptionTagPattern[];
 }
 
 /** Which trade packs are on: one id, several joined by "+", or "general" for none. See trades/. */
@@ -493,6 +496,11 @@ export function typeNamedIn(name: string): string | undefined {
 /** The Types the shop itself uses, as its export taught them; none where it has taught none. */
 export function learnedTypes(): string[] {
   return conventions.learned?.types.map((t) => t.type) ?? [];
+}
+
+/** The shapes the shop's tags take for its variants' values, as its export showed; none until it has. */
+export function optionTagPatterns(): OptionTagPattern[] {
+  return conventions.learned?.optionTags ?? [];
 }
 
 /** True when this names a place a product can legitimately be filed. */

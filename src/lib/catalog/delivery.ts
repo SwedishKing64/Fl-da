@@ -25,9 +25,10 @@
  */
 
 import { DEFAULT_CATEGORY_RULES, detectCategory, metafieldColumns, type CategoryRuleLike } from "./categorize";
-import { houseConventions } from "./taxonomy";
+import { houseConventions, optionTagPatterns } from "./taxonomy";
+import { optionTagsFor } from "./option-tags";
 import { buildRows, parseCsv, type CsvProduct } from "./csv";
-import { groupLineItems, type GroupedProduct } from "./grouping";
+import { groupLineItems, productOptions, type GroupedProduct } from "./grouping";
 import { audienceOfPrefix, withFit, withoutAudiencePrefix, withoutGender } from "./mapping";
 import { expandShorthand } from "./shorthand";
 import { colourName } from "./colour";
@@ -1008,7 +1009,7 @@ function toProduct(g: GroupedProduct, vendor: string): CsvProduct {
     vendor: brand,
     productType: csvType(g.productType, g.collections),
     productCategory: productCategoryFor(csvType(g.productType, g.collections), title),
-    tags: g.tags,
+    tags: [...g.tags, ...optionTagsFor(productOptions(g), optionTagPatterns()).filter((t) => !g.tags.some((x) => x.toLowerCase() === t.toLowerCase()))],
     published: false,
     status: "draft",
     seoTitle: seoTitle(brand, title),

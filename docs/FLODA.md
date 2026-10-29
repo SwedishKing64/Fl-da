@@ -120,6 +120,14 @@ standalone folder with an empty template database; `electron-builder.yml` wraps 
 `.github/workflows/desktop.yml` builds the Windows installer on a Windows runner and the Mac
 disk image on a Mac runner whenever a `v*` tag is pushed, and attaches them to the release.
 
+**Tags that mirror the variants.** Shopify filter apps tag a product with each of its sizes and
+colours ("Size_54", "Colour_Black", "size-m", or the bare value). `option-tags.ts` (pure) learns
+the shape each option's tags take from the export's listings, which now carry their options
+(`Listing.options`): one pattern per option where most of its values appear in that shape
+(`learned.optionTags`). The learner sets those tags aside (never a kind's tag, never a menu), and
+the build writes them from each new product's variants (`optionTagsFor` in `pipeline.ts` and
+`delivery.ts`), through the tag gate as the shop's own.
+
 **Blank slate.** A new copy of Flöda carries nothing of any one shop: no binding list, no
 default packages, no mounting charges, no seeded tag rules, no brand list outside a trade pack. A
 trade pack ticked at setup is a starting point (a menu, tag spellings, reading rules, the trade's

@@ -390,3 +390,9 @@ function orderByConvention(productType: string, keys: OptionKey[], items: Canoni
     return (ia === -1 ? wanted.length : ia) - (ib === -1 ? wanted.length : ib);
   });
 }
+
+/** The options a product is sold by and every value its variants take, for the tags that mirror them. */
+export function productOptions(g: Pick<GroupedProduct, "option1Name" | "option2Name" | "option3Name" | "variants">): Array<{ name: string; values: string[] }> {
+  const slots: Array<[string | null, (v: GroupedVariant) => string | null]> = [[g.option1Name, (v) => v.option1Value], [g.option2Name, (v) => v.option2Value], [g.option3Name, (v) => v.option3Value]];
+  return slots.filter(([name]) => name && name.trim()).map(([name, pick]) => ({ name: name!.trim(), values: [...new Set(g.variants.map((v) => (pick(v) ?? "").trim()).filter(Boolean))] })).filter((o) => o.values.length);
+}

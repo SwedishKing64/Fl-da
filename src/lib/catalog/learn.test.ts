@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { describeLearned, kindsFromListings, learnVocabulary, mergeVocabulary } from "./learn";
+
+/** A shop whose app tags every product with its sizes and colours, as "Size_M" and "Colour_Black". */
+function taggedShop(): Listing[] {
+  const out: Listing[] = [];
+  for (let i = 0; i < 8; i++) out.push({ handle: `jacket-${i}`, title: `Jacket ${i}`, vendor: "Rab", productType: "Jackets", tags: ["clothing", "jackets", "Size_M", "Size_L", i % 2 ? "Colour_Black" : "Colour_Moss"], options: [{ name: "Size", values: ["M", "L"] }, { name: "Colour", values: [i % 2 ? "Black" : "Moss"] }] });
+  return out;
+}
 import { SNOW_TEST_CONVENTIONS, activateConventions, isValidType, productTypes, resolveType, typeSections } from "./taxonomy";
 import { generalTags, isRuleGenerated, tagsFor } from "./tagging";
 import type { Listing } from "./shop-memory";
@@ -142,5 +149,25 @@ describe("which titles carry the model year", () => {
     expect(titleYear(["2026"], "ski boots")).toBe("2026");
     expect(titleYear(["camping", "2026"], "Tents")).toBeNull();
     expect(titleYear(["snow"], "Jackets")).toBeNull();
+  });
+});
+
+describe("tags that mirror the variants", () => {
+  it("are learned as a shape, set aside from the shelves, and said", () => {
+    const learned = learnVocabulary(taggedShop(), "jackets.csv");
+    expect(learned.optionTags).toEqual([
+      { option: "Colour", template: "Colour_{value}", form: "as-is", example: "Colour_Moss" },
+      { option: "Size", template: "Size_{value}", form: "as-is", example: "Size_M" },
+    ]);
+    expect(learned.sections).toEqual([]);
+    expect(describeLearned(learned).some((l) => /Size as "Size_M"/.test(l))).toBe(true);
+    const kinds = kindsFromListings(taggedShop());
+    expect(kinds[0].commonTags).toEqual(["clothing", "jackets"]);
+    expect(kinds[0].variesTags).toEqual([]);
+  });
+  it("survive a merge, the newer file's shape winning for an option both name", () => {
+    const a = learnVocabulary(taggedShop(), "a.csv");
+    const b = { ...learnVocabulary(taggedShop(), "b.csv"), optionTags: [{ option: "Size", template: "size-{value}", form: "slug" as const, example: "size-m" }] };
+    expect(mergeVocabulary(a, b).optionTags).toEqual([b.optionTags[0], a.optionTags![0]]);
   });
 });

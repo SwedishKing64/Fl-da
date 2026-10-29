@@ -89,8 +89,8 @@ export function LinksPanel({ batchId, products, locked }: { batchId: string; pro
   }
 
 
-  async function save(id: string): Promise<boolean> {
-    const value = (urls[id] ?? "").trim();
+  async function save(id: string, pasted?: string): Promise<boolean> {
+    const value = (pasted ?? urls[id] ?? "").trim();
     if (value === (saved.current[id] ?? "").trim()) return true;
     const r = await setProductLinkAction(id, value);
     if (!r.ok) { setSaid((s) => ({ ...s, [id]: { tone: "bad", text: r.error } })); return false; }
@@ -101,9 +101,9 @@ export function LinksPanel({ batchId, products, locked }: { batchId: string; pro
     return true;
   }
 
-  async function saveColour(id: string, colour: string): Promise<boolean> {
+  async function saveColour(id: string, colour: string, pasted?: string): Promise<boolean> {
     const k = ck(id, colour);
-    const value = (colourUrls[k] ?? "").trim();
+    const value = (pasted ?? colourUrls[k] ?? "").trim();
     if (value === (savedColours.current[k] ?? "").trim()) return true;
     const r = await setColourLinkAction(id, colour, value);
     if (!r.ok) { setSaid((s) => ({ ...s, [id]: { tone: "bad", text: `${colour}: ${r.error}` } })); return false; }
@@ -120,6 +120,27 @@ export function LinksPanel({ batchId, products, locked }: { batchId: string; pro
     for (const c of coloursOf(p)) if (!(await saveColour(p.id, c))) return false;
     return true;
   }
+
+  /** One product's page, read now: after a link is pasted, there is nothing to wait for. */
+  async function readOne(p: Row, kept: () => Promise<boolean>) {
+    setReading(p.id);
+    setSaid((s) => ({ ...s, [p.id]: { tone: "ok", text: "Reading the page…" } }));
+    if (await kept()) {
+      const r = await readProductLinkAction(p.id);
+      const ok = r.ok && r.data!.ok;
+      setStand((s) => ({ ...s, [p.id]: ok ? "read" : "failed" }));
+      setSaid((s) => ({ ...s, [p.id]: !r.ok ? { tone: "bad", text: r.error } : { tone: ok ? (/does not clearly match/.test(r.data!.said) ? "warn" : "ok") : "bad", text: r.data!.said } }));
+      if (ok) for (const id of r.data!.also) setStand((s) => (id in s ? { ...s, [id]: "read" } : s));
+    }
+    setReading(null);
+    router.refresh();
+  }
+
+  /** The link on the clipboard, when it is one. */
+  const pastedLink = (e: React.ClipboardEvent) => {
+    const text = e.clipboardData.getData("text").trim();
+    return /^https?:\/\/\S+$/i.test(text) ? text : null;
+  };
 
   async function readAll() {
     // What is waiting; or, when everything has been read, all of it again.
@@ -204,6 +225,7 @@ export function LinksPanel({ batchId, products, locked }: { batchId: string; pro
     const left = links.length - placed.length;
     setBulkSaid(`${placed.length} link${placed.length === 1 ? "" : "s"} placed${left > 0 ? `, ${left} left over (more links than products without one)` : ""}. ${saidLines.join(" · ")}`);
     setBulk("");
+    if (placed.length > 0) await readAll();
   }
 
   return (
@@ -251,6 +273,7 @@ export function LinksPanel({ batchId, products, locked }: { batchId: string; pro
                   disabled={locked || reading === p.id}
                   placeholder={coloursOf(p).length > 1 ? "This product's page, for the description (or leave it to the colours' pages below)" : coloursOf(p).length === 1 ? `Link to the ${coloursOf(p)[0]} page — opened with ${coloursOf(p)[0]} selected` : "Link to this product's page"}
                   onChange={(e) => setUrls((u) => ({ ...u, [p.id]: e.target.value }))}
+                  onPaste={(e) => { const link = pastedLink(e); if (!link || locked) return; e.preventDefault(); setUrls((u) => ({ ...u, [p.id]: link })); void readOne(p, () => save(p.id, link)); }}
                   onBlur={() => void save(p.id)}
                   onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
                   className="mt-1 w-full rounded-lg border border-[var(--line)] bg-white px-3 py-1.5 text-sm outline-none focus:border-[var(--violet)] focus:ring-2 focus:ring-[var(--violet-soft)] disabled:bg-neutral-50"
@@ -273,6 +296,7 @@ export function LinksPanel({ batchId, products, locked }: { batchId: string; pro
                               disabled={locked || reading === p.id}
                               placeholder={`The ${c} page — opened with ${c} selected`}
                               onChange={(e) => setColourUrls((u) => ({ ...u, [ck(p.id, c)]: e.target.value }))}
+                              onPaste={(e) => { const link = pastedLink(e); if (!link || locked) return; e.preventDefault(); setColourUrls((u) => ({ ...u, [ck(p.id, c)]: link })); void readOne(p, () => saveColour(p.id, c, link)); }}
                               onBlur={() => void saveColour(p.id, c)}
                               onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
                               className="mt-0.5 w-full rounded-lg border border-[var(--line)] bg-white px-3 py-1 text-sm outline-none focus:border-[var(--violet)] focus:ring-2 focus:ring-[var(--violet-soft)] disabled:bg-neutral-50"

@@ -402,6 +402,16 @@ terms and the due dates worked from them, PAID stamps) live in Rubin's handover.
 
 ## Decisions and history, newest first
 
+- 2026-10-29 **Links read themselves; tags that mirror the variants.** A website address pasted
+  on Teach Flöda is read a moment after it lands (no button); a product page pasted on the review
+  page is kept and read in the same breath, as is a pasted list of pages. The export now teaches
+  which tags mirror a product's own variants, the way filter apps write them ("Size_54",
+  "Colour_Black", "size-m", or the bare value): `option-tags.ts` learns one shape per option where
+  most values follow it (`learned.optionTags`, from the listings' options, which `listingsFromCsv`
+  and the store read now carry). Those tags are set aside from the shelves a kind is offered
+  (never in a kind's common or varying tags, never a menu), and the build writes them from each
+  new product's variants (pipeline and Prices and stock), past the tag gate. Teach Flöda says so
+  under Types, tags and categories.
 - 2026-10-29 **Blank slate.** Nothing of the first shop's own is built into a new copy any more:
   the built-in binding list (with its wholesale costs) is gone, so are the default packages (men's
   Griffon, women's Squire), the $59/$49 mount charges and the "Please Mount My Bindings" wording,

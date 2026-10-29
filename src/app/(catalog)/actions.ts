@@ -2029,6 +2029,7 @@ export async function learnVocabularyAction(learned: import("@/lib/catalog/taxon
       products: Number(learned.products) || 0,
       file: String(learned.file ?? "").slice(0, 200),
       learnedAt: new Date().toISOString(),
+      ...(Array.isArray(learned.optionTags) && learned.optionTags.length ? { optionTags: learned.optionTags.slice(0, 10).map((p) => ({ option: String(p.option).slice(0, 60), template: String(p.template).slice(0, 80), form: (["as-is", "lower", "slug"] as const).includes(p.form) ? p.form : "as-is", example: String(p.example).slice(0, 80) })).filter((p) => p.option && p.template.includes("{value}")) } : {}),
     };
     const before = await getLearnedVocabulary();
     const merged = before ? mergeVocabulary(before, clean) : clean;

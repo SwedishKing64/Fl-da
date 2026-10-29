@@ -16,7 +16,7 @@
  *   full        a supplier nobody has read before, or a batch that is broadly unsure: nothing goes
  *               on its own; the quick look is shown as it is
  *
- * The shop opts in on Training and Rules → Your store. Off, nothing is ever pushed on its own and
+ * The shop opts in on Teach Flöda → Your catalogue export → Or connect the store. Off, nothing is ever pushed on its own and
  * the one button on the quick look is the only way products go.
  */
 

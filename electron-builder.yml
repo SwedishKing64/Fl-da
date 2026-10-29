@@ -40,6 +40,8 @@ extraResources:
   - from: desktop/floda.json
     to: floda.json
 win:
+  # The Flöda mark, as src/app/icon.svg draws it, rendered at 1024px; electron-builder makes the .ico and .icns from it.
+  icon: desktop/icon.png
   target:
     - target: nsis
       arch: [x64]
@@ -51,6 +53,7 @@ nsis:
   shortcutName: Flöda
   uninstallDisplayName: Flöda
 mac:
+  icon: desktop/icon.png
   target:
     - target: dmg
       arch: [arm64, x64]

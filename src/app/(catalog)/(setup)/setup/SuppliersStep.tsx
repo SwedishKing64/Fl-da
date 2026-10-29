@@ -223,7 +223,7 @@ export function SuppliersStep({ fields, templates, next, standalone }: { fields:
 
       {!standalone && next && (
         <div className="mt-5 flex items-center justify-between border-t border-[var(--line-soft)] pt-4 text-[13px] text-[var(--ink-soft)]">
-          <span>{anyRead || templates > 0 ? "You can add more suppliers any time from Training and Rules." : "You can do this later, one supplier at a time, as their paperwork comes in."}</span>
+          <span>{anyRead || templates > 0 ? "You can add more suppliers any time from Teach Flöda." : "You can do this later, one supplier at a time, as their paperwork comes in."}</span>
           <Button size="sm" variant={anyRead || templates > 0 ? "primary" : "ghost"} disabled={pending || busy} onClick={() => start(async () => { if (!anyRead && templates === 0) await skipSetupStepAction("suppliers"); router.push(next); })}>{anyRead || templates > 0 ? "Continue →" : "Skip for now"}</Button>
         </div>
       )}

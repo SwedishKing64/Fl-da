@@ -245,6 +245,8 @@ export interface AppSettings {
   locations: ShopifyLocation[];
   publicBaseUrl: string; // where uploaded images are served for the CSV, e.g. https://tools.example.com
   seoTone: string; // tone instructions for AI-written descriptions
+  /** How an SEO title reads, in placeholders: "{title} | {shop}", "{brand} {title}". Empty means title | shop. */
+  seoTitlePattern: string;
   houseRules: string; // free text: how this shop builds products, fed to the AI on every product
   /** Offer confirmed supplier layouts (headings only) to other shops, and start from theirs. */
   shareLayouts: boolean;
@@ -261,6 +263,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   publicBaseUrl: "",
   seoTone:
     "Friendly, knowledgeable specialist shop. Plain English, no hype, mention who the product suits and key specs.",
+  seoTitlePattern: "",
   houseRules: "",
   shareLayouts: true,
 };

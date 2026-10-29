@@ -402,6 +402,16 @@ terms and the due dates worked from them, PAID stamps) live in Rubin's handover.
 
 ## Decisions and history, newest first
 
+- 2026-10-29 Training and Rules became **Teach Flöda** (`/training`): three source tiles (export,
+  website, a supplier's paperwork) and then what Flöda believes, in seven areas, every belief a
+  sentence with a Change beside it and Add a rule under each area (`teaching.ts`, `Teach.tsx`,
+  FLODA.md "Teach Flöda"). The old rulebook-by-stage and the big "How you list" form went from the
+  page; setup's form is unchanged. The export now teaches more: the SEO title pattern
+  (`settings.seoTitlePattern`), a brand's margin as a pricing rule named "From your export: …"
+  (only for a brand with no rule yet; the shop can switch it off or delete it), and the
+  description layout where a key is set. The pack's seeded tag rules now read as Flöda's own,
+  not the shop's, and in plain words. The desktop installers carry the Flöda mark
+  (`desktop/icon.png`, from `src/app/icon.svg`).
 - 2026-10-28 A shop simulator (`npm run eval:shops`, FLODA.md "Working on Flöda"): made-up shops in
   five trades, each with an export and a season of deliveries in nine supplier layouts, read and
   built and scored exactly against the truth they were rendered from. Its first run found, and

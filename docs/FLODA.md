@@ -120,9 +120,27 @@ standalone folder with an empty template database; `electron-builder.yml` wraps 
 `.github/workflows/desktop.yml` builds the Windows installer on a Windows runner and the Mac
 disk image on a Mac runner whenever a `v*` tag is pushed, and attaches them to the release.
 
-**Training and Rules.** One page (`/training`, admins) for everything Flöda is taught: the
-shop's website, each supplier's paperwork (`SuppliersStep` standing alone, with the remembered
-layouts listed), the Shopify export (`LearnPanel`) and the rules for every listing (`HouseForm`).
+**Teach Flöda.** One page (`/training`, admins) for everything Flöda is taught. At the top,
+three source tiles (`Sources.tsx`): the catalogue export (`LearnPanel`, with the store
+connection folded under it), the website, and a supplier's paperwork (`SuppliersStep` standing
+alone, with the remembered layouts listed); each says what it has taught so far and opens to
+teach more. Under them, everything Flöda now believes about how the shop lists, in seven areas
+(`teaching.ts`, pure: `buildAreas` gives types, tags and categories; titles; descriptions;
+variants; pricing; SEO; suppliers' invoices), every belief one sentence badged with where it
+came from — the export, the website, the shop, a supplier's paperwork, or Flöda's own default —
+and carrying the one editor that changes it (`Edit`: a choice, a text, a kind's field, a tag
+rule, a template, a pricing rule, a setting, a supplier's defaults). `Teach.tsx` renders the
+areas, opens the editor under the sentence, and ends each area with Add a rule: a tag rule, a
+type's title shape, a standing instruction, what a type is sold by, a pricing rule, a rule for
+the writer. The JSON actions behind it (`patchHouseAction`, `saveKindAction`,
+`saveTagRuleAction`, `savePricingRuleJsonAction`, `saveTemplateAction`,
+`saveSupplierDefaultsAction`, and the switch and delete actions) change one thing and leave the
+rest. The export now also teaches (`learn-more.ts`, pure, read in the browser): the SEO title
+pattern most products follow (`settings.seoTitlePattern`, placeholders `{title} {brand} {type}
+{shop}`, used by `seoTitleFrom` and told to the writer), each brand's margin where enough
+products agree (a pricing rule named "From your export: <brand>", only where the brand has none),
+and, with a key, the way its descriptions are laid out (`describeStyleAction` reads a few middling
+bodies and fills `house.descriptions` where the shop has set nothing).
 Settings keeps the shop's name and tax, the reading key, staff, backups and the deployment's
 health. **The website is the list of kinds of product** (`website.ts`): a Shopify store is read
 from `/collections.json`, page by page; any other site from the links in its menus; promotions,
@@ -168,8 +186,7 @@ calls cost), so the allowance goes as far as the lighter models let it; a model 
 is priced as the dearest. A row metered only in tokens, from before calls were priced, is still
 priced at the old single Opus rate.
 
-**The rulebook.** The top of Training and Rules is every rule in force, by stage, in plain words
-(`rulebook.ts`, pure: `buildRulebook` takes the house conventions, tag rules, templates, pricing
+**The rulebook.** The sentences on Teach Flöda come from `rulebook.ts` (pure: `buildRulebook` takes the house conventions, tag rules, templates, pricing
 rules, supplier layouts and defaults, supplier records, the website, the export's vocabulary and
 the settings, and gives eight stages — reading, naming, filing, pricing, copy, pictures, checks,
 export — each a list of `RuleEntry` sentences with where to change it). `describeTagRule`,
@@ -179,9 +196,9 @@ Flöda's own rules are listed and badged as Flöda's so the shop knows them. A t
 switched off, deleted or tried from the rulebook (`setTagRuleActiveAction`, `deleteTagRuleAction`,
 `ruleReachAction`: how many products of the latest open batch the rule touches, with a few by
 name, nothing changed). A kind's tag rules are said once, under the kind, not again as rules.
-This is the first step of opening how a shop's system runs to the shop; the next are turning a
-correction on the review grid into a rule, per-stage switches and notes, and a rulebook file that
-exports, imports and rolls back.
+`buildRulebook`'s eight stages are no longer shown; Teach Flöda shows the same beliefs by area
+(`teaching.ts`), where each can be changed in place. The next steps are turning a correction on
+the review grid into a rule, and a rulebook file that exports, imports and rolls back.
 
 **One confidence score per field.** `confidence.ts` (pure) scores a product's title, tags,
 picture and price from where each came from, and the product is the lowest of the four: a title
@@ -200,14 +217,14 @@ listings, its tag rules and templates, its kinds, the tags the rules work out pe
 gate. The build (`applyMappings`) and the batch check (`batch-agent.ts`) pass every product's
 tags through it: a tag the shop has never used is taken off and recorded once as a `TagProposal`
 with the product it was meant for; a tag the batch instructions asked for always stays; a tag a
-person types on the grid is approved as written (`approveTypedTags`). Training and Rules lists
+person types on the grid is approved as written (`approveTypedTags`). Teach Flöda lists
 the proposals with Approve (a tag of the shop's from then on) and Reject (never proposed again).
 
 **The quick look.** The review opens on the products that need a person, one card each, worst first: the field that pulled each down, its sentence, and that field's fix on the card (the title to retype, the tags to fix, the pictures to open, the retail to set per variant), with "Looks right" as the other answer, which scores the field as if the person had typed it. What is ready is counted and listed on request. The full table is one click away and the choice is remembered per browser; the errors pill opens the table on the rows with errors.
 
 **Pages found, not pasted.** The links people paste are the memory: from each brand's links the shape of its addresses is worked out (its template with the product's slug in it), a new product's name is put into that shape, and the address is fetched and checked against the product's name before it is believed. A brand nobody has linked yet, or a guess that does not hold, goes to one short web search, checked the same way. A page is kept only when it is titled like the product; a wrong page is worse than none. "Find the pages" on the review does the batch; "Find its page" on a card does one product and reads it.
 
-**The store, read rather than told.** With the store connected (Training and Rules → Your store: a domain and an Admin API token, proved by asking the store its name), what an export used to teach is read off the store itself: its listings, its vocabulary (kinds, tags, spelling), the conventions per brand and kind (templates filed under "store", replaced on each read), and the catalogue the batch check matches against. The store is read again before a build when the last read is a day old, and on demand. An export file still works for a shop that would rather not connect; what it taught stays and is joined.
+**The store, read rather than told.** With the store connected (Teach Flöda → Your catalogue export → Or connect the store: a domain and an Admin API token, proved by asking the store its name), what an export used to teach is read off the store itself: its listings, its vocabulary (kinds, tags, spelling), the conventions per brand and kind (templates filed under "store", replaced on each read), and the catalogue the batch check matches against. The store is read again before a build when the last read is a day old, and on demand. An export file still works for a shop that would rather not connect; what it taught stays and is joined.
 
 **Pushing without the person, tiered.** With the store connected and the shop opted in (Your store → "Push what is ready on its own"), a build ends with what has earned it going to the store as drafts: a product with every field above the bar, nothing wrong on it and no question of which listing it is, when its supplier has a clean record. Three tiers: auto (everything goes, nothing to do), exceptions (the ready ones go, the rest are the quick look), full (a supplier with no record or a broadly unsure batch: nothing goes on its own). Opted in or not, the quick look carries one button that sends what is ready; a batch is pushed once every product of it is in the store. Drafts only, and a push can be rolled back.
 

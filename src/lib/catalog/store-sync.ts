@@ -73,6 +73,7 @@ export function toListings(nodes: StoreNode[]): Listing[] {
       price: price !== null && Number.isFinite(price) ? price : null,
       bindingOption: binding,
       barcodes: p.variants.nodes.map((v) => (v.barcode ?? "").trim()).filter(Boolean),
+      options: p.options.map((o) => ({ name: o.name, values: [...new Set(p.variants.nodes.map((v) => v.selectedOptions.find((s) => s.name === o.name)?.value.trim() ?? "").filter(Boolean))] })).filter((o) => o.name && o.name.toLowerCase() !== "title" && o.values.length),
     };
   });
 }

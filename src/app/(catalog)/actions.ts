@@ -815,7 +815,10 @@ export async function saveSettingsAction(patch: Partial<AppSettings>): Promise<A
       locations: z.array(z.object({ id: z.string(), name: z.string(), isDefault: z.boolean().optional() })).optional(),
       publicBaseUrl: z.string().optional(),
       seoTone: z.string().optional(),
+      seoTitlePattern: z.string().max(200).optional(),
+      houseRules: z.string().max(8000).optional(),
       shareLayouts: z.boolean().optional(),
+      packages: z.object({ drillMountFee: z.number().min(0).max(10000), systemMountFee: z.number().min(0).max(10000), fittingMount: z.string().max(80), fittingNoMount: z.string().max(80) }).partial().optional(),
     });
     const data = schema.parse(patch);
     await saveSettings(data as Partial<AppSettings>);
@@ -1396,7 +1399,24 @@ export async function transcribeDocumentAction(input: { files: Array<{ name: str
 /** A file sent from the page: its name, type and contents as base64. */
 type SentFile = { name: string; type: string; base64: string };
 
-/** The shop's binding list for ski packages — name, RRP, wholesale — loaded once and kept. See binding-list.ts. */
+/** The shop's bindings for ski packages, typed in on Settings: name, RRP, wholesale. See binding-list.ts. */
+export async function saveBindingEntriesAction(input: { entries: Array<{ name: string; rrp: number; cost: number | null }> }): Promise<ActionResult<{ bindings: number }>> {
+  return safely(async () => {
+    const user = await requireUser("ADMIN");
+    const seen = new Set<string>();
+    const entries = (Array.isArray(input.entries) ? input.entries : []).slice(0, 200)
+      .map((e) => ({ name: String(e.name ?? "").replace(/\s+/g, " ").trim().slice(0, 120), rrp: Number(e.rrp), cost: e.cost === null || e.cost === undefined ? null : Number(e.cost) }))
+      .filter((e) => e.name && Number.isFinite(e.rrp) && e.rrp > 0 && (e.cost === null || (Number.isFinite(e.cost) && e.cost >= 0)) && !seen.has(e.name.toLowerCase()) && seen.add(e.name.toLowerCase()));
+    const list = { entries, file: "typed in", updatedAt: new Date().toISOString() };
+    await (await import("@/lib/catalog/trades/snow/binding-store")).saveBindingList(list);
+    await logAudit("packages.binding_list", { userId: user.id, details: { file: "typed in", bindings: entries.length } }).catch(() => undefined);
+    revalidatePath("/settings");
+    revalidatePath("/training");
+    return { ok: true, data: { bindings: entries.length } };
+  });
+}
+
+/** The shop's binding list for ski packages — name, RRP, wholesale — loaded from a sheet. See binding-list.ts. */
 export async function saveBindingListAction(file: SentFile): Promise<ActionResult<import("@/lib/catalog/trades/snow/binding-list").BindingList>> {
   return safely(async () => {
     const user = await requireUser("ADMIN");
@@ -2009,6 +2029,7 @@ export async function learnVocabularyAction(learned: import("@/lib/catalog/taxon
       products: Number(learned.products) || 0,
       file: String(learned.file ?? "").slice(0, 200),
       learnedAt: new Date().toISOString(),
+      ...(Array.isArray(learned.optionTags) && learned.optionTags.length ? { optionTags: learned.optionTags.slice(0, 10).map((p) => ({ option: String(p.option).slice(0, 60), template: String(p.template).slice(0, 80), form: (["as-is", "lower", "slug"] as const).includes(p.form) ? p.form : "as-is", example: String(p.example).slice(0, 80) })).filter((p) => p.option && p.template.includes("{value}")) } : {}),
     };
     const before = await getLearnedVocabulary();
     const merged = before ? mergeVocabulary(before, clean) : clean;
@@ -2658,4 +2679,457 @@ export async function saveRunAction(input: z.infer<typeof runInput>): Promise<Ac
   } catch (err) {
     return fail(err);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Shops on this computer (the desktop app; see shops.ts)
+// ---------------------------------------------------------------------------
+
+export async function addShopAction(input: { name: string }): Promise<ActionResult<{ id: string; name: string }>> {
+  return safely(async () => {
+    const user = await requireUser("ADMIN");
+    const entry = await (await import("@/lib/catalog/shops")).addShop(String(input.name ?? ""));
+    await logAudit("shops.add", { userId: user.id, details: entry }).catch(() => undefined);
+    revalidatePath("/settings");
+    return { ok: true, data: entry };
+  });
+}
+
+export async function renameShopAction(input: { id: string; name: string }): Promise<ActionResult> {
+  return safely(async () => {
+    const user = await requireUser("ADMIN");
+    await (await import("@/lib/catalog/shops")).renameShop(String(input.id ?? ""), String(input.name ?? ""));
+    await logAudit("shops.rename", { userId: user.id, details: input }).catch(() => undefined);
+    revalidatePath("/settings");
+    return { ok: true };
+  });
+}
+
+/** Open another shop. The desktop app restarts on it, and its own sign-in page opens. */
+export async function openShopAction(input: { id: string }): Promise<ActionResult> {
+  return safely(async () => {
+    const user = await requireUser();
+    await logAudit("shops.open", { userId: user.id, details: input }).catch(() => undefined);
+    await (await import("@/lib/catalog/shops")).openShop(String(input.id ?? ""));
+    return { ok: true };
+  });
+}
+
+// ---------------------------------------------------------------------------------------------
+// Teach Flöda: one belief changed in place, one rule added
+// ---------------------------------------------------------------------------------------------
+
+type HousePatch = {
+  naming?: Partial<import("@/lib/catalog/house").HouseConventions["naming"]>;
+  identifiers?: Partial<import("@/lib/catalog/house").HouseConventions["identifiers"]>;
+  weights?: Partial<import("@/lib/catalog/house").HouseConventions["weights"]>;
+  descriptions?: Partial<import("@/lib/catalog/house").HouseConventions["descriptions"]>;
+  notes?: string;
+};
+
+/** One of the shop's listing habits changed on the Teach page: the rest of them, and the kinds, stay as they were. */
+export async function patchHouseAction(patch: HousePatch): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const { cleanHouse } = await import("@/lib/catalog/house");
+    const { getHouseConventions, saveHouseConventions, saveShopProfile } = await import("@/lib/catalog/shop-profile");
+    const kept = await getHouseConventions();
+    const merged = {
+      ...kept,
+      naming: { ...kept.naming, ...(patch.naming ?? {}) },
+      identifiers: { ...kept.identifiers, ...(patch.identifiers ?? {}) },
+      weights: { ...kept.weights, ...(patch.weights ?? {}) },
+      descriptions: { ...kept.descriptions, ...(patch.descriptions ?? {}) },
+      notes: patch.notes === undefined ? kept.notes : String(patch.notes),
+    };
+    // The year goes on nothing when "chosen" is left behind, so the old choices do not come back with it.
+    if (patch.naming?.season && patch.naming.season !== "chosen") delete merged.naming.yearOn;
+    const house = { ...cleanHouse({ ...merged, kinds: kept.kinds }, kept), savedAt: new Date().toISOString() };
+    await saveHouseConventions(house);
+    await saveShopProfile({ skipped: { house: false } });
+    await logAudit("shop.house", { userId: user.id, details: { patched: Object.keys(patch) } });
+    revalidatePath("", "layout");
+    return { ok: true };
+  });
+}
+
+/** One thing said about one product type: its tags, the tags that vary, how its titles read, or what it is filed as. */
+export async function saveKindAction(input: { type: string; patch: Partial<Pick<import("@/lib/catalog/house").KindRule, "calledAs" | "tags" | "variesTags" | "titleFormat">> }): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const { cleanKinds } = await import("@/lib/catalog/house");
+    const { getHouseConventions, saveHouseConventions } = await import("@/lib/catalog/shop-profile");
+    const type = String(input.type ?? "").trim();
+    if (!type) return { ok: false, error: "Which product type?" };
+    const house = await getHouseConventions();
+    const was = house.kinds.find((k) => k.type.toLowerCase() === type.toLowerCase()) ?? { type, calledAs: type, tags: [], variesTags: [], titleFormat: "", count: 0 };
+    const next = cleanKinds([{ ...was, ...input.patch, type: was.type }])[0];
+    if (!next) return { ok: false, error: "That could not be kept." };
+    const kinds = house.kinds.some((k) => k.type.toLowerCase() === type.toLowerCase()) ? house.kinds.map((k) => (k.type.toLowerCase() === type.toLowerCase() ? next : k)) : [...house.kinds, next];
+    await saveHouseConventions({ ...house, kinds });
+    await materialiseKindRules(kinds);
+    await logAudit("shop.kinds", { userId: user.id, details: { type, patched: Object.keys(input.patch) } });
+    revalidatePath("", "layout");
+    return { ok: true };
+  });
+}
+
+/** A tag rule written or changed on the Teach page: when a field says this, add these tags and, if asked, file it as a type. */
+export async function saveTagRuleAction(input: { id?: string; matchField: string; pattern: string; addTags: string; setProductType?: string }): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const field = ["any", "title", "brand", "productType", "category", "sku"].includes(input.matchField) ? input.matchField : "any";
+    const pattern = String(input.pattern ?? "").trim().slice(0, 200);
+    const addTags = String(input.addTags ?? "").split(",").map((t) => t.trim()).filter(Boolean).slice(0, 40).join(", ");
+    const setProductType = String(input.setProductType ?? "").trim().slice(0, 120);
+    if (!pattern) return { ok: false, error: "Say what the rule looks for." };
+    if (!addTags && !setProductType) return { ok: false, error: "Say what the rule does: tags to add, a type to file it as, or both." };
+    const data = { matchField: field, pattern, addTags, setProductType };
+    if (input.id) {
+      const was = await prisma.tagRule.findUnique({ where: { id: input.id } });
+      if (!was) return { ok: false, error: "That rule is gone." };
+      // A rule the kinds or the old form wrote becomes the shop's own once it is edited here, so neither writes over it again.
+      const name = was.name.startsWith(KIND_RULE_PREFIX) || was.name.startsWith(HOUSE_RULE_PREFIX) ? `${field} ~ ${pattern}`.slice(0, 160) : was.name;
+      await prisma.tagRule.update({ where: { id: input.id }, data: { ...data, name } });
+    } else {
+      await prisma.tagRule.create({ data: { ...data, name: `${field} ~ ${pattern}`.slice(0, 160) } });
+    }
+    await logAudit(input.id ? "rule.updated" : "rule.created", { userId: user.id, details: data });
+    revalidatePath("/training");
+    return { ok: true };
+  });
+}
+
+/** A pricing rule written or changed on the Teach page, without the form. */
+export async function savePricingRuleJsonAction(input: { id?: string; name?: string; scope: string; matchValue?: string; mode: string; percent: number; roundTo: string }): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const scope = ["DEFAULT", "CATEGORY", "BRAND", "PRODUCT"].includes(input.scope) ? input.scope : "DEFAULT";
+    const mode = input.mode === "MARKUP" ? "MARKUP" : "MARGIN";
+    const percent = Number(input.percent);
+    const roundTo = ["NONE", "0.99", "0.95", "1.00", "5.00", "10.00"].includes(input.roundTo) ? input.roundTo : "0.99";
+    const matchValue = String(input.matchValue ?? "").trim().slice(0, 160);
+    if (!Number.isFinite(percent) || percent < 0 || percent > 999) return { ok: false, error: "The percentage needs to be a number." };
+    if (mode === "MARGIN" && percent >= 100) return { ok: false, error: "A margin must be below 100%." };
+    if (scope !== "DEFAULT" && !matchValue) return { ok: false, error: scope === "BRAND" ? "Which brand?" : scope === "CATEGORY" ? "Which product type?" : "Which SKU or model code?" };
+    const who = scope === "DEFAULT" ? "everything else" : matchValue;
+    const name = String(input.name ?? "").trim().slice(0, 160) || `${who}: ${percent}% ${mode === "MARGIN" ? "margin" : "markup"}`;
+    const data = { name, scope, matchValue, mode, percent, roundTo, priority: scope === "DEFAULT" ? 0 : scope === "PRODUCT" ? 30 : scope === "BRAND" ? 20 : 10 };
+    if (input.id) await prisma.pricingRule.update({ where: { id: input.id }, data: { ...data, name: input.name === undefined ? undefined : name } });
+    else await prisma.pricingRule.create({ data: { ...data, active: true } });
+    await logAudit(input.id ? "pricing.updated" : "pricing.created", { userId: user.id, details: data });
+    revalidatePath("/training");
+    revalidatePath("/pricing");
+    return { ok: true };
+  });
+}
+
+export async function setPricingRuleActiveAction(id: string, active: boolean): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    await prisma.pricingRule.update({ where: { id }, data: { active } });
+    await logAudit("pricing.toggled", { userId: user.id, details: { id, active } });
+    revalidatePath("/training");
+    revalidatePath("/pricing");
+    return { ok: true };
+  });
+}
+
+/**
+ * What every product of a brand or type gets, written or changed on the Teach page: the options it
+ * is sold by, the tags it always carries, the type it is filed as, and a note for the writer.
+ */
+export async function saveTemplateAction(input: { id?: string; scope: string; matchValue: string; matchProductType?: string; optionNames?: string[]; addTags?: string[]; setProductType?: string; notes?: string }): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const scope = ["BRAND", "PRODUCT_TYPE", "CATEGORY"].includes(input.scope) ? input.scope : "PRODUCT_TYPE";
+    const matchValue = String(input.matchValue ?? "").trim().slice(0, 120);
+    if (!matchValue) return { ok: false, error: scope === "BRAND" ? "Which brand?" : "Which product type?" };
+    const list = (xs: unknown, n: number) => [...new Set((Array.isArray(xs) ? xs : []).map((x) => String(x).trim().slice(0, 80)).filter(Boolean))].slice(0, n);
+    const data = {
+      scope,
+      matchValue,
+      matchProductType: String(input.matchProductType ?? "").trim().slice(0, 120),
+      optionNames: list(input.optionNames, 3).join(", "),
+      addTags: list(input.addTags, 40).join(", "),
+      setProductType: String(input.setProductType ?? "").trim().slice(0, 120),
+      notes: String(input.notes ?? "").trim().slice(0, 4000),
+    };
+    if (!data.optionNames && !data.addTags && !data.setProductType && !data.notes) return { ok: false, error: "Say at least one thing every one of them gets." };
+    if (input.id) {
+      await prisma.productTemplate.update({ where: { id: input.id }, data });
+    } else {
+      // The same brand or type said twice is one template, so a second saying replaces the first.
+      const same = await prisma.productTemplate.findFirst({ where: { scope, matchValue, matchProductType: data.matchProductType } });
+      if (same) await prisma.productTemplate.update({ where: { id: same.id }, data: { ...data, active: true } });
+      else await prisma.productTemplate.create({ data: { ...data, name: [scope === "BRAND" ? matchValue : "", scope === "BRAND" ? data.matchProductType : matchValue].filter(Boolean).join(" · ").slice(0, 160) || matchValue, sourceFileName: "you", priority: 500, active: true } });
+    }
+    await logAudit(input.id ? "template.updated" : "template.created", { userId: user.id, details: { scope, matchValue } });
+    revalidatePath("/training");
+    return { ok: true };
+  });
+}
+
+export async function deleteTemplateAction(id: string): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    await prisma.productTemplate.delete({ where: { id } });
+    await logAudit("template.deleted", { userId: user.id, details: { id } });
+    revalidatePath("/training");
+    return { ok: true };
+  });
+}
+
+export async function setTemplateActiveAction(id: string, active: boolean): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    await prisma.productTemplate.update({ where: { id }, data: { active } });
+    await logAudit("template.toggled", { userId: user.id, details: { id, active } });
+    revalidatePath("/training");
+    return { ok: true };
+  });
+}
+
+/** What a supplier's paperwork is taken to mean unless the file says otherwise: its currency, its tax, its brand. */
+export async function saveSupplierDefaultsAction(input: { id: string; defaultCurrency: string; defaultGstTreatment: string; defaultBrand: string }): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const currency = String(input.defaultCurrency ?? "").trim().toUpperCase().slice(0, 3);
+    if (!/^[A-Z]{3}$/.test(currency)) return { ok: false, error: "The currency is a three-letter code: AUD, USD, EUR." };
+    const gst = ["INCLUSIVE", "EXCLUSIVE", "NONE"].includes(input.defaultGstTreatment) ? input.defaultGstTreatment : "EXCLUSIVE";
+    await prisma.supplier.update({ where: { id: input.id }, data: { defaultCurrency: currency, defaultGstTreatment: gst, defaultBrand: String(input.defaultBrand ?? "").trim().slice(0, 120) || null } });
+    await logAudit("supplier.defaults", { userId: user.id, details: { id: input.id, currency, gst } });
+    revalidatePath("/training");
+    return { ok: true };
+  });
+}
+
+/**
+ * The patterns an export shows beyond its types and tags, worked out in the browser and kept here:
+ * the shape of the SEO titles, where the shop has not set one, and each brand's margin, as a pricing
+ * rule where the brand has none. Both are named as the export's, so the shop can see where they came
+ * from and change them.
+ */
+export async function learnMoreAction(input: { seoTitlePattern?: string; margins?: Array<{ brand: string; marginPct: number; products: number }> }): Promise<ActionResult<{ seoTitlePattern: string; margins: number }>> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const { EXPORT_RULE_PREFIX } = await import("@/lib/catalog/teaching");
+    const settings = await getSettings();
+    let pattern = "";
+    const offered = String(input.seoTitlePattern ?? "").trim().slice(0, 200);
+    if (offered && /\{title\}|\{brand\}/.test(offered) && !settings.seoTitlePattern.trim()) {
+      await saveSettings({ seoTitlePattern: offered });
+      pattern = offered;
+    }
+    let made = 0;
+    const have = await prisma.pricingRule.findMany({ where: { scope: "BRAND" }, select: { matchValue: true } });
+    const taken = new Set(have.map((r) => r.matchValue.toLowerCase()));
+    for (const m of (input.margins ?? []).slice(0, 200)) {
+      const brand = String(m.brand ?? "").trim().slice(0, 120);
+      const pct = Math.round(Number(m.marginPct));
+      if (!brand || taken.has(brand.toLowerCase()) || !Number.isFinite(pct) || pct < 5 || pct >= 95) continue;
+      taken.add(brand.toLowerCase());
+      await prisma.pricingRule.create({ data: { name: `${EXPORT_RULE_PREFIX}${brand}`.slice(0, 160), scope: "BRAND", matchValue: brand, mode: "MARGIN", percent: pct, roundTo: settings.defaultRoundTo || "0.99", priority: 20, active: true } });
+      made++;
+    }
+    await logAudit("shop.learned_more", { userId: user.id, details: { pattern, margins: made } });
+    revalidatePath("", "layout");
+    return { ok: true, data: { seoTitlePattern: pattern, margins: made } };
+  });
+}
+
+/**
+ * How the shop's descriptions are written, read off a handful of its own: the layout in a sentence
+ * or two, the heading over the details, and any further sections. Kept as the shop's description
+ * style where it has set none, so the writer matches it from the first product; the shop can change
+ * every word of it on the Teach page.
+ */
+export async function describeStyleAction(input: { samples: string[] }): Promise<ActionResult<{ learned: boolean; format: string }>> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const { getHouseConventions, saveHouseConventions } = await import("@/lib/catalog/shop-profile");
+    const house = await getHouseConventions();
+    if (house.descriptions.format.trim() || house.descriptions.sections?.length) return { ok: true, data: { learned: false, format: house.descriptions.format } };
+    const samples = (input.samples ?? []).map((s) => String(s).slice(0, 6000)).filter((s) => s.trim().length >= 200).slice(0, 6);
+    if (!aiAvailable() || samples.length < 2) return { ok: true, data: { learned: false, format: "" } };
+    const { anthropicClient, LIGHT_MODEL } = await import("@/lib/catalog/anthropic");
+    const { zodOutputFormat } = await import("@anthropic-ai/sdk/helpers/zod");
+    const Style = z.object({
+      format: z.string().describe("How these descriptions are laid out and written, as instructions to a writer in two to four plain sentences: what comes first, roughly how long, the voice, what is never said. Only what the samples show."),
+      specsHeading: z.string().describe("The heading used over the list of specifications or details, exactly as written; empty if there is no such list or heading."),
+      sections: z.array(z.object({ heading: z.string(), holds: z.string() })).describe("Headed sections that come after the main text, in order, each with what it holds, in a few words. Empty when the descriptions have no headed sections."),
+    });
+    const response = await anthropicClient(1).messages.parse({
+      model: LIGHT_MODEL,
+      max_tokens: 2000,
+      system: "You are shown a few product descriptions from one online shop, as HTML or text. Describe the house style they share so another writer can match it. Say only what the samples show; name no product.",
+      output_config: { format: zodOutputFormat(Style), effort: "low" },
+      messages: [{ role: "user", content: samples.map((s, i) => `Description ${i + 1}:\n${s}`).join("\n\n---\n\n") }],
+    }, { timeout: 40_000, maxRetries: 1, signal: AbortSignal.timeout(40_000) });
+    const style = response.parsed_output;
+    if (!style || !style.format.trim()) return { ok: true, data: { learned: false, format: "" } };
+    const { cleanHouse } = await import("@/lib/catalog/house");
+    const descriptions = { ...house.descriptions, format: style.format.trim(), specsHeading: style.specsHeading.trim() || house.descriptions.specsHeading, sections: style.sections.filter((s) => s.heading.trim()).slice(0, 8) };
+    await saveHouseConventions({ ...cleanHouse({ ...house, descriptions }, house), savedAt: new Date().toISOString() });
+    await logAudit("shop.description_style", { userId: user.id, details: { samples: samples.length } });
+    revalidatePath("", "layout");
+    return { ok: true, data: { learned: true, format: style.format.trim() } };
+  });
+}
+
+// ---------------------------------------------------------------------------------------------
+// Flöda support: a backup sent up, a rules file down
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * The shop's database, backed up now and sent to Flöda support, with a note. The file goes
+ * straight into the vendor's file store under a token the vendor issues for it, since it is far
+ * bigger than the vendor's own request limit; the vendor is told when it has arrived. Only the
+ * database goes: pictures stay here.
+ */
+export async function sendBackupToSupportAction(input: { note: string; email?: string }): Promise<ActionResult<{ bytes: number }>> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const { vendorMode, licenceServer } = await import("@/lib/catalog/licence");
+    if (vendorMode() || !licenceServer()) return { ok: false, error: "This copy has no Flöda to send to. Download the latest backup and email it instead." };
+    const { getLicence, installId } = await import("@/lib/catalog/licence-store");
+    const [licence, install] = await Promise.all([getLicence(), installId()]);
+    if (!licence?.key) return { ok: false, error: "This copy has no licence key, so Flöda cannot tell whose backup it is. Download the backup and email it instead." };
+    const backup = await backupNow("manual");
+    const { backupPath } = await import("@/lib/catalog/backup");
+    const file = backupPath(backup.name);
+    if (!file) return { ok: false, error: "The backup could not be found after it was made." };
+    const { readFile } = await import("node:fs/promises");
+    const bytes = await readFile(file);
+    const { shopName } = await import("@/lib/catalog/shop-profile");
+    const headers = { authorization: `Bearer ${licence.key}`, "content-type": "application/json" };
+    const begin = await fetch(`${licenceServer()}/api/support`, { method: "POST", headers, body: JSON.stringify({ step: "begin", name: backup.name, bytes: bytes.length }), signal: AbortSignal.timeout(15_000) });
+    const opened = (await begin.json().catch(() => null)) as { ok?: boolean; why?: string; pathname?: string; token?: string; access?: "public" | "private" } | null;
+    if (!begin.ok || !opened?.ok || !opened.pathname || !opened.token) return { ok: false, error: opened?.why || `Flöda answered ${begin.status} and took no backup.` };
+    const { put } = await import("@vercel/blob/client");
+    let access: "public" | "private" = opened.access === "private" ? "private" : "public";
+    let stored: { url: string; pathname: string };
+    try {
+      stored = await put(opened.pathname, bytes, { access, token: opened.token, multipart: true, contentType: "application/octet-stream" });
+    } catch (err) {
+      // A store of the other kind refuses the first try and says so; the file goes the other way.
+      if (!/private|public/i.test(err instanceof Error ? err.message : String(err))) throw err;
+      access = access === "private" ? "public" : "private";
+      stored = await put(opened.pathname, bytes, { access, token: opened.token, multipart: true, contentType: "application/octet-stream" });
+    }
+    const done = await fetch(`${licenceServer()}/api/support`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ step: "done", pathname: stored.pathname, url: access === "public" ? stored.url : "", access, name: backup.name, bytes: bytes.length, shop: shopName(), email: String(input.email ?? "").trim().slice(0, 200), note: String(input.note ?? "").trim().slice(0, 2000), version: process.env.FLODA_VERSION ?? "", install }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    const told = (await done.json().catch(() => null)) as { ok?: boolean; why?: string } | null;
+    if (!done.ok || !told?.ok) return { ok: false, error: told?.why || `The backup went up but Flöda did not record it (HTTP ${done.status}). Say so when you write.` };
+    await logAudit("backup.sent_to_support", { userId: user.id, details: { name: backup.name, bytes: bytes.length } });
+    return { ok: true, data: { bytes: bytes.length } };
+  });
+}
+
+export async function dismissSupportBackupAction(at: string): Promise<ActionResult> {
+  return safely(async () => {
+    await requireVendorAdmin();
+    const { SUPPORT_KEY } = await import("@/lib/catalog/support-box");
+    const row = await prisma.appSetting.findUnique({ where: { key: SUPPORT_KEY } });
+    const rows = parseJson<Array<{ at: string }>>(row?.value, []);
+    await prisma.appSetting.upsert({ where: { key: SUPPORT_KEY }, create: { key: SUPPORT_KEY, value: "[]" }, update: { value: JSON.stringify(rows.filter((r) => r.at !== at)) } });
+    revalidatePath("/clients");
+    return { ok: true };
+  });
+}
+
+/** Everything the shop has taught Flöda, as one file to keep or to send. See rules-file.ts. */
+export async function exportRulesAction(): Promise<ActionResult<{ json: string; filename: string }>> {
+  await requireUser("ADMIN");
+  return safely(async () => {
+    const { RULES_FILE_KIND, RULES_FILE_VERSION } = await import("@/lib/catalog/rules-file");
+    const { getHouseConventions, getLearnedVocabulary, getWebsiteCategories, shopName } = await import("@/lib/catalog/shop-profile");
+    const { getBindingList } = await import("@/lib/catalog/trades/snow/binding-store");
+    const [house, learned, website, settings, tagRules, pricingRules, templates, bindings] = await Promise.all([
+      getHouseConventions(), getLearnedVocabulary(), getWebsiteCategories(), getSettings(),
+      prisma.tagRule.findMany({ orderBy: { priority: "desc" } }),
+      prisma.pricingRule.findMany({ orderBy: { priority: "desc" } }),
+      prisma.productTemplate.findMany({ orderBy: { priority: "asc" } }),
+      getBindingList().catch(() => null),
+    ]);
+    const file = {
+      kind: RULES_FILE_KIND,
+      version: RULES_FILE_VERSION,
+      shop: shopName(),
+      exportedAt: new Date().toISOString(),
+      house,
+      tagRules: tagRules.map(({ name, matchField, pattern, addTags, addCollections, setProductType, setMetafields, priority, active }) => ({ name, matchField, pattern, addTags, addCollections, setProductType, setMetafields, priority, active })),
+      pricingRules: pricingRules.map(({ name, scope, matchValue, mode, percent, roundTo, priority, active }) => ({ name, scope, matchValue, mode, percent, roundTo, priority, active })),
+      templates: templates.map(({ name, scope, matchValue, matchProductType, notes, sourceFileName, productCount, setProductType, addTags, addCollections, optionNames, setMetafields, priority, active }) => ({ name, scope, matchValue, matchProductType, notes, sourceFileName, productCount, setProductType, addTags, addCollections, optionNames, setMetafields, priority, active })),
+      learned,
+      website,
+      settings: { seoTone: settings.seoTone, seoTitlePattern: settings.seoTitlePattern, houseRules: settings.houseRules, defaultRoundTo: settings.defaultRoundTo, minMarginPct: settings.minMarginPct, packages: settings.packages },
+      packageParts: bindings?.entries ?? [],
+    };
+    const stamp = new Date().toISOString().slice(0, 10);
+    return { ok: true, data: { json: JSON.stringify(file, null, 2), filename: `${shopName().replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "floda"}-rules-${stamp}.json` } };
+  });
+}
+
+/**
+ * A rules file loaded: each section it carries replaces what is here, the rest stays. The
+ * database is backed up first where this copy keeps one, so a wrong file is never the end of
+ * anything.
+ */
+export async function importRulesAction(input: { json: string }): Promise<ActionResult<{ loaded: string }>> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const { cleanRulesFile, describeRulesFile } = await import("@/lib/catalog/rules-file");
+    let parsed: unknown;
+    try { parsed = JSON.parse(String(input.json ?? "")); } catch { return { ok: false, error: "That is not a rules file: it could not be read as one." }; }
+    const file = cleanRulesFile(parsed);
+    if (!file) return { ok: false, error: "That is not a Flöda rules file." };
+    const { sqliteFile } = await import("@/lib/catalog/backup");
+    if (sqliteFile()) await backupNow("restore").catch(() => undefined);
+    const { getHouseConventions, saveHouseConventions, saveLearnedVocabulary, saveWebsiteCategories, refreshConventions } = await import("@/lib/catalog/shop-profile");
+    if (file.house) {
+      const kept = await getHouseConventions();
+      const { cleanHouse } = await import("@/lib/catalog/house");
+      const house = { ...cleanHouse(file.house, kept), savedAt: new Date().toISOString() };
+      await saveHouseConventions(house);
+      await materialiseKindRules(house.kinds);
+    }
+    if (file.tagRules) {
+      // The kinds' own rules were just rewritten from the house above; every other rule is the file's.
+      await prisma.tagRule.deleteMany({ where: { NOT: { name: { startsWith: KIND_RULE_PREFIX } } } });
+      for (const r of file.tagRules.filter((r) => !r.name.startsWith(KIND_RULE_PREFIX))) await prisma.tagRule.create({ data: r });
+    }
+    if (file.pricingRules) {
+      await prisma.pricingRule.deleteMany({});
+      for (const r of file.pricingRules) await prisma.pricingRule.create({ data: r });
+    }
+    if (file.templates) {
+      await prisma.productTemplate.deleteMany({});
+      for (const t of file.templates) await prisma.productTemplate.create({ data: { ...t, analysis: "{}" } });
+    }
+    if (file.learned !== undefined) await saveLearnedVocabulary(file.learned);
+    if (file.website !== undefined) await saveWebsiteCategories(file.website);
+    if (file.settings) await saveSettings(file.settings as Partial<AppSettings>);
+    if (file.packageParts) await (await import("@/lib/catalog/trades/snow/binding-store")).saveBindingList({ entries: file.packageParts, file: `a rules file from ${file.shop || "support"}`, updatedAt: new Date().toISOString() });
+    await refreshConventions();
+    await logAudit("rules.imported", { userId: user.id, details: { from: file.shop, exportedAt: file.exportedAt } });
+    revalidatePath("", "layout");
+    return { ok: true, data: { loaded: describeRulesFile(file) } };
+  });
+}
+
+/** A shop added to this computer from a backup file: support's way of opening a customer's copy. */
+export async function importShopAction(input: { name: string; base64: string }): Promise<ActionResult<{ id: string; name: string }>> {
+  return safely(async () => {
+    const user = await requireUser("ADMIN");
+    const bytes = Buffer.from(String(input.base64 ?? ""), "base64");
+    const entry = await (await import("@/lib/catalog/shops")).importShop(String(input.name ?? ""), bytes);
+    await logAudit("shops.import", { userId: user.id, details: { ...entry, bytes: bytes.length } }).catch(() => undefined);
+    revalidatePath("/settings");
+    return { ok: true, data: entry };
+  });
 }

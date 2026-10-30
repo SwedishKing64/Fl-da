@@ -1,5 +1,6 @@
 "use client";
 
+import { filesFromDrop, filesFromPicker } from "@/app/(catalog)/dropped-files";
 import { appliedBefore, fingerprint, forgetApplied, rememberApplied } from "@/lib/catalog/applied-memory";
 
 import { useRef, useState } from "react";
@@ -197,6 +198,8 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
   // A ski nobody has ticked a binding for has no package: nothing is picked for it. See binding-list.ts.
   const [packagePicks, setPackagePicks] = useState<Record<number, string[]>>({});
   const csvRef = useRef<HTMLInputElement>(null);
+  const folderRef = useRef<HTMLInputElement>(null);
+  const referenceFolderRef = useRef<HTMLInputElement>(null);
   const sheetRef = useRef<HTMLInputElement>(null);
   /**
    * The buyer's sheet last given, kept so loading another export re-reads it against the files as
@@ -1396,12 +1399,14 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
         <p className="mb-3 text-sm text-[var(--ink-soft)]">
           In Shopify: <strong>Products → Export</strong>. Add as many exports as you like — the sheet is matched against whatever is loaded, and only the changes that can touch these products are put in front of you.
         </p>
-        <div className="dropzone" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); if (e.dataTransfer.files.length) void takeCsvs(e.dataTransfer.files); }}>
-          <div className="text-sm font-medium text-[var(--ink)]">{busy === "files" ? "Reading…" : "Drop exports here, or choose files"}</div>
+        <div className="dropzone" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); const dt = e.dataTransfer; void filesFromDrop(dt).then((files) => { if (files.length) void takeCsvs(files); }); }}>
+          <div className="text-sm font-medium text-[var(--ink)]">{busy === "files" ? "Reading…" : "Drop exports or a folder of them here, or choose files"}</div>
           <div className="mt-1 text-xs text-[var(--ink-soft)]">Shopify export CSVs. An invoice dropped here — a spreadsheet, a PDF or a photo — is sent to the invoice reader below rather than refused.</div>
           <div className="mt-3">
             <Button icon="📂" size="sm" onClick={() => csvRef.current?.click()} disabled={busy !== null}>Choose files</Button>
+            <Button size="sm" variant="ghost" className="ml-2" onClick={() => folderRef.current?.click()} disabled={busy !== null}>Choose a folder</Button>
             <input ref={csvRef} type="file" multiple className="hidden" onChange={(e) => { if (e.target.files?.length) void takeCsvs(e.target.files); e.target.value = ""; }} />
+            <input ref={folderRef} type="file" className="hidden" {...({ webkitdirectory: "", directory: "" } as Record<string, string>)} onChange={(e) => { const files = filesFromPicker(e.target.files); e.target.value = ""; if (files.length) void takeCsvs(files); }} />
           </div>
         </div>
         {sheets.length > 0 && (
@@ -1859,7 +1864,9 @@ export function BulkPanel({ aiEnabled, builtBy = "", bindings = [] }: { aiEnable
                     <span className="ml-2 text-xs text-[var(--ink-soft)]">Burton&rsquo;s description list or Volkl&rsquo;s spec export: each order line is found on it first, so the order&rsquo;s shorthand (&ldquo;CUSTOM NEW GRAPHIC 58W&rdquo;) is matched to the shop under the catalogue&rsquo;s name (Custom, 158W), and anything that has to be built takes its description from it. A barcode list is where the EAN for each size is. Add the order first, then these.</span>
                   </div>
                   <Button icon="📑" size="sm" disabled={busy !== null} onClick={() => referenceRef.current?.click()}>{busy === "reference" ? "Reading…" : references.length > 0 ? "Add another" : "Add a spec sheet"}</Button>
+                  <Button size="sm" variant="ghost" disabled={busy !== null} onClick={() => referenceFolderRef.current?.click()}>A folder of them</Button>
                   <input ref={referenceRef} type="file" multiple className="hidden" onChange={(e) => { const f = Array.from(e.target.files ?? []); e.target.value = ""; void (async () => { for (const file of f) await takeReference(file); })(); }} />
+                  <input ref={referenceFolderRef} type="file" className="hidden" {...({ webkitdirectory: "", directory: "" } as Record<string, string>)} onChange={(e) => { const f = filesFromPicker(e.target.files); e.target.value = ""; void (async () => { for (const file of f) await takeReference(file); })(); }} />
                 </div>
                 {references.length > 0 && (
                   <ul className="mt-2 divide-y divide-[var(--line-soft)] text-xs">

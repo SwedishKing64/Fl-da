@@ -60,7 +60,7 @@ export interface DocumentScore {
 /** The table a file was read into, as the lines the build would start from. */
 export function linesFromTable(table: ExtractedTable): CanonicalLineItem[] {
   const mapping: Mapping = isReaderTable(table.headers) ? readerMapping(table.headers) : suggestMapping(table.headers, table.rows);
-  const items = table.rows.map((row) => applyMapping(row, mapping)).filter((i) => i.title || i.sku || i.costPrice !== null);
+  const items = table.rows.map((row) => applyMapping(row, mapping)).filter((i) => i.title || i.sku || i.barcode || i.modelCode);
   return keepOrderedLines(items.map((item) => ({ item, fileId: "doc" }))).kept.map((l) => l.item);
 }
 
@@ -127,7 +127,11 @@ export function scoreDocument(read: CanonicalLineItem[], key: CorpusKey): Docume
       // A code is right wherever the reader kept it: a size grid's lines carry a code per size
       // ("OW3101.S") and the style's own code beside it.
       if (f === "code" && [l.sku, l.barcode, l.modelCode].some((c) => sameText(c, want) || sameText(String(c).replace(/\.[^.]+$/, ""), want))) { fields[f].right++; continue; }
-      const ok = typeof want === "number" ? sameNumber(typeof got === "number" ? got : got === null || got === "" ? null : Number(got), want) : sameText(got, want);
+      // An option is right where the reader kept it as the variant, or kept the column it came in
+      // (its extras), which the build takes as an option: a scent, a capacity, a zip side.
+      // …and a size is right wherever the reader kept it: a sleeping bag's Regular is its variant.
+      const kept = (f === "option" || f === "size") && [l.variant ?? "", ...Object.values(l.extras ?? {})].some((v) => sameText(v, want));
+      const ok = kept || (typeof want === "number" ? sameNumber(typeof got === "number" ? got : got === null || got === "" ? null : Number(got), want) : sameText(got, want));
       if (ok) fields[f].right++;
       else wrong.push(`${label}: ${f} read ${JSON.stringify(got)}, key ${JSON.stringify(want)}`);
     }

@@ -15,7 +15,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 /** What Flöda does on a store: reads and writes products and their stock, reads its locations. */
-export const SCOPES = "read_products,write_products,read_inventory,write_inventory,read_locations";
+export const SCOPES = "read_products,write_products,read_inventory,write_inventory,read_locations,read_files,write_files";
 
 export interface OAuthApp {
   clientId: string;

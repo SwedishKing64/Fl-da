@@ -24,7 +24,7 @@ const LINKS = [
   { href: "/tidy", label: "Tidy a document", icon: "tidy" },
   { href: "/pricing", label: "Price calculator", icon: "pricing" },
   { href: "/history", label: "History", icon: "history" },
-  { href: "/training", label: "Training and Rules", icon: "training", admin: true },
+  { href: "/training", label: "Teach Flöda", icon: "training", admin: true },
   { href: "/settings", label: "Settings", icon: "settings", admin: true },
   { href: "/clients", label: "Clients", icon: "clients", admin: true, vendor: true },
 ];

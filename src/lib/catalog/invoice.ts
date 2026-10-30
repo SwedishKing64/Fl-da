@@ -186,10 +186,13 @@ const LOOSE_ITEM_HEADING = /^(?:(?:item|article|style|product|model|material)\s*
 export function isSizeHeading(raw: string): boolean {
   const h = raw.trim().toLowerCase().replace(/\s+/g, " ");
   if (!h) return false;
-  if (/^\d{1,3}(\.\d)?$/.test(h)) return true;
+  if (/^\d{1,3}(\.\d)?w?$/.test(h)) return true;
   if (/^(us|uk|eu|eur|au|m|w|mens|womens|men's|women's)\s?\d{1,2}(\.5)?$/.test(h)) return true;
-  const letter = "(?:xxxs|xxs|xs|s|m|l|xl|xxl|xxxl|[2-6]xl|[2-6]x)";
+  // Wetsuit sizes too: a tall medium is MT, a short large LS.
+  const letter = "(?:xxxs|xxs|xs|s|ms|m|mt|ml|ls|l|lt|xl|xxl|xxxl|[2-6]xl|[2-6]x)";
   if (new RegExp(`^${letter}(?:\\s?[/-]\\s?${letter})?$`).test(h)) return true;
+  // A surfboard's or a leash's length in feet and inches: 5'10, 6'0, 7'.
+  if (/^\d'(?:\d{1,2})?"?$/.test(h)) return true;
   if (/^(os|o\/s|one size|onesize|osfa|n\/s|reg|regular|long|short|petite|tall|x-long|xl long)$/.test(h)) return true;
   return false;
 }
@@ -228,16 +231,25 @@ function sectionsOf(grid: string[][]): Section[] {
     const qty = find(/^(total )?qty$|^quantity$/);
     // The lengths and sizes: numeric headings, and only past the quantity column so that a price
     // or an item number in the heading row cannot be mistaken for one.
+    const strict = headings.findIndex((c) => ITEM_HEADING.test(norm(c)));
+    const numeric = (c: string) => /^\d{2,3}(\.\d)?w?$/i.test(c.trim());
+    // Numeric lengths, and letter sizes beside them where one heading row serves several kinds.
     let sizes = headings
       .map((c, i) => [i, c] as [number, string])
-      .filter(([i, c]) => qty >= 0 && i > qty && /^\d{2,3}(\.\d)?$/.test(c.trim()));
+      .filter(([i, c]) => qty >= 0 && i > qty && (numeric(c) || isSizeHeading(c)));
     // Dalbello's boot form has its Mondo sizes BEFORE the "Total Qty" column: a run of three or
     // more sizes across the heading row, past the item code, is the size grid wherever it sits.
     if (sizes.length === 0) {
-      const run = headings.map((c, i) => [i, c] as [number, string]).filter(([i, c]) => i > Math.max(0, headings.findIndex((h) => ITEM_HEADING.test(norm(h)))) && /^\d{2,3}(\.\d)?$/.test(c.trim()));
+      const run = headings.map((c, i) => [i, c] as [number, string]).filter(([i, c]) => i > Math.max(0, strict) && numeric(c));
       if (run.length >= 3) sizes = run;
     }
-    const strict = headings.findIndex((c) => ITEM_HEADING.test(norm(c)));
+    // A clothing form headed "Item No." lays letter sizes across the top — XS S M L XL, S/M — past
+    // its quantity column, or past its prices where it has no quantity column. Two or more of them.
+    if (sizes.length === 0 && strict >= 0) {
+      const after = qty >= 0 ? qty : Math.max(strict, find(RRP), find(/^(w s|ws|wholesale|whsl|dealer|cost)( price)?$/));
+      const letters = headings.map((c, i) => [i, c] as [number, string]).filter(([i, c]) => i > after && isSizeHeading(c));
+      if (letters.length >= 2) sizes = letters;
+    }
     const sku = strict >= 0 ? strict : headings.findIndex((c) => LOOSE_ITEM_HEADING.test(headingWords(c)));
     const loose = strict < 0;
     // A clothing, footwear or pack form headed "Style #" or "SKU" lays its sizes across the top —
@@ -316,8 +328,22 @@ function readOrder(name: string, grid: string[][]): InvoiceRead | null {
   const tabBrand = brandIn(name);
   // A boot form's sizes are Mondo points written in millimetres, "245", which the shop writes as
   // the boot size, "24.5". Known by the form saying it is boots — its tab or its title rows.
-  const bootForm = /boot/i.test(name) || grid.slice(0, 20).some((r) => (r ?? []).some((c) => /\bski ?boots?\b/i.test(text(c))));
-  for (const section of sections) {
+  // A form with a section per kind — SKIS, then SKI BOOTS, then JACKETS on one tab — says so in a
+  // label row above each heading row; then only the boots section is boots, and each section's
+  // label is what its lines are. A tab with no such labels is read whole, as before.
+  const labelAbove = (at: number): string => {
+    for (let r = at - 1; r >= Math.max(0, at - 3); r--) {
+      const cells = (grid[r] ?? []).map(text).filter(Boolean);
+      if (cells.length === 0) continue;
+      return new Set(cells.map((c) => c.toLowerCase())).size === 1 && /[a-z]{3,}/i.test(cells[0]) && !/\d{2}/.test(cells[0]) ? cells[0] : "";
+    }
+    return "";
+  };
+  const labels = sections.map((s) => labelAbove(s.at));
+  const tabBoot = /boot/i.test(name) || (labels.every((l) => !l) && grid.slice(0, 20).some((r) => (r ?? []).some((c) => /\bski ?boots?\b/i.test(text(c)))));
+  for (const [n, section] of sections.entries()) {
+    const label = labels[n];
+    const bootForm = label ? /boot/i.test(label) : tabBoot;
     for (let r = section.at + 1; r < section.end; r++) {
       const row = grid[r] ?? [];
       const sku = text(row[section.sku]);
@@ -341,7 +367,7 @@ function readOrder(name: string, grid: string[][]): InvoiceRead | null {
         ...(colour ? { colour } : {}),
         ...(tabBrand ? { brand: tabBrand } : {}),
         // What a boot form's lines are: the form says so, its models' names do not ("DRS 75").
-        ...(bootForm ? { kind: "Ski Boots" } : {}),
+        ...(bootForm ? { kind: "Ski Boots" } : label ? { kind: label } : {}),
         costPrice: positive(section.cost),
         rrp: positive(section.rrp),
       };

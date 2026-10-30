@@ -6,12 +6,12 @@ import { isOfType, isSkipped, parseDirectives, typeKey } from "./instructions";
 import { prisma, parseJson } from "./db";
 import { extractFile, type UploadKind } from "./extract";
 import { applyMapping, headerHash, looksLikeReference, mappingProblems, repairTemplate, seasonFrom, suggestMapping, suggestOptions, type Mapping, type MappingOptions, type SavedOptions, nearestTemplate, trimToHeaders, type LayoutDrift } from "./mapping";
-import { groupLineItems } from "./grouping";
+import { groupLineItems, productOptions } from "./grouping";
 import { houseTags, retagForType } from "./product-tags";
 import { DEFAULT_CATEGORY_RULES, type CategoryRuleLike } from "./categorize";
 import { enrichFromSpecs, normKey } from "./specs";
 import { keepOrderedLines, resolveAgainstReference } from "./reference-match";
-import { isFlatSki, isPackageBinding, packageProducts, specFromName, type ChosenBindings } from "./trades/snow/packages";
+import { isFlatSki, isPackageBinding, packageProducts, specFromName, specsOfList, type ChosenBindings } from "./trades/snow/packages";
 import { readInvoiceGrids, type PriceRow } from "./invoice";
 import { asShopPrice, existingHandle, listingByBarcode, listingsAsReference, rememberedVendor } from "./shop-memory";
 import { dueInWindow, parseWindow } from "./deliveries";
@@ -24,7 +24,8 @@ import { repairCategoryRules, repairProductTags, repairTagRuleSpelling } from ".
 import { applyTagRules, type TagRuleLike } from "./rules";
 import { conventionGrams, conventionIdentifiers } from "./house";
 import { shopBody } from "./description-style";
-import { houseConventions, metafieldDefs } from "./taxonomy";
+import { houseConventions, metafieldDefs, optionTagPatterns } from "./taxonomy";
+import { optionTagsFor } from "./option-tags";
 import { homeCurrency } from "./shop-profile";
 import { applyTemplates, type ProductTemplateLike } from "./templates";
 import { allocateFreight, exGstCostHome, priceVariant } from "./pricing";
@@ -46,6 +47,7 @@ import { scoreProduct, tallyConfidence } from "./confidence";
 import { isValidType, typesAreKnown } from "./taxonomy";
 import type { MatchCandidate } from "./match-candidates";
 import { filePath, pictureHosting, publicFileUrl, readFile, saveFile, usingBlob } from "./storage";
+import { publishLocalPictures } from "./picture-publish";
 import { logAudit } from "./audit";
 import { contributeLayout, findSharedLayout } from "./shared-layouts-store";
 import { fillFromForm, formAndInvoice, invoiceOf, overlapOf } from "./order-and-invoice";
@@ -637,7 +639,7 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
     for (const entry of items) entry.item = { ...entry.item, season: toldYear };
   } else if (items.length > 0 && items.every((entry) => !/^20\d{2}$/.test(entry.item.season))) {
     // No season on any line: the file's own name says it, where it does — Burton's confirmation
-    // sheet is "Alpsport_W27_Burton_Confirmed…" and its lines carry no season column at all.
+    // sheet is "<Shop>_W27_Burton_Confirmed…" and its lines carry no season column at all.
     // The latest year the name gives: "…_NOV_2026_boot_pole_-2027-Retail" is the 2027 range,
     // delivered in November 2026.
     const fromName = batch.files.flatMap((f) => f.filename.split(/[^A-Za-z0-9/]+/)).map(seasonFrom).filter((y) => /^20[2-3]\d$/.test(y)).sort().at(-1);
@@ -827,8 +829,10 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
       // Through the house speller last: tag rules and batch instructions add tags after the
       // categoriser has been vetted, and theirs used to reach the column unchecked.
       tags: (() => {
-        // A tag the batch instructions asked for is the shop's own word and always stays.
-        const gated = partitionTags(houseTags([...out.tags, ...directives.addTags]), gate, directives.addTags);
+        // The tags the shop's export showed it keeps for each size and colour, written from the variants.
+        const mirrored = optionTagsFor(productOptions({ ...g, option1Name: viaTemplate.optionNames[0] ?? g.option1Name, option2Name: viaTemplate.optionNames[1] ?? g.option2Name, option3Name: viaTemplate.optionNames[2] ?? g.option3Name }), optionTagPatterns());
+        // A tag the batch instructions asked for is the shop's own word and always stays; so does a mirrored one.
+        const gated = partitionTags(houseTags([...out.tags, ...directives.addTags, ...mirrored]), gate, [...directives.addTags, ...mirrored]);
         for (const t of gated.proposed) if (!proposedTags.has(t)) proposedTags.set(t, g.title);
         return gated.kept;
       })(),
@@ -895,7 +899,7 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
     }
   }
   // The package bindings ordered with the skis go on the skis, not on the shelf. See isPackageBinding.
-  const setAside = directives.packages !== "none" && grouped.some((g) => isFlatSki(g)) ? grouped.filter((g) => isPackageBinding(g, Object.values(chosen))) : [];
+  const setAside = directives.packages !== "none" && grouped.some((g) => isFlatSki(g)) ? grouped.filter((g) => isPackageBinding(g, [...Object.values(chosen), ...specsOfList(bindingList)])) : [];
   for (const g of setAside) grouped.splice(grouped.indexOf(g), 1);
   if (setAside.length > 0) {
     for (const fileId of [...new Set(items.map((i) => i.fileId))]) {
@@ -1541,6 +1545,8 @@ function planExport(review: ReviewData): { ok: true; planned: PlannedPart[]; rep
  * before they could have their file at all was the same refusal wearing a different hat.
  */
 export async function exportBatch(batchId: string, userId: string): Promise<ExportResult> {
+  // Pictures still on this computer go to the shop's Shopify Files first, where Shopify can fetch them.
+  if (pictureHosting()) await publishLocalPictures(batchId).catch((err) => console.warn("[export] local pictures not sent:", err instanceof Error ? err.message : err));
   const review = await loadReview(batchId);
   const warnings = warningList(review.products);
   if (review.products.length === 0) return { ok: false, errors: ["Nothing to export - map the files first."], warnings, files: [], repairs: [] };

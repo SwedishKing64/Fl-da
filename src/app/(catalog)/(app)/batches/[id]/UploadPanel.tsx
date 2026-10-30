@@ -1,5 +1,6 @@
 "use client";
 
+import { filesFromDrop, filesFromPicker } from "@/app/(catalog)/dropped-files";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Alert, Button, LinkButton, cx } from "@/app/(catalog)/ui";
@@ -81,6 +82,7 @@ export function UploadPanel({ batchId, aiEnabled, reading, productCount, pending
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reading, buildNow]);
   const inputRef = useRef<HTMLInputElement>(null);
+  const folderRef = useRef<HTMLInputElement>(null);
   const [active, setActive] = useState(false);
   const [busy, setBusy] = useState(false);
   // null while nothing is in flight; 0-100 as the bytes go up; 100 once the server has them and is
@@ -214,14 +216,16 @@ export function UploadPanel({ batchId, aiEnabled, reading, productCount, pending
         className={cx("dropzone", active && "active")}
         onDragOver={(e) => { e.preventDefault(); setActive(true); }}
         onDragLeave={() => setActive(false)}
-        onDrop={(e) => { e.preventDefault(); setActive(false); void upload(e.dataTransfer.files); }}
+        onDrop={(e) => { e.preventDefault(); setActive(false); const dt = e.dataTransfer; void filesFromDrop(dt).then((files) => upload(files)); }}
       >
-        <div className="text-sm font-medium text-[var(--ink)]">{busy ? "Uploading and reading…" : "Drop files here, or choose files"}</div>
+        <div className="text-sm font-medium text-[var(--ink)]">{busy ? "Uploading and reading…" : "Drop files or a whole folder here, or choose them"}</div>
         <div className="mt-1 text-xs">{chosen.hint}</div>
         <div className="mt-1 text-xs">PDF, XLSX, CSV, TXT, JPG or PNG. {aiEnabled ? "PDFs, scans and photos are read by AI. A scan or photo is shrunk here before it is sent — it is read at 1568px across whatever you give it, so there is no need to scan above 300dpi." : "ANTHROPIC_API_KEY is not set: only CSV/XLSX and text-based PDFs can be read."}</div>
         <div className="mt-3">
           <Button size="sm" onClick={() => inputRef.current?.click()} disabled={busy}>Choose files</Button>
+          <Button size="sm" variant="ghost" className="ml-2" onClick={() => folderRef.current?.click()} disabled={busy} title="A supplier's folder: pictures, spec sheets, price lists, all taken at once">Choose a folder</Button>
           <input ref={inputRef} type="file" multiple className="hidden" onChange={(e) => e.target.files && upload(e.target.files)} />
+          <input ref={folderRef} type="file" className="hidden" {...({ webkitdirectory: "", directory: "" } as Record<string, string>)} onChange={(e) => { const files = filesFromPicker(e.target.files); e.target.value = ""; if (files.length) void upload(files); }} />
         </div>
         {notes.length > 0 && (
           <ul className="mx-auto mt-3 max-w-md list-none text-left text-[11px] text-[var(--ink-soft)]">

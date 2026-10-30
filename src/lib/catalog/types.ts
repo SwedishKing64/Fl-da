@@ -245,10 +245,27 @@ export interface AppSettings {
   locations: ShopifyLocation[];
   publicBaseUrl: string; // where uploaded images are served for the CSV, e.g. https://tools.example.com
   seoTone: string; // tone instructions for AI-written descriptions
+  /** How an SEO title reads, in placeholders: "{title} | {shop}", "{brand} {title}". Empty means title | shop. */
+  seoTitlePattern: string;
   houseRules: string; // free text: how this shop builds products, fed to the AI on every product
   /** Offer confirmed supplier layouts (headings only) to other shops, and start from theirs. */
   shareLayouts: boolean;
+  /** For a shop that packages skis with bindings: its mounting charges and the wording of the two fittings. */
+  packages: PackageTerms;
 }
+
+export interface PackageTerms {
+  /** Added to a package's recommended retail when the binding is drilled onto the ski. */
+  drillMountFee: number;
+  /** Added when the binding clicks onto a rail the ski already has. */
+  systemMountFee: number;
+  /** The Binding Fitting value that means "mount it", as the shop writes it. */
+  fittingMount: string;
+  /** The Binding Fitting value that means "leave it flat". */
+  fittingNoMount: string;
+}
+
+export const DEFAULT_PACKAGE_TERMS: PackageTerms = { drillMountFee: 0, systemMountFee: 0, fittingMount: "Mounted", fittingNoMount: "Not Mounted" };
 
 export const DEFAULT_SETTINGS: AppSettings = {
   gstRate: 0.1,
@@ -261,8 +278,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   publicBaseUrl: "",
   seoTone:
     "Friendly, knowledgeable specialist shop. Plain English, no hype, mention who the product suits and key specs.",
+  seoTitlePattern: "",
   houseRules: "",
   shareLayouts: true,
+  packages: DEFAULT_PACKAGE_TERMS,
 };
 
 // ---------------------------------------------------------------------------

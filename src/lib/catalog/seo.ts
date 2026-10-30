@@ -35,9 +35,15 @@ export interface SeoInput {
   guidance?: string;
 }
 
-export function templateSeo(input: SeoInput, shop = shopName()): z.infer<typeof SeoSchema> {
+/** An SEO title from the shop's pattern: "{brand} {title} | {shop}" filled in, spaces tidied, cut to 60. */
+export function seoTitleFrom(pattern: string, parts: { title: string; brand: string; type: string; shop: string }): string {
+  const p = pattern.trim() || "{title} | {shop}";
+  return p.replace(/\{title\}/gi, parts.title).replace(/\{brand\}/gi, parts.brand).replace(/\{type\}/gi, parts.type).replace(/\{shop\}/gi, parts.shop).replace(/\s+/g, " ").replace(/^[\s|–-]+|[\s|–-]+$/g, "").trim().slice(0, 60);
+}
+
+export function templateSeo(input: SeoInput, shop = shopName(), pattern = ""): z.infer<typeof SeoSchema> {
   const specs = Object.entries(input.metafields).filter(([, v]) => v).map(([k, v]) => `${k.replace(/_/g, " ")}: ${v}`);
-  const seoTitle = `${input.title} | ${shop}`.slice(0, 60);
+  const seoTitle = seoTitleFrom(pattern, { title: input.title, brand: input.vendor, type: input.productType, shop });
   const seoDescription = `Shop the ${input.title}${input.productType ? ` (${input.productType})` : ""} from ${input.vendor || "top brands"}${input.options.length ? ` in ${input.options.join(" and ")}` : ""}. Expert advice and fast shipping from ${shop}.`.slice(0, 155);
   const bodyHtml = [
     input.description ? `<p>${escapeHtml(input.description)}</p>` : `<p>${escapeHtml(input.title)}${input.vendor ? ` by ${escapeHtml(input.vendor)}` : ""}.</p>`,
@@ -51,14 +57,15 @@ function escapeHtml(s: string): string {
 }
 
 export async function generateSeo(input: SeoInput): Promise<{ result: z.infer<typeof SeoSchema>; source: "AI" | "TEMPLATE" }> {
-  if (!aiAvailable()) return { result: templateSeo(input), source: "TEMPLATE" };
   const settings = await getSettings();
+  const plain = () => templateSeo(input, shopName(), settings.seoTitlePattern);
+  if (!aiAvailable()) return { result: plain(), source: "TEMPLATE" };
   try {
     const response = await getClient().messages.parse({
       model: LIGHT_MODEL,
       max_tokens: 16_000,
       system: [
-        `You write product copy for the Shopify store of ${retailer()}. Tone: ${settings.seoTone}. ${englishVariant()}. Use only facts given; never invent specs. seoTitle max 60 characters, seoDescription 120-155 characters.`,
+        `You write product copy for the Shopify store of ${retailer()}. Tone: ${settings.seoTone}. ${englishVariant()}. Use only facts given; never invent specs. seoTitle max 60 characters${settings.seoTitlePattern.trim() ? `, following the shop's pattern "${settings.seoTitlePattern.trim()}" where {title} is the product's title, {brand} its brand, {type} its type and {shop} the shop's name` : ""}, seoDescription 120-155 characters.`,
         // The shop's own written conventions outrank the generic instructions above, but never
         // licence inventing a spec that is not in the input.
         input.guidance?.trim()
@@ -68,10 +75,10 @@ export async function generateSeo(input: SeoInput): Promise<{ result: z.infer<ty
       output_config: { format: zodOutputFormat(SeoSchema), effort: "low" },
       messages: [{ role: "user", content: JSON.stringify(input) }],
     });
-    if (!response.parsed_output) return { result: templateSeo(input), source: "TEMPLATE" };
+    if (!response.parsed_output) return { result: plain(), source: "TEMPLATE" };
     return { result: response.parsed_output, source: "AI" };
   } catch {
-    return { result: templateSeo(input), source: "TEMPLATE" };
+    return { result: plain(), source: "TEMPLATE" };
   }
 }
 

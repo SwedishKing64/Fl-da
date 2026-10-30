@@ -25,11 +25,12 @@
  * a Type that has nowhere to live on the website.
  */
 
-import { packFor, type PackId } from "./trades";
+import { packFor, type PackId, type TradePack } from "./trades";
 import type { PackKnowledge } from "./trades/knowledge";
 import { setTradeColours } from "./colour";
 import { DEFAULT_HOUSE, type HouseConventions } from "./house";
 import type { WebsiteCategories } from "./website";
+import type { OptionTagPattern } from "./option-tags";
 import { categoryById, resolveCategory, type TaxonomyCategory } from "./shopify-taxonomy";
 import { CANONICAL_FIELDS, type CanonicalFieldDef, type MetafieldDef } from "./types";
 
@@ -106,6 +107,8 @@ export interface LearnedVocabulary {
   products: number;
   file: string;
   learnedAt: string;
+  /** How the shop's tags mirror its variants ("Size_54", "Colour_Black"), per option, where they do. See option-tags.ts. */
+  optionTags?: OptionTagPattern[];
 }
 
 /** Which trade packs are on: one id, several joined by "+", or "general" for none. See trades/. */
@@ -141,7 +144,8 @@ interface Vocabulary {
 export const BLANK_CONVENTIONS: Conventions = { pack: "general", learned: null, marker: "", house: DEFAULT_HOUSE };
 
 /** The conventions of the shop Flöda was built in; the tests are written against them. */
-export const ALPSPORT_CONVENTIONS: Conventions = { pack: "snow-outdoor", learned: null, marker: "123abc", house: DEFAULT_HOUSE };
+/** A snow shop that has taught nothing yet, for tests. */
+export const SNOW_TEST_CONVENTIONS: Conventions = { pack: "snow-outdoor", learned: null, marker: "123abc", house: DEFAULT_HOUSE };
 
 /**
  * The menu draws an ampersand and the catalogue spells it out, so the two have to meet: without
@@ -230,7 +234,7 @@ let active: Vocabulary = build(conventions);
 
 /**
  * Put a shop's conventions in force for this process. Called by `shop-profile.ts` with what the
- * shop chose and learned, and by tests with `ALPSPORT_CONVENTIONS`. The vocabulary is process-wide:
+ * shop chose and learned, and by tests with `SNOW_TEST_CONVENTIONS`. The vocabulary is process-wide:
  * Flöda runs one shop per install.
  */
 export function activateConventions(next: Conventions): void {
@@ -240,6 +244,11 @@ export function activateConventions(next: Conventions): void {
 }
 
 /** What the shop's trade pack knows beyond its menu: kinds, sizes, colour shorthand. None for most packs. */
+/** The trade pack in force: the one the shop ticked at setup, or the blank one. */
+export function packInForce(): TradePack {
+  return packFor(conventions.pack);
+}
+
 export function packKnowledge(): PackKnowledge | null {
   return packFor(conventions.pack).knowledge ?? null;
 }
@@ -440,23 +449,58 @@ export function resolveType(value: string): string | undefined {
  * and more than half the words: a bare "Boots" is not a shop's "Apres Boots". Then the one sharing
  * most words wins, the shorter on a tie. Undefined when nothing is close.
  */
-export function closestType(value: string): string | undefined {
+export function closestType(value: string, among: readonly string[] = active.productTypes): string | undefined {
   const exact = resolveType(value);
-  if (exact) return exact;
+  if (exact && among.includes(exact)) return exact;
   const singular = (w: string) => (w.length > 3 && w.endsWith("s") && !w.endsWith("ss") ? w.slice(0, -1) : w);
   const words = (s: string) => norm(s).split(" ").filter((w) => w.length > 1).map(singular);
   const want = words(value);
   if (want.length === 0) return undefined;
   const head = want[want.length - 1];
   let best: { type: string; score: number } | null = null;
-  for (const type of active.productTypes) {
+  for (const type of among) {
     const have = words(type);
-    if (!have.includes(head)) continue;
+    // The head word, or a word that ends in it: "pack" is the head of "backpack" too.
+    if (!have.includes(head) && !(head.length >= 4 && have.some((w) => w.endsWith(head)))) continue;
     const shared = want.filter((w) => have.includes(w)).length;
     const score = shared / Math.max(want.length, have.length);
     if (score > 0.5 && (!best || score > best.score || (score === best.score && type.length < best.type.length))) best = { type, score };
   }
+  if (best) return best.type;
+  // Among the shop's own types, the one type that ends in the same word is it: "Jerseys" is the
+  // shop's "Cycling Jerseys", "2 Person Tents" its "Tents", where it has one such type.
+  if (among !== active.productTypes) {
+    const sameHead = among.filter((type) => { const have = words(type); return have.length > 0 && have[have.length - 1] === head; });
+    if (sameHead.length === 1) return sameHead[0];
+  }
+  return undefined;
+}
+
+/**
+ * The shop's own Type whose every word is in a product's name — "Down Jackets" in "Cirrus Hooded
+ * Down Jacket", "Mugs" in "Speckle Mug Set of 4" — the longest where several are. A product no rule,
+ * no reading and no listing has filed is filed by its own name before it is left untyped.
+ */
+export function typeNamedIn(name: string): string | undefined {
+  const singular = (w: string) => (w.length > 3 && w.endsWith("s") && !w.endsWith("ss") ? w.slice(0, -1) : w);
+  const have = new Set(norm(name).split(" ").filter(Boolean).map(singular));
+  let best: { type: string; words: number } | null = null;
+  for (const type of active.productTypes) {
+    const words = norm(type).split(" ").filter((w) => w.length > 1).map(singular);
+    if (words.length === 0 || !words.every((w) => have.has(w))) continue;
+    if (!best || words.length > best.words) best = { type, words: words.length };
+  }
   return best?.type;
+}
+
+/** The Types the shop itself uses, as its export taught them; none where it has taught none. */
+export function learnedTypes(): string[] {
+  return conventions.learned?.types.map((t) => t.type) ?? [];
+}
+
+/** The shapes the shop's tags take for its variants' values, as its export showed; none until it has. */
+export function optionTagPatterns(): OptionTagPattern[] {
+  return conventions.learned?.optionTags ?? [];
 }
 
 /** True when this names a place a product can legitimately be filed. */

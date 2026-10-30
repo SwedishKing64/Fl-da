@@ -66,7 +66,7 @@ export function ShopForm({ profile, next }: { profile: ShopProfile; next?: strin
         <p className="mt-2 text-[12.5px] text-[var(--ink-soft)]">{packs.length ? "" : "None ticked: Flöda learns everything from your own store and paperwork, and asks the first time it meets something new."}</p>
       </fieldset>
       <p className="rounded-[12px] bg-[var(--meta-tint)] px-3 py-2.5 text-[13.5px] sm:col-span-2">
-        Flöda learns your product types from your store, your website or your Shopify export, your supplier formats from their invoices, and how you list from the rules you set, all on <strong>Training and Rules</strong>. A trade to start from only fills the gaps until it has; nothing from any other shop carries over.
+        Flöda learns your product types from your store, your website or your Shopify export, your supplier formats from their invoices, and how you list from the rules you set, all on <strong>Teach Flöda</strong>. A trade to start from only fills the gaps until it has; nothing from any other shop carries over.
       </p>
 
       <Field label="Marker tag" hint="Optional. A tag written on everything Flöda builds, with the builder's initials on the end (abc → abc-jd), so you can find its work in Shopify. Leave empty for none." className="sm:col-span-2">

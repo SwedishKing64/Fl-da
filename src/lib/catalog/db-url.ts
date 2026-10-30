@@ -4,7 +4,7 @@
  * Vercel's storage integrations do not agree on a variable name. Neon sets `DATABASE_URL`,
  * Prisma Postgres sets `PRISMA_DATABASE_URL`, Supabase sets `POSTGRES_URL`, and any of them
  * set something else entirely when the store is attached with a custom prefix
- * (`ALPSPORT_DATABASE_URL`). Rather than guess the name, we look at the values: anything that
+ * (`<SHOP>_DATABASE_URL`). Rather than guess the name, we look at the values: anything that
  * parses as a Postgres URL will do. Values are never logged or rendered — only names.
  *
  * Pure and environment-injectable so it can be unit tested. Keep in sync with

@@ -20,8 +20,8 @@ const node = (over: Partial<StoreNode> = {}): StoreNode => ({
 });
 
 describe("toListings", () => {
-  it("reads a listing the way the export gave it: compare-at as the price, the binding, every barcode", () => {
-    expect(toListings([node()])).toEqual([{ handle: "atomic-bent-100-2027", title: "Atomic Bent 100 2027", vendor: "Atomic", productType: "Skis", tags: ["skis", "all-mountain"], price: 899, bindingOption: "Marker Squire - Black", barcodes: ["1234567890123"] }]);
+  it("reads a listing the way the export gave it: compare-at as the price, the binding, every barcode, the options and their values", () => {
+    expect(toListings([node()])).toEqual([{ handle: "atomic-bent-100-2027", title: "Atomic Bent 100 2027", vendor: "Atomic", productType: "Skis", tags: ["skis", "all-mountain"], price: 899, bindingOption: "Marker Squire - Black", barcodes: ["1234567890123"], options: [{ name: "Length", values: ["172", "180"] }, { name: "Binding", values: ["Marker Squire - Black"] }] }]);
   });
   it("falls back to the price when nothing is struck through", () => {
     const [l] = toListings([node({ variants: { nodes: [{ sku: "A", barcode: null, price: "49.95", compareAtPrice: null, selectedOptions: [] }] } })]);

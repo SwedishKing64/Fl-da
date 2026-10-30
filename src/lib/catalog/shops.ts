@@ -8,6 +8,7 @@
  */
 
 import { promises as fs } from "node:fs";
+import path from "node:path";
 import { randomBytes } from "node:crypto";
 
 export interface ShopEntry { id: string; name: string }
@@ -84,4 +85,26 @@ export async function openShop(id: string): Promise<void> {
   const list = (await readShopList()) ?? wholeList({});
   if (!list.shops.some((s) => s.id === id)) throw new Error("No such shop.");
   await write({ ...list, current: id });
+}
+
+/** A shop's folder on this computer: the app-data folder for the first, `shops/<id>` for the rest. The same rule as the desktop's. */
+export function shopDir(id: string): string | null {
+  const file = shopsFile();
+  if (!file) return null;
+  const root = path.dirname(file);
+  return id === FIRST ? root : path.join(root, "shops", id);
+}
+
+/**
+ * A shop added from a backup file: the file becomes the new shop's database, and the shop is not
+ * opened. The way a person at Flöda looks at a customer's copy, and the way a shop moves to a new
+ * computer. Only a SQLite database is taken; anything else is refused before it is written.
+ */
+export async function importShop(name: string, bytes: Buffer): Promise<ShopEntry> {
+  if (bytes.length < 100 || bytes.subarray(0, 16).toString("latin1") !== "SQLite format 3\0") throw new Error("That is not a Flöda backup: a backup is the database file itself (.db).");
+  const entry = await addShop(name);
+  const dir = shopDir(entry.id)!;
+  await fs.mkdir(dir, { recursive: true });
+  await fs.writeFile(path.join(dir, "floda.db"), bytes);
+  return entry;
 }

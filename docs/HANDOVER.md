@@ -402,6 +402,19 @@ terms and the due dates worked from them, PAID stamps) live in Rubin's handover.
 
 ## Decisions and history, newest first
 
+- 2026-10-30 **Folders and support.** A whole folder dropped on any drop zone (batch upload, the
+  exports zone and spec sheets on Prices and stock) is walked and every file inside taken, hidden
+  housekeeping files left out; a Choose a folder picker sits beside Choose files
+  (`dropped-files.ts`). Settings → Backups has Send a copy to Flöda support: the backup goes
+  straight into the vendor's Blob store under a one-file token the vendor issues
+  (`/api/support`, since the vendor's host takes no request over a few MB), and lands on the
+  Clients page under Backups sent to support with a download. The founder adds it as a shop on
+  their desktop copy (Settings → Shops on this computer → Add from a backup file, `importShop`),
+  looks, fixes, and sends a rules file back: Teach Flöda has Download your rules and Load a
+  rules file (`rules-file.ts`: house and kinds, tag, pricing and template rules, what the export
+  and website taught, writer settings, bindings; loading replaces each section the file carries,
+  after a backup). Vendor env: `FLODA_BLOB_PRIVATE=1` says the Blob store is private, so the
+  copy sends with private access and the download streams through the vendor.
 - 2026-10-29 **Links read themselves; tags that mirror the variants.** A website address pasted
   on Teach Flöda is read a moment after it lands (no button); a product page pasted on the review
   page is kept and read in the same breath, as is a pasted list of pages. The export now teaches

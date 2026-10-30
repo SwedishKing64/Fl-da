@@ -2976,3 +2976,160 @@ export async function describeStyleAction(input: { samples: string[] }): Promise
     return { ok: true, data: { learned: true, format: style.format.trim() } };
   });
 }
+
+// ---------------------------------------------------------------------------------------------
+// Flöda support: a backup sent up, a rules file down
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * The shop's database, backed up now and sent to Flöda support, with a note. The file goes
+ * straight into the vendor's file store under a token the vendor issues for it, since it is far
+ * bigger than the vendor's own request limit; the vendor is told when it has arrived. Only the
+ * database goes: pictures stay here.
+ */
+export async function sendBackupToSupportAction(input: { note: string; email?: string }): Promise<ActionResult<{ bytes: number }>> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const { vendorMode, licenceServer } = await import("@/lib/catalog/licence");
+    if (vendorMode() || !licenceServer()) return { ok: false, error: "This copy has no Flöda to send to. Download the latest backup and email it instead." };
+    const { getLicence, installId } = await import("@/lib/catalog/licence-store");
+    const [licence, install] = await Promise.all([getLicence(), installId()]);
+    if (!licence?.key) return { ok: false, error: "This copy has no licence key, so Flöda cannot tell whose backup it is. Download the backup and email it instead." };
+    const backup = await backupNow("manual");
+    const { backupPath } = await import("@/lib/catalog/backup");
+    const file = backupPath(backup.name);
+    if (!file) return { ok: false, error: "The backup could not be found after it was made." };
+    const { readFile } = await import("node:fs/promises");
+    const bytes = await readFile(file);
+    const { shopName } = await import("@/lib/catalog/shop-profile");
+    const headers = { authorization: `Bearer ${licence.key}`, "content-type": "application/json" };
+    const begin = await fetch(`${licenceServer()}/api/support`, { method: "POST", headers, body: JSON.stringify({ step: "begin", name: backup.name, bytes: bytes.length }), signal: AbortSignal.timeout(15_000) });
+    const opened = (await begin.json().catch(() => null)) as { ok?: boolean; why?: string; pathname?: string; token?: string; access?: "public" | "private" } | null;
+    if (!begin.ok || !opened?.ok || !opened.pathname || !opened.token) return { ok: false, error: opened?.why || `Flöda answered ${begin.status} and took no backup.` };
+    const { put } = await import("@vercel/blob/client");
+    let access: "public" | "private" = opened.access === "private" ? "private" : "public";
+    let stored: { url: string; pathname: string };
+    try {
+      stored = await put(opened.pathname, bytes, { access, token: opened.token, multipart: true, contentType: "application/octet-stream" });
+    } catch (err) {
+      // A store of the other kind refuses the first try and says so; the file goes the other way.
+      if (!/private|public/i.test(err instanceof Error ? err.message : String(err))) throw err;
+      access = access === "private" ? "public" : "private";
+      stored = await put(opened.pathname, bytes, { access, token: opened.token, multipart: true, contentType: "application/octet-stream" });
+    }
+    const done = await fetch(`${licenceServer()}/api/support`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ step: "done", pathname: stored.pathname, url: access === "public" ? stored.url : "", access, name: backup.name, bytes: bytes.length, shop: shopName(), email: String(input.email ?? "").trim().slice(0, 200), note: String(input.note ?? "").trim().slice(0, 2000), version: process.env.FLODA_VERSION ?? "", install }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    const told = (await done.json().catch(() => null)) as { ok?: boolean; why?: string } | null;
+    if (!done.ok || !told?.ok) return { ok: false, error: told?.why || `The backup went up but Flöda did not record it (HTTP ${done.status}). Say so when you write.` };
+    await logAudit("backup.sent_to_support", { userId: user.id, details: { name: backup.name, bytes: bytes.length } });
+    return { ok: true, data: { bytes: bytes.length } };
+  });
+}
+
+export async function dismissSupportBackupAction(at: string): Promise<ActionResult> {
+  return safely(async () => {
+    await requireVendorAdmin();
+    const { SUPPORT_KEY } = await import("@/lib/catalog/support-box");
+    const row = await prisma.appSetting.findUnique({ where: { key: SUPPORT_KEY } });
+    const rows = parseJson<Array<{ at: string }>>(row?.value, []);
+    await prisma.appSetting.upsert({ where: { key: SUPPORT_KEY }, create: { key: SUPPORT_KEY, value: "[]" }, update: { value: JSON.stringify(rows.filter((r) => r.at !== at)) } });
+    revalidatePath("/clients");
+    return { ok: true };
+  });
+}
+
+/** Everything the shop has taught Flöda, as one file to keep or to send. See rules-file.ts. */
+export async function exportRulesAction(): Promise<ActionResult<{ json: string; filename: string }>> {
+  await requireUser("ADMIN");
+  return safely(async () => {
+    const { RULES_FILE_KIND, RULES_FILE_VERSION } = await import("@/lib/catalog/rules-file");
+    const { getHouseConventions, getLearnedVocabulary, getWebsiteCategories, shopName } = await import("@/lib/catalog/shop-profile");
+    const { getBindingList } = await import("@/lib/catalog/trades/snow/binding-store");
+    const [house, learned, website, settings, tagRules, pricingRules, templates, bindings] = await Promise.all([
+      getHouseConventions(), getLearnedVocabulary(), getWebsiteCategories(), getSettings(),
+      prisma.tagRule.findMany({ orderBy: { priority: "desc" } }),
+      prisma.pricingRule.findMany({ orderBy: { priority: "desc" } }),
+      prisma.productTemplate.findMany({ orderBy: { priority: "asc" } }),
+      getBindingList().catch(() => null),
+    ]);
+    const file = {
+      kind: RULES_FILE_KIND,
+      version: RULES_FILE_VERSION,
+      shop: shopName(),
+      exportedAt: new Date().toISOString(),
+      house,
+      tagRules: tagRules.map(({ name, matchField, pattern, addTags, addCollections, setProductType, setMetafields, priority, active }) => ({ name, matchField, pattern, addTags, addCollections, setProductType, setMetafields, priority, active })),
+      pricingRules: pricingRules.map(({ name, scope, matchValue, mode, percent, roundTo, priority, active }) => ({ name, scope, matchValue, mode, percent, roundTo, priority, active })),
+      templates: templates.map(({ name, scope, matchValue, matchProductType, notes, sourceFileName, productCount, setProductType, addTags, addCollections, optionNames, setMetafields, priority, active }) => ({ name, scope, matchValue, matchProductType, notes, sourceFileName, productCount, setProductType, addTags, addCollections, optionNames, setMetafields, priority, active })),
+      learned,
+      website,
+      settings: { seoTone: settings.seoTone, seoTitlePattern: settings.seoTitlePattern, houseRules: settings.houseRules, defaultRoundTo: settings.defaultRoundTo, minMarginPct: settings.minMarginPct, packages: settings.packages },
+      packageParts: bindings?.entries ?? [],
+    };
+    const stamp = new Date().toISOString().slice(0, 10);
+    return { ok: true, data: { json: JSON.stringify(file, null, 2), filename: `${shopName().replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "floda"}-rules-${stamp}.json` } };
+  });
+}
+
+/**
+ * A rules file loaded: each section it carries replaces what is here, the rest stays. The
+ * database is backed up first where this copy keeps one, so a wrong file is never the end of
+ * anything.
+ */
+export async function importRulesAction(input: { json: string }): Promise<ActionResult<{ loaded: string }>> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const { cleanRulesFile, describeRulesFile } = await import("@/lib/catalog/rules-file");
+    let parsed: unknown;
+    try { parsed = JSON.parse(String(input.json ?? "")); } catch { return { ok: false, error: "That is not a rules file: it could not be read as one." }; }
+    const file = cleanRulesFile(parsed);
+    if (!file) return { ok: false, error: "That is not a Flöda rules file." };
+    const { sqliteFile } = await import("@/lib/catalog/backup");
+    if (sqliteFile()) await backupNow("restore").catch(() => undefined);
+    const { getHouseConventions, saveHouseConventions, saveLearnedVocabulary, saveWebsiteCategories, refreshConventions } = await import("@/lib/catalog/shop-profile");
+    if (file.house) {
+      const kept = await getHouseConventions();
+      const { cleanHouse } = await import("@/lib/catalog/house");
+      const house = { ...cleanHouse(file.house, kept), savedAt: new Date().toISOString() };
+      await saveHouseConventions(house);
+      await materialiseKindRules(house.kinds);
+    }
+    if (file.tagRules) {
+      // The kinds' own rules were just rewritten from the house above; every other rule is the file's.
+      await prisma.tagRule.deleteMany({ where: { NOT: { name: { startsWith: KIND_RULE_PREFIX } } } });
+      for (const r of file.tagRules.filter((r) => !r.name.startsWith(KIND_RULE_PREFIX))) await prisma.tagRule.create({ data: r });
+    }
+    if (file.pricingRules) {
+      await prisma.pricingRule.deleteMany({});
+      for (const r of file.pricingRules) await prisma.pricingRule.create({ data: r });
+    }
+    if (file.templates) {
+      await prisma.productTemplate.deleteMany({});
+      for (const t of file.templates) await prisma.productTemplate.create({ data: { ...t, analysis: "{}" } });
+    }
+    if (file.learned !== undefined) await saveLearnedVocabulary(file.learned);
+    if (file.website !== undefined) await saveWebsiteCategories(file.website);
+    if (file.settings) await saveSettings(file.settings as Partial<AppSettings>);
+    if (file.packageParts) await (await import("@/lib/catalog/trades/snow/binding-store")).saveBindingList({ entries: file.packageParts, file: `a rules file from ${file.shop || "support"}`, updatedAt: new Date().toISOString() });
+    await refreshConventions();
+    await logAudit("rules.imported", { userId: user.id, details: { from: file.shop, exportedAt: file.exportedAt } });
+    revalidatePath("", "layout");
+    return { ok: true, data: { loaded: describeRulesFile(file) } };
+  });
+}
+
+/** A shop added to this computer from a backup file: support's way of opening a customer's copy. */
+export async function importShopAction(input: { name: string; base64: string }): Promise<ActionResult<{ id: string; name: string }>> {
+  return safely(async () => {
+    const user = await requireUser("ADMIN");
+    const bytes = Buffer.from(String(input.base64 ?? ""), "base64");
+    const entry = await (await import("@/lib/catalog/shops")).importShop(String(input.name ?? ""), bytes);
+    await logAudit("shops.import", { userId: user.id, details: { ...entry, bytes: bytes.length } }).catch(() => undefined);
+    revalidatePath("/settings");
+    return { ok: true, data: entry };
+  });
+}

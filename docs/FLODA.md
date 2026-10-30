@@ -120,6 +120,19 @@ standalone folder with an empty template database; `electron-builder.yml` wraps 
 `.github/workflows/desktop.yml` builds the Windows installer on a Windows runner and the Mac
 disk image on a Mac runner whenever a `v*` tag is pushed, and attaches them to the release.
 
+**Support hand-off.** A shop sends a copy of its database to Flöda from Settings → Backups
+(`sendBackupToSupportAction`): the copy asks the vendor's `/api/support` to begin, is given a
+client token for one path in the vendor's Blob store, puts the file there in parts
+(`@vercel/blob/client`), and tells the vendor it is done; the vendor lists it on the Clients page
+(`support-box.ts`) with a download that streams a private blob or redirects to a public one. The
+founder adds the file as a shop on a desktop copy (`importShop`: the file becomes `floda.db` in a
+new shop folder), fixes what is wrong, downloads that shop's rules from Teach Flöda
+(`exportRulesAction`, `rules-file.ts`) and sends the file; the shop loads it (`importRulesAction`:
+each section the file carries replaces what is there, after a backup).
+
+**Folders.** `dropped-files.ts` walks a dropped folder's entries so every drop zone takes a
+supplier's whole folder, and a Choose a folder picker (`webkitdirectory`) does the same by click.
+
 **Tags that mirror the variants.** Shopify filter apps tag a product with each of its sizes and
 colours ("Size_54", "Colour_Black", "size-m", or the bare value). `option-tags.ts` (pure) learns
 the shape each option's tags take from the export's listings, which now carry their options

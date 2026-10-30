@@ -21,7 +21,7 @@ import { readShopList, renameShop, runningShopId } from "@/lib/catalog/shops";
 import { getSettings } from "@/lib/catalog/settings";
 import { oauthApp } from "@/lib/catalog/shopify-oauth";
 import { backupDir, listBackups, sqliteFile } from "@/lib/catalog/backup";
-import { licenceServer } from "@/lib/catalog/licence";
+import { licenceServer, vendorMode } from "@/lib/catalog/licence";
 import { currentLicence, getServerOverride, monthUse, readingUsage, servers } from "@/lib/catalog/licence-store";
 
 /**
@@ -103,7 +103,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         </Card>
         <Card title="Backups">
           {sqliteFile() ? (
-            <Backups backups={listBackups()} db={sqliteFile()!} dir={backupDir(sqliteFile()!)} />
+            <Backups backups={listBackups()} db={sqliteFile()!} dir={backupDir(sqliteFile()!)} canSend={!vendorMode() && Boolean(licenceServer())} />
           ) : (
             <p className="text-sm text-[var(--ink-soft)]">This copy&apos;s database is a server (Postgres), which keeps its own backups and point-in-time restore; nothing to do here.</p>
           )}

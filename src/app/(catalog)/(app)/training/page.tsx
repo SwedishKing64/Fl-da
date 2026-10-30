@@ -16,6 +16,7 @@ import { oauthApp } from "@/lib/catalog/shopify-oauth";
 import { TagProposals } from "./TagProposals";
 import { Teach } from "./Teach";
 import { Sources, type SourceTile } from "./Sources";
+import { RulesFile } from "./RulesFile";
 import { buildAreas, countBeliefs } from "@/lib/catalog/teaching";
 import { getSettings } from "@/lib/catalog/settings";
 import { supplierRecords } from "@/lib/catalog/supplier-score";
@@ -144,6 +145,7 @@ export default async function TrainingPage() {
       <PageHeader
         title="Teach Flöda"
         subtitle={<>What Flöda believes about how you list, in plain sentences, and where to teach it more. <strong>{n(counts.taught)}</strong> of these it learned from your shop; <strong>{n(counts.floda)}</strong> are its own defaults until you change them.</>}
+        actions={<RulesFile />}
       />
 
       <Sources tiles={tiles} />

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { addShopAction, openShopAction, renameShopAction } from "@/app/(catalog)/actions";
+import { useRef, useState, useTransition } from "react";
+import { addShopAction, importShopAction, openShopAction, renameShopAction } from "@/app/(catalog)/actions";
 import { Alert, Button, Field, INPUT } from "@/app/(catalog)/ui";
 import type { ShopList } from "@/lib/catalog/shops";
 
@@ -15,6 +15,14 @@ export function ShopsCard({ list, running }: { list: ShopList; running: string }
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
   const [pending, start] = useTransition();
+  const backupInput = useRef<HTMLInputElement>(null);
+  const fromBackup = (file: File) => run(async () => {
+    const base64 = await new Promise<string>((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(String(r.result).replace(/^data:[^,]*,/, "")); r.onerror = () => reject(new Error("The file could not be read.")); r.readAsDataURL(file); });
+    const shopName = name.trim() || file.name.replace(/\.db$/i, "").replace(/[-_]+/g, " ").slice(0, 80);
+    const r = await importShopAction({ name: shopName, base64 });
+    if (r.ok) setName("");
+    return r;
+  }, `${name.trim() || file.name} added from the backup. Open it to look.`);
 
   const run = (work: () => Promise<{ ok: boolean; error?: string }>, done: string) => start(async () => {
     setNote(null);
@@ -54,6 +62,8 @@ export function ShopsCard({ list, running }: { list: ShopList; running: string }
           <input id="shop-new-name" className={INPUT} value={name} onChange={(e) => setName(e.target.value)} placeholder="Shop name" maxLength={80} />
         </Field>
         <Button disabled={pending || !name.trim()} onClick={() => run(async () => { const r = await addShopAction({ name }); if (r.ok) setName(""); return r; }, `${name.trim()} added. Open it to set it up.`)}>Add</Button>
+        <Button variant="ghost" disabled={pending} onClick={() => backupInput.current?.click()} title="A backup file (.db) from Settings → Backups on another copy, or one a shop sent to support">Add from a backup file</Button>
+        <input ref={backupInput} type="file" accept=".db,application/octet-stream,application/x-sqlite3" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) fromBackup(f); }} />
       </div>
       {note && <Alert tone={note.ok ? "success" : "warning"}>{note.text}</Alert>}
     </div>

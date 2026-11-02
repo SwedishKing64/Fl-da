@@ -1,48 +1,38 @@
 /**
  * Building a ski package from a flat ski.
  *
- * A flat ski is one option — Length. The same ski sold as a package is three, and the shape is not
- * negotiable because 191 of the 455 skis in this shop's catalogue already have it:
+ * A flat ski is one option — Length. The same ski sold as a package is three:
  *
  *   Length  ×  Binding Option  ×  Binding Fitting
  *
- * Every value below is the shop's own spelling, counted from that catalogue rather than invented:
- * "Marker Griffon - Black" is on 175 products, and the two fittings are "Do Not Mount My Bindings"
- * (657) and "Please Mount My Bindings" (619).
- *
- * The prices come from the same place. A package's recommended retail is the ski's plus the
- * binding's, and mounting adds a flat amount to THAT — $55 on 319 of the 673 pairs that state
- * both, which is the plurality by a distance. It matters that the mount charge goes on the
- * recommended retail and not on the sell price: the Blaze 94 2025 is 1724.99/1779.99 at full price
- * and 1207.49/1245.99 on sale, which is the same 70% applied to both, so the mount is discounted
- * along with everything else rather than bolted on afterwards.
+ * The bindings a shop packages with are its own list (Settings → Bindings for ski packages), and
+ * a ski is packaged only with the ones somebody picked for it or named in an instruction; no
+ * binding is chosen for a ski by default. A package's recommended retail is the ski's plus the
+ * binding's, and mounting adds the shop's own charge to THAT, so a sale discounts the mount along
+ * with everything else rather than bolting it on afterwards. The charges and the wording of the two
+ * fittings are the shop's settings (terms.ts).
  */
 
 import { money } from "../../adjust";
 import { slugify } from "../../handle";
 import type { GroupedProduct } from "../../grouping";
 import { asShopWritesIt, productTitle, seasonTagFrom } from "../../titles";
-import { rememberedBinding, type Listing } from "../../shop-memory";
+import type { Listing } from "../../shop-memory";
 import { COLOUR_WORDS } from "../../types";
 import { isSystemBinding } from "./mount";
+import { packageTerms } from "./terms";
 
-/**
- * What the shop charges to mount a binding, before any discount (changed 2026-10-20): a drill mount
- * is $59, a system binding on its rail or plate $49. Which kind a binding is, mount.ts decides.
- */
-export const DRILL_MOUNT_FEE = 59;
-export const SYSTEM_MOUNT_FEE = 49;
-/** The drill charge, the one most packages carry. Kept under its old name for the callers that want one figure. */
-export const MOUNT_FEE = DRILL_MOUNT_FEE;
-
-/** The mounting charge for a package on this binding. */
+/** The mounting charge for a package on this binding: the shop's drill or system charge, by what the binding is. */
 export function mountFeeFor(binding: string): number {
-  return isSystemBinding(binding) ? SYSTEM_MOUNT_FEE : DRILL_MOUNT_FEE;
+  const t = packageTerms();
+  return isSystemBinding(binding) ? t.systemMountFee : t.drillMountFee;
 }
 
-/** The two fittings, spelled as the catalogue spells them. Do-not-mount is always first. */
-export const FITTING_NO_MOUNT = "Do Not Mount My Bindings";
-export const FITTING_MOUNT = "Please Mount My Bindings";
+/** The two fittings as the shop words them, not-mounted first. */
+export function fittings(): [string, string] {
+  const t = packageTerms();
+  return [t.fittingNoMount, t.fittingMount];
+}
 
 export interface BindingChoice {
   /** As it should read in the Binding Option column, e.g. "Marker Griffon - Black". */
@@ -131,19 +121,20 @@ export function buildPackage(ski: FlatSki, bindings: BindingChoice[]): SkiPackag
   if (chosen.length === 0) throw new Error("A package needs at least one binding.");
   const title = packageTitle(ski.title, ski.season, chosen[0]);
 
+  const [noMount, mount] = fittings();
   const variants: PackageVariant[] = [];
   for (const { length, rrp, barcode, cost = null, quantity = null } of ski.lengths) {
     const code = (barcode ?? "").trim();
     for (const binding of chosen) {
       const base = rrp === null ? null : money(rrp + binding.rrp);
       const both = cost === null || cost === undefined || binding.cost === null || binding.cost === undefined ? null : money(cost + binding.cost);
-      variants.push({ length, bindingOption: binding.label, bindingFitting: FITTING_NO_MOUNT, rrp: base, cost: both, quantity, barcode: code });
-      variants.push({ length, bindingOption: binding.label, bindingFitting: FITTING_MOUNT, rrp: base === null ? null : money(base + mountFeeFor(binding.label)), cost: both, quantity, barcode: code });
+      variants.push({ length, bindingOption: binding.label, bindingFitting: noMount, rrp: base, cost: both, quantity, barcode: code });
+      variants.push({ length, bindingOption: binding.label, bindingFitting: mount, rrp: base === null ? null : money(base + mountFeeFor(binding.label)), cost: both, quantity, barcode: code });
     }
   }
 
-  // "ski packages" is how this shop tags one — 40 products carry it. The flat ski's own tags come
-  // with it, because a package is the same ski on the same shelves.
+  // "ski packages" marks a package. The flat ski's own tags come with it, because a package is the
+  // same ski on the same shelves.
   const tags = [...ski.tags];
   for (const t of ["ski packages", "ski", "skis"]) if (!tags.includes(t)) tags.push(t);
 
@@ -159,21 +150,6 @@ export function buildPackage(ski: FlatSki, bindings: BindingChoice[]): SkiPackag
   };
 }
 
-/**
- * The binding a ski is packaged with, by who the ski is for.
- *
- * The shop's own choice, from its catalogue: men's and unisex skis go with the Marker Griffon in
- * black (59 packages), women's with the Marker Squire in white (30). A kids' ski takes a junior
- * binding the order has to name, so none is chosen for it here.
- */
-export const DEFAULT_PACKAGE_BINDINGS: { mens: BindingSpec; womens: BindingSpec } = {
-  // The Griffon's price is the shop's own, not whatever a supplier's list happens to say: $450
-  // recommended retail, $241 cost, on every package, and so a package is built for every flat ski
-  // whether or not the order carried the binding's price at all.
-  mens: { label: "Marker Griffon - Black", shortName: "Marker Griffon", model: /\bGRIFFON\s*13\s*MN\b/i, colour: /\bBLACK\b/i, fixed: { rrp: 450, cost: 241 } },
-  womens: { label: "Marker Squire - White", shortName: "Marker Squire", model: /\bSQUIRE\s*11\b/i, colour: /\bWHITE\b/i },
-};
-
 /** How a binding is found in a supplier's price list. */
 export interface BindingSpec {
   label: string;
@@ -184,20 +160,12 @@ export interface BindingSpec {
   fixed?: { rrp: number; cost: number };
 }
 
-/** Which of the defaults a ski takes, from its gender and name. Null for a kids' ski. */
-export function bindingSpecFor(gender: string, title: string): BindingSpec | null {
-  const g = `${gender} ${title}`.toLowerCase();
-  if (/\b(kid|kids|junior|jr|youth|girls?|boys?)\b/.test(g)) return null;
-  if (/\b(women|womens|women's|ladies|w)\b/.test(g)) return DEFAULT_PACKAGE_BINDINGS.womens;
-  return DEFAULT_PACKAGE_BINDINGS.mens;
-}
-
 /**
  * The binding's price and cost, read off the supplier's own price list.
  *
- * Their Marker tab prices every width of a binding the same — the Griffon 13 MN is 459 at 90, 100,
- * 110 and 120mm — so any row of the right model and colour gives the price. Where two rows of the
- * model disagree on price, none is taken: a guessed binding price is a wrong package price.
+ * A supplier's list usually prices every width of a binding the same, so any row of the right
+ * model and colour gives the price. Where two rows of the model disagree on price, none is taken:
+ * a guessed binding price is a wrong package price.
  */
 export function bindingFrom(spec: BindingSpec, priceList: Array<{ title: string; colour?: string; rrp: number | null; costPrice: number | null }>): BindingChoice | null {
   if (spec.fixed) return { label: spec.label, shortName: spec.shortName, rrp: spec.fixed.rrp, cost: spec.fixed.cost };
@@ -250,45 +218,29 @@ export function isFlatSki(g: { productType: string; title: string; tags: string[
   return /\bskis?$/i.test(g.productType.trim()) && !/cross[- ]?country|\bnordic\b/i.test(g.productType) && !/\binc\b|\bpackage\b|\bsystem\b/i.test(g.title) && !g.tags.includes("ski packages");
 }
 
-/**
- * The binding package of every flat ski in a delivery, alongside the flat ski itself.
- *
- * The shop sells each of its skis twice: "M7 Mantra 2027", the ski on its own, and "M7 Mantra 2027
- * inc Marker Griffon Binding Package" — the same ski, the same stock, with a binding added to the
- * price and to the cost, and the choice of having it mounted for $55. Men's skis go with the Griffon
- * in black and women's with the Squire in white (see DEFAULT_PACKAGE_BINDINGS); the binding's price
- * and cost are read off the supplier's own price list, never assumed.
- *
- * Each package is written in the product shape the rest of the build already uses, so it goes
- * through the same writer as the flat ski: its variants are copies of the flat ski's line items
- * with the package's price and cost on them.
- */
 /** The bindings someone asked for, by who the skis are for. See BatchDirectives.packageBindings. */
 export type ChosenBindings = Partial<Record<"mens" | "womens" | "kids", BindingSpec>>;
 
 /**
- * A binding as somebody named it — "the Griffon", "Marker Squire", "Look Pivot 12" — as something to
- * find on the price list. The shop's own defaults are used where the name is one of theirs, so "the
- * Griffon" is the Griffon 13 MN in black and not every Griffon on the Marker tab.
+ * A binding as somebody named it — "the Griffon", "Marker Squire", "Look Pivot 12", "Squire black" —
+ * as something to find on the price list: its model words, and the colour where one is named.
  */
 export function specFromName(name: string): BindingSpec | null {
   const n = name.trim();
   if (!n) return null;
-  // "Squire black": the shop's Squire, in the colour asked for rather than its usual white.
-  const colour = n.toUpperCase().split(/[^A-Z]+/).find((w) => COLOUR_WORDS.has(w));
-  for (const spec of [DEFAULT_PACKAGE_BINDINGS.mens, DEFAULT_PACKAGE_BINDINGS.womens]) {
-    const word = spec.shortName.replace(/^marker\s+/i, "");
-    if (!new RegExp(`\\b${word}\\b`, "i").test(n)) continue;
-    if (!colour) return spec;
-    const named = colour.charAt(0) + colour.slice(1).toLowerCase();
-    return { ...spec, label: `${spec.shortName} - ${named}`, colour: new RegExp(`^\\s*${colour}\\s*$`, "i") };
-  }
   const bySwatch = specFromLabel(n);
   if (bySwatch) return bySwatch;
-  const words = n.split(/\s+/).filter((w) => !/^(marker|look|tyrolia|salomon|atomic|rossignol|the|binding|bindings)$/i.test(w));
+  const colour = n.toUpperCase().split(/[^A-Z]+/).find((w) => COLOUR_WORDS.has(w));
+  const words = n.split(/\s+/).filter((w) => !/^(marker|look|tyrolia|salomon|atomic|rossignol|the|binding|bindings)$/i.test(w) && w.toUpperCase() !== colour);
   if (words.length === 0) return null;
   const esc = (w: string) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return { label: n, shortName: n, model: new RegExp(`\\b${words.map(esc).join("\\s*")}\\b`, "i"), colour: /./ };
+  const shortName = words.join(" ");
+  return {
+    label: colour ? `${shortName} - ${colour.charAt(0) + colour.slice(1).toLowerCase()}` : n,
+    shortName,
+    model: new RegExp(`\\b${words.map(esc).join("\\s*")}\\b`, "i"),
+    colour: colour ? new RegExp(`^\\s*${colour}\\s*$`, "i") : /./,
+  };
 }
 
 export function packageProducts(
@@ -301,13 +253,12 @@ export function packageProducts(
    * Binding Option each. An empty pick or none at all is no package.
    */
   picked?: (ski: GroupedProduct) => BindingChoice[] | undefined,
-  /** The shop's own binding list: where a default binding is on it, its price and cost come from it. */
+  /** The shop's own binding list: where a named binding is on it, its price and cost come from it. */
   shopList: Array<{ name: string; rrp: number; cost: number | null }> = [],
-  /** Package an unpicked ski with the usual binding. Off: the shop picks every ski's bindings. */
-  useDefaults = false,
 ): { packages: GroupedProduct[]; skipped: PackageSkip[] } {
   const packages: GroupedProduct[] = [];
   const skipped: PackageSkip[] = [];
+  void listings;
   for (const g of products) {
     if (!isFlatSki(g)) continue;
     const season = seasonTagFrom(g.tags);
@@ -315,16 +266,12 @@ export function packageProducts(
     const picks = picked?.(g);
     if (picks && picks.length === 0) continue;
     if (picks && picks.length > 0) { packages.push(packageOf(g, flatTitle, season ?? "", picks)); continue; }
+    // No binding is chosen for a ski on its own: a ski is packaged only with the bindings somebody
+    // picked for it, or that an instruction named for skis like it. Unpicked, it has no package.
     const gender = g.tags.find((t) => /^(mens|womens|kids)$/.test(t)) ?? "";
-    // A kids' ski takes the binding the shop packaged the model with last time, if it ever did.
-    const who = gender === "womens" ? "womens" : gender === "kids" || !bindingSpecFor(gender, flatTitle) ? "kids" : "mens";
-    // No binding is chosen for a ski on its own (asked 2026-10-20): a ski is packaged only with the
-    // bindings somebody picked for it, or that an instruction named. Unpicked, it has no package
-    // until one is picked under it. The old defaults (men's Griffon, women's Squire) are kept only
-    // where a caller asks for them.
-    if (!chosen[who] && !useDefaults) continue;
-    const spec = chosen[who] ?? bindingSpecFor(gender, flatTitle) ?? specFromLabel(rememberedBinding({ title: g.title, brand: g.brand }, listings));
-    if (!spec) { skipped.push({ title: flatTitle, reason: "a kids' ski takes a junior binding, and neither the order nor the shop's earlier packages of it say which" }); continue; }
+    const who = gender === "womens" ? "womens" : gender === "kids" || /\b(kid|kids|junior|jr|youth|girls?|boys?)\b/i.test(flatTitle) ? "kids" : "mens";
+    const spec = chosen[who];
+    if (!spec) continue;
     const listed = shopList.find((e) => new RegExp(`^${spec.shortName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i").test(e.name.trim()));
     const binding = listed ? { label: spec.label, shortName: spec.shortName, rrp: listed.rrp, cost: listed.cost } : bindingFrom(spec, priceList);
     if (!binding) { skipped.push({ title: flatTitle, reason: `no ${spec.label} with one price on the supplier's price list` }); continue; }
@@ -341,9 +288,10 @@ function packageOf(g: GroupedProduct, flatTitle: string, season: string, binding
     return bindings.flatMap((binding) => {
       const rrp = v.item.rrp === null ? null : money(v.item.rrp + binding.rrp);
       const cost = v.item.costPrice === null || binding.cost === null || binding.cost === undefined ? null : money(v.item.costPrice + binding.cost);
-      return [FITTING_NO_MOUNT, FITTING_MOUNT].map((fitting) => ({
+      const [noMount, mount] = fittings();
+      return [noMount, mount].map((fitting) => ({
         ...v,
-        item: { ...v.item, rrp: rrp === null ? null : fitting === FITTING_MOUNT ? money(rrp + mountFeeFor(binding.label)) : rrp, costPrice: cost },
+        item: { ...v.item, rrp: rrp === null ? null : fitting === mount ? money(rrp + mountFeeFor(binding.label)) : rrp, costPrice: cost },
         option1Value: length,
         option2Value: binding.label,
         option3Value: fitting,
@@ -386,17 +334,21 @@ export function specFromLabel(label: string): BindingSpec | null {
 /**
  * A binding on the order that is there to go on the skis, not to be sold on its own.
  *
- * Their Völkl order has five Marker Griffon 13 MN in black beside the skis: the binding every men's
- * package is made with. Built as a product of its own it became a "Griffon 13 MN" listing nobody
- * asked for, while the packages it was bought for went on without it. So a binding the packages use
- * (the Griffon in black, the Squire in white, or one a package here was built with), ordered in the
- * same delivery as skis, is package stock and is not listed.
+ * An order of skis often carries the binding the packages are made with beside them. Built as a
+ * product of its own it becomes a listing nobody asked for, while the packages it was bought for go
+ * on without it. So a binding the packages use — one on the shop's binding list, or one an
+ * instruction named — ordered in the same delivery as skis, is package stock and is not listed.
  */
 export function isPackageBinding(
   p: { title: string; category?: string; productType: string; variants: Array<{ item: { colour: string } }> },
-  extra: Array<BindingSpec | undefined> = [],
+  packageBindings: Array<BindingSpec | undefined> = [],
 ): boolean {
   if (!/binding/i.test(p.productType) && p.category !== "bindings") return false;
   const colour = p.variants.map((v) => v.item.colour.trim()).find(Boolean) ?? "";
-  return [DEFAULT_PACKAGE_BINDINGS.mens, DEFAULT_PACKAGE_BINDINGS.womens, ...extra.filter((e): e is BindingSpec => Boolean(e))].some((spec) => spec.model.test(p.title) && spec.colour.test(colour || p.title));
+  return packageBindings.filter((e): e is BindingSpec => Boolean(e)).some((spec) => spec.model.test(p.title) && spec.colour.test(colour || p.title));
+}
+
+/** The shop's binding list as specs, for telling package stock from a binding to sell. */
+export function specsOfList(entries: Array<{ name: string }>): BindingSpec[] {
+  return entries.map((e) => specFromName(e.name)).filter((s): s is BindingSpec => Boolean(s));
 }

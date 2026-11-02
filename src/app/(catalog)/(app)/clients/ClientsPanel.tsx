@@ -1,9 +1,10 @@
 "use client";
 
 import { useActionState, useState, useTransition } from "react";
-import { clientFromLeadAction, createClientAction, deleteClientAction, dismissFeedbackAction, dismissLeadAction, regenerateClientKeyAction, updateClientAction } from "@/app/(catalog)/actions";
+import { clientFromLeadAction, createClientAction, deleteClientAction, dismissFeedbackAction, dismissLeadAction, dismissSupportBackupAction, regenerateClientKeyAction, updateClientAction } from "@/app/(catalog)/actions";
 import { PLANS, per, planOf } from "@/lib/catalog/plans";
 import type { FeedbackRow } from "@/lib/catalog/feedback-box";
+import type { SupportBackupRow } from "@/lib/catalog/support-box";
 import { Alert, Badge, Button, Empty, Field, INPUT, fmtDate } from "@/app/(catalog)/ui";
 import { ActionForm } from "@/app/(catalog)/ActionForm";
 
@@ -151,7 +152,37 @@ function Feedback({ rows }: { rows: FeedbackRow[] }) {
   );
 }
 
-export function ClientsPanel({ clients, leads, feedback }: { clients: ClientRow[]; leads: LeadRow[]; feedback: FeedbackRow[] }) {
+/**
+ * Backups shops sent to support. Download one, add it as a shop on your desktop copy (Settings →
+ * Shops on this computer → Add from a backup file), find what is wrong, download that shop's rules
+ * from Teach Flöda and send the file back for them to load.
+ */
+function SupportBackups({ rows }: { rows: SupportBackupRow[] }) {
+  const [pending, start] = useTransition();
+  return (
+    <div>
+      {rows.length === 0 && <Empty>Nothing yet. A shop sends a copy of its database from Settings → Backups → Send a copy to Flöda support, and it lands here.</Empty>}
+      <ul className="divide-y divide-[var(--line-soft)]">
+        {rows.map((b) => (
+          <li key={b.at} className="flex flex-wrap items-start justify-between gap-3 py-3">
+            <div className="min-w-0 text-sm">
+              <div className="font-semibold">{b.shop || "(unnamed shop)"} <span className="font-normal text-[var(--ink-soft)]">· {(b.bytes / 1024 / 1024).toFixed(1)} MB · {fmtDate(b.at)}{b.version ? ` · v${b.version}` : ""}</span></div>
+              {b.note && <div className="mt-1 whitespace-pre-wrap">{b.note}</div>}
+              <div className="mt-1 text-xs text-[var(--ink-soft)]">{[b.email, b.name, b.install && `install ${b.install.slice(0, 8)}`].filter(Boolean).join(" · ")}</div>
+            </div>
+            <div className="flex gap-1">
+              <a className="btn-secondary inline-flex items-center rounded-[10px] px-3 py-1.5 text-[13px] font-semibold" href={`/api/support?path=${encodeURIComponent(b.pathname)}`}>Download</a>
+              {b.email && <a className="btn-secondary inline-flex items-center rounded-[10px] px-3 py-1.5 text-[13px] font-semibold" href={`mailto:${b.email}?subject=${encodeURIComponent("Your Flöda backup")}`}>Reply</a>}
+              <Button size="sm" variant="ghost" disabled={pending} onClick={() => start(async () => { await dismissSupportBackupAction(b.at); })}>Done</Button>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+export function ClientsPanel({ clients, leads, feedback, support }: { clients: ClientRow[]; leads: LeadRow[]; feedback: FeedbackRow[]; support: SupportBackupRow[] }) {
   return (
     <div className="space-y-8">
       <section>
@@ -174,6 +205,10 @@ export function ClientsPanel({ clients, leads, feedback }: { clients: ClientRow[
       <section>
         <h3 className="mb-2 text-[15px] font-semibold">Feedback ({feedback.length})</h3>
         <Feedback rows={feedback} />
+      </section>
+      <section>
+        <h3 className="mb-2 text-[15px] font-semibold">Backups sent to support ({support.length})</h3>
+        <SupportBackups rows={support} />
       </section>
     </div>
   );

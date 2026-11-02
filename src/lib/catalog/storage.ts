@@ -12,6 +12,9 @@
 //  - Pictures only: a licensed copy with neither (a desktop copy, whose own address is
 //    127.0.0.1 and no use to Shopify) sends each picture to its vendor, which keeps it in Flöda's
 //    own Blob store and answers with the public address. See `setPictureHost`.
+//  - Pictures, before the vendor: a copy whose shop has connected its Shopify store keeps them in
+//    the shop's own Shopify Files (shopify-files.ts), which Shopify can always fetch. See
+//    `setShopifyPictures`.
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -34,9 +37,34 @@ export function setPictureHost(next: { server: string; key: string } | null): vo
   pictureHost = next && next.server && next.key ? { server: next.server.replace(/\/+$/, ""), key: next.key } : null;
 }
 
-/** Whether a picture kept here comes out with a public address Shopify can fetch: Blob, or the vendor's store. */
+let shopifyPictures = false;
+
+/** Whether pictures go to the shop's own Shopify Files: its store is connected and nothing better hosts them. */
+export function setShopifyPictures(connected: boolean): void {
+  shopifyPictures = connected;
+}
+
+/** Whether a picture kept here comes out with a public address Shopify can fetch: Blob, Shopify Files or the vendor's store. */
 export function pictureHosting(): boolean {
-  return usingBlob() || pictureHost !== null;
+  return usingBlob() || shopifyPictures || pictureHost !== null;
+}
+
+/**
+ * Keep a picture in the shop's Shopify Files; its address, or null where it could not be. A token
+ * without the files scope is refused for every picture alike, so after one such refusal the rest
+ * go where they would have gone, until the store is connected again.
+ */
+export async function keepInShopify(filename: string, data: Buffer, alt = ""): Promise<string | null> {
+  if (!shopifyPictures) return null;
+  try {
+    const { uploadToShopifyFiles } = await import("./shopify-files");
+    return await uploadToShopifyFiles(safeName(filename), data, contentTypeFor(filename), alt);
+  } catch (err) {
+    const why = err instanceof Error ? err.message : String(err);
+    if (/access denied|scope|not approved|unauthori[sz]ed|forbidden|401|403/i.test(why)) shopifyPictures = false;
+    console.warn("[storage] Shopify did not keep a picture:", why);
+    return null;
+  }
 }
 
 /** How long one picture may take to reach the vendor. */
@@ -110,6 +138,10 @@ export async function saveFile(kind: StorageKind, filename: string, data: Buffer
     }
     await put(`catalog/${key}`, data, { ...options, access: "private" });
     return key;
+  }
+  if (kind === "images") {
+    const kept = await keepInShopify(filename, data);
+    if (kept) return kept;
   }
   if (kind === "images" && pictureHost) {
     // A picture is for Shopify to fetch, so it goes where Shopify can reach it. One the vendor

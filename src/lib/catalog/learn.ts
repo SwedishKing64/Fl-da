@@ -14,11 +14,13 @@
  *  - Sections: a tag that runs across several kinds of product and sits on nearly every product
  *    of each is a menu ("ski", "outdoor", "clothing"), and the kinds it sits on are filed under it.
  *
- * What is never learned: tags Shopify writes itself, tags staff put on by hand (sales, stocktake),
- * seasons, genders and vendor names. Those are worked out per product by the rules.
+ * What is never learned as a shelf: tags Shopify writes itself, tags staff put on by hand (sales,
+ * stocktake), seasons, genders, vendor names, and the tags that mirror a product's own sizes and
+ * colours. The last are learned as a shape instead (option-tags.ts), and the build writes them.
  */
 
 import { isShopifyGenerated } from "./generated-tags";
+import { isOptionTag, learnOptionTags, type OptionTagPattern } from "./option-tags";
 import type { Listing } from "./shop-memory";
 import type { LearnedType, LearnedVocabulary } from "./taxonomy";
 
@@ -36,9 +38,10 @@ const AUDIENCE = new Set(["mens", "womens", "kids", "men", "women", "unisex", "y
 const MANUAL = /^(sale|clearance|scan|superseded|bonus\d+|new|featured|bestseller|best-seller)$|(^|[-\s])(sale|promo|clearance)$/;
 
 /** A tag that says nothing about where a product is filed. */
-function ignorable(tag: string, vendors: Set<string>): boolean {
+function ignorable(tag: string, vendors: Set<string>, mirrors: OptionTagPattern[] = [], options?: Listing["options"]): boolean {
   const value = tag.trim().toLowerCase();
   if (!value) return true;
+  if (mirrors.length && isOptionTag(tag, mirrors, options)) return true;
   if (isShopifyGenerated(value)) return true;
   if (/^(19|20|29)\d{2}$/.test(value)) return true;
   if (AUDIENCE.has(value)) return true;
@@ -57,6 +60,8 @@ export function learnVocabulary(listings: Listing[], file = ""): LearnedVocabula
     if (v) vendorCounts.set(v, (vendorCounts.get(v) ?? 0) + 1);
   }
   const vendorSlugs = new Set([...vendorCounts.keys()].map(slug));
+  // The tags that mirror each product's sizes and colours, learned as a shape and then set aside.
+  const optionTags = learnOptionTags(clean);
 
   // Products of each Type, and how often each tag sits on them.
   const byType = new Map<string, { count: number; tags: Map<string, number> }>();
@@ -70,7 +75,7 @@ export function learnVocabulary(listings: Listing[], file = ""): LearnedVocabula
     const seen = new Set<string>();
     for (const raw of l.tags) {
       const tag = raw.trim().toLowerCase();
-      if (!tag || seen.has(tag) || ignorable(tag, vendorSlugs)) continue;
+      if (!tag || seen.has(tag) || ignorable(tag, vendorSlugs, optionTags, l.options)) continue;
       seen.add(tag);
       entry.tags.set(tag, (entry.tags.get(tag) ?? 0) + 1);
       tagTotal.set(tag, (tagTotal.get(tag) ?? 0) + 1);
@@ -123,6 +128,7 @@ export function learnVocabulary(listings: Listing[], file = ""): LearnedVocabula
     products,
     file,
     learnedAt: new Date().toISOString(),
+    ...(optionTags.length ? { optionTags } : {}),
   };
 }
 
@@ -135,6 +141,7 @@ export function describeLearned(v: LearnedVocabulary): string[] {
   else lines.push("No menu tags found running across product types; each type is tagged on its own.");
   const spelled = Object.keys(v.spelling).length;
   if (spelled) lines.push(`How ${spelled} shelf tag${spelled === 1 ? " is" : "s are"} spelled.`);
+  if (v.optionTags?.length) lines.push(`Your tags carry each product's variants: ${v.optionTags.map((p) => `${p.option} as "${p.example}"`).join(", ")}. The build writes those from the variants; nobody adds them by hand.`);
   return lines;
 }
 
@@ -164,6 +171,7 @@ export function mergeVocabulary(before: LearnedVocabulary, next: LearnedVocabula
     products: sameFile ? Math.max(before.products, next.products) : before.products + next.products,
     file: files.join(" + "),
     learnedAt: next.learnedAt,
+    ...((before.optionTags?.length || next.optionTags?.length) ? { optionTags: [...(next.optionTags ?? []), ...(before.optionTags ?? []).filter((b) => !(next.optionTags ?? []).some((n) => n.option.toLowerCase() === b.option.toLowerCase()))] } : {}),
   };
 }
 
@@ -193,6 +201,7 @@ const KIND_TAG_SHARE = 0.95;
 /** The kinds of product in an export's rows, biggest first, with what their rows have in common. */
 export function kindsFromListings(listings: Listing[]): KindSummary[] {
   const vendorSlugs = new Set(listings.map((l) => slug(l.vendor)).filter(Boolean));
+  const mirrors = learnOptionTags(listings);
   const byType = new Map<string, Listing[]>();
   for (const l of listings) {
     const type = l.productType.trim();
@@ -206,7 +215,7 @@ export function kindsFromListings(listings: Listing[]): KindSummary[] {
   for (const rows of byType.values()) {
     const counts = new Map<string, number>();
     for (const l of rows) for (const tag of new Set(l.tags.map((t) => t.trim()).filter(Boolean))) {
-      if (ignorable(tag, vendorSlugs)) continue;
+      if (ignorable(tag, vendorSlugs, mirrors, l.options)) continue;
       counts.set(tag, (counts.get(tag) ?? 0) + 1);
     }
     const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));

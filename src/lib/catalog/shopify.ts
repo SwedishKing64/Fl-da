@@ -14,6 +14,8 @@ import { productCategoryOf, csvType } from "./pipeline-pure";
 import { categoryGid } from "./shopify-taxonomy";
 import { blockingErrors } from "./validate";
 import { offTotals } from "./totals";
+import { pictureHosting } from "./storage";
+import { publishLocalPictures } from "./picture-publish";
 
 export interface ShopifyConfig {
   storeDomain: string;
@@ -375,6 +377,8 @@ export async function pushBatch(batchId: string, userId: string, opts: { confirm
   if (!opts.confirm) return { ok: false, errors: ["Push not confirmed."], created: 0, updated: 0 };
   const cfg = await shopifyConfig();
   const settings = await getSettings();
+  // A picture on this computer is an address Shopify cannot fetch: it goes to the shop's Files first.
+  if (pictureHosting()) await publishLocalPictures(batchId).catch((err) => console.warn("[push] local pictures not sent:", err instanceof Error ? err.message : err));
   const whole = await loadReview(batchId);
   // Only the products named, when some are: the ones that have earned it go, the rest wait.
   const chosen = opts.productIds ? new Set(opts.productIds) : null;

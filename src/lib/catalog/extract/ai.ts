@@ -29,11 +29,11 @@ const LineItemSchema = z.object({
   currency: z.string().describe("ISO currency code if stated on the document, else empty"),
   quantity: z.number().nullable().describe("Units ordered/invoiced for this line; null when not an order"),
   rrp: z.number().nullable().describe("Recommended retail price if stated — printed in an RRP column, or written by hand against the line (see the handwriting rules)"),
-  length: z.string().describe("A length in cm for skis, snowboards and poles, digits only; else empty. A length written as a word (Regular, Long, Short) is a variant, not a length."),
+  length: z.string().describe("A length in cm for skis, snowboards and poles, digits only, keeping a wide board's W as printed (158W); else empty. A length written as a word (Regular, Long, Short) is a variant, not a length."),
   size: z.string().describe("The size the line is sold in, as printed: apparel (XS–XXXL, 8, 10, 12), footwear with its system where printed (US 9.5, UK 8, EU 42), boot mondopoint (26.5), pack, harness or glove size (S/M, M/L), One Size. Else empty. On a size-grid invoice this is the column header the quantity sat under."),
   width: z.string().describe("Fit or width: Wide, Regular, Narrow, a boot last or ski waist in mm. Else empty."),
   colour: z.string().describe("The colourway's name. Where the line prints only a colour code (001, BLK, 4417) and the document names that code somewhere — a legend, another line, a heading — give the name; otherwise the code as printed. Else empty."),
-  variant: z.string().describe("Any other option that tells this line apart from the same product's other lines and is not its length, size, width or colour: a tent's capacity (2P, 3 Person), a pack's or bag's volume (35L, 65L), a sleeping bag's length (Regular, Long) or zip side (Left Zip), a bottle's capacity (750ml). As printed. Else empty."),
+  variant: z.string().describe("Any other option that tells this line apart from the same product's other lines and is not its length, size, width or colour: a pack's or bag's volume (35L, 65L), a sleeping bag's length (Regular, Long) or zip side (Left Zip), a bottle's capacity (750ml). As printed. Else empty."),
   variantName: z.string().describe("What that option is called on a listing: Capacity, Volume, Length, Zip. Empty when variant is empty."),
   productType: z.string().describe("What kind of product this is, in the shop's own words: one of the shop's kinds listed in the message when there are any, else the plainest name for it (Tents, Hiking Packs, Sleeping Bags, Trail Shoes, Rain Jackets). Empty if you cannot tell."),
   gender: z.string().describe("Mens/Womens/Unisex/Kids if stated, else empty"),
@@ -135,7 +135,7 @@ Handwriting — a printed document the shop's staff have written on in pen, whic
 - Where a handwritten figure could be read two ways, take the likelier and say in notes what else it could read.
 
 Rules:
-- title is the product name only; put length, size, width, colour and any other option (capacity, volume, zip side) in their own fields, so the lines of one product share one title: "Atmos AG" in 65L and 50L is one product with a Volume option, not two products. Keep the brand out of the title when it is identifiable separately. A number that is part of the model's name stays in the title: "Bent 100", "Hubba Hubba 2" when that is what the brand calls it.
+- title is the product name only; put length, size, width, colour and any other option (capacity, volume, zip side) in their own fields, so the lines of one product share one title: "Atmos AG" in 65L and 50L is one product with a Volume option, not two products. Keep the brand out of the title when it is identifiable separately. A number that is part of the model's name stays in the title: "Bent 100", "Hubba Hubba 2" when that is what the brand calls it. A tent's person count (2P, 3P, 2 Person) and a boardshort's inseam (18", 20") are part of the name — a 2P and a 3P tent are two products, not one with a capacity option.
 - modelCode is the code shared across sizes of the same product (style number); sku is the code unique to this variant. If only one code exists, put it in sku and derive modelCode by stripping the size/colour suffix when obvious, otherwise leave modelCode empty.
 - costPrice is the UNIT price for one item, never the line total. Strip currency symbols.
 - Never invent values. Leave a string empty or a number null when the document does not state it.

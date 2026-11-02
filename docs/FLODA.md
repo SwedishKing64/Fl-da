@@ -120,9 +120,66 @@ standalone folder with an empty template database; `electron-builder.yml` wraps 
 `.github/workflows/desktop.yml` builds the Windows installer on a Windows runner and the Mac
 disk image on a Mac runner whenever a `v*` tag is pushed, and attaches them to the release.
 
-**Training and Rules.** One page (`/training`, admins) for everything Flöda is taught: the
-shop's website, each supplier's paperwork (`SuppliersStep` standing alone, with the remembered
-layouts listed), the Shopify export (`LearnPanel`) and the rules for every listing (`HouseForm`).
+**Columns placed without a step.** `autoApplyMappings` builds every layout whose headings and
+values place the product's name; one they cannot goes to the light model with five rows
+(`mapping-ai.ts`: `aiMapping`, validated against the fields in force, `fillMapping` filling only
+the gaps), and what neither can place is the one case the mapping screen is still opened for,
+from the file's own warning. **Training reads are free.** `asTraining` in `anthropic.ts` runs a
+piece of work with a mark every relay call carries (`x-floda-purpose: training`); the relay
+(`/api/ai`) neither meters nor refuses such a call. A "Setup: " batch's files and the description
+style reader run inside it.
+
+**Support hand-off.** A shop sends a copy of its database to Flöda from Settings → Backups
+(`sendBackupToSupportAction`): the copy asks the vendor's `/api/support` to begin, is given a
+client token for one path in the vendor's Blob store, puts the file there in parts
+(`@vercel/blob/client`), and tells the vendor it is done; the vendor lists it on the Clients page
+(`support-box.ts`) with a download that streams a private blob or redirects to a public one. The
+founder adds the file as a shop on a desktop copy (`importShop`: the file becomes `floda.db` in a
+new shop folder), fixes what is wrong, downloads that shop's rules from Teach Flöda
+(`exportRulesAction`, `rules-file.ts`) and sends the file; the shop loads it (`importRulesAction`:
+each section the file carries replaces what is there, after a backup).
+
+**Folders.** `dropped-files.ts` walks a dropped folder's entries so every drop zone takes a
+supplier's whole folder, and a Choose a folder picker (`webkitdirectory`) does the same by click.
+
+**Tags that mirror the variants.** Shopify filter apps tag a product with each of its sizes and
+colours ("Size_54", "Colour_Black", "size-m", or the bare value). `option-tags.ts` (pure) learns
+the shape each option's tags take from the export's listings, which now carry their options
+(`Listing.options`): one pattern per option where most of its values appear in that shape
+(`learned.optionTags`). The learner sets those tags aside (never a kind's tag, never a menu), and
+the build writes them from each new product's variants (`optionTagsFor` in `pipeline.ts` and
+`delivery.ts`), through the tag gate as the shop's own.
+
+**Blank slate.** A new copy of Flöda carries nothing of any one shop: no binding list, no
+default packages, no mounting charges, no seeded tag rules, no brand list outside a trade pack. A
+trade pack ticked at setup is a starting point (a menu, tag spellings, reading rules, the trade's
+brands); a shop that ticks none starts from its own export, website and paperwork alone. The
+things a ski shop needs that the pack cannot know are its own, set on Settings → Bindings for ski
+packages: the bindings it packages skis with (name, RRP, wholesale), what it charges to mount
+(`settings.packages.drillMountFee` / `systemMountFee`) and how it words the two fittings. A ski is
+packaged only with the bindings picked for it on the review page or named in an instruction.
+
+**Teach Flöda.** One page (`/training`, admins) for everything Flöda is taught. At the top,
+three source tiles (`Sources.tsx`): the catalogue export (`LearnPanel`, with the store
+connection folded under it), the website, and a supplier's paperwork (`SuppliersStep` standing
+alone, with the remembered layouts listed); each says what it has taught so far and opens to
+teach more. Under them, everything Flöda now believes about how the shop lists, in seven areas
+(`teaching.ts`, pure: `buildAreas` gives types, tags and categories; titles; descriptions;
+variants; pricing; SEO; suppliers' invoices), every belief one sentence badged with where it
+came from — the export, the website, the shop, a supplier's paperwork, or Flöda's own default —
+and carrying the one editor that changes it (`Edit`: a choice, a text, a kind's field, a tag
+rule, a template, a pricing rule, a setting, a supplier's defaults). `Teach.tsx` renders the
+areas, opens the editor under the sentence, and ends each area with Add a rule: a tag rule, a
+type's title shape, a standing instruction, what a type is sold by, a pricing rule, a rule for
+the writer. The JSON actions behind it (`patchHouseAction`, `saveKindAction`,
+`saveTagRuleAction`, `savePricingRuleJsonAction`, `saveTemplateAction`,
+`saveSupplierDefaultsAction`, and the switch and delete actions) change one thing and leave the
+rest. The export now also teaches (`learn-more.ts`, pure, read in the browser): the SEO title
+pattern most products follow (`settings.seoTitlePattern`, placeholders `{title} {brand} {type}
+{shop}`, used by `seoTitleFrom` and told to the writer), each brand's margin where enough
+products agree (a pricing rule named "From your export: <brand>", only where the brand has none),
+and, with a key, the way its descriptions are laid out (`describeStyleAction` reads a few middling
+bodies and fills `house.descriptions` where the shop has set nothing).
 Settings keeps the shop's name and tax, the reading key, staff, backups and the deployment's
 health. **The website is the list of kinds of product** (`website.ts`): a Shopify store is read
 from `/collections.json`, page by page; any other site from the links in its menus; promotions,
@@ -168,8 +225,7 @@ calls cost), so the allowance goes as far as the lighter models let it; a model 
 is priced as the dearest. A row metered only in tokens, from before calls were priced, is still
 priced at the old single Opus rate.
 
-**The rulebook.** The top of Training and Rules is every rule in force, by stage, in plain words
-(`rulebook.ts`, pure: `buildRulebook` takes the house conventions, tag rules, templates, pricing
+**The rulebook.** The sentences on Teach Flöda come from `rulebook.ts` (pure: `buildRulebook` takes the house conventions, tag rules, templates, pricing
 rules, supplier layouts and defaults, supplier records, the website, the export's vocabulary and
 the settings, and gives eight stages — reading, naming, filing, pricing, copy, pictures, checks,
 export — each a list of `RuleEntry` sentences with where to change it). `describeTagRule`,
@@ -179,9 +235,9 @@ Flöda's own rules are listed and badged as Flöda's so the shop knows them. A t
 switched off, deleted or tried from the rulebook (`setTagRuleActiveAction`, `deleteTagRuleAction`,
 `ruleReachAction`: how many products of the latest open batch the rule touches, with a few by
 name, nothing changed). A kind's tag rules are said once, under the kind, not again as rules.
-This is the first step of opening how a shop's system runs to the shop; the next are turning a
-correction on the review grid into a rule, per-stage switches and notes, and a rulebook file that
-exports, imports and rolls back.
+`buildRulebook`'s eight stages are no longer shown; Teach Flöda shows the same beliefs by area
+(`teaching.ts`), where each can be changed in place. The next steps are turning a correction on
+the review grid into a rule, and a rulebook file that exports, imports and rolls back.
 
 **One confidence score per field.** `confidence.ts` (pure) scores a product's title, tags,
 picture and price from where each came from, and the product is the lowest of the four: a title
@@ -200,14 +256,14 @@ listings, its tag rules and templates, its kinds, the tags the rules work out pe
 gate. The build (`applyMappings`) and the batch check (`batch-agent.ts`) pass every product's
 tags through it: a tag the shop has never used is taken off and recorded once as a `TagProposal`
 with the product it was meant for; a tag the batch instructions asked for always stays; a tag a
-person types on the grid is approved as written (`approveTypedTags`). Training and Rules lists
+person types on the grid is approved as written (`approveTypedTags`). Teach Flöda lists
 the proposals with Approve (a tag of the shop's from then on) and Reject (never proposed again).
 
 **The quick look.** The review opens on the products that need a person, one card each, worst first: the field that pulled each down, its sentence, and that field's fix on the card (the title to retype, the tags to fix, the pictures to open, the retail to set per variant), with "Looks right" as the other answer, which scores the field as if the person had typed it. What is ready is counted and listed on request. The full table is one click away and the choice is remembered per browser; the errors pill opens the table on the rows with errors.
 
 **Pages found, not pasted.** The links people paste are the memory: from each brand's links the shape of its addresses is worked out (its template with the product's slug in it), a new product's name is put into that shape, and the address is fetched and checked against the product's name before it is believed. A brand nobody has linked yet, or a guess that does not hold, goes to one short web search, checked the same way. A page is kept only when it is titled like the product; a wrong page is worse than none. "Find the pages" on the review does the batch; "Find its page" on a card does one product and reads it.
 
-**The store, read rather than told.** With the store connected (Training and Rules → Your store: a domain and an Admin API token, proved by asking the store its name), what an export used to teach is read off the store itself: its listings, its vocabulary (kinds, tags, spelling), the conventions per brand and kind (templates filed under "store", replaced on each read), and the catalogue the batch check matches against. The store is read again before a build when the last read is a day old, and on demand. An export file still works for a shop that would rather not connect; what it taught stays and is joined.
+**The store, read rather than told.** With the store connected (Teach Flöda → Your catalogue export → Or connect the store: a domain and an Admin API token, proved by asking the store its name), what an export used to teach is read off the store itself: its listings, its vocabulary (kinds, tags, spelling), the conventions per brand and kind (templates filed under "store", replaced on each read), and the catalogue the batch check matches against. The store is read again before a build when the last read is a day old, and on demand. An export file still works for a shop that would rather not connect; what it taught stays and is joined.
 
 **Pushing without the person, tiered.** With the store connected and the shop opted in (Your store → "Push what is ready on its own"), a build ends with what has earned it going to the store as drafts: a product with every field above the bar, nothing wrong on it and no question of which listing it is, when its supplier has a clean record. Three tiers: auto (everything goes, nothing to do), exceptions (the ready ones go, the rest are the quick look), full (a supplier with no record or a broadly unsure batch: nothing goes on its own). Opted in or not, the quick look carries one button that sends what is ready; a batch is pushed once every product of it is in the store. Drafts only, and a push can be rolled back.
 
@@ -312,9 +368,13 @@ that belonged to one shop.
 
 ## Known limits
 
-- The desktop app keeps uploaded product photos on the machine, so a Shopify CSV that refers to
-  them carries local paths Shopify cannot fetch. Pictures taken from brand pages are remote URLs
-  and work. A hosted copy with a Blob store does not have this problem.
+- Pictures on the desktop app: a copy whose shop has connected its Shopify store keeps every picture
+  in that store's own Shopify Files (`shopify-files.ts`: staged upload, `fileCreate`, the
+  cdn.shopify.com address), and pictures saved before it was connected are sent the same way just
+  before a batch is exported or pushed (`picture-publish.ts`). That needs the `read_files` and
+  `write_files` scopes: the install link asks for them, and a custom-app token must be given them.
+  A copy with no store connected and no licence (the local build) still keeps pictures on the
+  machine, which Shopify cannot fetch; pictures taken from brand pages are remote URLs and work.
 - Pricing is still modelled as one home currency with one sales tax; the column names say AUD and
   GST. The profile's currency and tax name are used in prompts and labels, and the tax rate is
   the one used in pricing, but a shop in two currencies is not supported.
@@ -331,8 +391,14 @@ that belonged to one shop.
   it looks for; the shown name comes from `InfoPlist.strings`, written in after-pack, and
   `app.setName("Flöda")` in `main.cjs`. If a copy from an earlier build says damaged:
   `xattr -dr com.apple.quarantine /Applications/Floda.app`.
-- One shop per install. The conventions are process-wide state, which is right for an installed
-  copy and for one hosted copy per shop, and wrong for several shops in one deployment.
+- Several shops per desktop install, one open at a time (`desktop/shops.cjs`, `shops.ts`): each is
+  its own database and files folder, the first in the app-data folder as before, the rest under
+  `shops/<id>`. Settings → Shops on this computer, or the Shop menu, adds and opens them; opening
+  one restarts the server on its folder and shows its sign-in. A hosted deployment is still one
+  shop: the conventions are process-wide state.
+- Shopify only. Flöda reads a Shopify export and writes Shopify's CSV or pushes through its API.
+  Other platforms wait until the Shopify launch has paying shops (decided 2026-10-27; WooCommerce
+  was the first candidate).
 
 ## What is next
 
@@ -344,10 +410,136 @@ that belonged to one shop.
    Developer identity, which also lets a Mac copy install an update itself.
 4. Billing. The Clients page records the plan; nothing yet charges for it.
 
+## Planned: shared product memory, and a catalogue check (2026-11-02)
+
+Two features decided on 2026-11-02, not yet built. Both spend what Flöda already holds: the
+shop's taught rules, the store read off Shopify, the supplier layouts shared between shops, and
+the pictures kept on Flöda's deployment.
+
+### Shared product memory
+
+**What it is.** Once one shop has read a supplier's delivery, found the manufacturer's page,
+taken its copy and specifications and kept its pictures, the next shop that receives the same
+product gets all of that at once, without a page fetch or a reading. The key is the barcode.
+
+**What exists.** `shared-layouts.ts` and its store share a file's column layout between shops
+through the licence route (`layout-share`, `layout-find`), under the licence key, never a value
+and never which shop. The same route already keeps pictures for copies (`picture`) on Flöda's
+blob store. A product records where its copy came from (`lookupSource`, `lookupStatus`), each
+picture records its source, and `gtin.ts` says whether a barcode is one. The web lookup
+(`enrich.ts`) and the page finder are where the time and the reading go today.
+
+**What is shared, and what never is.** Shared: the barcode, the brand, the supplier's own name
+for the product, the manufacturer's page address, the copy and specifications taken from that
+page, the option names and values (sizes, colours) and the hosted pictures with the colour each
+shows. Never: a cost, a retail price, a margin, a quantity, a shop's own tags, title or rewritten
+description, or which shop contributed. Only fields that came from the lookup leave a shop (a
+product whose `lookupStatus` is FOUND and whose text is unchanged since); anything a person typed
+stays. A shop can stop contributing in Settings beside the layouts switch and still receive.
+
+**Data.** On Flöda's deployment, one table `SharedProduct`: a product key (brand + the
+supplier's name, lower-cased), the source page, the copy, the specifications as JSON, the
+pictures as JSON `[{url, colour}]`, the options, the barcodes it is known under, how many shops
+confirmed it, and when it was last confirmed. A second table `SharedBarcode` maps each barcode
+to a product key, so a lookup by any variant's barcode finds the product. A later reading of the
+same product with a different copy is kept as a variant and the most-confirmed wins, as the
+layout variants do.
+
+**Flow.** When a batch is built and its line items carry barcodes, the copy asks `product-find`
+with the batch's barcodes, in one request, before the web lookup. A hit fills the title (as the
+supplier names it; the shop's title rules still apply), the product type where the shop's own
+types do not already decide it, the copy and specifications, the pictures and the colour links,
+and marks the product `lookupStatus: SHARED` with the source page. Misses go to the web lookup as
+today. When the shop exports or pushes the batch, the copy offers `product-share` for the
+products whose lookup found something, with the fields above and nothing else. Neither call ever
+holds up a batch: a deployment that cannot be reached is a miss.
+
+**Quality.** A shop that corrects a shared description in review corrects its own copy only;
+"This is wrong" on the review grid sends a mark, and a product marked wrong by two shops is
+taken out until a third reading confirms it. The barcode's check digit is verified before it is
+used as a key. A barcode seen with two different brands is not trusted as a key for either.
+
+**Phases.** (1) The two tables, the two route actions, the find on build, and the Teach Flöda
+belief line "what other shops have found": a week. (2) Contribute after export, the settings
+switch, the wrong mark: three days. (3) Counts on the Clients page: hits, pictures served,
+readings saved. (4) A second key, brand + model code, for suppliers whose files carry no
+barcodes; riskier, so later and gated on the brand matching too.
+
+**Cost and terms.** Each hit saves a page fetch and about a reading's worth of the model (10c a
+product on the relay). The deployment pays the blob egress for pictures served. What is shared is
+information the manufacturer publishes; the terms should say so, and a brand that asks to have
+its copy removed is removed by product key.
+
+### Catalogue check
+
+**What it is.** A standing audit of the shop's live catalogue against the shop's own rules, read
+off the connected store: what is missing, what drifts from the pattern the shop taught, and for
+each finding the fix those rules would produce, applied back to Shopify a group at a time.
+
+**What exists.** The store is read in full (`store-sync.ts` `readStore`, with title, vendor,
+type, tags, body, SEO, options, collections and variants); the shop's rules are the house
+conventions, the learned vocabulary, tag rules, pricing rules, templates and the SEO title
+pattern; the checks the export already runs (`validate.ts`, `gtin.ts`, `tag-gate.ts`,
+`option-tags.ts`, `tag-spelling.ts`, `size-order.ts`, `title-colour.ts`) are pure and reusable;
+findings are grouped by message (`issue-groups.ts`); `pushBatch` writes products with
+`productSet`. The page called "Tidy a document" is the photo transcriber and stays as it is; this
+is a new page, **Catalogue check**.
+
+**The checks**, each a pure function over the store's products and the rules, returning
+findings `{kind, product, detail, fix?}`:
+
+- Descriptions: none, shorter than the shop's own are, or without the sections the shop's format
+  names. Fix: the copy writer in the shop's style, only on request, with the reading count shown
+  before it runs.
+- Titles: brand placed against the shop's rule, a model year where the kind takes none or none
+  where it does, a colour in the title against the rule, the shop's own name in a title.
+  Fix: the title the pipeline would build.
+- Tags: two spellings of one tag; tags that mirror an option (Size_54); a tag the type's rule
+  adds that is missing; a type not among the shop's learned or website types; a vendor spelled
+  two ways. Fix: the rules' tags.
+- Pictures: none, or fewer than the minimum. Fix: shared product memory by barcode first, then
+  the page finder, then nothing automatic.
+- Variants: option names that drift ("Size" and "Sizes"), sizes out of order, a barcode that
+  fails its check digit, a SKU used twice, a compare-at price below the price.
+- SEO: no SEO title or description, or a title off the shop's pattern. Fix: the pattern.
+
+**Applying a fix.** Findings show grouped, as the export page groups its notes, with the
+before and after for each product, ticked by default and untickable. Apply writes with
+`productUpdate` (title, tags, type, SEO, body) and `productCreateMedia` (pictures), records each
+change with its before value, and offers Undo for thirty days from the same page. Nothing is
+written without the person pressing Apply, and each finding kind is applied separately.
+
+**Standing.** The check runs after each store read (daily, and on demand) and keeps a score per
+area; the Home page shows the counts and Teach Flöda shows where the catalogue disagrees with
+what the shop taught, which is also where a wrong rule shows itself.
+
+**Phases.** (1) The checks as pure functions with tests, the page as a read-only report, no
+model reading: four days. (2) Apply with undo for titles, tags, types and SEO: three days.
+(3) Descriptions written and pictures found, counted against the plan: three days.
+(4) Daily run, score and the Home widget: two days.
+
+**Open.** Whether sharing product data is on by default like layouts, or asked in setup. What the
+page is called to a shop. Whether the catalogue check is in every plan or from the Shop plan up.
+
 ## Working on Flöda
 
 Everything in `HANDOVER.md` under "Working on it" applies. In addition:
 
+- **Shops Flöda has never seen, by the hundred.** `npm run eval:shops` makes up shops in five
+  trades (bike, outdoor, snow, surf, general — `src/lib/catalog/sim/world.ts`, the snow one in
+  `trades/snow/sim-world.ts`), each with brands, a range, an export of what it already lists, and
+  a season of deliveries rendered the ways suppliers send them (`sim/documents.ts`: three flat
+  CSV vocabularies, a barcode-led one, a size grid, a workbook under a letterhead with totals
+  below, a sectioned order form, a price list with a few boxes filled in, a distributor's
+  multi-brand invoice, and with `--ai` a printed page as text, as a PDF and as a photo). Every
+  document comes with the truth it was rendered from, so the reading is scored exactly
+  (`corpus.ts`) and so is the build (`sim/score-build.ts`: a product per model, its variants and
+  options, a Type the shop has, priced at RRP and above cost, barcodes kept, a CSV and a push
+  input Shopify would take). Scores are by trade and by layout; `--write-baseline` records them
+  and `--baseline` fails when a trade gets worse; `--out <dir>` writes every shop's export and
+  invoices so they can be loaded into the app by hand or by a script. The same seed is always the
+  same shops. It found eight reader and build bugs on its first run (HANDOVER, 2026-10-28). It
+  is a floor, not a ceiling: real suppliers' files are stranger than any of these.
 - Alpsport's Rubin and Flöda share history up to the split. A fix to a supplier reader or to the
   document reading is worth carrying to both; a change to a convention is Flöda's alone.
 - `npm run desktop:build` then `npm run desktop:check` runs the built server under plain Node

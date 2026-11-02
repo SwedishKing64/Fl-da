@@ -72,6 +72,9 @@ function combinePacks(packs: TradePack[]): TradePack {
     // several trades is a new shop and gets the category Shopify asks for.
     fillsCategory: true,
     metafields: snow ? packs.find((p) => p.snowRules)!.metafields : packs[0].metafields,
+    brands: [...new Set(packs.flatMap((p) => p.brands ?? []))],
+    distributors: [...new Set(packs.flatMap((p) => p.distributors ?? []))],
+    snowboardBrands: [...new Set(packs.flatMap((p) => p.snowboardBrands ?? []))],
     ...(packs.some((p) => p.knowledge) ? {
       knowledge: {
         verified: packs.every((p) => p.knowledge?.verified ?? true),

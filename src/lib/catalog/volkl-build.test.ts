@@ -147,11 +147,11 @@ describe.skipIf(!existsSync(`${UP}22065406-products_export_1-7.csv`))("the Volkl
     return { invoice, csv, out: buildDelivery(csv, invoice.lines, { season: "2027", vendor: "Volkl", specs: [...specs, ...barcodes], listings: memory, priceList: invoice.priceList }) };
   }
 
-  it("prices the Griffon at the shop's own 450 / 241 and the Squire off the Marker tab", { timeout: 60_000 }, async () => {
+  it("prices a binding named in an instruction off the Marker tab", { timeout: 60_000 }, async () => {
     const { invoice } = await deliver();
-    const { bindingFrom, DEFAULT_PACKAGE_BINDINGS } = await import("./trades/snow/packages");
-    expect(bindingFrom(DEFAULT_PACKAGE_BINDINGS.mens, invoice.priceList!)).toMatchObject({ label: "Marker Griffon - Black", rrp: 450, cost: 241 });
-    expect(bindingFrom(DEFAULT_PACKAGE_BINDINGS.womens, invoice.priceList!)).toMatchObject({ label: "Marker Squire - White", rrp: 349 });
+    const { bindingFrom, specFromName } = await import("./trades/snow/packages");
+    expect(bindingFrom(specFromName("Griffon 13 MN black")!, invoice.priceList!)).toMatchObject({ label: "Griffon 13 MN - Black", rrp: 459 });
+    expect(bindingFrom(specFromName("Squire 11 white")!, invoice.priceList!)).toMatchObject({ label: "Squire 11 - White", rrp: 349 });
     // INDENT, which is what the shop's costs are: the M7 Mantra at 749.55.
     expect(invoice.lines.find((l) => l.title === "M7 MANTRA")?.costPrice).toBeCloseTo(749.55, 2);
   });

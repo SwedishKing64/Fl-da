@@ -18,7 +18,8 @@
     "desktop:check": "node desktop/launch.cjs --check",
     "desktop:dev": "electron .",
     "desktop:dist": "electron-builder --publish never",
-    "eval:read": "tsx scripts/corpus.ts"
+    "eval:read": "tsx scripts/corpus.ts",
+    "eval:shops": "tsx scripts/simulate.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",

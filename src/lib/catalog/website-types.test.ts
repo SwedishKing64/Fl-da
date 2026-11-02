@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { ALPSPORT_CONVENTIONS, activateConventions, isValidType, productTypes, typesAreKnown } from "./taxonomy";
+import { SNOW_TEST_CONVENTIONS, activateConventions, isValidType, productTypes, typesAreKnown } from "./taxonomy";
 import { emptyVariantView, hardErrors, validateReview } from "./validate";
 import type { ReviewProduct } from "./review-types";
 import { unscored } from "./confidence";
@@ -17,7 +17,7 @@ function product(partial: Partial<ReviewProduct>): ReviewProduct {
 const website = { url: "https://shop.example", source: "shopify" as const, readAt: "2026-10-15T00:00:00Z", categories: [{ title: "Skis", path: "/collections/skis" }, { title: "Jackets", path: "/collections/jackets" }, { title: "Gloves & Mitts", path: "/collections/gloves-mitts" }] };
 
 describe("the website's categories as kinds of product", () => {
-  afterEach(() => activateConventions(ALPSPORT_CONVENTIONS));
+  afterEach(() => activateConventions(SNOW_TEST_CONVENTIONS));
 
   it("are the whole vocabulary on a blank shop, and nothing is known before they are read", () => {
     activateConventions({ pack: "general", learned: null, marker: "" });
@@ -54,7 +54,7 @@ describe("the website's categories as kinds of product", () => {
 });
 
 describe("filing under the shop's nearest type", () => {
-  afterEach(() => activateConventions(ALPSPORT_CONVENTIONS));
+  afterEach(() => activateConventions(SNOW_TEST_CONVENTIONS));
 
   it("finds the shop's own type for a name that is close, and nothing for one that is not", async () => {
     const { closestType } = await import("./taxonomy");

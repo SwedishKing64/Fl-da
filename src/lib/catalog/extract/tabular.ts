@@ -70,14 +70,26 @@ export function orderToTable(order: { lines: InvoiceLine[]; sheet: string; warni
   // What a ski is for, where the form says — its section and waist (see grid-form.ts).
   const terrains = order.lines.some((l) => (l.terrain ?? "").trim());
   const headers = ["Item No.", "SKU", "Barcode", "Brand", "Description", ...(kinds ? ["Category"] : []), ...(terrains ? ["Terrain"] : []), "Gender", "Colour", "Length", "Size", "RRP", "Cost", "Qty"];
+  // A code on more than one line is the model's, not the variant's: a size grid writes the style's
+  // code once per size ordered. Each variant needs a SKU of its own, so the size goes on the end
+  // ("OW3101.S", "PK2745.SM"), the way a length already did; the model's code stays in Item No.
+  // A model ordered in two colours repeats once more, so the colour goes on too where the size alone
+  // does not tell the lines apart ("OW3101-Navy.S").
+  const count = (keys: string[]) => keys.reduce((m, k) => m.set(k, (m.get(k) ?? 0) + 1), new Map<string, number>());
+  const condensed = (v: string | undefined) => (v ?? "").replace(/[^A-Za-z0-9.]/g, "");
+  const bySku = count(order.lines.map((l) => l.sku));
+  const bySkuSize = count(order.lines.map((l) => `${l.sku}.${condensed(l.size)}`));
   const rows = order.lines.map((line) => {
     const size = (line.size ?? "").trim();
     // A ski or pole length is a whole number of centimetres, 60 and up; a boot's 24.5 is a size.
-    const length = /^\d{2,3}(\.\d)?$/.test(size) && Number(size) >= 60 && !(line.kind ?? "").match(/boot/i) ? size : "";
+    // A board's wide length, 158W, is a length too.
+    const length = /^\d{2,3}(\.\d)?w?$/i.test(size) && parseInt(size, 10) >= 60 && !(line.kind ?? "").match(/boot/i) ? size : "";
+    const colourToo = (bySkuSize.get(`${line.sku}.${condensed(size)}`) ?? 0) > 1 && condensed(line.colour) ? `-${condensed(line.colour)}` : "";
+    const perSize = size && (bySku.get(line.sku) ?? 0) > 1 ? `${line.sku}${colourToo}.${condensed(size)}` : "";
     return {
       "Item No.": line.sku,
       // The per-length SKU the spec sheets use — but a code that is already per size stands alone.
-      SKU: length ? `${line.sku}.${length}` : line.sku,
+      SKU: length ? `${line.sku}${colourToo}.${length}` : perSize || line.sku,
       Barcode: (line.barcode ?? "").trim(),
       Brand: (line.brand ?? "").trim(),
       Description: line.title,

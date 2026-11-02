@@ -1,10 +1,10 @@
 /**
- * The shop's bindings for ski packages, with what each sells for and costs (asked 2026-10-20).
+ * The shop's bindings for ski packages, with what each sells for and costs.
  *
- * A ski is packaged with the bindings somebody picks for it, from this list: the Griffon, the
- * Squire, the Strive 12, the Pivot 2.0 … Each is a Binding Option on the package, priced at the
- * ski's recommended retail plus the binding's, and costed at the ski's cost plus the binding's
- * wholesale. The shop's list is built in (SHOP_BINDINGS); a newer one loaded in Settings replaces it.
+ * A ski is packaged with the bindings somebody picks for it, from this list. Each is a Binding
+ * Option on the package, priced at the ski's recommended retail plus the binding's, and costed at
+ * the ski's cost plus the binding's wholesale. The list is the shop's own, typed in or loaded from
+ * a sheet on Settings; a new copy of Flöda has none.
  */
 
 import type { BindingChoice } from "./packages";
@@ -20,22 +20,6 @@ export interface BindingList {
   file: string;
   updatedAt: string;
 }
-
-/**
- * The shop's own binding list, built in at its request (2026-10-20) so it is there without being
- * loaded: its RRP and its wholesale for each binding it packages skis with. A newer list loaded in
- * Settings takes its place.
- */
-export const SHOP_BINDINGS: BindingEntry[] = [
-  { name: "Marker Griffon", rrp: 459.99, cost: 241 },
-  { name: "Marker Squire", rrp: 349, cost: 186.63 },
-  { name: "Salomon Strive 12", rrp: 379.99, cost: 186.94 },
-  { name: "Look Pivot 2.0 11", rrp: 649.99, cost: 295 },
-  { name: "Tyrolia Attack LYT 12", rrp: 429.99, cost: 195 },
-  { name: "Tyrolia Attack LYT 11", rrp: 349.99, cost: 159 },
-  { name: "Look Pivot 2.0 15", rrp: 799.99, cost: 363.18 },
-  { name: "Marker Griffon X", rrp: 479.99, cost: 243.18 },
-];
 
 const num = (raw: string): number | null => {
   const v = (raw ?? "").toString().replace(/[$,\s]/g, "");

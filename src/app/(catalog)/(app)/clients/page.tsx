@@ -15,6 +15,7 @@ import { vendorMode } from "@/lib/catalog/licence";
 import { Card, PageHeader } from "@/app/(catalog)/ui";
 import { ClientsPanel, type ClientRow, type LeadRow } from "./ClientsPanel";
 import { FEEDBACK_KEY, type FeedbackRow } from "@/lib/catalog/feedback-box";
+import { SUPPORT_KEY, type SupportBackupRow } from "@/lib/catalog/support-box";
 
 export const dynamic = "force-dynamic";
 
@@ -26,11 +27,13 @@ export const dynamic = "force-dynamic";
 export default async function ClientsPage() {
   await requireUser("ADMIN");
   if (!vendorMode()) notFound();
-  const [clients, leadsRow, feedbackRow] = await Promise.all([
+  const [clients, leadsRow, feedbackRow, supportRow] = await Promise.all([
     prisma.client.findMany({ orderBy: [{ status: "asc" }, { createdAt: "desc" }] }),
     prisma.appSetting.findUnique({ where: { key: "floda.leads" } }),
     prisma.appSetting.findUnique({ where: { key: FEEDBACK_KEY } }),
+    prisma.appSetting.findUnique({ where: { key: SUPPORT_KEY } }),
   ]);
+  const support = parseJson<SupportBackupRow[]>(supportRow?.value, []).slice().reverse();
   const leads = parseJson<LeadRow[]>(leadsRow?.value, []).slice().reverse();
   const feedback = parseJson<FeedbackRow[]>(feedbackRow?.value, []).slice().reverse();
   const rows: ClientRow[] = clients.map((c) => ({
@@ -43,7 +46,7 @@ export default async function ClientsPage() {
     <>
       <PageHeader title="Clients" subtitle="Every shop running Flöda, the key their copy runs under, when it last checked in, and what its reading through Flöda has cost this fortnight. A copy asks about its key when the key is entered and about once a day after that; pausing or ending a client is felt within the day, and stops its reading at once." />
       <Card>
-        <ClientsPanel clients={rows} leads={leads} feedback={feedback} />
+        <ClientsPanel clients={rows} leads={leads} feedback={feedback} support={support} />
       </Card>
     </>
   );

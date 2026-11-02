@@ -13,7 +13,14 @@ import { buildDelivery } from "./delivery";
 import { parseCsv } from "./csv";
 import { alignRows } from "./diff";
 import type { InvoiceLine } from "./reconcile";
-import { SHOP_BINDINGS } from "./trades/snow/binding-list";
+import { setPackageTerms } from "./trades/snow/terms";
+
+/** A shop's binding list, made up, in the shape Settings keeps it. */
+const SHOP_BINDINGS = [
+  { name: "Marker Griffon", rrp: 459.99, cost: 241 },
+  { name: "Marker Squire", rrp: 349, cost: 186.63 },
+];
+setPackageTerms({ drillMountFee: 59, systemMountFee: 49, fittingMount: "Please Mount My Bindings", fittingNoMount: "Do Not Mount My Bindings" });
 
 const line = (over: Partial<InvoiceLine> = {}): InvoiceLine =>
   ({ sku: "", barcode: "", title: "", costPrice: null, rrp: null, quantity: null, ...over });

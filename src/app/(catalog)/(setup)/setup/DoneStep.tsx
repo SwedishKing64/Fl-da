@@ -26,6 +26,12 @@ export function DoneStep({ shopName, learned, aiReady, skipped, store = "", corr
         ))}
       </ul>
       <div className="mb-4 rounded-[12px] bg-[var(--meta-tint)] p-4 text-[14px]">
+        <div className="font-semibold">Next: teach Flöda how you list</div>
+        <p className="mt-1 text-[var(--ink-soft)]">
+          Everything Flöda believes about your shop is on one page, <Link href="/training" className="font-semibold text-[var(--meta)]">Teach Flöda</Link>, with a four-step guide at the top: your export, your website, the rules, and one invoice from each supplier. Reading done while teaching is not counted against your plan.
+        </p>
+      </div>
+      <div className="mb-4 rounded-[12px] bg-[var(--canvas)] p-4 text-[14px]">
         <div className="font-semibold">Fixing something once is enough</div>
         <p className="mt-1 text-[var(--ink-soft)]">
           What Flöda guessed rather than learned keeps being checked: the review screen shows you what it is unsure of first. When you fix something there — a renamed option, a different product type, a corrected line — Flöda does it that way from then on, for that supplier and that product type.{corrections > 0 ? ` It already holds ${corrections} correction${corrections === 1 ? "" : "s"} of yours.` : ""}

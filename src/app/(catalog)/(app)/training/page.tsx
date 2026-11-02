@@ -17,6 +17,8 @@ import { TagProposals } from "./TagProposals";
 import { Teach } from "./Teach";
 import { Sources, type SourceTile } from "./Sources";
 import { RulesFile } from "./RulesFile";
+import { TeachGuide } from "./TeachGuide";
+import { apiKeySource } from "@/lib/catalog/anthropic";
 import { buildAreas, countBeliefs } from "@/lib/catalog/teaching";
 import { getSettings } from "@/lib/catalog/settings";
 import { supplierRecords } from "@/lib/catalog/supplier-score";
@@ -147,6 +149,8 @@ export default async function TrainingPage() {
         subtitle={<>What Flöda believes about how you list, in plain sentences, and where to teach it more. <strong>{n(counts.taught)}</strong> of these it learned from your shop; <strong>{n(counts.floda)}</strong> are its own defaults until you change them.</>}
         actions={<RulesFile />}
       />
+
+      <TeachGuide state={{ exportTaught: Boolean(learned) || store.configured, websiteRead: Boolean(website), rulesTouched: Boolean(house.savedAt) || tagRules.length > 0 || pricingRules.length > 0, supplierTaught: layouts.length > 0, readingIncluded: apiKeySource() === "floda" }} />
 
       <Sources tiles={tiles} />
 

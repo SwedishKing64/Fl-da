@@ -120,6 +120,15 @@ standalone folder with an empty template database; `electron-builder.yml` wraps 
 `.github/workflows/desktop.yml` builds the Windows installer on a Windows runner and the Mac
 disk image on a Mac runner whenever a `v*` tag is pushed, and attaches them to the release.
 
+**Columns placed without a step.** `autoApplyMappings` builds every layout whose headings and
+values place the product's name; one they cannot goes to the light model with five rows
+(`mapping-ai.ts`: `aiMapping`, validated against the fields in force, `fillMapping` filling only
+the gaps), and what neither can place is the one case the mapping screen is still opened for,
+from the file's own warning. **Training reads are free.** `asTraining` in `anthropic.ts` runs a
+piece of work with a mark every relay call carries (`x-floda-purpose: training`); the relay
+(`/api/ai`) neither meters nor refuses such a call. A "Setup: " batch's files and the description
+style reader run inside it.
+
 **Support hand-off.** A shop sends a copy of its database to Flöda from Settings → Backups
 (`sendBackupToSupportAction`): the copy asks the vendor's `/api/support` to begin, is given a
 client token for one path in the vendor's Blob store, puts the file there in parts

@@ -14,6 +14,7 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
+import { AsyncLocalStorage } from "node:async_hooks";
 
 /**
  * Three models, by how hard the work is. Each overridable per deployment.
@@ -92,6 +93,21 @@ export function onRelayCall(fn: (() => void) | null): void {
 }
 
 /** A client for the key in force. `maxRetries` is per caller: a season's sheet needs more patience than a colour check. */
+/**
+ * Reading done to teach Flöda — a supplier's example in setup, the shape of the shop's
+ * descriptions — is not work, and is not counted against the shop's plan. Code that reads for
+ * that reason runs inside `asTraining`; every call to the relay from inside it carries the mark,
+ * and the relay meters nothing for it. On a shop's own key the mark changes nothing.
+ */
+const purpose = new AsyncLocalStorage<"training">();
+export const TRAINING_HEADER = "x-floda-purpose";
+export function asTraining<T>(work: () => Promise<T>): Promise<T> {
+  return purpose.run("training", work);
+}
+export function isTrainingRead(): boolean {
+  return purpose.getStore() === "training";
+}
+
 export function anthropicClient(maxRetries: number): Anthropic {
   const key = hostKey() || storedKey;
   const viaFloda = !key && !gatewayToken() ? relay : null;
@@ -99,7 +115,13 @@ export function anthropicClient(maxRetries: number): Anthropic {
   let client = clients.get(id);
   if (!client) {
     client = viaFloda
-      ? new Anthropic({ apiKey: null, authToken: viaFloda.key, baseURL: `${viaFloda.server}/api/ai`, maxRetries, fetch: async (url, init) => { const res = await fetch(url, init); afterRelayCall?.(); return res; } })
+      ? new Anthropic({ apiKey: null, authToken: viaFloda.key, baseURL: `${viaFloda.server}/api/ai`, maxRetries, fetch: async (url, init) => {
+          const headers = new Headers(init?.headers as HeadersInit | undefined);
+          if (isTrainingRead()) headers.set(TRAINING_HEADER, "training");
+          const res = await fetch(url, { ...init, headers });
+          afterRelayCall?.();
+          return res;
+        } })
       : key ? new Anthropic({ apiKey: key, maxRetries }) : new Anthropic({ maxRetries });
     clients.set(id, client);
   }

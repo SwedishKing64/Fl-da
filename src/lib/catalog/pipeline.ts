@@ -19,7 +19,9 @@ import { siblingsOfPlaced } from "./siblings";
 import { writeOutColour } from "./colour";
 import { audienceByModel, brandIn, isBrand } from "./brands";
 import { askToJoin } from "./reference-ai";
-import { aiAvailable } from "./anthropic";
+import { aiAvailable, asTraining } from "./anthropic";
+import { aiMapping, fillMapping } from "./mapping-ai";
+import { fieldsInForce } from "./taxonomy";
 import { repairCategoryRules, repairProductTags, repairTagRuleSpelling } from "./seed";
 import { applyTagRules, type TagRuleLike } from "./rules";
 import { conventionGrams, conventionIdentifiers } from "./house";
@@ -198,9 +200,16 @@ async function supplierReadsKnown(batchId: string): Promise<boolean> {
 
 /** Read a file that is already stored, and record what came of it. */
 export async function extractStoredFile(fileId: string, origin?: string): Promise<IngestResult> {
-  const record = await prisma.sourceFile.findUniqueOrThrow({ where: { id: fileId } });
+  const record = await prisma.sourceFile.findUniqueOrThrow({ where: { id: fileId }, include: { batch: { select: { name: true } } } });
   const buffer = await readFile(record.storagePath);
-  return ingestFile(record.batchId, { filename: record.filename, mimeType: record.mimeType, buffer, kind: record.kind as UploadKind, origin, existingFileId: record.id });
+  const read = () => ingestFile(record.batchId, { filename: record.filename, mimeType: record.mimeType, buffer, kind: record.kind as UploadKind, origin, existingFileId: record.id });
+  // A supplier's example read during setup or on Teach Flöda is training, not work: it is not counted against the shop's plan.
+  return isTrainingBatch(record.batch.name) ? asTraining(read) : read();
+}
+
+/** The batches setup and Teach Flöda make to read one example of a supplier's paperwork. */
+export function isTrainingBatch(name: string): boolean {
+  return /^Setup: /.test(name);
 }
 
 export async function ingestFile(batchId: string, given: { filename: string; mimeType: string; buffer: Buffer; kind?: UploadKind; origin?: string; existingFileId?: string }): Promise<IngestResult> {
@@ -410,8 +419,9 @@ export async function mappingState(batchId: string): Promise<HeaderGroup[]> {
  *
  * Mapping columns was a step of its own, and it should not have been: the suggestion is right
  * almost every time, and where it is not, the place to fix it is the review grid, which is where
- * the operator is looking anyway. So every layout the suggestion can build from is built, and only
- * a layout with no recognisable product name is left for the mapping screen to sort out.
+ * the operator is looking anyway. So every layout the suggestion can build from is built; one
+ * with no recognisable product name is put to the model, and only what neither can place is left
+ * for the mapping screen, which is no longer a step but a door opened from the file's own warning.
  */
 export async function autoApplyMappings(batchId: string, userId: string | null): Promise<{ applied: boolean; products: number; variants: number; unmapped: string[]; drifted: string[] }> {
   const groups = await mappingState(batchId);
@@ -419,10 +429,20 @@ export async function autoApplyMappings(batchId: string, userId: string | null):
   // columns that moved are the ones a remembered mapping gets wrong, so a person confirms them
   // once, on the mapping screen, and the new layout is remembered beside the old.
   const usable = groups.filter((g) => !g.drift && mappingProblems(g.suggestion).length === 0);
+  // A layout the headings could not place is put to the model before it is put to a person: the
+  // headings and a few rows, against the fields Flöda writes. Its answer fills the gaps the
+  // heuristics left; where that settles the product's name, the layout builds like any other.
+  const stuck = groups.filter((g) => !usable.includes(g) && !g.drift && !g.isCanonical);
+  const mapped = new Map<string, Mapping>();
+  for (const g of stuck) {
+    const guessed = aiAvailable() ? await aiMapping(g.headers, g.sampleRows, fieldsInForce()) : null;
+    const filled = fillMapping(g.suggestion, guessed);
+    if (mappingProblems(filled).length === 0) { mapped.set(g.hash, filled); usable.push(g); await logAudit("layout.ai-mapped", { batchId, userId, details: { files: g.filenames } }).catch(() => undefined); }
+  }
   const drifted = groups.filter((g) => g.drift).map((g) => describeDrift(g));
   const unmapped = groups.filter((g) => !usable.includes(g) && !g.drift).flatMap((g) => g.filenames);
   if (usable.length === 0) return { applied: false, products: 0, variants: 0, unmapped, drifted };
-  const result = await applyMappings(batchId, usable.map((g) => ({ hash: g.hash, mapping: g.suggestion, options: g.options, saveTemplate: null })), userId);
+  const result = await applyMappings(batchId, usable.map((g) => ({ hash: g.hash, mapping: mapped.get(g.hash) ?? g.suggestion, options: g.options, saveTemplate: null })), userId);
   for (const g of usable.filter((x) => x.sharedBy)) {
     await logAudit("layout.shared-used", { batchId, userId, details: { files: g.filenames.length, shops: g.sharedBy } }).catch(() => undefined);
   }

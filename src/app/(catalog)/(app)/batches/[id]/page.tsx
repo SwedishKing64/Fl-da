@@ -75,7 +75,6 @@ async function renderBatchPage(props: PageProps<"/batches/[id]">) {
         actions={<>
           {batch._count.products > 0 && <LinkButton href={`/batches/${id}/review`} variant="primary" icon="🔍">Review &amp; price →</LinkButton>}
           {batch._count.products === 0 && extracted.length > 0 && !locked && <BuildProductsButton batchId={id} />}
-          {extracted.length > 0 && <LinkButton href={`/batches/${id}/map`}>Column mapping</LinkButton>}
           <DeleteBatchButton batchId={id} disabled={batch.status === "PUSHED"} />
         </>}
       />

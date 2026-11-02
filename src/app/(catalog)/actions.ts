@@ -2959,13 +2959,14 @@ export async function describeStyleAction(input: { samples: string[] }): Promise
       specsHeading: z.string().describe("The heading used over the list of specifications or details, exactly as written; empty if there is no such list or heading."),
       sections: z.array(z.object({ heading: z.string(), holds: z.string() })).describe("Headed sections that come after the main text, in order, each with what it holds, in a few words. Empty when the descriptions have no headed sections."),
     });
-    const response = await anthropicClient(1).messages.parse({
+    const { asTraining } = await import("@/lib/catalog/anthropic");
+    const response = await asTraining(() => anthropicClient(1).messages.parse({
       model: LIGHT_MODEL,
       max_tokens: 2000,
       system: "You are shown a few product descriptions from one online shop, as HTML or text. Describe the house style they share so another writer can match it. Say only what the samples show; name no product.",
       output_config: { format: zodOutputFormat(Style), effort: "low" },
       messages: [{ role: "user", content: samples.map((s, i) => `Description ${i + 1}:\n${s}`).join("\n\n---\n\n") }],
-    }, { timeout: 40_000, maxRetries: 1, signal: AbortSignal.timeout(40_000) });
+    }, { timeout: 40_000, maxRetries: 1, signal: AbortSignal.timeout(40_000) }));
     const style = response.parsed_output;
     if (!style || !style.format.trim()) return { ok: true, data: { learned: false, format: "" } };
     const { cleanHouse } = await import("@/lib/catalog/house");

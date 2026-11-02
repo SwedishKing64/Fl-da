@@ -296,7 +296,7 @@ export function UploadPanel({ batchId, aiEnabled, reading, productCount, pending
               );
             })}
           </ul>
-          {auto && !auto.applied && results.some((r) => r.rows > 0) && <div className="mt-2 text-xs">Some columns were not recognised. Everything that could be built has been; <a href={`/batches/${batchId}/map`} className="font-semibold underline">set the rest by hand</a> and it is remembered for this supplier.</div>}
+          {auto && !auto.applied && results.some((r) => r.rows > 0) && <div className="mt-2 text-xs">One file&rsquo;s product-name column could not be placed, by the headings or by the model, so nothing was built from it. <a href={`/batches/${batchId}/map`} className="font-semibold underline">Point to it</a> once and this layout is remembered for the supplier.</div>}
         </Alert>
       )}
     </div>

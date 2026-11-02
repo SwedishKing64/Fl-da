@@ -402,6 +402,17 @@ terms and the due dates worked from them, PAID stamps) live in Rubin's handover.
 
 ## Decisions and history, newest first
 
+- 2026-11-02 **No mapping step; training reads are free; a guide on Teach Flöda.** The Column
+  mapping button is gone from the batch page. A layout whose headings could not place the
+  product's name is put to the light model with a few rows (`mapping-ai.ts`), and its answer fills
+  the gaps the heuristics left (`autoApplyMappings`); the mapping screen remains only as the door
+  in a file's own warning, for what neither could place. Reading that teaches Flöda (a supplier's
+  example in a "Setup: " batch, the shape of the shop's descriptions) runs inside `asTraining`
+  (`anthropic.ts`), which marks each relay call with `x-floda-purpose: training`; the relay
+  meters nothing for it and lets it through an exhausted allowance. Teach Flöda opens with a
+  four-step guide (`TeachGuide.tsx`: export, website, read and correct the beliefs, one invoice
+  per supplier), ticked as each is done, folding away when all are or when closed; setup's last
+  step and the AI step point at it and say training reads are not counted.
 - 2026-10-30 **Folders and support.** A whole folder dropped on any drop zone (batch upload, the
   exports zone and spec sheets on Prices and stock) is walked and every file inside taken, hidden
   housekeeping files left out; a Choose a folder picker sits beside Choose files

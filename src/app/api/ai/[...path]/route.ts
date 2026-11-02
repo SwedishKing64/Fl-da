@@ -34,8 +34,11 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/ai/[...path
   const verdict = verdictFor(client);
   if (!client || !verdict.ok) return refuse(403, "floda_error", `${verdict.ok ? "" : verdict.why} Reading through Flöda stops with it. A key of your own under Reading documents in Settings still works.`.trim());
   if (planOf(client.plan).reading === "own-key") return refuse(403, "floda_error", "This plan reads with the shop's own key, not through Flöda. Put your Anthropic key under Reading documents in Settings.");
+  // Reading that teaches Flöda (a supplier's example in setup, the shape of the shop's descriptions)
+  // is not counted against the plan, and is not stopped by an allowance that is used up.
+  const training = req.headers.get("x-floda-purpose") === "training";
   const allowance = allowanceOf(client);
-  if (allowance.exhausted) return refuse(403, "floda_error", limitReachedMessage());
+  if (allowance.exhausted && !training) return refuse(403, "floda_error", limitReachedMessage());
   const vendorKey = (process.env.ANTHROPIC_API_KEY ?? "").trim();
   if (!vendorKey) return refuse(503, "api_error", "Flöda's own reading key is not set, so nothing can be read through it right now.");
 
@@ -82,7 +85,7 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/ai/[...path
       } catch (err) {
         console.warn("[ai relay] stream ended early:", err instanceof Error ? err.message : err);
       }
-      await record(client.id, meter.end(), rate);
+      if (!training) await record(client.id, meter.end(), rate);
     });
     return new Response(toCopy, { status: upstream.status, headers: out });
   }
@@ -91,7 +94,7 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/ai/[...path
   if (upstream.ok) {
     let usage: Usage | null = null;
     try { usage = usageOf((JSON.parse(text) as { usage?: unknown }).usage); } catch { /* not a message */ }
-    if (usage && !noUsage(usage)) { const u = usage; after(() => record(client.id, u, rate)); }
+    if (usage && !noUsage(usage) && !training) { const u = usage; after(() => record(client.id, u, rate)); }
   }
   return new Response(text, { status: upstream.status, headers: out });
 }

@@ -410,6 +410,117 @@ that belonged to one shop.
    Developer identity, which also lets a Mac copy install an update itself.
 4. Billing. The Clients page records the plan; nothing yet charges for it.
 
+## Planned: shared product memory, and a catalogue check (2026-11-02)
+
+Two features decided on 2026-11-02, not yet built. Both spend what Flöda already holds: the
+shop's taught rules, the store read off Shopify, the supplier layouts shared between shops, and
+the pictures kept on Flöda's deployment.
+
+### Shared product memory
+
+**What it is.** Once one shop has read a supplier's delivery, found the manufacturer's page,
+taken its copy and specifications and kept its pictures, the next shop that receives the same
+product gets all of that at once, without a page fetch or a reading. The key is the barcode.
+
+**What exists.** `shared-layouts.ts` and its store share a file's column layout between shops
+through the licence route (`layout-share`, `layout-find`), under the licence key, never a value
+and never which shop. The same route already keeps pictures for copies (`picture`) on Flöda's
+blob store. A product records where its copy came from (`lookupSource`, `lookupStatus`), each
+picture records its source, and `gtin.ts` says whether a barcode is one. The web lookup
+(`enrich.ts`) and the page finder are where the time and the reading go today.
+
+**What is shared, and what never is.** Shared: the barcode, the brand, the supplier's own name
+for the product, the manufacturer's page address, the copy and specifications taken from that
+page, the option names and values (sizes, colours) and the hosted pictures with the colour each
+shows. Never: a cost, a retail price, a margin, a quantity, a shop's own tags, title or rewritten
+description, or which shop contributed. Only fields that came from the lookup leave a shop (a
+product whose `lookupStatus` is FOUND and whose text is unchanged since); anything a person typed
+stays. A shop can stop contributing in Settings beside the layouts switch and still receive.
+
+**Data.** On Flöda's deployment, one table `SharedProduct`: a product key (brand + the
+supplier's name, lower-cased), the source page, the copy, the specifications as JSON, the
+pictures as JSON `[{url, colour}]`, the options, the barcodes it is known under, how many shops
+confirmed it, and when it was last confirmed. A second table `SharedBarcode` maps each barcode
+to a product key, so a lookup by any variant's barcode finds the product. A later reading of the
+same product with a different copy is kept as a variant and the most-confirmed wins, as the
+layout variants do.
+
+**Flow.** When a batch is built and its line items carry barcodes, the copy asks `product-find`
+with the batch's barcodes, in one request, before the web lookup. A hit fills the title (as the
+supplier names it; the shop's title rules still apply), the product type where the shop's own
+types do not already decide it, the copy and specifications, the pictures and the colour links,
+and marks the product `lookupStatus: SHARED` with the source page. Misses go to the web lookup as
+today. When the shop exports or pushes the batch, the copy offers `product-share` for the
+products whose lookup found something, with the fields above and nothing else. Neither call ever
+holds up a batch: a deployment that cannot be reached is a miss.
+
+**Quality.** A shop that corrects a shared description in review corrects its own copy only;
+"This is wrong" on the review grid sends a mark, and a product marked wrong by two shops is
+taken out until a third reading confirms it. The barcode's check digit is verified before it is
+used as a key. A barcode seen with two different brands is not trusted as a key for either.
+
+**Phases.** (1) The two tables, the two route actions, the find on build, and the Teach Flöda
+belief line "what other shops have found": a week. (2) Contribute after export, the settings
+switch, the wrong mark: three days. (3) Counts on the Clients page: hits, pictures served,
+readings saved. (4) A second key, brand + model code, for suppliers whose files carry no
+barcodes; riskier, so later and gated on the brand matching too.
+
+**Cost and terms.** Each hit saves a page fetch and about a reading's worth of the model (10c a
+product on the relay). The deployment pays the blob egress for pictures served. What is shared is
+information the manufacturer publishes; the terms should say so, and a brand that asks to have
+its copy removed is removed by product key.
+
+### Catalogue check
+
+**What it is.** A standing audit of the shop's live catalogue against the shop's own rules, read
+off the connected store: what is missing, what drifts from the pattern the shop taught, and for
+each finding the fix those rules would produce, applied back to Shopify a group at a time.
+
+**What exists.** The store is read in full (`store-sync.ts` `readStore`, with title, vendor,
+type, tags, body, SEO, options, collections and variants); the shop's rules are the house
+conventions, the learned vocabulary, tag rules, pricing rules, templates and the SEO title
+pattern; the checks the export already runs (`validate.ts`, `gtin.ts`, `tag-gate.ts`,
+`option-tags.ts`, `tag-spelling.ts`, `size-order.ts`, `title-colour.ts`) are pure and reusable;
+findings are grouped by message (`issue-groups.ts`); `pushBatch` writes products with
+`productSet`. The page called "Tidy a document" is the photo transcriber and stays as it is; this
+is a new page, **Catalogue check**.
+
+**The checks**, each a pure function over the store's products and the rules, returning
+findings `{kind, product, detail, fix?}`:
+
+- Descriptions: none, shorter than the shop's own are, or without the sections the shop's format
+  names. Fix: the copy writer in the shop's style, only on request, with the reading count shown
+  before it runs.
+- Titles: brand placed against the shop's rule, a model year where the kind takes none or none
+  where it does, a colour in the title against the rule, the shop's own name in a title.
+  Fix: the title the pipeline would build.
+- Tags: two spellings of one tag; tags that mirror an option (Size_54); a tag the type's rule
+  adds that is missing; a type not among the shop's learned or website types; a vendor spelled
+  two ways. Fix: the rules' tags.
+- Pictures: none, or fewer than the minimum. Fix: shared product memory by barcode first, then
+  the page finder, then nothing automatic.
+- Variants: option names that drift ("Size" and "Sizes"), sizes out of order, a barcode that
+  fails its check digit, a SKU used twice, a compare-at price below the price.
+- SEO: no SEO title or description, or a title off the shop's pattern. Fix: the pattern.
+
+**Applying a fix.** Findings show grouped, as the export page groups its notes, with the
+before and after for each product, ticked by default and untickable. Apply writes with
+`productUpdate` (title, tags, type, SEO, body) and `productCreateMedia` (pictures), records each
+change with its before value, and offers Undo for thirty days from the same page. Nothing is
+written without the person pressing Apply, and each finding kind is applied separately.
+
+**Standing.** The check runs after each store read (daily, and on demand) and keeps a score per
+area; the Home page shows the counts and Teach Flöda shows where the catalogue disagrees with
+what the shop taught, which is also where a wrong rule shows itself.
+
+**Phases.** (1) The checks as pure functions with tests, the page as a read-only report, no
+model reading: four days. (2) Apply with undo for titles, tags, types and SEO: three days.
+(3) Descriptions written and pictures found, counted against the plan: three days.
+(4) Daily run, score and the Home widget: two days.
+
+**Open.** Whether sharing product data is on by default like layouts, or asked in setup. What the
+page is called to a shop. Whether the catalogue check is in every plan or from the Shop plan up.
+
 ## Working on Flöda
 
 Everything in `HANDOVER.md` under "Working on it" applies. In addition:

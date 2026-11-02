@@ -2959,7 +2959,7 @@ export async function describeStyleAction(input: { samples: string[] }): Promise
       specsHeading: z.string().describe("The heading used over the list of specifications or details, exactly as written; empty if there is no such list or heading."),
       sections: z.array(z.object({ heading: z.string(), holds: z.string() })).describe("Headed sections that come after the main text, in order, each with what it holds, in a few words. Empty when the descriptions have no headed sections."),
     });
-    const { asTraining } = await import("@/lib/catalog/anthropic");
+    const { asTraining } = await import("@/lib/catalog/training-mark");
     const response = await asTraining(() => anthropicClient(1).messages.parse({
       model: LIGHT_MODEL,
       max_tokens: 2000,

@@ -14,7 +14,6 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
-import { AsyncLocalStorage } from "node:async_hooks";
 
 /**
  * Three models, by how hard the work is. Each overridable per deployment.
@@ -96,16 +95,17 @@ export function onRelayCall(fn: (() => void) | null): void {
 /**
  * Reading done to teach Flöda — a supplier's example in setup, the shape of the shop's
  * descriptions — is not work, and is not counted against the shop's plan. Code that reads for
- * that reason runs inside `asTraining`; every call to the relay from inside it carries the mark,
+ * that reason runs inside `asTraining` (training-mark.ts); every call to the relay from inside it carries the mark,
  * and the relay meters nothing for it. On a shop's own key the mark changes nothing.
  */
-const purpose = new AsyncLocalStorage<"training">();
 export const TRAINING_HEADER = "x-floda-purpose";
-export function asTraining<T>(work: () => Promise<T>): Promise<T> {
-  return purpose.run("training", work);
+let trainingRead: () => boolean = () => false;
+/** Set once by `training-mark.ts`, the server-only module that keeps the mark; this file is also bundled for the browser, where there is no mark. */
+export function provideTrainingMark(read: () => boolean): void {
+  trainingRead = read;
 }
 export function isTrainingRead(): boolean {
-  return purpose.getStore() === "training";
+  return trainingRead();
 }
 
 export function anthropicClient(maxRetries: number): Anthropic {

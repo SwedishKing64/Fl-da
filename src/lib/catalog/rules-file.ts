@@ -1,5 +1,5 @@
 /**
- * Everything a shop has taught Flöda, as one file: its listing habits and kinds, its tag rules,
+ * Everything a shop has taught Snaben, as one file: its listing habits and kinds, its tag rules,
  * pricing rules and templates, what its export and website taught, its writer settings and the
  * parts it packages products with. The shop downloads it to keep or to send to support; support sends one back with the
  * rules fixed, and loading it puts those in place. No batch, product, picture or staff account is

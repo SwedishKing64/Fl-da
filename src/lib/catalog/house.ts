@@ -57,7 +57,7 @@ export interface HouseConventions {
   };
   /** Anything else, in the shop's own words. Fed to the reader on every product. */
   notes: string;
-  /** Each kind of product the shop told Flöda about from its exports: what it is called, its tags, how its titles read. */
+  /** Each kind of product the shop told Snaben about from its exports: what it is called, its tags, how its titles read. */
   kinds: KindRule[];
   /** When it was last saved; empty until the shop has been through it once. */
   savedAt: string;

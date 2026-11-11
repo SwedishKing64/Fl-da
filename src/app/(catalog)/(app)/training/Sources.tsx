@@ -15,7 +15,7 @@ export interface SourceTile {
 }
 
 /**
- * The three things a shop teaches Flöda from: its catalogue export, its website and a supplier's
+ * The three things a shop teaches Snaben from: its catalogue export, its website and a supplier's
  * paperwork. Three tiles, each saying what it has taught so far; opening one shows the panel that
  * reads more. Only one is open at a time, so the page stays a page and not a wall of forms.
  */

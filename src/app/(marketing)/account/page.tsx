@@ -14,7 +14,7 @@ import { signOutAction } from "./actions";
 import "../welcome/welcome.css";
 import "./account.css";
 
-export const metadata: Metadata = { title: "Your Flöda account", description: "Your plan, your key, your reading this fortnight, and your billing." };
+export const metadata: Metadata = { title: "Your Snaben account", description: "Your plan, your key, your reading this fortnight, and your billing." };
 export const dynamic = "force-dynamic";
 
 const STANDING: Record<string, string> = { TRIAL: "On trial", ACTIVE: "Active", PAUSED: "Paused", ENDED: "Ended" };
@@ -35,7 +35,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
     <Site>
       <section className="band page-head">
         <div className="wrap">
-          <Reveal className="head"><span className="eyebrow">Your account</span><h1>{client.name || "Your shop"}</h1><p className="lede">{welcome ? "Your account is made and the trial has started. " : ""}Signed in as {client.email}. <Link href="/download">Download Flöda</Link>, sign in to it with the same email and password, and it is licensed at once.</p></Reveal>
+          <Reveal className="head"><span className="eyebrow">Your account</span><h1>{client.name || "Your shop"}</h1><p className="lede">{welcome ? "Your account is made and the trial has started. " : ""}Signed in as {client.email}. <Link href="/download">Download Snaben</Link>, sign in to it with the same email and password, and it is licensed at once.</p></Reveal>
         </div>
       </section>
       <section className="band grey">
@@ -51,10 +51,10 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
           <Reveal className="acct-card" delay={1}>
             <h2>Reading this fortnight</h2>
             {plan.reading === "own-key" ? (
-              <p className="soft">On the Own key plan reading is billed by Anthropic to your own key, so there is no allowance here. Set the key under Settings → Reading documents in Flöda.</p>
+              <p className="soft">On the Own key plan reading is billed by Anthropic to your own key, so there is no allowance here. Set the key under Settings → Reading documents in Snaben.</p>
             ) : (
               <>
-                <p className="soft">Documents are read through Flöda up to the plan&rsquo;s allowance each fortnight. The bar starts again on the date shown.</p>
+                <p className="soft">Documents are read through Snaben up to the plan&rsquo;s allowance each fortnight. The bar starts again on the date shown.</p>
                 <AllowanceBar spentCents={allowance.spentCents} capCents={allowance.capCents} resetsAt={periodEnd()} />
                 <p className="soft" style={{ marginTop: 10 }}>{allowance.calls} reading{allowance.calls === 1 ? "" : "s"} so far. Reached the limit mid-season? Move up a plan below, or write to <a href={SUPPORT_MAILTO}>{SUPPORT_EMAIL}</a>.</p>
               </>
@@ -62,7 +62,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
           </Reveal>
           <Reveal className="acct-card" delay={2}>
             <h2>Licence key</h2>
-            <p className="soft">Signing in to Flöda with your email and password enters it for you. It is here for a copy that needs it typed.</p>
+            <p className="soft">Signing in to Snaben with your email and password enters it for you. It is here for a copy that needs it typed.</p>
             <p className="acct-key"><code>{client.licenceKey}</code></p>
           </Reveal>
           <Reveal className="acct-card acct-wide" delay={3}>

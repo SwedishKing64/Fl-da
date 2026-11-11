@@ -1,8 +1,8 @@
 /**
- * The plans Flöda is sold on, billed and sized by the fortnight.
+ * The plans Snaben is sold on, billed and sized by the fortnight.
  *
  * One place for the landing page, the Clients page and the installed copy to agree on: the price
- * a fortnight, what a fortnight on the plan is meant to hold, and how much reading through Flöda
+ * a fortnight, what a fortnight on the plan is meant to hold, and how much reading through Snaben
  * it carries. The invoice and product counts are what a plan is sized for and what the Clients
  * page shows against; nothing stops a shop that goes past them mid-season. The reading allowance
  * is the only hard stop, and it is the vendor's to raise. The Starter plan has no invoice count at
@@ -16,7 +16,7 @@ export const PERIOD = "fortnight";
 export const PERIOD_DAYS = 14;
 
 /**
- * What reading one product costs through Flöda, in cents: the invoice line read, the product
+ * What reading one product costs through Snaben, in cents: the invoice line read, the product
  * matched and priced, its page fetched and read for the description and pictures. A rough,
  * deliberately high figure from the relay's rates, so the invoices an allowance is said to buy
  * are fewer than it will really stretch to.
@@ -39,7 +39,7 @@ export interface Plan {
   price: number;
   /** How often it is billed and what it is sized by. The own-key plan is the one monthly plan. */
   period: "month" | "fortnight";
-  /** Whether reading documents comes through Flöda's relay, capped, or the shop's own Anthropic key. */
+  /** Whether reading documents comes through Snaben's relay, capped, or the shop's own Anthropic key. */
   reading: "included" | "own-key";
   /** Invoices a fortnight the plan is sized for; null is no count. */
   invoices: number | null;
@@ -47,7 +47,7 @@ export interface Plan {
   products: number | null;
   /** Who may use it, in words. */
   people: string;
-  /** Reading through Flöda a fortnight, in cents. 0 on a plan that reads with the shop's own key. */
+  /** Reading through Snaben a fortnight, in cents. 0 on a plan that reads with the shop's own key. */
   readingCapCents: number;
   /** One line under the name. */
   blurb: string;
@@ -62,7 +62,7 @@ export const PLANS: readonly Plan[] = [
   { id: "unlimited", name: "Unlimited", price: 299, period: "fortnight", reading: "included", invoices: null, products: null, people: "Everyone on staff", readingCapCents: 15000, blurb: "A big catalogue, many suppliers, no counting." },
 ];
 
-/** The plans with reading through Flöda: what the calculator picks between. */
+/** The plans with reading through Snaben: what the calculator picks between. */
 export const INCLUDED_PLANS: readonly Plan[] = PLANS.filter((p) => p.reading === "included");
 
 /** "a month" or "a fortnight", for after a price. */

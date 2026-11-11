@@ -42,8 +42,8 @@ function keepCurrent({ log, window }) {
     told = info.version;
     const ask = dialog.showMessageBox(window() ?? undefined, {
       type: "info",
-      title: "A newer Flöda",
-      message: `Flöda ${info.version} is out. This copy is ${app.getVersion()}.`,
+      title: "A newer Snaben",
+      message: `Snaben ${info.version} is out. This copy is ${app.getVersion()}.`,
       detail: "Download the new version and install it over this one; your data stays where it is.",
       buttons: ["Download", "Later"],
       defaultId: 0,
@@ -58,9 +58,9 @@ function keepCurrent({ log, window }) {
     told = info.version;
     const ask = dialog.showMessageBox(window() ?? undefined, {
       type: "info",
-      title: "Flöda is ready to update",
-      message: `Flöda ${info.version} has been downloaded.`,
-      detail: "Restart now to use it, or later and it is installed the next time Flöda is closed. Your data stays where it is.",
+      title: "Snaben is ready to update",
+      message: `Snaben ${info.version} has been downloaded.`,
+      detail: "Restart now to use it, or later and it is installed the next time Snaben is closed. Your data stays where it is.",
       buttons: ["Restart now", "Later"],
       defaultId: 0,
       cancelId: 1,

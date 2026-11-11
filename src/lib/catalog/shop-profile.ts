@@ -1,5 +1,5 @@
 /**
- * The shop this install belongs to: who it is, what it sells, and what Flöda has learned about it.
+ * The shop this install belongs to: who it is, what it sells, and what Snaben has learned about it.
  *
  * Everything about one shop that used to be written into the code lives here as data in the
  * `AppSetting` table, under three keys:
@@ -12,7 +12,7 @@
  * `ensureConventions()` loads the three and puts them in force for the process: the vocabulary in
  * `taxonomy.ts`, the key in `anthropic.ts`, the retailer's description for the prompts here. It is
  * called from `requireUser`, which every page, action and route goes through, and is cheap after
- * the first call. Flöda runs one shop per install, so process-wide state is the right scope.
+ * the first call. Snaben runs one shop per install, so process-wide state is the right scope.
  */
 
 import { planOf } from "./plans";
@@ -132,9 +132,9 @@ async function load(): Promise<void> {
   activateConventions({ pack: profile.pack, learned, marker: profile.marker, house, website });
   activateCorrections(corrections);
   setStoredApiKey(key);
-  // A copy in good standing with its vendor reads through Flöda when it has no key of its own.
+  // A copy in good standing with its vendor reads through Snaben when it has no key of its own.
   const standing = licenceState(parseJson<Licence | null>(licenceRow?.value, null));
-  // A copy in good standing with its vendor reads through Flöda when it has no key of its own,
+  // A copy in good standing with its vendor reads through Snaben when it has no key of its own,
   // unless its plan is the one that reads with the shop's own key.
   setRelay(standing.kind === "ok" && planOf(standing.licence.plan).reading === "included" ? { server: licenceServer(), key: standing.licence.key } : null);
   // And sends its pictures to the vendor's store on any plan, since its own address is no use to Shopify.

@@ -112,6 +112,6 @@ describe("reaching the vendor", () => {
     expect(asked[0]).toBe("https://fl-da.vercel.app");
     await expect(reachVendor(["https://floda.ai"], async () => { throw notFound; })).rejects.toThrow(/floda.ai: the address does not exist.*Settings → Licence/);
     // The vendor's own refusal is not a reach failure and is not passed over.
-    await expect(reachVendor(["https://floda.ai", "https://fl-da.vercel.app"], async () => { throw new Error("Flöda answered 403 without a verdict"); })).rejects.toThrow("403");
+    await expect(reachVendor(["https://floda.ai", "https://fl-da.vercel.app"], async () => { throw new Error("Snaben answered 403 without a verdict"); })).rejects.toThrow("403");
   });
 });

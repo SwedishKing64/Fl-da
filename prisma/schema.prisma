@@ -347,7 +347,7 @@ model TagProposal {
   decidedAt DateTime?
 }
 
-/// A supplier's file layout as shops have taught it, kept on Flöda's own deployment for every
+/// A supplier's file layout as shops have taught it, kept on Snaben's own deployment for every
 /// shop to start from: the file's headings and which field each one is. Never a value from a file,
 /// never a price, never which supplier or shop it came from. `variants` is JSON [{ mappings, contributors: [clientId] }]: shops that read the
 /// same headings differently each keep their reading, and the one most shops agree on is offered.
@@ -537,10 +537,10 @@ model ShopListing {
 }
 
 // ---------------------------------------------------------------------------
-// Clients of Flöda itself (only on the vendor's own deployment; see licence.ts)
+// Clients of Snaben itself (only on the vendor's own deployment; see licence.ts)
 // ---------------------------------------------------------------------------
 
-/// A retailer Flöda is sold to: who they are, what they are on, and the key their copy runs under.
+/// A retailer Snaben is sold to: who they are, what they are on, and the key their copy runs under.
 model Client {
   id          String    @id @default(cuid())
   name        String
@@ -556,7 +556,7 @@ model Client {
   lastVersion String    @default("")
   lastInstall String    @default("") // the install's own id, so two copies on one key show up
   checkIns    Int       @default(0)
-  /// Reading through Flöda's relay this month: the month, what it used, and the month's allowance in cents (0 = none).
+  /// Reading through Snaben's relay this month: the month, what it used, and the month's allowance in cents (0 = none).
   aiMonth      String    @default("")
   aiInput      Int       @default(0)
   aiCacheWrite Int       @default(0)

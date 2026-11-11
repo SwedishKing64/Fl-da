@@ -1,5 +1,5 @@
 /**
- * The rulebook: everything Flöda does to a listing, in the order it does it, as sentences a shop
+ * The rulebook: everything Snaben does to a listing, in the order it does it, as sentences a shop
  * can read.
  *
  * The rules a shop sets live in six stores — the house conventions, the tag rules, the templates,
@@ -42,7 +42,7 @@ export interface RuleEntry {
   /** The rule in plain words. */
   sentence: string;
   source: RuleSource;
-  /** Where to change it. Empty for a rule that is Flöda's own and not the shop's to change. */
+  /** Where to change it. Empty for a rule that is Snaben's own and not the shop's to change. */
   editHref: string;
   /** A tag rule's row, so the page can switch it off, delete it or try it on a batch. */
   tagRuleId?: string;
@@ -104,7 +104,7 @@ export interface RulebookStage {
 const HOUSE = "/training#house";
 const SOURCE_WORDS: Record<RuleSource, string> = {
   house: "how you list", kind: "a product type", tag: "tag rule", template: "template", pricing: "pricing rule", layout: "supplier layout",
-  supplier: "supplier", website: "your website", export: "your export", setting: "setting", floda: "Flöda",
+  supplier: "supplier", website: "your website", export: "your export", setting: "setting", floda: "Snaben",
 };
 
 /** The source of a rule in a word or two, for a badge. */
@@ -306,13 +306,13 @@ function exporting(): RuleEntry[] {
   ];
 }
 
-/** The whole rulebook, by stage, from what the shop has set and what Flöda does on its own. */
+/** The whole rulebook, by stage, from what the shop has set and what Snaben does on its own. */
 export function buildRulebook(input: RulebookInput): RulebookStage[] {
   const all = [...reading(input), ...naming(input.house), ...filing(input), ...pricing(input), ...copy(input), ...pictures(input), ...checks(input), ...exporting()];
   return STAGES.map((s) => ({ ...s, rules: all.filter((r) => r.stage === s.key) }));
 }
 
-/** How many rules the shop set itself, against the ones that are Flöda's own. */
+/** How many rules the shop set itself, against the ones that are Snaben's own. */
 export function countRules(stages: RulebookStage[]): { shop: number; floda: number } {
   let shop = 0;
   let floda = 0;

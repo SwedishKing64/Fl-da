@@ -124,7 +124,7 @@ export function HouseForm({ house: initial, tagRules: initialRules, kinds, next,
 
       <section className="space-y-4">
         <h3 className="text-[15px] font-bold">Prices</h3>
-        <Choice<string> label="How a retail price ends, where Flöda works it out from cost" value={ending} onChange={setEnding} options={ENDINGS} />
+        <Choice<string> label="How a retail price ends, where Snaben works it out from cost" value={ending} onChange={setEnding} options={ENDINGS} />
       </section>
 
       <section className="space-y-4">
@@ -185,7 +185,7 @@ export function HouseForm({ house: initial, tagRules: initialRules, kinds, next,
 
       <section className="space-y-3">
         <h3 className="text-[15px] font-bold">Extra tags by brand, product type or title</h3>
-        <p className="text-[13.5px] text-[var(--ink-soft)]">Flöda already copies the tags your existing listings use. Add a rule here only for a tag your listings don&rsquo;t show, for example: every product whose brand is Burton gets the tag <em>burton</em>.</p>
+        <p className="text-[13.5px] text-[var(--ink-soft)]">Snaben already copies the tags your existing listings use. Add a rule here only for a tag your listings don&rsquo;t show, for example: every product whose brand is Burton gets the tag <em>burton</em>.</p>
         <div className="space-y-2">
           {rules.map((r, i) => (
             <div key={i} className="flex flex-wrap items-center gap-2 rounded-[12px] border border-[var(--line)] bg-white p-3 text-[13.5px]">
@@ -205,7 +205,7 @@ export function HouseForm({ house: initial, tagRules: initialRules, kinds, next,
 
       <section className="space-y-4">
         <h3 className="text-[15px] font-bold">Descriptions</h3>
-        <p className="text-[13.5px] text-[var(--ink-soft)]">A brand page or a spec sheet gives the manufacturer&rsquo;s words and a list of details. Say how a description should be laid out and written here, and every description Flöda takes from a page or writes itself comes out that way. It never adds a fact that was not given.</p>
+        <p className="text-[13.5px] text-[var(--ink-soft)]">A brand page or a spec sheet gives the manufacturer&rsquo;s words and a list of details. Say how a description should be laid out and written here, and every description Snaben takes from a page or writes itself comes out that way. It never adds a fact that was not given.</p>
         <Field label="How a description should read" hint="What comes first, how long, what to leave out, what never to say.">
           <textarea className={cx(INPUT, "min-h-[96px]")} value={house.descriptions.format} onChange={(e) => set("descriptions", { format: e.target.value })} placeholder={"Two short paragraphs: who it is for, then what makes it different. Then the details as a list. Plain English, no exclamation marks, never mention the price."} />
         </Field>
@@ -250,7 +250,7 @@ export function HouseStep({ house, tagRules, kinds, priceEnding }: { house: Hous
   return (
     <Card title="How you list">
       <p className="mb-5 text-[14px] text-[var(--ink-soft)]">
-        Your export shows Flöda what you sell and how it is filed. It cannot show the choices a person makes on every listing — whether the brand goes in the title, what the SKU is, what you write for weight. Say them once here, and every listing Flöda builds follows them. All of it can be changed later in Settings.
+        Your export shows Snaben what you sell and how it is filed. It cannot show the choices a person makes on every listing — whether the brand goes in the title, what the SKU is, what you write for weight. Say them once here, and every listing Snaben builds follows them. All of it can be changed later in Settings.
       </p>
       <HouseForm house={house} tagRules={tagRules} kinds={kinds} next="/setup?step=menu" priceEnding={priceEnding} />
       <div className="mt-5 flex items-center justify-between border-t border-[var(--line-soft)] pt-4 text-[13px] text-[var(--ink-soft)]">

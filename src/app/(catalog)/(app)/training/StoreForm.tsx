@@ -65,7 +65,7 @@ export function StoreForm({ state, canInstall = false }: { state: StoreState; ca
   return (
     <div className="space-y-4 text-[14px]">
       <p className="text-[var(--ink-soft)]">
-        Connect the store once and Flöda reads it instead of being told: which product types it has, which tags go with each, how each brand is listed, and every listing an order line can be placed on. It reads the store again before a batch when the last read is a day old, so a product added in the store last week is known to this week&rsquo;s batch. The connection reads, and on the export page pushes drafts; it never changes a listing on its own.
+        Connect the store once and Snaben reads it instead of being told: which product types it has, which tags go with each, how each brand is listed, and every listing an order line can be placed on. It reads the store again before a batch when the last read is a day old, so a product added in the store last week is known to this week&rsquo;s batch. The connection reads, and on the export page pushes drafts; it never changes a listing on its own.
       </p>
 
       {state.configured && !editing && (
@@ -89,7 +89,7 @@ export function StoreForm({ state, canInstall = false }: { state: StoreState; ca
       )}
 
       {editing && canInstall && (
-        // Flöda's Shopify app: the owner approves it on their own admin, and comes back here.
+        // Snaben's Shopify app: the owner approves it on their own admin, and comes back here.
         <form action="/api/shopify/install" method="get" className="flex flex-wrap items-end gap-3">
           <input type="hidden" name="next" value="/training#store" />
           <Field label="Your store" hint="The name before .myshopify.com, as your Shopify admin shows it.">

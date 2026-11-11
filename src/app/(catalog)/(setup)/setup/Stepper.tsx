@@ -6,7 +6,7 @@ export type SetupStep = "account" | "plan" | "store" | "shop" | "learn" | "house
  */
 export const STEPS: Array<{ key: SetupStep; label: string }> = [
   { key: "account", label: "Your account" },
-  { key: "plan", label: "Your Flöda account" },
+  { key: "plan", label: "Your Snaben account" },
   { key: "store", label: "Your store" },
   { key: "shop", label: "What you sell" },
   { key: "learn", label: "What we found" },

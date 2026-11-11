@@ -1,7 +1,7 @@
 /**
  * Shared supplier layouts, kept and asked for. See shared-layouts.ts for what is shared and why.
  *
- * On Flöda's own deployment the layouts are kept in its database (`recordLayout`, `lookupLayout`).
+ * On Snaben's own deployment the layouts are kept in its database (`recordLayout`, `lookupLayout`).
  * A shop's copy reaches them through the licence route with its licence key: it offers a layout a
  * person confirmed (`contributeLayout`) and asks for one when a file arrives in a layout it has
  * never seen (`findSharedLayout`). Neither ever holds up a batch: a vendor that cannot be reached
@@ -15,7 +15,7 @@ import { licenceServer, reachVendor, vendorMode } from "./licence";
 import { getSettings } from "./settings";
 import { addReading, bestReading, shareable, shareableHeaders, type LayoutVariant, type SharedLayoutAnswer } from "./shared-layouts";
 
-/** On Flöda's deployment: one shop's confirmed reading of a layout, kept beside the others'. */
+/** On Snaben's deployment: one shop's confirmed reading of a layout, kept beside the others'. */
 export async function recordLayout(input: { headers: string[]; mappings: Mapping }, client: string): Promise<boolean> {
   const safe = shareable(input.headers, input.mappings);
   if (!safe) return false;
@@ -30,7 +30,7 @@ export async function recordLayout(input: { headers: string[]; mappings: Mapping
   return true;
 }
 
-/** On Flöda's deployment: the reading most other shops agree on for these headings, if any. */
+/** On Snaben's deployment: the reading most other shops agree on for these headings, if any. */
 export async function lookupLayout(hash: string, client: string): Promise<SharedLayoutAnswer | null> {
   const row = await prisma.sharedLayout.findUnique({ where: { headerHash: hash } });
   if (!row) return null;

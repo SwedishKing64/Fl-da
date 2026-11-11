@@ -1,10 +1,10 @@
 /**
- * What Flöda believes about a shop, by the seven things a shop teaches it: how products are filed
+ * What Snaben believes about a shop, by the seven things a shop teaches it: how products are filed
  * and tagged, how titles read, how descriptions are written, how variants are made, how prices are
  * set, how SEO titles read, and how each supplier's paperwork reads.
  *
  * Every belief is one sentence, marked by where it came from — the shop's export, its website, the
- * shop itself, a supplier's paperwork, or Flöda's own way — and, where the shop may change it, with
+ * shop itself, a supplier's paperwork, or Snaben's own way — and, where the shop may change it, with
  * what editing it means (`Edit`), so the page can change it in place rather than send the person
  * to a form elsewhere. Pure: the page loads the stores and hands them in, as rulebook.ts does; the
  * sentences themselves are shared with it.
@@ -80,7 +80,7 @@ export interface TeachingInput {
   packages?: PackageTeaching | null;
 }
 
-export const SOURCE_LABELS: Record<Source, string> = { export: "from your export", website: "from your website", you: "you set this", floda: "Flöda's own", supplier: "from paperwork" };
+export const SOURCE_LABELS: Record<Source, string> = { export: "from your export", website: "from your website", you: "you set this", floda: "Snaben's own", supplier: "from paperwork" };
 
 const quote = (s: string) => `"${s}"`;
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
@@ -107,7 +107,7 @@ function filing(input: TeachingInput): Belief[] {
     out.push({ id: "types.none", source: "floda", sentence: "No product types yet. Read your website or your catalogue export, and every listing's Type is picked from that list.", edit: { kind: "link", href: "#export", label: "Read an export" } });
   }
   if (learned?.sections.length) out.push({ id: "learned.sections", source: "export", sentence: `Menu tags that run across types: ${andList(learned.sections)}. A product gets its type's menu tag as well as its own.` });
-  if (learned?.optionTags?.length) out.push({ id: "learned.optionTags", source: "export", sentence: `Your tags carry each product's variants, ${describeOptionTags(learned.optionTags)}. Flöda writes those from the variants of every new product; nobody adds them by hand.` });
+  if (learned?.optionTags?.length) out.push({ id: "learned.optionTags", source: "export", sentence: `Your tags carry each product's variants, ${describeOptionTags(learned.optionTags)}. Snaben writes those from the variants of every new product; nobody adds them by hand.` });
   for (const k of house.kinds) {
     const name = k.calledAs || k.type;
     if (k.calledAs && k.calledAs !== k.type) out.push({ id: `kind.calledAs.${k.type}`, source: "export", sentence: `What your export calls ${quote(k.type)} is filed as ${quote(k.calledAs)}.`, edit: { kind: "kind", type: k.type, field: "calledAs", value: k.calledAs, label: `${k.type} is filed as` } });
@@ -256,7 +256,7 @@ export function buildAreas(input: TeachingInput): Area[] {
   return AREAS.map((a) => ({ ...a, beliefs: by[a.key] }));
 }
 
-/** How many beliefs came from the shop or its files, against Flöda's own. */
+/** How many beliefs came from the shop or its files, against Snaben's own. */
 export function countBeliefs(areas: Area[]): { taught: number; floda: number } {
   let taught = 0;
   let floda = 0;

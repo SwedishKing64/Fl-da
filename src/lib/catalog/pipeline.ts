@@ -204,11 +204,11 @@ export async function extractStoredFile(fileId: string, origin?: string): Promis
   const record = await prisma.sourceFile.findUniqueOrThrow({ where: { id: fileId }, include: { batch: { select: { name: true } } } });
   const buffer = await readFile(record.storagePath);
   const read = () => ingestFile(record.batchId, { filename: record.filename, mimeType: record.mimeType, buffer, kind: record.kind as UploadKind, origin, existingFileId: record.id });
-  // A supplier's example read during setup or on Teach Flöda is training, not work: it is not counted against the shop's plan.
+  // A supplier's example read during setup or on Teach Snaben is training, not work: it is not counted against the shop's plan.
   return isTrainingBatch(record.batch.name) ? asTraining(read) : read();
 }
 
-/** The batches setup and Teach Flöda make to read one example of a supplier's paperwork. */
+/** The batches setup and Teach Snaben make to read one example of a supplier's paperwork. */
 export function isTrainingBatch(name: string): boolean {
   return /^Setup: /.test(name);
 }
@@ -431,7 +431,7 @@ export async function autoApplyMappings(batchId: string, userId: string | null):
   // once, on the mapping screen, and the new layout is remembered beside the old.
   const usable = groups.filter((g) => !g.drift && mappingProblems(g.suggestion).length === 0);
   // A layout the headings could not place is put to the model before it is put to a person: the
-  // headings and a few rows, against the fields Flöda writes. Its answer fills the gaps the
+  // headings and a few rows, against the fields Snaben writes. Its answer fills the gaps the
   // heuristics left; where that settles the product's name, the layout builds like any other.
   const stuck = groups.filter((g) => !usable.includes(g) && !g.drift && !g.isCanonical);
   const mapped = new Map<string, Mapping>();

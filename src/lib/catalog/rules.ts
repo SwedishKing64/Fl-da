@@ -133,8 +133,8 @@ function safeParse(s: string): Record<string, string> {
 }
 
 /**
- * Rules every new copy starts with: none. Flöda used to seed a ski shop's own rules (gender tags,
- * terrain, a list of binding models) into every install; a shop now writes its own on Teach Flöda,
+ * Rules every new copy starts with: none. Snaben used to seed a ski shop's own rules (gender tags,
+ * terrain, a list of binding models) into every install; a shop now writes its own on Teach Snaben,
  * and the ones an older install was seeded with stay as the shop's to keep or delete.
  */
 export const DEFAULT_TAG_RULES: Array<Omit<TagRuleLike, "id">> = [];

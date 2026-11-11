@@ -1,7 +1,7 @@
 /**
  * Simulated shops: a trade, a shop in it with the products it already lists, and the suppliers it
  * buys from, each with a range to order from. Everything is made up and made the same way every
- * time from a seed, so Flöda can be run against many shops it has never seen without a single real
+ * time from a seed, so Snaben can be run against many shops it has never seen without a single real
  * invoice — and a change can be scored on the same shops before and after.
  *
  * What a world gives is the truth the documents are then rendered from (sim/documents.ts): every

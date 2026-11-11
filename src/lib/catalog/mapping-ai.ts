@@ -4,9 +4,9 @@
  * Most supplier spreadsheets are matched by their headings and a look at the values
  * (`suggestMapping`), and a layout seen before is remembered. The rest used to stop at a
  * mapping screen for a person to sort out. Now, where a key column (the product's name) could
- * not be placed, the headings and a few rows go to the light model with the list of fields Flöda
+ * not be placed, the headings and a few rows go to the light model with the list of fields Snaben
  * writes, and its answer fills the gaps the heuristics left. It never overrides a column the
- * heuristics placed, and a field it names that Flöda does not have is dropped. Nothing is
+ * heuristics placed, and a field it names that Snaben does not have is dropped. Nothing is
  * remembered from it until a person confirms a build, as with any automatic mapping.
  */
 
@@ -19,7 +19,7 @@ import type { CanonicalFieldDef } from "./types";
 const Answer = z.object({
   columns: z.array(z.object({
     header: z.string().describe("A column heading, exactly as given."),
-    field: z.string().describe("The field it holds, by key from the list, or an empty string for a column Flöda has no use for."),
+    field: z.string().describe("The field it holds, by key from the list, or an empty string for a column Snaben has no use for."),
   })),
 });
 

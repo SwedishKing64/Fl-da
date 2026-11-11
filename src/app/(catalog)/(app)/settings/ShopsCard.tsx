@@ -8,7 +8,7 @@ import type { ShopList } from "@/lib/catalog/shops";
 /**
  * The shops kept on this computer. Each is a database and files folder of its own — its own staff,
  * settings, suppliers, learning and batches — so nothing one shop does is seen by another. Opening
- * another shop restarts Flöda on it and shows that shop's sign-in. The Shop menu does the same.
+ * another shop restarts Snaben on it and shows that shop's sign-in. The Shop menu does the same.
  */
 export function ShopsCard({ list, running }: { list: ShopList; running: string }) {
   const [name, setName] = useState("");
@@ -33,7 +33,7 @@ export function ShopsCard({ list, running }: { list: ShopList; running: string }
   return (
     <div className="space-y-4 text-sm">
       <p className="text-[13px] text-[var(--ink-soft)]">
-        Each shop keeps its own staff, settings, suppliers, what Flöda has learned and its batches. Nothing crosses between them. Opening another shop restarts Flöda on it, which takes a few seconds, and you sign in to that shop. The Shop menu at the top of the window does the same.
+        Each shop keeps its own staff, settings, suppliers, what Snaben has learned and its batches. Nothing crosses between them. Opening another shop restarts Snaben on it, which takes a few seconds, and you sign in to that shop. The Shop menu at the top of the window does the same.
       </p>
       <ul className="divide-y divide-[var(--line-soft)] rounded-xl border border-[var(--line)]">
         {list.shops.map((s) => (

@@ -4,7 +4,7 @@
  * A ski is packaged with the bindings somebody picks for it, from this list. Each is a Binding
  * Option on the package, priced at the ski's recommended retail plus the binding's, and costed at
  * the ski's cost plus the binding's wholesale. The list is the shop's own, typed in or loaded from
- * a sheet on Settings; a new copy of Flöda has none.
+ * a sheet on Settings; a new copy of Snaben has none.
  */
 
 import type { BindingChoice } from "./packages";

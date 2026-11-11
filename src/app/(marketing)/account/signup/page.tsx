@@ -8,7 +8,7 @@ import { SignUpForm } from "../AccountForms";
 import "../../welcome/welcome.css";
 import "../account.css";
 
-export const metadata: Metadata = { title: "Make a Flöda account", description: "Your account starts the trial and is what you sign in to Flöda with." };
+export const metadata: Metadata = { title: "Make a Snaben account", description: "Your account starts the trial and is what you sign in to Snaben with." };
 export const dynamic = "force-dynamic";
 
 export default async function SignUpPage({ searchParams }: { searchParams: Promise<{ plan?: string }> }) {
@@ -18,7 +18,7 @@ export default async function SignUpPage({ searchParams }: { searchParams: Promi
     <Site>
       <section className="band page-head">
         <div className="wrap">
-          <Reveal className="head"><span className="eyebrow">Your account</span><h1>Make your account.</h1><p className="lede">It starts your {TRIAL_DAYS}-day trial, makes your licence key, and is what you sign in to Flöda with on your own computer. No card until you choose a plan.</p></Reveal>
+          <Reveal className="head"><span className="eyebrow">Your account</span><h1>Make your account.</h1><p className="lede">It starts your {TRIAL_DAYS}-day trial, makes your licence key, and is what you sign in to Snaben with on your own computer. No card until you choose a plan.</p></Reveal>
         </div>
       </section>
       <section className="band grey">

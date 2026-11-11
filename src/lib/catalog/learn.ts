@@ -3,7 +3,7 @@
  *
  * A new shop starts blank. What it sells, what it calls each kind of product, which menu tags go
  * with each kind and how each shelf tag is spelled are all in the export it already has, so that is
- * where Flöda learns them. This is the pure half: listings in, a `LearnedVocabulary` out. The
+ * where Snaben learns them. This is the pure half: listings in, a `LearnedVocabulary` out. The
  * templates (per brand and kind) are learned separately by `templates.ts`; the listings themselves
  * are remembered by `shop-memory-store.ts`.
  *

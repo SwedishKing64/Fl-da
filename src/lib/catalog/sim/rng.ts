@@ -1,6 +1,6 @@
 /**
  * A seeded random number generator, so a simulated shop is the same shop every run: a score that
- * changes between runs is then a change in Flöda, never a different roll of the dice.
+ * changes between runs is then a change in Snaben, never a different roll of the dice.
  */
 export class Rng {
   private state: number;

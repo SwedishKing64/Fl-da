@@ -22,7 +22,7 @@ export function ApiKeyForm({ source, tail, next }: { source: KeySource; tail: st
   return (
     <ActionForm action={action} state={state} className="space-y-3">
       {source === "settings" && <Alert tone="success">A key ending {tail} is kept. Paste another to replace it, or save empty to remove it.</Alert>}
-      {source === "floda" && <Alert tone="success">Reading is included in your Flöda plan, so there is nothing to set up. Reading done while teaching Flöda, in setup and on Teach Flöda, is not counted against it. Paste a key of your own only if you would rather reading was billed to your own Anthropic account.</Alert>}
+      {source === "floda" && <Alert tone="success">Reading is included in your Snaben plan, so there is nothing to set up. Reading done while teaching Snaben, in setup and on Teach Snaben, is not counted against it. Paste a key of your own only if you would rather reading was billed to your own Anthropic account.</Alert>}
       <Field label="Anthropic API key" hint="From console.anthropic.com → API keys. It is kept in this copy's own database and sent nowhere but to Anthropic.">
         <input name="key" type="password" className={INPUT} placeholder="sk-ant-…" autoComplete="off" />
       </Field>

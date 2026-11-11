@@ -25,7 +25,7 @@ type Outcome = { file: string; lines: string[]; templates: number; remembered: n
 const fmtSize = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`);
 
 /**
- * Teach Flöda the shop from its own Shopify export, one file at a time: a shop exports a
+ * Teach Snaben the shop from its own Shopify export, one file at a time: a shop exports a
  * category at a time, and each file is read here in the browser (they can be tens of megabytes)
  * with three small things going to the server: the vocabulary, the templates per brand and kind,
  * and the listings in chunks, each joined to what earlier files taught. Then the kinds the file
@@ -152,7 +152,7 @@ export function LearnPanel({ learned: before, kinds: saved = [], next, onDone, s
         </>
       )}
       {!outcome && saved.length > 0 && (
-        <KindsEditor kinds={saved} title="The product types you have told Flöda about" blurb="From the exports read so far. Change what is wrong; the next export's kinds join this list." />
+        <KindsEditor kinds={saved} title="The product types you have told Snaben about" blurb="From the exports read so far. Change what is wrong; the next export's kinds join this list." />
       )}
     </div>
   );
@@ -162,13 +162,13 @@ export function LearnStep({ learned, kinds }: { learned: LearnedVocabulary | nul
   const [pending, start] = useTransition();
   const router = useRouter();
   return (
-    <Card title="Teach Flöda your catalogue">
+    <Card title="Teach Snaben your catalogue">
       <p className="mb-4 text-[14px] text-[var(--ink-soft)]">
-        Flöda learns how your shop files and tags products from the products you already sell, one export at a time: which product types you have, which tags go with each, how each shelf tag is spelled, and the conventions each brand follows. After each file, say what each kind is called, the tags every one gets, and how its titles read. New listings are then built to match.
+        Snaben learns how your shop files and tags products from the products you already sell, one export at a time: which product types you have, which tags go with each, how each shelf tag is spelled, and the conventions each brand follows. After each file, say what each kind is called, the tags every one gets, and how its titles read. New listings are then built to match.
       </p>
       <LearnPanel learned={learned} kinds={kinds} next="/setup?step=house" />
       <div className="mt-5 flex items-center justify-between border-t border-[var(--line-soft)] pt-4 text-[13px] text-[var(--ink-soft)]">
-        <span>No export to hand? Flöda works without one; it just has less to go on.</span>
+        <span>No export to hand? Snaben works without one; it just has less to go on.</span>
         <Button size="sm" variant="ghost" disabled={pending} onClick={() => start(async () => { await skipSetupStepAction("learn"); router.push("/setup?step=house"); })}>Skip for now</Button>
       </div>
     </Card>

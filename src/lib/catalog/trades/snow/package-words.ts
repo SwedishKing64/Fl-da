@@ -1,5 +1,5 @@
 /**
- * What Teach Flöda says about ski packages: the bindings the shop offers and its terms, in
+ * What Teach Snaben says about ski packages: the bindings the shop offers and its terms, in
  * sentences. Here rather than in teaching.ts so the snow trade's words stay in its pack. Pure:
  * the page reads the list (binding-store.ts `packagesForTeaching`) and hands it in.
  */

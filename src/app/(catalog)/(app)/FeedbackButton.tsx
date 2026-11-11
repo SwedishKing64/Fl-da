@@ -2,11 +2,11 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { usePathname } from "next/navigation";
-import { sendNoteToFlodaAction } from "@/app/(catalog)/actions";
+import { sendNoteToSnabenAction } from "@/app/(catalog)/actions";
 import { Button, INPUT, cx } from "@/app/(catalog)/ui";
 
 /**
- * A word to the people who make Flöda, from any page. It goes to the vendor with the shop's name,
+ * A word to the people who make Snaben, from any page. It goes to the vendor with the shop's name,
  * the page it was written on and the version, so a report arrives with its context on it.
  */
 export function FeedbackButton() {
@@ -29,7 +29,7 @@ export function FeedbackButton() {
 
   const send = () => start(async () => {
     setError("");
-    const r = await sendNoteToFlodaAction({ message, email, page: pathname });
+    const r = await sendNoteToSnabenAction({ message, email, page: pathname });
     if (!r.ok) { setError(r.error ?? "It could not be sent."); return; }
     setSent(r.message ?? "Sent. Thank you.");
     setMessage("");

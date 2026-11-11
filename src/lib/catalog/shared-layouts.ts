@@ -1,10 +1,10 @@
 /**
  * A supplier's file layout, shared between shops: the second shop to buy from a supplier does not
- * teach Flöda its columns again.
+ * teach Snaben its columns again.
  *
  * What is shared is the structure and nothing else: the file's column headings, and which field each
  * one was mapped to by a shop that confirmed it. Never a value from a file, never a price, never which
- * shop it came from. The layouts are kept on Flöda's own deployment, which copies already talk to
+ * shop it came from. The layouts are kept on Snaben's own deployment, which copies already talk to
  * with their licence key; a shop can stop sharing in Settings and still receive.
  */
 
@@ -13,7 +13,7 @@ import type { Mapping } from "./mapping";
 
 export interface LayoutVariant {
   mappings: Mapping;
-  /** The clients that taught it, by id; kept only on Flöda's deployment, never sent to a copy. */
+  /** The clients that taught it, by id; kept only on Snaben's deployment, never sent to a copy. */
   contributors: string[];
 }
 
@@ -33,7 +33,7 @@ export function shareableHeaders(headers: string[]): string[] {
 }
 
 /**
- * Only what may leave a shop: headings no longer than a heading is, each mapped to a field Flöda
+ * Only what may leave a shop: headings no longer than a heading is, each mapped to a field Snaben
  * knows or to nothing. A heading that holds a value — a long cell, a number that could be a price —
  * is dropped rather than shared.
  */

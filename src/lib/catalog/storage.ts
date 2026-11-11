@@ -10,7 +10,7 @@
 //    served by /api/catalog/files/<path>; set `publicBaseUrl` in Settings (or APP_PUBLIC_URL)
 //    so uploaded images get public HTTPS URLs for the Shopify CSV.
 //  - Pictures only: a licensed copy with neither (a desktop copy, whose own address is
-//    127.0.0.1 and no use to Shopify) sends each picture to its vendor, which keeps it in Flöda's
+//    127.0.0.1 and no use to Shopify) sends each picture to its vendor, which keeps it in Snaben's
 //    own Blob store and answers with the public address. See `setPictureHost`.
 //  - Pictures, before the vendor: a copy whose shop has connected its Shopify store keeps them in
 //    the shop's own Shopify Files (shopify-files.ts), which Shopify can always fetch. See
@@ -80,7 +80,7 @@ async function publishPicture(filename: string, data: Buffer): Promise<string> {
     signal: AbortSignal.timeout(PUBLISH_MS),
   });
   const answer = (await res.json().catch(() => null)) as { ok?: boolean; url?: string; why?: string } | null;
-  if (!res.ok || !answer?.ok || !answer.url) throw new Error(answer?.why || `Flöda answered ${res.status} without keeping the picture`);
+  if (!res.ok || !answer?.ok || !answer.url) throw new Error(answer?.why || `Snaben answered ${res.status} without keeping the picture`);
   return answer.url;
 }
 

@@ -2,8 +2,8 @@
  * One place that knows how to reach the reading service.
  *
  * The key comes from the host (`ANTHROPIC_API_KEY`, or `ANTHROPIC_AUTH_TOKEN` for a gateway) or,
- * when the host sets none, from the one the shop pasted into Settings — an installed copy of Flöda
- * has no host to set a variable on. A copy on a plan with neither reads through Flöda: the SDK is
+ * when the host sets none, from the one the shop pasted into Settings — an installed copy of Snaben
+ * has no host to set a variable on. A copy on a plan with neither reads through Snaben: the SDK is
  * pointed at the vendor's relay (`/api/ai`) with the licence key as its bearer token, and the
  * vendor forwards with a key of its own. `shop-profile.ts` hands the stored key and the licence in
  * once per request; nothing here reads the database, so the pure modules and their tests can
@@ -58,7 +58,7 @@ export function setStoredApiKey(key: string): void {
   storedKey = key.trim();
 }
 
-/** Where the copy reads through Flöda when it has no key of its own: the vendor and the licence key. Null when it may not. */
+/** Where the copy reads through Snaben when it has no key of its own: the vendor and the licence key. Null when it may not. */
 export function setRelay(next: { server: string; key: string } | null): void {
   relay = next && next.server && next.key ? { server: next.server.replace(/\/+$/, ""), key: next.key } : null;
 }
@@ -85,7 +85,7 @@ export function aiAvailable(): boolean {
   return apiKeySource() !== "none";
 }
 
-/** Told after each reading through Flöda, so the allowance bar asks again rather than trusting a stale count. */
+/** Told after each reading through Snaben, so the allowance bar asks again rather than trusting a stale count. */
 let afterRelayCall: (() => void) | null = null;
 export function onRelayCall(fn: (() => void) | null): void {
   afterRelayCall = fn;
@@ -93,7 +93,7 @@ export function onRelayCall(fn: (() => void) | null): void {
 
 /** A client for the key in force. `maxRetries` is per caller: a season's sheet needs more patience than a colour check. */
 /**
- * Reading done to teach Flöda — a supplier's example in setup, the shape of the shop's
+ * Reading done to teach Snaben — a supplier's example in setup, the shape of the shop's
  * descriptions — is not work, and is not counted against the shop's plan. Code that reads for
  * that reason runs inside `asTraining` (training-mark.ts); every call to the relay from inside it carries the mark,
  * and the relay meters nothing for it. On a shop's own key the mark changes nothing.
@@ -110,12 +110,12 @@ export function isTrainingRead(): boolean {
 
 export function anthropicClient(maxRetries: number): Anthropic {
   const key = hostKey() || storedKey;
-  const viaFloda = !key && !gatewayToken() ? relay : null;
-  const id = viaFloda ? `${maxRetries}:floda:${viaFloda.server}:${viaFloda.key}` : `${maxRetries}:${key}`;
+  const viaSnaben = !key && !gatewayToken() ? relay : null;
+  const id = viaSnaben ? `${maxRetries}:floda:${viaSnaben.server}:${viaSnaben.key}` : `${maxRetries}:${key}`;
   let client = clients.get(id);
   if (!client) {
-    client = viaFloda
-      ? new Anthropic({ apiKey: null, authToken: viaFloda.key, baseURL: `${viaFloda.server}/api/ai`, maxRetries, fetch: async (url, init) => {
+    client = viaSnaben
+      ? new Anthropic({ apiKey: null, authToken: viaSnaben.key, baseURL: `${viaSnaben.server}/api/ai`, maxRetries, fetch: async (url, init) => {
           const headers = new Headers(init?.headers as HeadersInit | undefined);
           if (isTrainingRead()) headers.set(TRAINING_HEADER, "training");
           const res = await fetch(url, { ...init, headers });

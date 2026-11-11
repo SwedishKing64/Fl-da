@@ -101,7 +101,7 @@ export async function extractFile(buffer: Buffer, filename: string, mimeType: st
     }
     default:
       // Kept with the batch all the same: a supplier's file is the shop's record of what was sent.
-      return { table: { headers: [], rows: [], method: "HEURISTIC", warnings: [`Kept with the batch, but ${filename} is not a kind of file Flöda can read (it reads PDFs, spreadsheets, CSVs, Word documents, text and pictures). Nothing was taken from it.`] } };
+      return { table: { headers: [], rows: [], method: "HEURISTIC", warnings: [`Kept with the batch, but ${filename} is not a kind of file Snaben can read (it reads PDFs, spreadsheets, CSVs, Word documents, text and pictures). Nothing was taken from it.`] } };
   }
 }
 

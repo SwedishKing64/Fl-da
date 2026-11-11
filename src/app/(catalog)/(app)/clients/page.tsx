@@ -20,7 +20,7 @@ import { SUPPORT_KEY, type SupportBackupRow } from "@/lib/catalog/support-box";
 export const dynamic = "force-dynamic";
 
 /**
- * Who runs Flöda. Only on the vendor's own deployment: every client's name, plan, standing and
+ * Who runs Snaben. Only on the vendor's own deployment: every client's name, plan, standing and
  * key, when their copy last checked in and on what, and the retailers who put their hand up on
  * the landing page and are not clients yet.
  */
@@ -44,7 +44,7 @@ export default async function ClientsPage() {
   }));
   return (
     <>
-      <PageHeader title="Clients" subtitle="Every shop running Flöda, the key their copy runs under, when it last checked in, and what its reading through Flöda has cost this fortnight. A copy asks about its key when the key is entered and about once a day after that; pausing or ending a client is felt within the day, and stops its reading at once." />
+      <PageHeader title="Clients" subtitle="Every shop running Snaben, the key their copy runs under, when it last checked in, and what its reading through Snaben has cost this fortnight. A copy asks about its key when the key is entered and about once a day after that; pausing or ending a client is felt within the day, and stops its reading at once." />
       <Card>
         <ClientsPanel clients={rows} leads={leads} feedback={feedback} support={support} />
       </Card>

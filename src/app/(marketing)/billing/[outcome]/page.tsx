@@ -6,18 +6,18 @@ import { Reveal } from "../../welcome/Motion";
 import { SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/catalog/support";
 import "../../welcome/welcome.css";
 
-export const metadata: Metadata = { title: "Flöda billing", description: "Back from Stripe." };
+export const metadata: Metadata = { title: "Snaben billing", description: "Back from Stripe." };
 
 const OUTCOMES = {
   paid: {
     eyebrow: "Paid",
     title: "Thank you. Your plan is on.",
-    lede: "Stripe has told Flöda, and your copy will see it the next time it checks its key. Go back to Flöda and press “Check the key” under Settings → Licence to see it now rather than tomorrow.",
+    lede: "Stripe has told Snaben, and your copy will see it the next time it checks its key. Go back to Snaben and press “Check the key” under Settings → Licence to see it now rather than tomorrow.",
   },
   cancelled: {
     eyebrow: "Not paid",
     title: "Nothing was charged.",
-    lede: "You left the payment page before paying. Your copy is exactly as it was; pick a plan again in Flöda whenever you like, or write to us.",
+    lede: "You left the payment page before paying. Your copy is exactly as it was; pick a plan again in Snaben whenever you like, or write to us.",
   },
   "portal-done": {
     eyebrow: "Billing",

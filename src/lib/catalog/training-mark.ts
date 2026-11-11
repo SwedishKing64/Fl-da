@@ -1,5 +1,5 @@
 /**
- * The mark on reading done to teach Flöda. `asTraining(work)` runs `work` with the mark set,
+ * The mark on reading done to teach Snaben. `asTraining(work)` runs `work` with the mark set,
  * and every call to the relay made inside it carries the x-floda-purpose header, so the relay
  * meters nothing for it. The mark lives in an AsyncLocalStorage, which only Node has: this file
  * is server-only, and anthropic.ts (which the browser also loads) reads the mark through the

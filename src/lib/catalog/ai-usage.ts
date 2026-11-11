@@ -1,5 +1,5 @@
 /**
- * Metering for reading through Flöda.
+ * Metering for reading through Snaben.
  *
  * A shop on a plan reads documents through the vendor's relay (`/api/ai`) rather than with a key
  * of its own. The relay forwards each call to the reading service with the vendor's key and
@@ -139,7 +139,7 @@ export const monthKey = periodKey;
  */
 export function limitReachedMessage(now = new Date()): string {
   const again = periodEnd(now).toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "long" });
-  return `You have reached your fortnightly limit for reading documents through Flöda. It starts again on ${again}. To carry on before then, move up a plan on your account page, or put a key of your own under Reading documents in Settings.`;
+  return `You have reached your fortnightly limit for reading documents through Snaben. It starts again on ${again}. To carry on before then, move up a plan on your account page, or put a key of your own under Reading documents in Settings.`;
 }
 
 /** What a Client row keeps about its reading. */

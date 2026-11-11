@@ -49,7 +49,7 @@ export function ShopForm({ profile, next }: { profile: ShopProfile; next?: strin
           carries over; a trade pack is only a starting menu, and the shop's own store overrides it. */}
       <fieldset className="sm:col-span-2">
         <legend className="mb-2 text-[13.5px] font-semibold text-[var(--ink-2)]">What do you sell?</legend>
-        <p className="mb-2 text-[12.5px] text-[var(--ink-soft)]">Tick each trade that fits, or none. A trade gives Flöda a starting menu, the sizes that trade uses and where its products sit in Shopify; your own store overrides it.</p>
+        <p className="mb-2 text-[12.5px] text-[var(--ink-soft)]">Tick each trade that fits, or none. A trade gives Snaben a starting menu, the sizes that trade uses and where its products sit in Shopify; your own store overrides it.</p>
         <input type="hidden" name="pack" value={packs.length ? packs.join("+") : "general"} />
         <div className="grid gap-2 sm:grid-cols-2">
           {PICKABLE_PACKS.map((id) => (
@@ -63,13 +63,13 @@ export function ShopForm({ profile, next }: { profile: ShopProfile; next?: strin
             </label>
           ))}
         </div>
-        <p className="mt-2 text-[12.5px] text-[var(--ink-soft)]">{packs.length ? "" : "None ticked: Flöda learns everything from your own store and paperwork, and asks the first time it meets something new."}</p>
+        <p className="mt-2 text-[12.5px] text-[var(--ink-soft)]">{packs.length ? "" : "None ticked: Snaben learns everything from your own store and paperwork, and asks the first time it meets something new."}</p>
       </fieldset>
       <p className="rounded-[12px] bg-[var(--meta-tint)] px-3 py-2.5 text-[13.5px] sm:col-span-2">
-        Flöda learns your product types from your store, your website or your Shopify export, your supplier formats from their invoices, and how you list from the rules you set, all on <strong>Teach Flöda</strong>. A trade to start from only fills the gaps until it has; nothing from any other shop carries over.
+        Snaben learns your product types from your store, your website or your Shopify export, your supplier formats from their invoices, and how you list from the rules you set, all on <strong>Teach Snaben</strong>. A trade to start from only fills the gaps until it has; nothing from any other shop carries over.
       </p>
 
-      <Field label="Marker tag" hint="Optional. A tag written on everything Flöda builds, with the builder's initials on the end (abc → abc-jd), so you can find its work in Shopify. Leave empty for none." className="sm:col-span-2">
+      <Field label="Marker tag" hint="Optional. A tag written on everything Snaben builds, with the builder's initials on the end (abc → abc-jd), so you can find its work in Shopify. Leave empty for none." className="sm:col-span-2">
         <input name="marker" defaultValue={profile.marker} maxLength={12} className={INPUT} placeholder="floda" />
       </Field>
 
@@ -82,7 +82,7 @@ export function ShopForm({ profile, next }: { profile: ShopProfile; next?: strin
 export function ShopStep({ profile }: { profile: ShopProfile }) {
   return (
     <Card title="Your shop">
-      <p className="mb-4 text-[14px] text-[var(--ink-soft)]">Nothing about a shop is built into Flöda. What you say here is how it reads your paperwork and writes your listings, and you can change any of it later in Settings.</p>
+      <p className="mb-4 text-[14px] text-[var(--ink-soft)]">Nothing about a shop is built into Snaben. What you say here is how it reads your paperwork and writes your listings, and you can change any of it later in Settings.</p>
       <ShopForm profile={profile} next="/setup?step=learn" />
     </Card>
   );

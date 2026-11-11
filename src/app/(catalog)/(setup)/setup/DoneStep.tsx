@@ -11,7 +11,7 @@ export function DoneStep({ shopName, learned, aiReady, skipped, store = "", corr
   const rows: Array<{ ok: boolean; text: string; href?: string }> = [
     { ok: true, text: `${shopName || "The shop"} is set up.` },
     { ok: Boolean(store), text: store ? `Your store, ${store}, is connected and read.` : "No store connected: new products go out as a CSV to import.", href: store ? undefined : "/setup?step=store" },
-    { ok: learned, text: learned ? "Flöda has learned your catalogue." : "Your catalogue has not been taught yet. Until it is, Flöda has only your supplier's paperwork to go on.", href: learned ? undefined : "/setup?step=learn" },
+    { ok: learned, text: learned ? "Snaben has learned your catalogue." : "Your catalogue has not been taught yet. Until it is, Snaben has only your supplier's paperwork to go on.", href: learned ? undefined : "/setup?step=learn" },
     { ok: aiReady, text: aiReady ? "PDFs, photos and brand pages can be read." : "No API key yet: spreadsheets work, PDFs and photos wait.", href: aiReady ? undefined : "/setup?step=ai" },
   ];
   void skipped;
@@ -26,28 +26,28 @@ export function DoneStep({ shopName, learned, aiReady, skipped, store = "", corr
         ))}
       </ul>
       <div className="mb-4 rounded-[12px] bg-[var(--meta-tint)] p-4 text-[14px]">
-        <div className="font-semibold">Next: teach Flöda how you list</div>
+        <div className="font-semibold">Next: teach Snaben how you list</div>
         <p className="mt-1 text-[var(--ink-soft)]">
-          Everything Flöda believes about your shop is on one page, <Link href="/training" className="font-semibold text-[var(--meta)]">Teach Flöda</Link>, with a four-step guide at the top: your export, your website, the rules, and one invoice from each supplier. Reading done while teaching is not counted against your plan.
+          Everything Snaben believes about your shop is on one page, <Link href="/training" className="font-semibold text-[var(--meta)]">Teach Snaben</Link>, with a four-step guide at the top: your export, your website, the rules, and one invoice from each supplier. Reading done while teaching is not counted against your plan.
         </p>
       </div>
       <div className="mb-4 rounded-[12px] bg-[var(--canvas)] p-4 text-[14px]">
         <div className="font-semibold">Fixing something once is enough</div>
         <p className="mt-1 text-[var(--ink-soft)]">
-          What Flöda guessed rather than learned keeps being checked: the review screen shows you what it is unsure of first. When you fix something there — a renamed option, a different product type, a corrected line — Flöda does it that way from then on, for that supplier and that product type.{corrections > 0 ? ` It already holds ${corrections} correction${corrections === 1 ? "" : "s"} of yours.` : ""}
+          What Snaben guessed rather than learned keeps being checked: the review screen shows you what it is unsure of first. When you fix something there — a renamed option, a different product type, a corrected line — Snaben does it that way from then on, for that supplier and that product type.{corrections > 0 ? ` It already holds ${corrections} correction${corrections === 1 ? "" : "s"} of yours.` : ""}
         </p>
       </div>
       <div className="rounded-[12px] bg-[var(--canvas)] p-4 text-[14px]">
-        <div className="font-semibold">How to work in Flöda</div>
+        <div className="font-semibold">How to work in Snaben</div>
         <ol className="mt-2 list-decimal space-y-1 pl-5 text-[var(--ink-soft)]">
           <li><strong className="text-[var(--ink)]">New products</strong>: start an import, drop in the supplier&rsquo;s invoice or order form (and any spec sheet or photos), say anything in words, build, check the grid, download the Shopify CSV.</li>
           <li><strong className="text-[var(--ink)]">Prices and stock</strong>: load your Shopify export, say the change in plain words or add a delivery, check every changed cell, download the updated file.</li>
           <li><strong className="text-[var(--ink)]">Tidy a document</strong>: a photo of scribbled-on paperwork becomes a table you can check and save as a CSV the other two take.</li>
-          <li><strong className="text-[var(--ink)]">Settings</strong>: staff accounts, the shop, the key, and teaching Flöda a newer export.</li>
+          <li><strong className="text-[var(--ink)]">Settings</strong>: staff accounts, the shop, the key, and teaching Snaben a newer export.</li>
         </ol>
       </div>
       <div className="mt-5">
-        <Button variant="primary" icon="🏠" disabled={pending} onClick={() => start(() => finishSetupAction())}>{pending ? "Opening…" : "Go to Flöda"}</Button>
+        <Button variant="primary" icon="🏠" disabled={pending} onClick={() => start(() => finishSetupAction())}>{pending ? "Opening…" : "Go to Snaben"}</Button>
       </div>
     </Card>
   );

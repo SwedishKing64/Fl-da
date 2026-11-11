@@ -1,7 +1,7 @@
 /**
  * Scoring the reader against documents whose right answers a person has checked.
  *
- * "Reads any invoice" is a claim about documents nobody has shown Flöda yet, so it is measured on a
+ * "Reads any invoice" is a claim about documents nobody has shown Snaben yet, so it is measured on a
  * fixed set of real documents from several trades, each with an answer key, and the score is
  * compared run to run. A change that improves one trade and quietly costs another shows up here
  * before it ships. See docs and `scripts/corpus.ts`.

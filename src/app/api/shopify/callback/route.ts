@@ -15,7 +15,7 @@ const STATE_COOKIE = "floda_shopify_state";
  */
 export async function GET(req: NextRequest) {
   const app = oauthApp();
-  if (!app) return NextResponse.json({ error: "This copy of Flöda has no Shopify app set up." }, { status: 400 });
+  if (!app) return NextResponse.json({ error: "This copy of Snaben has no Shopify app set up." }, { status: 400 });
   const [state, asked, nextRaw] = (req.cookies.get(STATE_COOKIE)?.value ?? "").split(":");
   const next = returnPath(decodeURIComponent(nextRaw ?? ""));
   const back = (outcome: string) => {

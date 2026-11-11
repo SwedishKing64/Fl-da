@@ -4,14 +4,14 @@ import { useState } from "react";
 import { INCLUDED_PLANS, planOf, type PlanId, per } from "@/lib/catalog/plans";
 
 /**
- * What Flöda saves a shop, in its own numbers. Three things the shop knows (what an hour costs,
- * how many products a fortnight, how long a hundred take by hand) and one thing Flöda knows (it reads,
+ * What Snaben saves a shop, in its own numbers. Three things the shop knows (what an hour costs,
+ * how many products a fortnight, how long a hundred take by hand) and one thing Snaben knows (it reads,
  * matches and prices a hundred products in about fifteen minutes), with the checking time left
  * adjustable because it is the shop's. The plan is suggested from the volume.
  */
 
 /**
- * How long Flöda itself takes: about 15 minutes for 100 products, never under 5 for an order of
+ * How long Snaben itself takes: about 15 minutes for 100 products, never under 5 for an order of
  * any size, and less per product as an order grows, because the reading, the matching and the
  * brand pages are done in parallel and a bigger order shares the fixed part.
  */
@@ -48,7 +48,7 @@ export function Calculator() {
   const times = plan.price > 0 ? (byHandCost - flodaStaffCost) / plan.price : 0;
 
   return (
-    <div className="calc" aria-label="What Flöda saves you">
+    <div className="calc" aria-label="What Snaben saves you">
       <div className="calc-in">
         <label>
           <span className="l">What an hour of staff time costs</span>
@@ -67,10 +67,10 @@ export function Calculator() {
           <span className="h">Typing names, sizes, colours, prices; finding pictures; writing a description; checking it.</span>
         </label>
         <label>
-          <span className="l">Your checking time per 100, through Flöda</span>
+          <span className="l">Your checking time per 100, through Snaben</span>
           <span className="v">{checkHours}<small> h</small></span>
           <input type="range" min={0.25} max={6} step={0.25} value={checkHours} onChange={(e) => setCheckHours(Number(e.target.value))} aria-label="Checking hours per 100 products/variants" />
-          <span className="h">Looking over the grid and pressing import. Flöda&rsquo;s own time for your {products} products/variants is about {Math.round(flodaMinutes(products))} minutes.</span>
+          <span className="h">Looking over the grid and pressing import. Snaben&rsquo;s own time for your {products} products/variants is about {Math.round(flodaMinutes(products))} minutes.</span>
         </label>
       </div>
       <div className="calc-out">
@@ -81,11 +81,11 @@ export function Calculator() {
         </div>
         <div className="rows">
           <div><span>By hand</span><b>{hours(byHandHours)} · {money(byHandCost)}</b></div>
-          <div><span>Through Flöda</span><b>{hours(flodaHours)} · {money(flodaStaffCost)}</b></div>
+          <div><span>Through Snaben</span><b>{hours(flodaHours)} · {money(flodaStaffCost)}</b></div>
           <div><span>Suggested plan</span><b>{plan.name} · ${plan.price} {per(plan)}</b></div>
           <div><span>Pays for itself</span><b>{times >= 1 ? `${times >= 10 ? Math.round(times) : Math.round(times * 10) / 10} times over` : "not at this volume"}</b></div>
         </div>
-        <p className="fine">Flöda reads, matches, prices and illustrates about 100 products/variants in {FLODA_MIN_PER_100} minutes, never under {FLODA_FLOOR_MIN} for an order of any size, and less per product/variant on a big order, because the reading and the brand pages run side by side. The checking is yours and the slider is how long you give it. The plan is suggested from the products/variants a fortnight: {INCLUDED_PLANS.map((p) => `${p.name} up to ${p.products ?? "any number"}`).join(", ")}; the Own key plan is the software alone, with reading on your own key.</p>
+        <p className="fine">Snaben reads, matches, prices and illustrates about 100 products/variants in {FLODA_MIN_PER_100} minutes, never under {FLODA_FLOOR_MIN} for an order of any size, and less per product/variant on a big order, because the reading and the brand pages run side by side. The checking is yours and the slider is how long you give it. The plan is suggested from the products/variants a fortnight: {INCLUDED_PLANS.map((p) => `${p.name} up to ${p.products ?? "any number"}`).join(", ")}; the Own key plan is the software alone, with reading on your own key.</p>
       </div>
     </div>
   );

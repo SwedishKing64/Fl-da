@@ -88,8 +88,8 @@ async function renderReviewPage(props: PageProps<"/batches/[id]/review">) {
           {finished < 2 && (
             <div className="mb-4 flex flex-wrap items-center gap-3 rounded-[12px] border border-[var(--line)] bg-white px-4 py-2.5 text-[13.5px]">
               <span className="font-semibold">Your first batches.</span>
-              <span className="text-[var(--ink-2)]">A Flöda engineer set you up and is on the end of this: anything that reads wrong, write and it is looked at the same working day.</span>
-              <a href={askHref} className="ml-auto font-semibold text-[var(--meta)] underline">Ask a Flöda engineer about this batch →</a>
+              <span className="text-[var(--ink-2)]">A Snaben engineer set you up and is on the end of this: anything that reads wrong, write and it is looked at the same working day.</span>
+              <a href={askHref} className="ml-auto font-semibold text-[var(--meta)] underline">Ask a Snaben engineer about this batch →</a>
             </div>
           )}
           {offFiles.length > 0 && (

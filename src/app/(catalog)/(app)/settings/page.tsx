@@ -25,10 +25,10 @@ import { licenceServer, vendorMode } from "@/lib/catalog/licence";
 import { currentLicence, getServerOverride, monthUse, readingUsage, servers } from "@/lib/catalog/licence-store";
 
 /**
- * The shop, the people who can sign in, what Flöda has learned, the key it reads with, and
+ * The shop, the people who can sign in, what Snaben has learned, the key it reads with, and
  * whether the app is standing on solid ground.
  *
- * Everything a shop can change about how Flöda works is here or on the setup steps these cards
+ * Everything a shop can change about how Snaben works is here or on the setup steps these cards
  * link to. The health check at the end reports the conditions that lose work silently — uploads
  * that will not survive the next request, and a database far enough away to be most of why a page
  * feels slow.
@@ -73,8 +73,8 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           )}
         </div>
         <div className="grid gap-6">
-          <Card title="Teach Flöda">
-            <p className="text-[14px] text-[var(--ink-soft)]">What Flöda is taught lives on its own page: your website&apos;s categories as the product types, each supplier&apos;s paperwork, your Shopify export, and the rules for every listing. <Link href="/training" className="font-semibold text-[var(--meta)]">Open Teach Flöda →</Link></p>
+          <Card title="Teach Snaben">
+            <p className="text-[14px] text-[var(--ink-soft)]">What Snaben is taught lives on its own page: your website&apos;s categories as the product types, each supplier&apos;s paperwork, your Shopify export, and the rules for every listing. <Link href="/training" className="font-semibold text-[var(--meta)]">Open Teach Snaben →</Link></p>
           </Card>
           <div id="shopify">
             <Card title="Your Shopify store">
@@ -94,7 +94,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       </div>
       <div className="grid gap-6 lg:grid-cols-2">
         <Card title="Staff accounts">
-          <p className="mb-3 text-[13.5px] text-[var(--ink-soft)]">Everyone signs in on this same copy: the batches, suppliers and what Flöda has learned live here, so staff use Flöda on this machine (or a hosted copy you run), not each on an install of their own.</p>
+          <p className="mb-3 text-[13.5px] text-[var(--ink-soft)]">Everyone signs in on this same copy: the batches, suppliers and what Snaben has learned live here, so staff use Snaben on this machine (or a hosted copy you run), not each on an install of their own.</p>
           <table className="mb-4 w-full text-sm">
             <thead className="text-left text-xs text-[var(--ink-soft)]"><tr><th className="py-1">Name</th><th>Email</th><th>Role</th><th>Added</th><th /></tr></thead>
             <tbody>{users.map((u) => <tr key={u.id} className="border-t border-[var(--line-soft)]"><td className="py-1.5">{u.name}</td><td>{u.email}</td><td>{u.role}</td><td className="text-xs text-[var(--ink-soft)]">{fmtDate(u.createdAt)}</td><td className="text-right">{u.id !== me.id && <DeleteUserButton id={u.id} />}</td></tr>)}</tbody>

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { applyTagRules, compilePattern, DEFAULT_TAG_RULES, ruleMatches, type RuleTarget, type TagRuleLike } from "./rules";
 
-/** Rules a ski shop might write on Teach Flöda; none ships with Flöda. */
+/** Rules a ski shop might write on Teach Snaben; none ships with Snaben. */
 const rules: TagRuleLike[] = [
   { name: "Women's products", matchField: "any", pattern: String.raw`\b(women'?s|womens|wmns|w'?s|ladies|female)\b`, addTags: "womens", addCollections: "Womens", setProductType: "", setMetafields: JSON.stringify({ gender: "Womens" }), priority: 50, active: true },
   { name: "New season", matchField: "any", pattern: String.raw`\b20(2[6-9]|3[0-9])\b`, addTags: "", addCollections: "New Arrivals", setProductType: "", setMetafields: "{}", priority: 10, active: true },

@@ -60,7 +60,7 @@ export function LinksPanel({ batchId, products, locked }: { batchId: string; pro
   const [found, setFound] = useState<string | null>(null);
 
   /**
-   * Flöda finds the pages itself: the brand's usual address first, then a search; then reads what
+   * Snaben finds the pages itself: the brand's usual address first, then a search; then reads what
    * it found. One request has a time limit, so it goes again by itself until every product has
    * been tried, rather than asking to be pressed again.
    */
@@ -233,7 +233,7 @@ export function LinksPanel({ batchId, products, locked }: { batchId: string; pro
       className="mb-4"
       title={<>Product pages <span className="font-normal text-[var(--ink-soft)]">· {linked.length} of {own.length} new product{own.length === 1 ? "" : "s"} have a link{updates > 0 ? ` · ${updates} quantity update${updates === 1 ? "" : "s"} keep the page they have` : ""}</span></>}
       actions={<>
-        {unlinked.length > 0 && <Button size="sm" variant={linked.length === 0 ? "primary" : "secondary"} disabled={locked || finding || progress !== null} onClick={() => void findAll()} title="Flöda looks for each product's page itself: the brand's usual address first, then a search; a page is kept only when it is titled like the product">
+        {unlinked.length > 0 && <Button size="sm" variant={linked.length === 0 ? "primary" : "secondary"} disabled={locked || finding || progress !== null} onClick={() => void findAll()} title="Snaben looks for each product's page itself: the brand's usual address first, then a search; a page is kept only when it is titled like the product">
           {finding ? `Finding ${unlinked.length} page${unlinked.length === 1 ? "" : "s"}…` : `Find ${unlinked.length} page${unlinked.length === 1 ? "" : "s"}`}
         </Button>}
         <Button size="sm" variant="primary" icon="🔗" disabled={locked || progress !== null || linked.length === 0} onClick={() => void readAll()}>
@@ -245,9 +245,9 @@ export function LinksPanel({ batchId, products, locked }: { batchId: string; pro
       <p className="mb-3 text-xs text-[var(--ink-soft)]">
         {own.length === 0
           ? <>Every product here is one the shop already lists, so each keeps the page it has. Nothing to link.</>
-          : <>Paste each new product&rsquo;s own page under its name and its description, details and pictures are taken from it. <strong>Where a product comes in more than one colour, paste a separate page for each colour</strong> in that colour&rsquo;s box &mdash; open the brand&rsquo;s page with that colour selected and copy that link &mdash; so each colour gets its own pictures. Flöda looks for each page itself when this opens, and each colour&rsquo;s too where the brand has one. A product with no link is left exactly as it is.</>}
+          : <>Paste each new product&rsquo;s own page under its name and its description, details and pictures are taken from it. <strong>Where a product comes in more than one colour, paste a separate page for each colour</strong> in that colour&rsquo;s box &mdash; open the brand&rsquo;s page with that colour selected and copy that link &mdash; so each colour gets its own pictures. Snaben looks for each page itself when this opens, and each colour&rsquo;s too where the brand has one. A product with no link is left exactly as it is.</>}
         {read > 0 && <> {read} read so far.</>}
-        {own.length > 0 && <> Or let Flöda find them: it tries each brand&rsquo;s usual address first, learned from the links pasted before, then searches, and keeps a page only when it is titled like the product.</>}
+        {own.length > 0 && <> Or let Snaben find them: it tries each brand&rsquo;s usual address first, learned from the links pasted before, then searches, and keeps a page only when it is titled like the product.</>}
         {found && <> <strong>{found}</strong></>}
       </p>
       {open && own.length > 1 && !locked && (

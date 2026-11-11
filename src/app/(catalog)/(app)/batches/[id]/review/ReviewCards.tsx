@@ -106,7 +106,7 @@ function ProductCard({ p, kinds, locked, busy, commitProduct, commitVariant, ope
         </button>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className={cx("inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-bold", "bg-[var(--passive-tint)] text-[#8a5a0b]")} title={`How sure Flöda is of the weakest field: ${c.product} of 100`}>{c.product}</span>
+            <span className={cx("inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-bold", "bg-[var(--passive-tint)] text-[#8a5a0b]")} title={`How sure Snaben is of the weakest field: ${c.product} of 100`}>{c.product}</span>
             <span className="text-[15px] font-semibold">{p.title || <em className="text-[var(--ink-soft)]">No title</em>}</span>
             <span className="text-[12px] text-[var(--ink-soft)]">{[p.vendor, p.productType].filter(Boolean).join(" · ")}{p.variants.length ? ` · ${p.variants.length} variant${p.variants.length === 1 ? "" : "s"}` : ""}</span>
           </div>
@@ -166,7 +166,7 @@ function Fix({ p, field, locked, busy, commitProduct, commitVariant, openDrawer,
     case "image":
       return (
         <div className="flex flex-wrap items-center gap-2">
-          {p.images.length === 0 && <Button size="sm" variant="primary" disabled={busy} title="Flöda finds the product's own page (the brand's usual address first, then a search) and takes its pictures and copy" onClick={() => findPage(p.id)}>Find its page</Button>}
+          {p.images.length === 0 && <Button size="sm" variant="primary" disabled={busy} title="Snaben finds the product's own page (the brand's usual address first, then a search) and takes its pictures and copy" onClick={() => findPage(p.id)}>Find its page</Button>}
           <Button size="sm" variant={p.images.length ? "primary" : "secondary"} disabled={busy} onClick={() => openDrawer(p.id)}>{p.images.length ? "See the pictures" : "Add pictures"}</Button>
           {p.images.length > 0 && looksRight}
         </div>

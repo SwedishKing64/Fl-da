@@ -31,8 +31,8 @@ const n = (x: number) => x.toLocaleString("en-AU");
 const plural = (x: number, one: string, many = `${one}s`) => `${n(x)} ${x === 1 ? one : many}`;
 
 /**
- * Where a shop teaches Flöda and sees what it has learned. Three sources at the top — the
- * catalogue export, the website, a supplier's paperwork — and under them everything Flöda now
+ * Where a shop teaches Snaben and sees what it has learned. Three sources at the top — the
+ * catalogue export, the website, a supplier's paperwork — and under them everything Snaben now
  * believes about how the shop lists, by area, each belief a sentence that can be changed where it
  * stands or joined by a new rule.
  */
@@ -88,7 +88,7 @@ export default async function TrainingPage() {
       panel: (
         <div className="space-y-4">
           <p className="text-[14px] text-[var(--ink-soft)]">
-            In Shopify, export your products as a CSV (one product group at a time is fine) and drop it here. Flöda reads it on your computer and learns which product types you have, the tags that go with each, how titles are written, what each type is sold by, each brand&rsquo;s margin, the shape of your SEO titles and the way your descriptions are laid out. Then it lays the product types out for you to say what each is called and tagged.
+            In Shopify, export your products as a CSV (one product group at a time is fine) and drop it here. Snaben reads it on your computer and learns which product types you have, the tags that go with each, how titles are written, what each type is sold by, each brand&rsquo;s margin, the shape of your SEO titles and the way your descriptions are laid out. Then it lays the product types out for you to say what each is called and tagged.
           </p>
           <LearnPanel learned={learned} kinds={house.kinds} shop={{ name: shopName(), taxRate: settings.gstRate, pricesIncludeTax: settings.pricesIncludeGst }} />
           <Details summary="Or connect the store" hint={store.configured ? "connected" : "read, not told"} className="!shadow-none">
@@ -105,7 +105,7 @@ export default async function TrainingPage() {
       taught: Boolean(website),
       panel: (
         <div className="space-y-4">
-          <p className="text-[14px] text-[var(--ink-soft)]">Flöda reads your site for its product categories. Tick the ones that are a product type, add any it missed, and every listing&rsquo;s Type is picked from that list; each type can then be given its tags and instructions below.</p>
+          <p className="text-[14px] text-[var(--ink-soft)]">Snaben reads your site for its product categories. Tick the ones that are a product type, add any it missed, and every listing&rsquo;s Type is picked from that list; each type can then be given its tags and instructions below.</p>
           <WebsiteForm saved={website} />
         </div>
       ),
@@ -118,7 +118,7 @@ export default async function TrainingPage() {
       taught: layouts.length > 0,
       panel: (
         <div className="space-y-4">
-          <p className="text-[14px] text-[var(--ink-soft)]">Drop in one invoice, order confirmation or order form from a supplier. Flöda reads it now, shows what it took every column for, and remembers the corrected layout for that supplier, so their next file reads the way this one was left.</p>
+          <p className="text-[14px] text-[var(--ink-soft)]">Drop in one invoice, order confirmation or order form from a supplier. Snaben reads it now, shows what it took every column for, and remembers the corrected layout for that supplier, so their next file reads the way this one was left.</p>
           {layouts.length > 0 && (
             <div className="overflow-auto rounded-[12px] border border-[var(--line)] bg-white">
               <table className="w-full text-[13.5px]">
@@ -145,8 +145,8 @@ export default async function TrainingPage() {
   return (
     <>
       <PageHeader
-        title="Teach Flöda"
-        subtitle={<>What Flöda believes about how you list, in plain sentences, and where to teach it more. <strong>{n(counts.taught)}</strong> of these it learned from your shop; <strong>{n(counts.floda)}</strong> are its own defaults until you change them.</>}
+        title="Teach Snaben"
+        subtitle={<>What Snaben believes about how you list, in plain sentences, and where to teach it more. <strong>{n(counts.taught)}</strong> of these it learned from your shop; <strong>{n(counts.floda)}</strong> are its own defaults until you change them.</>}
         actions={<RulesFile />}
       />
 

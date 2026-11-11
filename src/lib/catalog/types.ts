@@ -234,7 +234,7 @@ export interface AppSettings {
     storeDomain: string; // my-store.myshopify.com
     accessToken: string; // Admin API access token: from the install link, or pasted from a custom app
     apiVersion: string; // e.g. 2025-07
-    /** How the store was connected: through Flöda's install link (its token expires and is refreshed), or a pasted token. */
+    /** How the store was connected: through Snaben's install link (its token expires and is refreshed), or a pasted token. */
     connectedBy?: "oauth" | "token";
     /** For a connection made through the install link: the refresh token, and when each token lapses (ms since epoch). */
     refreshToken?: string;

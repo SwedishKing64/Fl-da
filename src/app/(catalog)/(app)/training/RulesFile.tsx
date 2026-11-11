@@ -6,7 +6,7 @@ import { exportRulesAction, importRulesAction } from "@/app/(catalog)/actions";
 import { Alert, Button } from "@/app/(catalog)/ui";
 
 /**
- * Everything Flöda has been taught, as one file: downloaded to keep or to send to Flöda support,
+ * Everything Snaben has been taught, as one file: downloaded to keep or to send to Snaben support,
  * and loaded back when support sends it with the rules fixed. Loading replaces each section the
  * file carries and backs the database up first.
  */
@@ -27,7 +27,7 @@ export function RulesFile() {
       a.download = r.data!.filename;
       a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-      setNote({ tone: "info", text: `Downloaded ${r.data!.filename}. Keep it, or send it to Flöda support with what is wrong.` });
+      setNote({ tone: "info", text: `Downloaded ${r.data!.filename}. Keep it, or send it to Snaben support with what is wrong.` });
     });
 
   const load = (file: File) =>
@@ -43,8 +43,8 @@ export function RulesFile() {
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <Button size="sm" variant="ghost" disabled={pending} onClick={download} title="Everything on this page as one file: to keep, or to send to Flöda support">Download your rules</Button>
-      <Button size="sm" variant="ghost" disabled={pending} onClick={() => input.current?.click()} title="A rules file from Flöda support, or one you downloaded earlier">Load a rules file</Button>
+      <Button size="sm" variant="ghost" disabled={pending} onClick={download} title="Everything on this page as one file: to keep, or to send to Snaben support">Download your rules</Button>
+      <Button size="sm" variant="ghost" disabled={pending} onClick={() => input.current?.click()} title="A rules file from Snaben support, or one you downloaded earlier">Load a rules file</Button>
       <input ref={input} type="file" accept=".json,application/json" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void load(f); }} />
       {note && <Alert tone={note.tone} className="basis-full">{note.text}</Alert>}
     </div>

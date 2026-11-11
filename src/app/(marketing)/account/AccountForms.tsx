@@ -31,7 +31,7 @@ export function SignUpForm({ plan: initial }: { plan: PlanId }) {
           {PLANS.map((p) => <option key={p.id} value={p.id}>{p.name} · ${p.price} {per(p)}{p.founding ? ", founding price" : ""}</option>)}
         </select>
       </label>
-      <p className="soft" style={{ fontSize: 13, margin: 0 }}>{describePlanSize(PLANS.find((p) => p.id === plan)!)}. {TRIAL_DAYS} days free first, no card. You sign in to Flöda with this email and password.</p>
+      <p className="soft" style={{ fontSize: 13, margin: 0 }}>{describePlanSize(PLANS.find((p) => p.id === plan)!)}. {TRIAL_DAYS} days free first, no card. You sign in to Snaben with this email and password.</p>
       {result && !result.ok && <p className="err">{result.error}</p>}
       <button className="btn btn-meta" type="submit" disabled={pending}>{pending ? "Making your account…" : "Make the account and start the trial"}</button>
       <p className="soft" style={{ fontSize: 13 }}>Already have one? <Link href="/account/login">Sign in</Link>. By making an account you agree to the <Link href="/terms">terms</Link>.</p>

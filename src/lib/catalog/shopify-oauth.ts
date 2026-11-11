@@ -1,26 +1,26 @@
 /**
- * Connecting a shop to Flöda the way Shopify asks of apps since January 2026: the shop owner clicks
- * an install link, approves Flöda's access on their own store, and Shopify sends them back with a
- * code that Flöda trades for an access token. Nobody creates a custom app or pastes a token.
+ * Connecting a shop to Snaben the way Shopify asks of apps since January 2026: the shop owner clicks
+ * an install link, approves Snaben's access on their own store, and Shopify sends them back with a
+ * code that Snaben trades for an access token. Nobody creates a custom app or pastes a token.
  *
  * The token asked for is an expiring offline one: it lasts an hour, and the refresh token that
  * comes with it (good for 90 days, renewed on every refresh) gets the next. Shopify added these in
  * December 2025 and steers apps to them; a token that cannot leak forever is the safer one to hold.
  *
  * Needs the app's client ID and secret from Shopify's Dev Dashboard (SHOPIFY_CLIENT_ID,
- * SHOPIFY_CLIENT_SECRET) and the address Flöda is served from (FLODA_APP_URL), which must be
+ * SHOPIFY_CLIENT_SECRET) and the address Snaben is served from (FLODA_APP_URL), which must be
  * listed as an allowed redirect on the app. A copy without them keeps the pasted-token way.
  */
 
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
-/** What Flöda does on a store: reads and writes products and their stock, reads its locations. */
+/** What Snaben does on a store: reads and writes products and their stock, reads its locations. */
 export const SCOPES = "read_products,write_products,read_inventory,write_inventory,read_locations,read_files,write_files";
 
 export interface OAuthApp {
   clientId: string;
   clientSecret: string;
-  /** Where Flöda is served from, e.g. https://fl-da.vercel.app. */
+  /** Where Snaben is served from, e.g. https://fl-da.vercel.app. */
   appUrl: string;
 }
 
@@ -61,7 +61,7 @@ export function newState(): string {
   return randomBytes(16).toString("hex");
 }
 
-/** The page on the shop's own admin where its owner approves Flöda. Empty grant options: an offline token. */
+/** The page on the shop's own admin where its owner approves Snaben. Empty grant options: an offline token. */
 export function authorizeUrl(app: OAuthApp, shop: string, state: string): string {
   const q = new URLSearchParams({ client_id: app.clientId, scope: SCOPES, redirect_uri: `${app.appUrl}${CALLBACK_PATH}`, state });
   return `https://${shop}/admin/oauth/authorize?${q.toString()}`;
@@ -85,7 +85,7 @@ export function signedByShopify(query: URLSearchParams, secret: string): boolean
   return got.length === expected.length && timingSafeEqual(got, expected);
 }
 
-/** A store's token as Flöda keeps it. */
+/** A store's token as Snaben keeps it. */
 export interface StoreToken {
   accessToken: string;
   scope: string;

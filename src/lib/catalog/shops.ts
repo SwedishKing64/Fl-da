@@ -97,11 +97,11 @@ export function shopDir(id: string): string | null {
 
 /**
  * A shop added from a backup file: the file becomes the new shop's database, and the shop is not
- * opened. The way a person at Flöda looks at a customer's copy, and the way a shop moves to a new
+ * opened. The way a person at Snaben looks at a customer's copy, and the way a shop moves to a new
  * computer. Only a SQLite database is taken; anything else is refused before it is written.
  */
 export async function importShop(name: string, bytes: Buffer): Promise<ShopEntry> {
-  if (bytes.length < 100 || bytes.subarray(0, 16).toString("latin1") !== "SQLite format 3\0") throw new Error("That is not a Flöda backup: a backup is the database file itself (.db).");
+  if (bytes.length < 100 || bytes.subarray(0, 16).toString("latin1") !== "SQLite format 3\0") throw new Error("That is not a Snaben backup: a backup is the database file itself (.db).");
   const entry = await addShop(name);
   const dir = shopDir(entry.id)!;
   await fs.mkdir(dir, { recursive: true });

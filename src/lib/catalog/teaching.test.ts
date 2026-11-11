@@ -20,7 +20,7 @@ const input = (over: Partial<TeachingInput> = {}): TeachingInput => ({
   ...over,
 });
 
-describe("what Flöda believes, by area", () => {
+describe("what Snaben believes, by area", () => {
   it("has the seven areas in order, each with a belief, for a shop that has said nothing", () => {
     const areas = buildAreas(input());
     expect(areas.map((a) => a.key)).toEqual(AREAS.map((a) => a.key));
@@ -30,7 +30,7 @@ describe("what Flöda believes, by area", () => {
     expect(filing.beliefs[0].edit).toEqual({ kind: "link", href: "#export", label: "Read an export" });
   });
 
-  it("marks where each belief came from and counts the shop's against Flöda's own", () => {
+  it("marks where each belief came from and counts the shop's against Snaben's own", () => {
     const areas = buildAreas(input({
       learned: { types: [{ type: "Skis", count: 40, sections: ["snow"] }], sections: ["snow"], spelling: {}, vendors: [], products: 40, file: "skis.csv", learnedAt: "" },
       types: ["Skis"],
@@ -89,7 +89,7 @@ describe("what Flöda believes, by area", () => {
     expect(variants.beliefs.find((b) => b.id === "plan:Wax")).toBeUndefined();
   });
 
-  it("shows the SEO title pattern with an example, Flöda's own until the shop sets one", () => {
+  it("shows the SEO title pattern with an example, Snaben's own until the shop sets one", () => {
     const plain = buildAreas(input()).find((a) => a.key === "seo")!.beliefs[0];
     expect(plain.source).toBe("floda");
     expect(plain.sentence).toBe('SEO titles follow "{title} | {shop}": "Talon 22 2026 | Alpine Edge". Cut to 60 characters.');

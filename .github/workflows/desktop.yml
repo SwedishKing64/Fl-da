@@ -10,7 +10,7 @@
 #
 # With "local" ticked (or a tag ending in -local) it builds a copy that checks no licence: the
 # shop makes its own account on the computer and reads on its own key, with nothing asked of the
-# hosted Flöda. It installs over the ordinary app, keeping its data, and goes to a pre-release
+# hosted Snaben. It installs over the ordinary app, keeping its data, and goes to a pre-release
 # of its own, v1.2.3-local, again with no latest.yml.
 name: Desktop app
 
@@ -71,11 +71,11 @@ jobs:
           # The app reports the version it is released as, and its updater compares against it.
           npm version "$v" --no-git-tag-version --allow-same-version > /dev/null
           if [ "$OPEN" = "1" ]; then
-            echo "tag=v${v}-open" >> "$GITHUB_OUTPUT"; echo "name=Flöda v${v} open copy" >> "$GITHUB_OUTPUT"
+            echo "tag=v${v}-open" >> "$GITHUB_OUTPUT"; echo "name=Snaben v${v} open copy" >> "$GITHUB_OUTPUT"
           elif [ "$LOCAL" = "1" ]; then
-            echo "tag=v${v}-local" >> "$GITHUB_OUTPUT"; echo "name=Flöda v${v} local copy" >> "$GITHUB_OUTPUT"
+            echo "tag=v${v}-local" >> "$GITHUB_OUTPUT"; echo "name=Snaben v${v} local copy" >> "$GITHUB_OUTPUT"
           else
-            echo "tag=v${v}" >> "$GITHUB_OUTPUT"; echo "name=Flöda v${v}" >> "$GITHUB_OUTPUT"
+            echo "tag=v${v}" >> "$GITHUB_OUTPUT"; echo "name=Snaben v${v}" >> "$GITHUB_OUTPUT"
           fi
       - name: Build the server for the desktop
         run: npm run desktop:build
@@ -85,7 +85,7 @@ jobs:
           NEXT_PUBLIC_FLODA_SUPPORT_EMAIL: ${{ vars.FLODA_SUPPORT_EMAIL || '' }}
           # Only an open build takes the key; the ordinary app reads through its licence.
           FLODA_ANTHROPIC_API_KEY: ${{ env.OPEN == '1' && (secrets.FLODA_ANTHROPIC_API_KEY || secrets.ANTHROPIC_API_KEY) || '' }}
-          # An open copy keeps its pictures in Flöda's picture store, where Shopify can fetch them: the store's token, as the website holds it.
+          # An open copy keeps its pictures in Snaben's picture store, where Shopify can fetch them: the store's token, as the website holds it.
           FLODA_BLOB_TOKEN: ${{ env.OPEN == '1' && (secrets.FLODA_BLOB_TOKEN || secrets.BLOB_READ_WRITE_TOKEN) || '' }}
       - name: Make the installer
         run: npx electron-builder ${{ matrix.target }} --publish never ${{ env.OPEN == '1' && '--config electron-builder.open.yml' || '' }}

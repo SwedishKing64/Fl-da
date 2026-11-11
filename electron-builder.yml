@@ -1,11 +1,11 @@
 # How the desktop app is packaged. Run `npm run desktop:build` first; `npm run desktop:dist` then
 # makes the installer for the platform it runs on. The GitHub workflow in .github/workflows/desktop.yml
 # runs both on a Windows and a macOS runner and attaches the installers to a release.
+# The id is the one the app shipped under as Flöda: Windows and macOS know an installed app by
+# it, so an update with this id installs over the old copy rather than beside it.
 appId: ai.floda.app
-# ASCII on disk (Floda.app, Floda.exe): a path with an umlaut tripped codesign on the build
-# runner. The name people see — in the Dock, the menu bar, the installer — is still Flöda.
-productName: Floda
-copyright: Flöda
+productName: Snaben
+copyright: Snaben
 # No asar: the server's native modules (Prisma's engine, sharp) load from plain files, and there
 # is nothing here worth hiding from the person who installed it.
 asar: false
@@ -40,18 +40,18 @@ extraResources:
   - from: desktop/floda.json
     to: floda.json
 win:
-  # The Flöda mark, as src/app/icon.svg draws it, rendered at 1024px; electron-builder makes the .ico and .icns from it.
+  # The Snaben mark, as src/app/icon.svg draws it, rendered at 1024px; electron-builder makes the .ico and .icns from it.
   icon: desktop/icon.png
   target:
     - target: nsis
       arch: [x64]
-  artifactName: "Floda-Setup-${version}.${ext}"
+  artifactName: "Snaben-Setup-${version}.${ext}"
 nsis:
   oneClick: true
   perMachine: false
   deleteAppDataOnUninstall: false
-  shortcutName: Flöda
-  uninstallDisplayName: Flöda
+  shortcutName: Snaben
+  uninstallDisplayName: Snaben
 mac:
   icon: desktop/icon.png
   target:
@@ -62,19 +62,19 @@ mac:
     - target: zip
       arch: [arm64, x64]
   category: public.app-category.business
-  artifactName: "Floda-${version}-${arch}.${ext}"
+  artifactName: "Snaben-${version}-${arch}.${ext}"
   # No Apple Developer identity yet: electron-builder's own signing is off and the app is ad-hoc
   # signed in after-pack.cjs instead, so Gatekeeper says "unidentified developer" (right-click →
   # Open) rather than "damaged". Notarisation needs an Apple Developer account.
   identity: null
   hardenedRuntime: false
   gatekeeperAssess: false
-  # CFBundleName is left as electron-builder sets it (Floda): Electron finds its helper apps by
-  # that name, so it has to match "Floda Helper.app" or the app stops as it starts ("Unable to
-  # find helper app"). The name people see is localised to Flöda in desktop/after-pack.cjs.
+  # CFBundleName is left as electron-builder sets it (Snaben): Electron finds its helper apps by
+  # that name, so it has to match "Snaben Helper.app" or the app stops as it starts ("Unable to
+  # find helper app"). The name people see is localised to Snaben in desktop/after-pack.cjs.
   extendInfo:
-    CFBundleDisplayName: Flöda
+    CFBundleDisplayName: Snaben
 linux:
   target:
     - AppImage
-  artifactName: "Floda-${version}.${ext}"
+  artifactName: "Snaben-${version}.${ext}"

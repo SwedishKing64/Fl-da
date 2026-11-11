@@ -25,7 +25,7 @@ export function KindsEditor({ kinds: initial, title, blurb, onSaved }: { kinds: 
       const kinds = rows.map(({ tagsText, ...k }) => ({ ...k, tags: tagsText.split(",").map((t) => t.trim()).filter(Boolean) }));
       const r = await saveKindsAction({ kinds });
       if (!r.ok) return setNote({ ok: false, text: r.error });
-      setNote({ ok: true, text: `Kept. Flöda now knows ${r.data?.kinds ?? kinds.length} kind${(r.data?.kinds ?? kinds.length) === 1 ? "" : "s"} of product by what you call them, their tags and how their titles read.` });
+      setNote({ ok: true, text: `Kept. Snaben now knows ${r.data?.kinds ?? kinds.length} kind${(r.data?.kinds ?? kinds.length) === 1 ? "" : "s"} of product by what you call them, their tags and how their titles read.` });
       onSaved?.();
       router.refresh();
     });
@@ -61,7 +61,7 @@ export function KindsEditor({ kinds: initial, title, blurb, onSaved }: { kinds: 
                   {r.variesTags?.length ? (
                     <>
                       <div className="flex max-w-[18rem] flex-wrap gap-1">{r.variesTags.map((t) => <span key={t} className="rounded-full bg-[var(--canvas)] px-2 py-0.5 text-[12px] ring-1 ring-inset ring-[var(--line)]">{t}</span>)}</div>
-                      <div className="mt-0.5 text-[11.5px] text-[var(--ink-soft)]">On some of these products and not others, so Flöda picks the ones that fit each product.</div>
+                      <div className="mt-0.5 text-[11.5px] text-[var(--ink-soft)]">On some of these products and not others, so Snaben picks the ones that fit each product.</div>
                     </>
                   ) : <span className="text-[12px] text-[var(--ink-soft)]">None</span>}
                 </td>
@@ -73,7 +73,7 @@ export function KindsEditor({ kinds: initial, title, blurb, onSaved }: { kinds: 
       </div>
       <div className="flex flex-wrap items-center gap-3 border-t border-[var(--line-soft)] px-4 py-3">
         <Button variant="primary" size="sm" disabled={pending} onClick={save}>{pending ? "Keeping…" : "Keep these"}</Button>
-        <span className="text-[12.5px] text-[var(--ink-soft)]">A product type with a new name becomes one of yours; its tags and title pattern are applied to every product of that type Flöda builds.</span>
+        <span className="text-[12.5px] text-[var(--ink-soft)]">A product type with a new name becomes one of yours; its tags and title pattern are applied to every product of that type Snaben builds.</span>
       </div>
       {note && <div className="px-4 pb-3"><Alert tone={note.ok ? "success" : "danger"}>{note.text}</Alert></div>}
     </div>

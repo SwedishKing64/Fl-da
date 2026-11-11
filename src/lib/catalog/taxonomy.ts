@@ -3,7 +3,7 @@
  *
  * Nothing about one shop is fixed here. The vocabulary in force is built from two things: a
  * *rules pack* the shop switched on (the snow-and-outdoor menu below, transcribed from the ski
- * shop Flöda was built in, or nothing at all) and what was *learned* from the shop's own Shopify
+ * shop Snaben was built in, or nothing at all) and what was *learned* from the shop's own Shopify
  * export — its Types, which menu tags go with each, and how each shelf tag is spelled. See
  * `activateConventions` at the foot of the file; `shop-profile.ts` loads the shop's choice and
  * calls it once per request.
@@ -143,7 +143,7 @@ interface Vocabulary {
 /** Blank: no pack, nothing learned, no marker. What a fresh install runs on until setup. */
 export const BLANK_CONVENTIONS: Conventions = { pack: "general", learned: null, marker: "", house: DEFAULT_HOUSE };
 
-/** The conventions of the shop Flöda was built in; the tests are written against them. */
+/** The conventions of the shop Snaben was built in; the tests are written against them. */
 /** A snow shop that has taught nothing yet, for tests. */
 export const SNOW_TEST_CONVENTIONS: Conventions = { pack: "snow-outdoor", learned: null, marker: "123abc", house: DEFAULT_HOUSE };
 
@@ -235,7 +235,7 @@ let active: Vocabulary = build(conventions);
 /**
  * Put a shop's conventions in force for this process. Called by `shop-profile.ts` with what the
  * shop chose and learned, and by tests with `SNOW_TEST_CONVENTIONS`. The vocabulary is process-wide:
- * Flöda runs one shop per install.
+ * Snaben runs one shop per install.
  */
 export function activateConventions(next: Conventions): void {
   conventions = next;
@@ -267,7 +267,7 @@ export function fieldsInForce(): CanonicalFieldDef[] {
 
 /**
  * A kind of product's place in Shopify's Standard Product Taxonomy: as the pack places it, or its
- * heading as the pack places that, or — for a kind the shop taught Flöda — found by name, where the
+ * heading as the pack places that, or — for a kind the shop taught Snaben — found by name, where the
  * name says plainly what it is. Null where none of these says: no category beats the wrong one.
  */
 export function categoryForKind(kind: string): TaxonomyCategory | null {
@@ -290,13 +290,13 @@ export function metafieldDefs(): MetafieldDef[] {
 
 /**
  * True where the ski and snowboard rules apply: the shop started from the snow pack, or its own
- * store or exports have taught Flöda that it sells skis or snowboards.
+ * store or exports have taught Snaben that it sells skis or snowboards.
  */
 export function snowTrade(): boolean {
   return packFor(conventions.pack).snowRules || active.productTypes.some((t) => /\b(skis?|snowboards?)\b/i.test(t));
 }
 
-/** True once the shop has told Flöda its kinds of product, from its website or its export, so a Type can be checked against them. */
+/** True once the shop has told Snaben its kinds of product, from its website or its export, so a Type can be checked against them. */
 export function typesAreKnown(): boolean {
   return active.productTypes.length > 0;
 }

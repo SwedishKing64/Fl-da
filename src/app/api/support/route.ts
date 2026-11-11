@@ -8,7 +8,7 @@ import { safeBackupName, SUPPORT_KEY, SUPPORT_MAX_BYTES, type SupportBackupRow }
 export const runtime = "nodejs";
 
 /**
- * A shop's backup, sent to Flöda support. Answered only on the vendor's own deployment.
+ * A shop's backup, sent to Snaben support. Answered only on the vendor's own deployment.
  *
  * A database is far bigger than a request this host will take, so the file never passes through
  * here: the copy says it is about to send one ("begin") and is given a token that lets it put that
@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
   if (!client || !verdict.ok) return NextResponse.json({ ok: false, why: "Backups are taken from copies in good standing." }, { status: 403 });
   const body = (await req.json().catch(() => null)) as Partial<{ step: string; name: string; bytes: number; shop: string; email: string; note: string; version: string; install: string; pathname: string; url: string; access: string }> | null;
   const blob = findBlobToken();
-  if (!blob) return NextResponse.json({ ok: false, why: "Flöda has no file store attached, so a backup cannot be taken just now. Email it instead." }, { status: 503 });
+  if (!blob) return NextResponse.json({ ok: false, why: "Snaben has no file store attached, so a backup cannot be taken just now. Email it instead." }, { status: 503 });
 
   if (body?.step === "begin") {
     const bytes = Number(body.bytes) || 0;

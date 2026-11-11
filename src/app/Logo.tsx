@@ -1,7 +1,7 @@
 import { cx } from "@/app/(catalog)/ui";
 
 /**
- * The Flöda mark: the letter, and nothing else. A heavy geometric F in white on the blue tile,
+ * The Snaben mark, kept from before the name changed: a heavy geometric F in white on the blue tile,
  * its two bars stepped like lines on a form, so it reads as "F" at 16px in a tab and as a tile on
  * a desktop. Inline SVG so it is crisp at any size and needs no file.
  */
@@ -29,23 +29,14 @@ export function Mark({ size = 28, className }: { size?: number; className?: stri
 }
 
 /**
- * The wordmark: Flöda, set heavy and tight in the display face, its umlaut drawn as the two dots
- * of the mark. `tone` is the ink it is written in — dark on a light page, white on the blue rail.
+ * The wordmark: Snaben, set heavy and tight in the display face, in the same face and weight the
+ * mark was drawn for. `tone` is the ink it is written in — dark on a light page, white on the
+ * blue rail.
  */
 export function Wordmark({ size = 22, tone = "dark", className }: { size?: number; tone?: "dark" | "light"; className?: string }) {
-  const dot = tone === "light" ? "#7fc0ff" : "#0866ff";
-  const dot2 = tone === "light" ? "#ffffff" : "#38a9ff";
   return (
-    <span className={cx("wordmark", className)} style={{ fontSize: size, color: tone === "light" ? "#fff" : "var(--ink)" }} aria-label="Flöda">
-      <span aria-hidden>Fl</span>
-      <span className="wordmark-o" aria-hidden>
-        o
-        <span className="wordmark-dots">
-          <i style={{ background: dot }} />
-          <i style={{ background: dot2 }} />
-        </span>
-      </span>
-      <span aria-hidden>da</span>
+    <span className={cx("wordmark", className)} style={{ fontSize: size, color: tone === "light" ? "#fff" : "var(--ink)" }} aria-label="Snaben">
+      <span aria-hidden>Snaben</span>
     </span>
   );
 }

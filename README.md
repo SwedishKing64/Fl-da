@@ -1,11 +1,11 @@
-# Flöda
+# Snaben
 
-Supplier paperwork in, shop-ready listings out. Flöda turns supplier invoices, order
+Supplier paperwork in, shop-ready listings out. Snaben turns supplier invoices, order
 confirmations, spec sheets and photographed paperwork into ready-to-upload Shopify product CSVs
 and stock and price changes.
 
-Flöda is the product made from Rubin, the tool built inside Alpsport, a Sydney ski and snowboard
-retailer; see `docs/FLODA.md` for the plan to make it work for any specialty retailer, and
+Snaben is the product made from Rubin, the tool built inside Alpsport, a Sydney ski and snowboard
+retailer; see `docs/SNABEN.md` for the plan to make it work for any specialty retailer, and
 `docs/HANDOVER.md` for the rules it carries. The landing page is at `/welcome`.
 
 **Flow:** upload files (invoices, spec sheets, catalogue pages, product photos; CSV/XLSX are
@@ -17,7 +17,7 @@ spreadsheet-style grid grouped by brand → export one validated Shopify CSV per
 product type) or push to the store → every batch is logged.
 
 **Pricing** (`/pricing`): an interactive price calculator, the markup/margin rules and tax/FX
-settings. **Settings**: the shop, what Flöda has learned from its export, the API key, staff.
+settings. **Settings**: the shop, what Snaben has learned from its export, the API key, staff.
 
 ## Run it
 
@@ -27,7 +27,7 @@ npm run demo       # SQLite database, dev server on http://localhost:3000
 ```
 
 The first visit walks through setup: the admin account, the shop (name, country, currency, tax,
-what it sells, which rules to start from), the shop's Shopify export (Flöda learns its kinds of
+what it sells, which rules to start from), the shop's Shopify export (Snaben learns its kinds of
 product, menus, tag spellings and per-brand conventions from it), and the Anthropic API key that
 reads PDFs and photos. Spreadsheets work without a key. `ANTHROPIC_API_KEY` in the environment
 is used when set; otherwise the key pasted in setup is kept in the database.
@@ -49,7 +49,7 @@ with `npm run catalog:fixtures` after an intentional change.
 
 ## The desktop app
 
-Flöda installs on a PC or a Mac as an app. It is the same server, started on the machine with a
+Snaben installs on a PC or a Mac as an app. It is the same server, started on the machine with a
 SQLite database and a files folder in the user's app-data directory, in an Electron window.
 
 ```sh

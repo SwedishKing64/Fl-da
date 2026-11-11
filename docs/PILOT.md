@@ -1,6 +1,6 @@
 # Pilot shops: real documents, honestly scored
 
-Phase 2 of the industry expansion memo needs evidence nobody at Flöda wrote. That means real supplier
+Phase 2 of the industry expansion memo needs evidence nobody at Snaben wrote. That means real supplier
 documents from two or three shops outside the ski trade (bikes first), each with an answer key a
 person checked. This page covers how to ask for them, how to make them safe to share, and how they
 are scored.

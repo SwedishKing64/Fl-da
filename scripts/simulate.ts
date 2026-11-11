@@ -1,5 +1,5 @@
 /**
- * Run Flöda against shops it has never seen: made-up shops in several trades, each with its own
+ * Run Snaben against shops it has never seen: made-up shops in several trades, each with its own
  * export and a season of deliveries in the layouts suppliers use, read and built and scored.
  *
  *   npm run eval:shops                                  # every trade, two shops each, by code only

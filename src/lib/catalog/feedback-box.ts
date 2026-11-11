@@ -1,5 +1,5 @@
 /**
- * Feedback from the people using Flöda — a bug, a wrong listing, a wish — kept on the vendor's
+ * Feedback from the people using Snaben — a bug, a wrong listing, a wish — kept on the vendor's
  * deployment under one key in `AppSetting`, the way leads are, and shown on the Clients page.
  * (`feedback.ts` is something else: corrections to one batch, turned into house rules.)
  */

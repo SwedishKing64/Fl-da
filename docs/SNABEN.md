@@ -1,14 +1,14 @@
-# Flöda — the product
+# Snaben — the product
 
-Flöda is the product made from Rubin, the internal tool built for Alpsport, a Sydney ski and
+Snaben is the product made from Rubin, the internal tool built for Alpsport, a Sydney ski and
 snowboard retailer. Rubin stays with Alpsport in its own repository (`RubinAlp/Rubin`) and keeps
-running their shop; nothing here touches it. Flöda is a copy of the same code, with the same
+running their shop; nothing here touches it. Snaben is a copy of the same code, with the same
 history, turned into something any specialty retailer can install and use. Read `HANDOVER.md`
-for what Rubin does and the rules it carries; this file is about what Flöda is.
+for what Rubin does and the rules it carries; this file is about what Snaben is.
 
 ## The principle
 
-Nothing about a shop lives in code. A fresh Flöda is blank: it learns the shop from the shop's
+Nothing about a shop lives in code. A fresh Snaben is blank: it learns the shop from the shop's
 own Shopify export, and the rules Rubin was built with are a pack a shop switches on if it sells
 snow and outdoor gear. The code holds only what is the same at every retailer — how documents are
 read, how lines are matched to listings, how a change is checked before it goes to the store —
@@ -67,7 +67,7 @@ left on a trial and the month's use against the plan sit in the sidebar for ever
 the trial is three days from ending or the month is past the plan, with a banner for the former,
 so neither is a surprise on the way to the paywall. A copy asks for its licence at the first
 address that can be reached (`reachVendor` in `licence.ts`): the one a person set under Settings
-→ Licence ("Can't reach Flöda? Its address", kept in `AppSetting`), then the one the build baked
+→ Licence ("Can't reach Snaben? Its address", kept in `AppSetting`), then the one the build baked
 in (`FLODA_LICENCE_SERVER`, fl-da.vercel.app, the deployment's own address), then the fallbacks
 (`LICENCE_FALLBACKS`: fl-da.vercel.app, then floda.ai for the day that name exists). An address that cannot be reached is passed over, and when none can be the
 error says why for each (no DNS record, nothing answering, certificate refused, no answer in 15
@@ -88,7 +88,7 @@ bar**: the copy asks the vendor for its fortnight's reading (`/api/licence/usage
 shows the bar under the plan in the sidebar and on the Licence card; the account page shows the
 same from the row itself. When the fortnight's reading is spent the relay refuses with
 `limitReachedMessage`: "You have reached your fortnightly limit…" and the date it starts again,
-never a key or a balance; a money refusal from the reading service itself is worded as Flöda
+never a key or a balance; a money refusal from the reading service itself is worded as Snaben
 being unavailable on a plan, and as the shop's own Anthropic credit on the Own key plan.
 
 **Paying for a plan.** Stripe, on the vendor (`stripe.ts`): the copy's paywall and the Licence
@@ -129,13 +129,13 @@ piece of work with a mark every relay call carries (`x-floda-purpose: training`)
 (`/api/ai`) neither meters nor refuses such a call. A "Setup: " batch's files and the description
 style reader run inside it.
 
-**Support hand-off.** A shop sends a copy of its database to Flöda from Settings → Backups
+**Support hand-off.** A shop sends a copy of its database to Snaben from Settings → Backups
 (`sendBackupToSupportAction`): the copy asks the vendor's `/api/support` to begin, is given a
 client token for one path in the vendor's Blob store, puts the file there in parts
 (`@vercel/blob/client`), and tells the vendor it is done; the vendor lists it on the Clients page
 (`support-box.ts`) with a download that streams a private blob or redirects to a public one. The
 founder adds the file as a shop on a desktop copy (`importShop`: the file becomes `floda.db` in a
-new shop folder), fixes what is wrong, downloads that shop's rules from Teach Flöda
+new shop folder), fixes what is wrong, downloads that shop's rules from Teach Snaben
 (`exportRulesAction`, `rules-file.ts`) and sends the file; the shop loads it (`importRulesAction`:
 each section the file carries replaces what is there, after a backup).
 
@@ -150,7 +150,7 @@ the shape each option's tags take from the export's listings, which now carry th
 the build writes them from each new product's variants (`optionTagsFor` in `pipeline.ts` and
 `delivery.ts`), through the tag gate as the shop's own.
 
-**Blank slate.** A new copy of Flöda carries nothing of any one shop: no binding list, no
+**Blank slate.** A new copy of Snaben carries nothing of any one shop: no binding list, no
 default packages, no mounting charges, no seeded tag rules, no brand list outside a trade pack. A
 trade pack ticked at setup is a starting point (a menu, tag spellings, reading rules, the trade's
 brands); a shop that ticks none starts from its own export, website and paperwork alone. The
@@ -159,14 +159,14 @@ packages: the bindings it packages skis with (name, RRP, wholesale), what it cha
 (`settings.packages.drillMountFee` / `systemMountFee`) and how it words the two fittings. A ski is
 packaged only with the bindings picked for it on the review page or named in an instruction.
 
-**Teach Flöda.** One page (`/training`, admins) for everything Flöda is taught. At the top,
+**Teach Snaben.** One page (`/training`, admins) for everything Snaben is taught. At the top,
 three source tiles (`Sources.tsx`): the catalogue export (`LearnPanel`, with the store
 connection folded under it), the website, and a supplier's paperwork (`SuppliersStep` standing
 alone, with the remembered layouts listed); each says what it has taught so far and opens to
-teach more. Under them, everything Flöda now believes about how the shop lists, in seven areas
+teach more. Under them, everything Snaben now believes about how the shop lists, in seven areas
 (`teaching.ts`, pure: `buildAreas` gives types, tags and categories; titles; descriptions;
 variants; pricing; SEO; suppliers' invoices), every belief one sentence badged with where it
-came from — the export, the website, the shop, a supplier's paperwork, or Flöda's own default —
+came from — the export, the website, the shop, a supplier's paperwork, or Snaben's own default —
 and carrying the one editor that changes it (`Edit`: a choice, a text, a kind's field, a tag
 rule, a template, a pricing rule, a setting, a supplier's defaults). `Teach.tsx` renders the
 areas, opens the editor under the sentence, and ends each area with Add a rule: a tag rule, a
@@ -225,17 +225,17 @@ calls cost), so the allowance goes as far as the lighter models let it; a model 
 is priced as the dearest. A row metered only in tokens, from before calls were priced, is still
 priced at the old single Opus rate.
 
-**The rulebook.** The sentences on Teach Flöda come from `rulebook.ts` (pure: `buildRulebook` takes the house conventions, tag rules, templates, pricing
+**The rulebook.** The sentences on Teach Snaben come from `rulebook.ts` (pure: `buildRulebook` takes the house conventions, tag rules, templates, pricing
 rules, supplier layouts and defaults, supplier records, the website, the export's vocabulary and
 the settings, and gives eight stages — reading, naming, filing, pricing, copy, pictures, checks,
 export — each a list of `RuleEntry` sentences with where to change it). `describeTagRule`,
 `describePricingRule` and `describeLayout` are the sentences. A rule the shop set links to its
 form (anchors `#website`, `#suppliers`, `#export`, `#house` on the page, `/pricing`, `/settings`);
-Flöda's own rules are listed and badged as Flöda's so the shop knows them. A tag rule can be
+Snaben's own rules are listed and badged as Snaben's so the shop knows them. A tag rule can be
 switched off, deleted or tried from the rulebook (`setTagRuleActiveAction`, `deleteTagRuleAction`,
 `ruleReachAction`: how many products of the latest open batch the rule touches, with a few by
 name, nothing changed). A kind's tag rules are said once, under the kind, not again as rules.
-`buildRulebook`'s eight stages are no longer shown; Teach Flöda shows the same beliefs by area
+`buildRulebook`'s eight stages are no longer shown; Teach Snaben shows the same beliefs by area
 (`teaching.ts`), where each can be changed in place. The next steps are turning a correction on
 the review grid into a rule, and a rulebook file that exports, imports and rolls back.
 
@@ -256,14 +256,14 @@ listings, its tag rules and templates, its kinds, the tags the rules work out pe
 gate. The build (`applyMappings`) and the batch check (`batch-agent.ts`) pass every product's
 tags through it: a tag the shop has never used is taken off and recorded once as a `TagProposal`
 with the product it was meant for; a tag the batch instructions asked for always stays; a tag a
-person types on the grid is approved as written (`approveTypedTags`). Teach Flöda lists
+person types on the grid is approved as written (`approveTypedTags`). Teach Snaben lists
 the proposals with Approve (a tag of the shop's from then on) and Reject (never proposed again).
 
 **The quick look.** The review opens on the products that need a person, one card each, worst first: the field that pulled each down, its sentence, and that field's fix on the card (the title to retype, the tags to fix, the pictures to open, the retail to set per variant), with "Looks right" as the other answer, which scores the field as if the person had typed it. What is ready is counted and listed on request. The full table is one click away and the choice is remembered per browser; the errors pill opens the table on the rows with errors.
 
 **Pages found, not pasted.** The links people paste are the memory: from each brand's links the shape of its addresses is worked out (its template with the product's slug in it), a new product's name is put into that shape, and the address is fetched and checked against the product's name before it is believed. A brand nobody has linked yet, or a guess that does not hold, goes to one short web search, checked the same way. A page is kept only when it is titled like the product; a wrong page is worse than none. "Find the pages" on the review does the batch; "Find its page" on a card does one product and reads it.
 
-**The store, read rather than told.** With the store connected (Teach Flöda → Your catalogue export → Or connect the store: a domain and an Admin API token, proved by asking the store its name), what an export used to teach is read off the store itself: its listings, its vocabulary (kinds, tags, spelling), the conventions per brand and kind (templates filed under "store", replaced on each read), and the catalogue the batch check matches against. The store is read again before a build when the last read is a day old, and on demand. An export file still works for a shop that would rather not connect; what it taught stays and is joined.
+**The store, read rather than told.** With the store connected (Teach Snaben → Your catalogue export → Or connect the store: a domain and an Admin API token, proved by asking the store its name), what an export used to teach is read off the store itself: its listings, its vocabulary (kinds, tags, spelling), the conventions per brand and kind (templates filed under "store", replaced on each read), and the catalogue the batch check matches against. The store is read again before a build when the last read is a day old, and on demand. An export file still works for a shop that would rather not connect; what it taught stays and is joined.
 
 **Pushing without the person, tiered.** With the store connected and the shop opted in (Your store → "Push what is ready on its own"), a build ends with what has earned it going to the store as drafts: a product with every field above the bar, nothing wrong on it and no question of which listing it is, when its supplier has a clean record. Three tiers: auto (everything goes, nothing to do), exceptions (the ready ones go, the rest are the quick look), full (a supplier with no record or a broadly unsure batch: nothing goes on its own). Opted in or not, the quick look carries one button that sends what is ready; a batch is pushed once every product of it is in the store. Drafts only, and a push can be rolled back.
 
@@ -309,7 +309,7 @@ this app's storage (`pictures.ts`), and Shopify fetches it from there, so it nee
 address. The website keeps pictures in Vercel Blob. A desktop copy's own address is 127.0.0.1,
 which `publicFileUrl` now treats as no address at all, so framed copies are never written with it;
 instead a licensed copy on any plan sends each picture to its vendor (`POST /api/licence/picture`,
-the licence key as bearer, the bytes as the body), which keeps it in Flöda's Blob store under the
+the licence key as bearer, the bytes as the body), which keeps it in Snaben's Blob store under the
 client's id and answers with the public address (`setPictureHost` in `storage.ts`, set from the
 licence standing in `shop-profile.ts`). The open copy has no licence, so it carries the store's
 token itself (`FLODA_BLOB_TOKEN` at build time, the repository secret of the same name or
@@ -339,7 +339,7 @@ document and is read as before.
 and a product row's title) while the rest scrolls; the offsets are measured off the header cells.
 The dots are explained above the grid, and the errors pill filters the grid to the rows with
 errors. Product pages take several links pasted at once, placed by name or in order. On the shop's
-first two batches the review page names a Flöda engineer to write to. The home checklist is
+first two batches the review page names a Snaben engineer to write to. The home checklist is
 named the way the setup steps are. The "How you list" step shows what a title comes out as.
 **Backups.** A copy on a file (every desktop copy) is copied with SQLite's `VACUUM INTO` into
 a `backups` folder beside the database (`backup.ts`): once a night while the app is open (checked
@@ -354,7 +354,7 @@ delivery is now remembered by what is on it (`applied-memory.ts`: a fingerprint 
 in the browser's storage, so the question is asked after a reload or a re-saved file too, with
 when it was applied; undoing the delivery forgets it.
 
-**Gone from Flöda:** Bills for QuickBooks, the copy-from-the-old-site migration, and every seed
+**Gone from Snaben:** Bills for QuickBooks, the copy-from-the-old-site migration, and every seed
 that belonged to one shop.
 
 ## Where each copy runs
@@ -384,19 +384,19 @@ that belonged to one shop.
   `entitlements.mac.plist`), so macOS says it "could not verify" the app and System Settings →
   Privacy & Security → Open Anyway gets past it (right-click → Open no longer does on macOS 15+).
   Without a signature Apple silicon reports the app as "damaged", and without the JIT
-  entitlement macOS 26 stops Electron as it starts (a trap in V8 before any of Flöda's code
-  runs). The bundle is `Floda.app` on disk and "Flöda" everywhere a person sees it: the plist's
-  CFBundleName must stay `Floda`, because Electron finds its helper apps by that name and stops
-  at launch ("Unable to find helper app", a trap 110 ms in) when `Floda Helper.app` is not what
+  entitlement macOS 26 stops Electron as it starts (a trap in V8 before any of Snaben's code
+  runs). The bundle is `Snaben.app` on disk and "Snaben" everywhere a person sees it: the plist's
+  CFBundleName must stay `Snaben`, because Electron finds its helper apps by that name and stops
+  at launch ("Unable to find helper app", a trap 110 ms in) when `Snaben Helper.app` is not what
   it looks for; the shown name comes from `InfoPlist.strings`, written in after-pack, and
-  `app.setName("Flöda")` in `main.cjs`. If a copy from an earlier build says damaged:
-  `xattr -dr com.apple.quarantine /Applications/Floda.app`.
+  `app.setName("Snaben")` in `main.cjs`. If a copy from an earlier build says damaged:
+  `xattr -dr com.apple.quarantine /Applications/Snaben.app`.
 - Several shops per desktop install, one open at a time (`desktop/shops.cjs`, `shops.ts`): each is
   its own database and files folder, the first in the app-data folder as before, the rest under
   `shops/<id>`. Settings → Shops on this computer, or the Shop menu, adds and opens them; opening
   one restarts the server on its folder and shows its sign-in. A hosted deployment is still one
   shop: the conventions are process-wide state.
-- Shopify only. Flöda reads a Shopify export and writes Shopify's CSV or pushes through its API.
+- Shopify only. Snaben reads a Shopify export and writes Shopify's CSV or pushes through its API.
   Other platforms wait until the Shopify launch has paying shops (decided 2026-10-27; WooCommerce
   was the first candidate).
 
@@ -412,9 +412,9 @@ that belonged to one shop.
 
 ## Planned: shared product memory, and a catalogue check (2026-11-02)
 
-Two features decided on 2026-11-02, not yet built. Both spend what Flöda already holds: the
+Two features decided on 2026-11-02, not yet built. Both spend what Snaben already holds: the
 shop's taught rules, the store read off Shopify, the supplier layouts shared between shops, and
-the pictures kept on Flöda's deployment.
+the pictures kept on Snaben's deployment.
 
 ### Shared product memory
 
@@ -424,7 +424,7 @@ product gets all of that at once, without a page fetch or a reading. The key is 
 
 **What exists.** `shared-layouts.ts` and its store share a file's column layout between shops
 through the licence route (`layout-share`, `layout-find`), under the licence key, never a value
-and never which shop. The same route already keeps pictures for copies (`picture`) on Flöda's
+and never which shop. The same route already keeps pictures for copies (`picture`) on Snaben's
 blob store. A product records where its copy came from (`lookupSource`, `lookupStatus`), each
 picture records its source, and `gtin.ts` says whether a barcode is one. The web lookup
 (`enrich.ts`) and the page finder are where the time and the reading go today.
@@ -437,7 +437,7 @@ description, or which shop contributed. Only fields that came from the lookup le
 product whose `lookupStatus` is FOUND and whose text is unchanged since); anything a person typed
 stays. A shop can stop contributing in Settings beside the layouts switch and still receive.
 
-**Data.** On Flöda's deployment, one table `SharedProduct`: a product key (brand + the
+**Data.** On Snaben's deployment, one table `SharedProduct`: a product key (brand + the
 supplier's name, lower-cased), the source page, the copy, the specifications as JSON, the
 pictures as JSON `[{url, colour}]`, the options, the barcodes it is known under, how many shops
 confirmed it, and when it was last confirmed. A second table `SharedBarcode` maps each barcode
@@ -459,7 +459,7 @@ holds up a batch: a deployment that cannot be reached is a miss.
 taken out until a third reading confirms it. The barcode's check digit is verified before it is
 used as a key. A barcode seen with two different brands is not trusted as a key for either.
 
-**Phases.** (1) The two tables, the two route actions, the find on build, and the Teach Flöda
+**Phases.** (1) The two tables, the two route actions, the find on build, and the Teach Snaben
 belief line "what other shops have found": a week. (2) Contribute after export, the settings
 switch, the wrong mark: three days. (3) Counts on the Clients page: hits, pictures served,
 readings saved. (4) A second key, brand + model code, for suppliers whose files carry no
@@ -510,7 +510,7 @@ change with its before value, and offers Undo for thirty days from the same page
 written without the person pressing Apply, and each finding kind is applied separately.
 
 **Standing.** The check runs after each store read (daily, and on demand) and keeps a score per
-area; the Home page shows the counts and Teach Flöda shows where the catalogue disagrees with
+area; the Home page shows the counts and Teach Snaben shows where the catalogue disagrees with
 what the shop taught, which is also where a wrong rule shows itself.
 
 **Phases.** (1) The checks as pure functions with tests, the page as a read-only report, no
@@ -521,11 +521,11 @@ model reading: four days. (2) Apply with undo for titles, tags, types and SEO: t
 **Open.** Whether sharing product data is on by default like layouts, or asked in setup. What the
 page is called to a shop. Whether the catalogue check is in every plan or from the Shop plan up.
 
-## Working on Flöda
+## Working on Snaben
 
 Everything in `HANDOVER.md` under "Working on it" applies. In addition:
 
-- **Shops Flöda has never seen, by the hundred.** `npm run eval:shops` makes up shops in five
+- **Shops Snaben has never seen, by the hundred.** `npm run eval:shops` makes up shops in five
   trades (bike, outdoor, snow, surf, general — `src/lib/catalog/sim/world.ts`, the snow one in
   `trades/snow/sim-world.ts`), each with brands, a range, an export of what it already lists, and
   a season of deliveries rendered the ways suppliers send them (`sim/documents.ts`: three flat
@@ -540,8 +540,8 @@ Everything in `HANDOVER.md` under "Working on it" applies. In addition:
   invoices so they can be loaded into the app by hand or by a script. The same seed is always the
   same shops. It found eight reader and build bugs on its first run (HANDOVER, 2026-10-28). It
   is a floor, not a ceiling: real suppliers' files are stranger than any of these.
-- Alpsport's Rubin and Flöda share history up to the split. A fix to a supplier reader or to the
-  document reading is worth carrying to both; a change to a convention is Flöda's alone.
+- Alpsport's Rubin and Snaben share history up to the split. A fix to a supplier reader or to the
+  document reading is worth carrying to both; a change to a convention is Snaben's alone.
 - `npm run desktop:build` then `npm run desktop:check` runs the built server under plain Node
   against a throwaway data folder and hits three pages. Packaging runs the same check against
   the packaged copy (`desktop/after-pack.cjs`), because electron-builder leaves out the top-level
@@ -595,11 +595,11 @@ Everything in `HANDOVER.md` under "Working on it" applies. In addition:
   weeks. The landing page sells a 14-day trial on any plan, and promises that a forward-deployed
   engineer sets every shop up on a call, on its own invoices. The sums on it come from the shop
   it was built in: a 50-product order is about 12 hours and $350 of staff time by hand, 2 hours
-  and $60 through Flöda, checking included. The pricing section now carries a savings calculator
+  and $60 through Snaben, checking included. The pricing section now carries a savings calculator
   (`Calculator.tsx`): hourly wage, products a fortnight, hours per 100 products by hand and the
-  shop's own checking time are sliders; Flöda's own time is about 15 minutes per 100
+  shop's own checking time are sliders; Snaben's own time is about 15 minutes per 100
   products with a 5-minute floor and economies of scale (`15 × (n/100)^0.75`, never under 5); the plan is suggested from the volume and the fortnight's saving is net of its price.
-- Reading through Flöda (`src/app/api/ai/[...path]/route.ts`, `src/lib/catalog/ai-usage.ts`): a
+- Reading through Snaben (`src/app/api/ai/[...path]/route.ts`, `src/lib/catalog/ai-usage.ts`): a
   copy on a plan with no key of its own has its SDK pointed at the vendor's `/api/ai` with the
   licence key as bearer token (`anthropic.ts` `setRelay`, put in force by `shop-profile.ts` from
   the licence row). The vendor checks the key's standing and the month's allowance, forwards

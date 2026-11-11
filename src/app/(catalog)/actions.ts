@@ -681,7 +681,7 @@ export async function restoreBackupAction(name: string): Promise<ActionResult> {
     const { safety } = await restoreBackup(name);
     await logAudit("backup.restored", { userId: user.id, details: { name, safety: safety.name } });
     revalidatePath("", "layout");
-    return { ok: true, message: `Restored from ${name}. What was there is kept as ${safety.name}. Restart Flöda now so every page reads the restored data.` };
+    return { ok: true, message: `Restored from ${name}. What was there is kept as ${safety.name}. Restart Snaben now so every page reads the restored data.` };
   } catch (err) {
     return fail(err);
   }
@@ -1085,7 +1085,7 @@ export async function saveShopifyTokenAction(input: { domain: string; token: str
   });
 }
 
-/** Forget the store's token. Its products and what Flöda learned from them stay. */
+/** Forget the store's token. Its products and what Snaben learned from them stay. */
 export async function disconnectShopifyAction(): Promise<ActionResult> {
   const user = await requireUser("ADMIN");
   return safely(async () => {
@@ -1972,7 +1972,7 @@ export async function clearInstructionsAction(batchId: string): Promise<ActionRe
 
 
 // ---------------------------------------------------------------------------
-// Setup: the shop, what it sells, what it has taught Flöda, how documents are read
+// Setup: the shop, what it sells, what it has taught Snaben, how documents are read
 // ---------------------------------------------------------------------------
 
 const shopSchema = z.object({
@@ -2173,7 +2173,7 @@ export async function finishSetupAction(): Promise<void> {
 
 
 // ---------------------------------------------------------------------------
-// Clients of Flöda (the vendor's own deployment) and this copy's licence
+// Clients of Snaben (the vendor's own deployment) and this copy's licence
 // ---------------------------------------------------------------------------
 
 async function requireVendorAdmin() {
@@ -2191,7 +2191,7 @@ const clientSchema = z.object({
   status: z.enum(["TRIAL", "ACTIVE", "PAUSED", "ENDED"]).default("TRIAL"),
   expiresAt: z.string().trim().default(""),
   notes: z.string().trim().max(2000).default(""),
-  /** Dollars a fortnight their reading through Flöda may cost; empty for the plan's own allowance, 0 for no limit. */
+  /** Dollars a fortnight their reading through Snaben may cost; empty for the plan's own allowance, 0 for no limit. */
   aiCap: z.string().trim().regex(/^(\d{0,5}(\.\d{1,2})?)?$/, "The reading allowance is dollars a fortnight, like 60, or empty for the plan's own").default(""),
 });
 
@@ -2290,24 +2290,24 @@ export async function dismissLeadAction(at: string): Promise<ActionResult> {
   });
 }
 
-/** This copy's licence key, entered by the shop and tried against Flöda now. */
+/** This copy's licence key, entered by the shop and tried against Snaben now. */
 export async function activateLicenceAction(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
   return safely(async () => {
     const user = await requireUser("ADMIN");
     const { normaliseKey, licenceServer } = await import("@/lib/catalog/licence");
     if (!licenceServer()) return { ok: false, error: "This copy is not set up to check a licence." };
     const key = normaliseKey(String(formData.get("licence") ?? ""));
-    if (!key) return { ok: false, error: "That is not a Flöda licence key. It looks like FL-XXXX-XXXX-XXXX-XXXX." };
+    if (!key) return { ok: false, error: "That is not a Snaben licence key. It looks like FL-XXXX-XXXX-XXXX-XXXX." };
     const { activate } = await import("@/lib/catalog/licence-store");
     let licence;
     try {
       licence = await activate(key);
     } catch (err) {
-      return { ok: false, error: `Flöda could not be reached to check the key: ${said(err)}` };
+      return { ok: false, error: `Snaben could not be reached to check the key: ${said(err)}` };
     }
     await logAudit("licence.entered", { userId: user.id, details: { status: licence.status, client: licence.client } });
     revalidatePath("", "layout");
-    if (licence.why) return { ok: false, error: `Flöda says: ${licence.why} The key has been kept; contact ${SUPPORT_EMAIL}.` };
+    if (licence.why) return { ok: false, error: `Snaben says: ${licence.why} The key has been kept; contact ${SUPPORT_EMAIL}.` };
     return { ok: true, message: `Licensed to ${licence.client}${licence.expiresAt ? ` until ${new Date(licence.expiresAt).toLocaleDateString("en-AU")}` : ""}.` };
   });
 }
@@ -2322,7 +2322,7 @@ export async function billingLinkAction(what: "checkout" | "portal", plan?: stri
     try {
       out = await billingLink(what, plan);
     } catch (err) {
-      return { ok: false, error: `Flöda could not be reached: ${said(err)}` };
+      return { ok: false, error: `Snaben could not be reached: ${said(err)}` };
     }
     if ("refused" in out) return { ok: false, error: out.refused };
     await logAudit(what === "checkout" ? "licence.checkout_opened" : "licence.portal_opened", { userId: user.id, details: { plan } });
@@ -2331,7 +2331,7 @@ export async function billingLinkAction(what: "checkout" | "portal", plan?: stri
 }
 
 // ---------------------------------------------------------------------------
-// How the shop writes a listing, and feedback to the people who make Flöda
+// How the shop writes a listing, and feedback to the people who make Snaben
 // ---------------------------------------------------------------------------
 
 /** The tag rules the "How you list" form writes are named so it can find and replace its own. */
@@ -2346,7 +2346,7 @@ export async function houseTagRules(): Promise<import("@/lib/catalog/house").Tag
 const KIND_RULE_PREFIX = "kind: ";
 
 /**
- * The kinds the shop told Flöda about, as tag rules the build applies: every product of the kind
+ * The kinds the shop told Snaben about, as tag rules the build applies: every product of the kind
  * gets its tags, and its Type is written as what the shop calls it. The kind rules replace the
  * kind rules; rules made anywhere else are left alone.
  */
@@ -2427,11 +2427,11 @@ export async function saveHouseAction(input: { house: import("@/lib/catalog/hous
 }
 
 /**
- * A word from someone using Flöda to the people who make it. On the vendor's own deployment it
+ * A word from someone using Snaben to the people who make it. On the vendor's own deployment it
  * is kept there; an installed copy sends it to the vendor with the shop, page and version on it,
  * and keeps it here as well if the vendor cannot be reached.
  */
-export async function sendNoteToFlodaAction(input: { message: string; email?: string; page?: string }): Promise<ActionResult> {
+export async function sendNoteToSnabenAction(input: { message: string; email?: string; page?: string }): Promise<ActionResult> {
   const user = await requireUser();
   return safely(async () => {
     const message = String(input.message ?? "").trim().slice(0, 4000);
@@ -2475,7 +2475,7 @@ export async function sendNoteToFlodaAction(input: { message: string; email?: st
       return { ok: true, message: "Sent. Thank you — a person reads every one." };
     } catch {
       await keepHere();
-      return { ok: true, message: `Flöda could not be reached just now, so it is kept with this copy. Write to ${SUPPORT_EMAIL} if it is urgent.` };
+      return { ok: true, message: `Snaben could not be reached just now, so it is kept with this copy. Write to ${SUPPORT_EMAIL} if it is urgent.` };
     }
   });
 }
@@ -2507,11 +2507,11 @@ export async function setLicenceServerAction(_prev: ActionResult | null, formDat
     await logAudit("licence.server", { userId: user.id, details: { server: url.trim() } });
     revalidatePath("", "layout");
     const list = await servers();
-    return { ok: true, message: url.trim() ? `Flöda is asked at ${list[0]} from now on.` : `Back to the built-in address${list[0] ? ` (${list[0]})` : ""}.` };
+    return { ok: true, message: url.trim() ? `Snaben is asked at ${list[0]} from now on.` : `Back to the built-in address${list[0] ? ` (${list[0]})` : ""}.` };
   });
 }
 
-/** Sign this copy in with the shop's Flöda account: the vendor hands over the key and it is kept. */
+/** Sign this copy in with the shop's Snaben account: the vendor hands over the key and it is kept. */
 export async function signInLicenceAction(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
   return safely(async () => {
     const user = await requireUser("ADMIN");
@@ -2525,7 +2525,7 @@ export async function signInLicenceAction(_prev: ActionResult | null, formData: 
     try {
       outcome = await signInWithAccount(parsed.data);
     } catch (err) {
-      return { ok: false, error: `Flöda could not be reached to sign in: ${said(err)}` };
+      return { ok: false, error: `Snaben could not be reached to sign in: ${said(err)}` };
     }
     if ("refused" in outcome) return { ok: false, error: outcome.refused };
     const { saveShopProfile, getShopProfile } = await import("@/lib/catalog/shop-profile");
@@ -2716,7 +2716,7 @@ export async function openShopAction(input: { id: string }): Promise<ActionResul
 }
 
 // ---------------------------------------------------------------------------------------------
-// Teach Flöda: one belief changed in place, one rule added
+// Teach Snaben: one belief changed in place, one rule added
 // ---------------------------------------------------------------------------------------------
 
 type HousePatch = {
@@ -2979,11 +2979,11 @@ export async function describeStyleAction(input: { samples: string[] }): Promise
 }
 
 // ---------------------------------------------------------------------------------------------
-// Flöda support: a backup sent up, a rules file down
+// Snaben support: a backup sent up, a rules file down
 // ---------------------------------------------------------------------------------------------
 
 /**
- * The shop's database, backed up now and sent to Flöda support, with a note. The file goes
+ * The shop's database, backed up now and sent to Snaben support, with a note. The file goes
  * straight into the vendor's file store under a token the vendor issues for it, since it is far
  * bigger than the vendor's own request limit; the vendor is told when it has arrived. Only the
  * database goes: pictures stay here.
@@ -2992,10 +2992,10 @@ export async function sendBackupToSupportAction(input: { note: string; email?: s
   const user = await requireUser("ADMIN");
   return safely(async () => {
     const { vendorMode, licenceServer } = await import("@/lib/catalog/licence");
-    if (vendorMode() || !licenceServer()) return { ok: false, error: "This copy has no Flöda to send to. Download the latest backup and email it instead." };
+    if (vendorMode() || !licenceServer()) return { ok: false, error: "This copy has no Snaben to send to. Download the latest backup and email it instead." };
     const { getLicence, installId } = await import("@/lib/catalog/licence-store");
     const [licence, install] = await Promise.all([getLicence(), installId()]);
-    if (!licence?.key) return { ok: false, error: "This copy has no licence key, so Flöda cannot tell whose backup it is. Download the backup and email it instead." };
+    if (!licence?.key) return { ok: false, error: "This copy has no licence key, so Snaben cannot tell whose backup it is. Download the backup and email it instead." };
     const backup = await backupNow("manual");
     const { backupPath } = await import("@/lib/catalog/backup");
     const file = backupPath(backup.name);
@@ -3006,7 +3006,7 @@ export async function sendBackupToSupportAction(input: { note: string; email?: s
     const headers = { authorization: `Bearer ${licence.key}`, "content-type": "application/json" };
     const begin = await fetch(`${licenceServer()}/api/support`, { method: "POST", headers, body: JSON.stringify({ step: "begin", name: backup.name, bytes: bytes.length }), signal: AbortSignal.timeout(15_000) });
     const opened = (await begin.json().catch(() => null)) as { ok?: boolean; why?: string; pathname?: string; token?: string; access?: "public" | "private" } | null;
-    if (!begin.ok || !opened?.ok || !opened.pathname || !opened.token) return { ok: false, error: opened?.why || `Flöda answered ${begin.status} and took no backup.` };
+    if (!begin.ok || !opened?.ok || !opened.pathname || !opened.token) return { ok: false, error: opened?.why || `Snaben answered ${begin.status} and took no backup.` };
     const { put } = await import("@vercel/blob/client");
     let access: "public" | "private" = opened.access === "private" ? "private" : "public";
     let stored: { url: string; pathname: string };
@@ -3025,7 +3025,7 @@ export async function sendBackupToSupportAction(input: { note: string; email?: s
       signal: AbortSignal.timeout(15_000),
     });
     const told = (await done.json().catch(() => null)) as { ok?: boolean; why?: string } | null;
-    if (!done.ok || !told?.ok) return { ok: false, error: told?.why || `The backup went up but Flöda did not record it (HTTP ${done.status}). Say so when you write.` };
+    if (!done.ok || !told?.ok) return { ok: false, error: told?.why || `The backup went up but Snaben did not record it (HTTP ${done.status}). Say so when you write.` };
     await logAudit("backup.sent_to_support", { userId: user.id, details: { name: backup.name, bytes: bytes.length } });
     return { ok: true, data: { bytes: bytes.length } };
   });
@@ -3043,7 +3043,7 @@ export async function dismissSupportBackupAction(at: string): Promise<ActionResu
   });
 }
 
-/** Everything the shop has taught Flöda, as one file to keep or to send. See rules-file.ts. */
+/** Everything the shop has taught Snaben, as one file to keep or to send. See rules-file.ts. */
 export async function exportRulesAction(): Promise<ActionResult<{ json: string; filename: string }>> {
   await requireUser("ADMIN");
   return safely(async () => {
@@ -3088,7 +3088,7 @@ export async function importRulesAction(input: { json: string }): Promise<Action
     let parsed: unknown;
     try { parsed = JSON.parse(String(input.json ?? "")); } catch { return { ok: false, error: "That is not a rules file: it could not be read as one." }; }
     const file = cleanRulesFile(parsed);
-    if (!file) return { ok: false, error: "That is not a Flöda rules file." };
+    if (!file) return { ok: false, error: "That is not a Snaben rules file." };
     const { sqliteFile } = await import("@/lib/catalog/backup");
     if (sqliteFile()) await backupNow("restore").catch(() => undefined);
     const { getHouseConventions, saveHouseConventions, saveLearnedVocabulary, saveWebsiteCategories, refreshConventions } = await import("@/lib/catalog/shop-profile");

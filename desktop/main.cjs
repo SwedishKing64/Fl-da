@@ -1,6 +1,6 @@
-// Flöda as an app on a PC or a Mac.
+// Snaben as an app on a PC or a Mac.
 //
-// Electron opens a window; everything behind it is the same Next.js server the hosted Flöda
+// Electron opens a window; everything behind it is the same Next.js server the hosted Snaben
 // runs, started here on a free port with a SQLite database and a files folder in the user's own
 // app-data directory (see launch.cjs). Nothing leaves the machine except what the shop asks for:
 // the reading service for PDFs and photos, brand pages for specs, and the vendor for the licence.
@@ -23,9 +23,27 @@ const config = readConfig(root());
 const open = Boolean(config.open);
 
 // The name in the app menu, in "About" and "Quit", and of the data folder in app-data — on every
-// platform, whatever the bundle or the executable is called on disk (Floda, ASCII, so that the
-// Mac bundle signs and Electron finds its helpers).
-app.setName(open ? "Flöda Open" : "Flöda");
+// platform, and the same as the bundle and the executable on disk.
+app.setName(open ? "Snaben Open" : "Snaben");
+
+// The data folder is named after the app, so a copy that was installed as Flöda has its shops
+// in a folder of that name. Before anything touches app-data, that folder is moved under the new
+// name once: a rename within the same parent, so nothing is copied and nothing is lost.
+(function keepOldData() {
+  const fresh = app.getPath("userData");
+  const old = path.join(path.dirname(fresh), open ? "Fl\u00f6da Open" : "Fl\u00f6da");
+  try {
+    if (!fs.existsSync(old)) return;
+    if (!fs.existsSync(fresh)) { fs.renameSync(old, fresh); return; }
+    if (fs.existsSync(path.join(fresh, "shops.json")) || fs.existsSync(path.join(fresh, "floda.db"))) return;
+    for (const entry of fs.readdirSync(old)) {
+      const to = path.join(fresh, entry);
+      if (!fs.existsSync(to)) fs.renameSync(path.join(old, entry), to);
+    }
+  } catch (err) {
+    console.error("[desktop] could not move the old data folder:", err);
+  }
+})();
 
 let server = null;
 let win = null;
@@ -74,7 +92,7 @@ async function switchShop() {
     }
   } catch (err) {
     log(`[desktop] could not open the other shop: ${err.message}`);
-    dialog.showErrorBox("Flöda could not open that shop", `${err.message}\n\nThe last few lines of the log:\n${lines.slice(-12).join("\n")}`);
+    dialog.showErrorBox("Snaben could not open that shop", `${err.message}\n\nThe last few lines of the log:\n${lines.slice(-12).join("\n")}`);
   } finally {
     switching = false;
     menu();
@@ -96,7 +114,7 @@ function openWindow() {
     height: 900,
     minWidth: 900,
     minHeight: 600,
-    title: "Flöda",
+    title: "Snaben",
     backgroundColor: "#f0f2f5",
     autoHideMenuBar: true,
     webPreferences: { contextIsolation: true, sandbox: true },
@@ -132,7 +150,7 @@ function menu() {
     ] },
     { label: "View", submenu: [{ role: "reload" }, { role: "resetZoom" }, { role: "zoomIn" }, { role: "zoomOut" }, { type: "separator" }, { role: "togglefullscreen" }] },
     { role: "windowMenu" },
-    { label: "Help", submenu: [{ label: "Flöda website", click: () => shell.openExternal("https://fl-da.vercel.app") }, { label: "Show the log", click: () => shell.openPath(path.join(app.getPath("userData"), "floda.log")) }, { type: "separator" }, { label: `Flöda ${app.getVersion()}${open ? " (open copy)" : ""}`, enabled: false }] },
+    { label: "Help", submenu: [{ label: "Snaben website", click: () => shell.openExternal("https://fl-da.vercel.app") }, { label: "Show the log", click: () => shell.openPath(path.join(app.getPath("userData"), "floda.log")) }, { type: "separator" }, { label: `Snaben ${app.getVersion()}${open ? " (open copy)" : ""}`, enabled: false }] },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
@@ -156,7 +174,7 @@ if (!app.requestSingleInstanceLock()) {
       if (!open) keepCurrent({ log, window: () => win });
     } catch (err) {
       log(`[desktop] could not start: ${err.message}`);
-      dialog.showErrorBox("Flöda could not start", `${err.message}\n\nThe last few lines of the log:\n${lines.slice(-12).join("\n")}`);
+      dialog.showErrorBox("Snaben could not start", `${err.message}\n\nThe last few lines of the log:\n${lines.slice(-12).join("\n")}`);
       app.quit();
     }
   });

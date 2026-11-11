@@ -1,5 +1,5 @@
 /**
- * An open copy: Flöda with no sign-in and no licence.
+ * An open copy: Snaben with no sign-in and no licence.
  *
  * A desktop build made with FLODA_OPEN=1 runs for whoever opens the window. Its launcher opens
  * `/open`, which signs the person in as the copy's owner (an admin called "Shop owner", made the

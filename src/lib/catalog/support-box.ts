@@ -1,6 +1,6 @@
 /**
- * A shop's backup sent to Flöda support, kept on the vendor's deployment: what was sent, by whom,
- * and where the file sits in the vendor's Blob store, so a person at Flöda can load it into a shop
+ * A shop's backup sent to Snaben support, kept on the vendor's deployment: what was sent, by whom,
+ * and where the file sits in the vendor's Blob store, so a person at Snaben can load it into a shop
  * of their own, look, fix, and send a rules file back. Listed on the Clients page under one key in
  * `AppSetting`, the way feedback is.
  */

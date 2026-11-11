@@ -8,14 +8,14 @@ import { describePlanSize, PLANS, perShort, planOf, TRIAL_DAYS } from "@/lib/cat
 
 /**
  * What a copy shows instead of the app when it may not run: the trial has ended, the licence
- * was paused or ended, Flöda could not be reached for a month, or no key was ever entered. The
+ * was paused or ended, Snaben could not be reached for a month, or no key was ever entered. The
  * shop's data is untouched behind it; a key, or a plan, opens it again. Staff see who to ask.
  */
 export function Paywall({ state, isAdmin, name, servers = [], override = "" }: { state: Exclude<LicenceState, { kind: "unlicensed" | "ok" }>; isAdmin: boolean; name: string; servers?: string[]; override?: string }) {
   const lapsed = state.kind === "lapsed" ? state : null;
   const trialOver = lapsed?.licence.status === "TRIAL";
   const was = lapsed ? planOf(lapsed.licence.plan) : null;
-  const title = state.kind === "none" ? "Sign in with your Flöda account" : trialOver ? "Your free trial has ended" : "This copy's licence needs attention";
+  const title = state.kind === "none" ? "Sign in with your Snaben account" : trialOver ? "Your free trial has ended" : "This copy's licence needs attention";
   return (
     <main className="min-h-screen bg-[var(--canvas)]">
       <header className="aurora relative overflow-hidden pb-24 pt-14 text-center">
@@ -28,8 +28,8 @@ export function Paywall({ state, isAdmin, name, servers = [], override = "" }: {
         <div className="card p-6 md:p-8">
           <h1 className="text-[24px] font-bold tracking-[-0.02em]">{title}</h1>
           <p className="mt-2 text-[14.5px] text-[var(--ink-2)]">
-            {state.kind === "none" && <>Hello {name}. Flöda is used with an account made on its website, which starts {TRIAL_DAYS} days free with no card. Signing in here licenses this copy; everything the shop does in Flöda stays on this machine.</>}
-            {lapsed && trialOver && <>Thanks for trying Flöda, {name}. Everything you set up and every invoice you read is still here, untouched. Pick a plan to carry on.</>}
+            {state.kind === "none" && <>Hello {name}. Snaben is used with an account made on its website, which starts {TRIAL_DAYS} days free with no card. Signing in here licenses this copy; everything the shop does in Snaben stays on this machine.</>}
+            {lapsed && trialOver && <>Thanks for trying Snaben, {name}. Everything you set up and every invoice you read is still here, untouched. Pick a plan to carry on.</>}
             {lapsed && !trialOver && <>{lapsed.why} Everything is still here, untouched.</>}
           </p>
 

@@ -77,7 +77,7 @@ export function WebsiteForm({ saved }: { saved: WebsiteCategories | null }) {
   return (
     <div className="space-y-4 text-[14px]">
       <p className="text-[var(--ink-soft)]">
-        Every product has a place it must appear on your site, and that place is a category the site already has. Flöda reads the categories off your website and uses them, and nothing else, as the product types it may write in the Type column. A reader that proposes a kind you do not have is stopped on the review grid, so nothing is invented.
+        Every product has a place it must appear on your site, and that place is a category the site already has. Snaben reads the categories off your website and uses them, and nothing else, as the product types it may write in the Type column. A reader that proposes a kind you do not have is stopped on the review grid, so nothing is invented.
       </p>
 
       {saved && !found && (

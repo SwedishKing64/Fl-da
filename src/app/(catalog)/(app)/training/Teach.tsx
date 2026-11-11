@@ -26,7 +26,7 @@ import { fromGrams, toGrams, type HouseConventions } from "@/lib/catalog/house";
 import { ENDINGS, SOURCE_LABELS, type Area, type Belief, type Choice, type Edit, type Source } from "@/lib/catalog/teaching";
 
 /**
- * What Flöda believes about the shop, by area, every belief a sentence that can be changed where
+ * What Snaben believes about the shop, by area, every belief a sentence that can be changed where
  * it stands. A row's Change opens the one editor that belief needs — two tiles for a choice, a box
  * for a text, a few fields for a rule — and Keep writes it and reloads the sentence. Each area ends
  * with Add a rule, for the thing no export could show.
@@ -78,7 +78,7 @@ function AreaCard({ area, lists }: { area: Area; lists: TeachLists }) {
           <span className="mt-0.5 block text-[13px] text-[var(--ink-soft)]">{area.blurb}</span>
         </span>
         <span className="flex shrink-0 items-center gap-3 text-[12.5px] text-[var(--ink-soft)]">
-          <span className="hidden sm:inline">{taught ? <><strong className="text-[var(--ink-2)]">{taught}</strong> from your shop · </> : null}{area.beliefs.length - taught} Flöda&rsquo;s own{off ? ` · ${off} off` : ""}</span>
+          <span className="hidden sm:inline">{taught ? <><strong className="text-[var(--ink-2)]">{taught}</strong> from your shop · </> : null}{area.beliefs.length - taught} Snaben&rsquo;s own{off ? ` · ${off} off` : ""}</span>
           <span className={cx("grid h-7 w-7 place-items-center rounded-full bg-[var(--canvas-2)] transition-transform", open && "rotate-90")} aria-hidden>›</span>
         </span>
       </button>

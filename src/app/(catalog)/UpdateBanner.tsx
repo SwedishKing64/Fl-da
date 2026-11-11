@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 /**
- * "Flöda has been updated — reload": a page keeps running the version it was opened with, so a fix
+ * "Snaben has been updated — reload": a page keeps running the version it was opened with, so a fix
  * that went live after it was opened never reaches it until it is reloaded (2026-10-23). The build
  * this page came with is compared with the server's, on a timer and whenever the tab comes back
  * into view.
@@ -31,7 +31,7 @@ export function UpdateBanner() {
   if (!stale) return null;
   return (
     <div role="status" className="sticky top-0 z-50 flex flex-wrap items-center justify-center gap-3 bg-amber-100 px-4 py-2 text-sm text-amber-900 shadow">
-      <span><strong>Flöda has been updated.</strong> Reload the page to use the latest version — until then this page keeps working the old way.</span>
+      <span><strong>Snaben has been updated.</strong> Reload the page to use the latest version — until then this page keeps working the old way.</span>
       <button type="button" className="rounded-lg bg-amber-900 px-3 py-1 text-xs font-semibold text-white hover:bg-amber-800" onClick={() => window.location.reload()}>Reload now</button>
     </div>
   );

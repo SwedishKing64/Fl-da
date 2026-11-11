@@ -402,6 +402,19 @@ terms and the due dates worked from them, PAID stamps) live in Rubin's handover.
 
 ## Decisions and history, newest first
 
+- 2026-11-11 **The product is called Snaben.** The name changed from Flöda; the mark (the blue
+  tile with the F) stays, and the wordmark is the new name in the same face, without the umlaut's
+  two dots. Everything a person sees changed: the app, the installers
+  (`Snaben-Setup-<version>.exe`, `Snaben-<version>-<arch>.dmg`), the menus, the pages, the docs
+  (`docs/SNABEN.md`). What did not change, on purpose, so installed copies and the deployment
+  keep working: the app id `ai.floda.app` (an update installs over an old copy rather than beside
+  it); the data folder is named after the app, so on first start under the new name the old
+  `Flöda` folder in app-data is moved to `Snaben` once (`desktop/main.cjs`); the file names
+  `floda.db` and `floda.json`; the audit and settings keys (`floda.*`), the cookies, the
+  `x-floda-*` headers, the `floda_error` field, the `FLODA_*` environment variables, the `FL-`
+  licence-key prefix and the CSS class names; and the addresses (`floda.ai`, `hello@floda.ai`,
+  `fl-da.vercel.app`) and the repository name, until a Snaben domain exists. The support email
+  shown can be set with `NEXT_PUBLIC_FLODA_SUPPORT_EMAIL` meanwhile.
 - 2026-11-02 **No mapping step; training reads are free; a guide on Teach Snaben.** The Column
   mapping button is gone from the batch page. A layout whose headings could not place the
   product's name is put to the light model with a few rows (`mapping-ai.ts`), and its answer fills

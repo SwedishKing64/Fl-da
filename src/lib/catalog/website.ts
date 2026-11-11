@@ -3,7 +3,7 @@
  *
  * A product has a place it must appear on the shop's site, and that place is a category the site
  * already has. So the categories are read off the site itself, once, and become the kinds of
- * product Flöda may write: the Shopify `Type` column is filled only from this list, and a Type the
+ * product Snaben may write: the Shopify `Type` column is filled only from this list, and a Type the
  * reader proposes that is not on it is an error on the review grid rather than a word nobody put
  * there. Nothing is invented.
  *
@@ -174,7 +174,7 @@ export function parseMenuLinks(html: string, origin: string): WebsiteCategory[] 
   return dedupe(out);
 }
 
-const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36 Floda/1.0";
+const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36 Snaben/1.0";
 const PAGE_LIMIT = 250;
 const MAX_PAGES = 12;
 /** 10,000 products: enough to see every Product Type a store uses. */

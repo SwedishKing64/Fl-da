@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { ALPSPORT_CONVENTIONS, BLANK_CONVENTIONS, SNOW_OUTDOOR_TAXONOMY, activateConventions, productTypes } from "./taxonomy";
+import { SNOW_TEST_CONVENTIONS, BLANK_CONVENTIONS, SNOW_OUTDOOR_TAXONOMY, activateConventions, productTypes } from "./taxonomy";
 import { PACKS, PACK_IDS, packFor } from "./trades";
 import { groupLineItems } from "./grouping";
 import { emptyLineItem, type CanonicalLineItem } from "./types";
@@ -14,7 +14,7 @@ afterEach(() => activateConventions(BLANK_CONVENTIONS));
 describe("trade packs", () => {
   it("keeps the snow-and-outdoor menu exactly where the engine found it", () => {
     expect(PACKS["snow-outdoor"].tree).toBe(SNOW_OUTDOOR_TAXONOMY);
-    activateConventions(ALPSPORT_CONVENTIONS);
+    activateConventions(SNOW_TEST_CONVENTIONS);
     expect(productTypes()).toContain("Skis");
     expect(productTypes()).toContain("Tents");
   });
@@ -41,9 +41,9 @@ describe("trade packs", () => {
     expect(packFor(undefined).id).toBe("general");
   });
 
-  it("offers every pack at setup, none first, and only the snow pack seeds rules", () => {
+  it("offers every pack at setup, none first, and no pack seeds rules", () => {
     expect(PACK_IDS[0]).toBe("general");
-    expect(PACK_IDS.filter((id) => PACKS[id].seeds)).toEqual(["snow-outdoor"]);
+    expect(PACK_IDS.filter((id) => PACKS[id].seeds)).toEqual([]);
   });
 });
 
@@ -52,7 +52,7 @@ describe("the ski and snowboard rules", () => {
   const boot = line({ brand: "Burton", title: "Trail Boot", sku: "B1", size: "9" });
 
   it("file a ski shop's glove under Ski Accessories and a Burton boot as a snowboard boot", () => {
-    activateConventions(ALPSPORT_CONVENTIONS);
+    activateConventions(SNOW_TEST_CONVENTIONS);
     const [g] = groupLineItems([glove], RULES);
     const [b] = groupLineItems([boot], RULES);
     expect(g.productType).toBe("Ski Accessories");
@@ -97,7 +97,7 @@ describe("product metafields", () => {
     const { metafieldDefs } = await import("./taxonomy");
     const { metafieldsFor, metafieldColumns } = await import("./categorize");
     const tent = { ...emptyLineItem(), title: "Ridgeback Tent", length: "210", gender: "Unisex", modelCode: "RB2" };
-    activateConventions(ALPSPORT_CONVENTIONS);
+    activateConventions(SNOW_TEST_CONVENTIONS);
     expect(metafieldDefs().every((d) => d.namespace === "ski")).toBe(true);
     activateConventions({ ...BLANK_CONVENTIONS, pack: "outdoor" });
     expect(metafieldDefs().map((d) => d.namespace)).toEqual(["custom", "custom", "custom"]);
@@ -110,7 +110,7 @@ describe("a ski's own fields", () => {
     const { suggestMapping, applyMapping } = await import("./mapping");
     const headers = ["SKU", "Name", "Flex", "Terrain", "Qty", "Cost"];
     const rows = [{ SKU: "B1", Name: "Ridge Bike", Flex: "Stiff", Terrain: "Gravel", Qty: "1", Cost: "900" }];
-    activateConventions(ALPSPORT_CONVENTIONS);
+    activateConventions(SNOW_TEST_CONVENTIONS);
     expect(suggestMapping(headers, rows)).toMatchObject({ Flex: "flex", Terrain: "terrain" });
     activateConventions({ ...BLANK_CONVENTIONS, pack: "outdoor" });
     const mapping = suggestMapping(headers, rows);

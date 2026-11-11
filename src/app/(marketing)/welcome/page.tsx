@@ -12,8 +12,8 @@ import { describePlanSize, PLANS, per } from "@/lib/catalog/plans";
 import "./welcome.css";
 
 export const metadata: Metadata = {
-  title: "Flöda",
-  description: "Supplier paperwork in, shop-ready listings out. Flöda reads invoices, order forms, spec sheets and photographed paperwork into Shopify products, stock updates and price changes, and learns how your shop does it from your own catalogue.",
+  title: "Snaben",
+  description: "Supplier paperwork in, shop-ready listings out. Snaben reads invoices, order forms, spec sheets and photographed paperwork into Shopify products, stock updates and price changes, and learns how your shop does it from your own catalogue.",
 };
 
 /**
@@ -30,18 +30,18 @@ export default function WelcomePage() {
             <Reveal className="eyebrow-wrap"><span className="eyebrow"><span className="pulse" />Now onboarding founding retailers</span></Reveal>
             <Reveal delay={1}><h1 id="hero-title">Supplier paperwork in.<br /><span className="grad">Shop-ready listings out.</span></h1></Reveal>
             <Reveal delay={2} as="p" className="lede">
-              Flöda reads the invoices, order confirmations, spec sheets and scribbled-on order forms your suppliers send, and turns them into Shopify products, stock updates and price changes, the way your shop already does it. Every cell checked on screen before anything touches your store.
+              Snaben reads the invoices, order confirmations, spec sheets and scribbled-on order forms your suppliers send, and turns them into Shopify products, stock updates and price changes, the way your shop already does it. Every cell checked on screen before anything touches your store.
             </Reveal>
             <Reveal delay={3} className="ctas">
               <a href="#register" className="btn btn-meta btn-lg">Start free trial<span aria-hidden>→</span></a>
               <a href="#how" className="btn btn-ghost btn-lg">See how it works</a>
             </Reveal>
-            <Reveal delay={4} as="p" className="note">14 days free on any plan. An app for Windows and Mac, or hosted. Set up with you by a Flöda engineer.</Reveal>
+            <Reveal delay={4} as="p" className="note">14 days free on any plan. An app for Windows and Mac, or hosted. Set up with you by a Snaben engineer.</Reveal>
 
             <Reveal delay={3} className="demo-wrap">
               <Tilt>
                 <div className="window hero-shot" aria-label="The review grid, with a supplier's order read into it">
-                  <div className="chrome"><i /><i /><i /><span className="url">Flöda · Northwind order 1182 · Review</span><span className="live"><b /> 7 products · 12 variants</span></div>
+                  <div className="chrome"><i /><i /><i /><span className="url">Snaben · Northwind order 1182 · Review</span><span className="live"><b /> 7 products · 12 variants</span></div>
                   <div className="shot"><Image src="/shots/review-grid.jpg" alt="The review grid: every product and variant from a supplier's order with SKU, barcode, options, stock, cost and price, and the order's totals" width={1800} height={1433} sizes="(min-width: 1100px) 1040px, 100vw" priority /></div>
                 </div>
               </Tilt>
@@ -54,8 +54,8 @@ export default function WelcomePage() {
           <div className="wrap">
             <Reveal className="fact" delay={0}><b>Spreadsheets, PDFs, photos</b><span>Whatever the supplier sends, pen marks included.</span></Reveal>
             <Reveal className="fact" delay={1}><b>Learns your catalogue</b><span>Your own Shopify export teaches it how you file, tag and name things.</span></Reveal>
-            <Reveal className="fact" delay={2}><b>You press import</b><span>Flöda writes the file. Nothing touches your store on its own.</span></Reveal>
-            <Reveal className="fact" delay={3}><b>Set up with you</b><span>A Flöda engineer on a call, on your own invoices, supplier by supplier.</span></Reveal>
+            <Reveal className="fact" delay={2}><b>You press import</b><span>Snaben writes the file. Nothing touches your store on its own.</span></Reveal>
+            <Reveal className="fact" delay={3}><b>Set up with you</b><span>A Snaben engineer on a call, on your own invoices, supplier by supplier.</span></Reveal>
           </div>
         </section>
 
@@ -65,11 +65,11 @@ export default function WelcomePage() {
             <Reveal className="head center">
               <span className="eyebrow">How it works</span>
               <h2>Three steps. The third one is you checking.</h2>
-              <p className="lede">Nothing goes to your store on Flöda&rsquo;s say-so. It does the reading and the matching; you look at the result and press import.</p>
+              <p className="lede">Nothing goes to your store on Snaben&rsquo;s say-so. It does the reading and the matching; you look at the result and press import.</p>
             </Reveal>
             <Story
               steps={[
-                { title: "Drop in what the supplier sent", text: "A spreadsheet, a PDF, or a photo off your phone, pen marks and all. Flöda reads the print and the handwriting: a price in the margin is the RRP, a percentage is the discount, a year is the season." },
+                { title: "Drop in what the supplier sent", text: "A spreadsheet, a PDF, or a photo off your phone, pen marks and all. Snaben reads the print and the handwriting: a price in the margin is the RRP, a percentage is the discount, a year is the season." },
                 { title: "It becomes your catalogue\u2019s shape", text: "Lines are matched to what you already sell by barcode, code or name. New products are named, categorised, tagged and priced the way your shop does it, learned from your own Shopify export." },
                 { title: "Check it, then import it", text: "Every product in a grid, every changed cell listed. Download a Shopify CSV, or only the product types you\u2019re working on today, and import it yourself." },
               ]}
@@ -106,12 +106,12 @@ export default function WelcomePage() {
                 <p>A photo of scribbled-on paperwork becomes a table you can check, doubtful readings marked, saved as a CSV the other jobs take.</p>
               </Reveal>
               <Reveal className="tile" delay={3}>
-                <div className="tile-shot"><Image src="/shots/learn.jpg" alt="Teach Flöda your catalogue" width={1800} height={1138} sizes="(min-width: 860px) 360px, 100vw" /></div>
+                <div className="tile-shot"><Image src="/shots/learn.jpg" alt="Teach Snaben your catalogue" width={1800} height={1138} sizes="(min-width: 860px) 360px, 100vw" /></div>
                 <h3>Learns your shop</h3>
                 <p>Starts blank. Your Shopify export teaches it your product types, your menus, how you spell every tag and what each brand&rsquo;s listings look like.</p>
               </Reveal>
               <Reveal className="tile" delay={4}>
-                <div className="tile-ui app-ui"><div className="dock"><span className="win">▣</span><span className="mac">⌘</span></div><span className="lbl">Floda-Setup.exe · Floda.dmg</span></div>
+                <div className="tile-ui app-ui"><div className="dock"><span className="win">▣</span><span className="mac">⌘</span></div><span className="lbl">Snaben-Setup.exe · Snaben.dmg</span></div>
                 <h3>Runs on your PC</h3>
                 <p>An app for Windows and Mac, with its database on your machine. Or hosted, if you&rsquo;d rather. Your supplier costs never sit on someone else&rsquo;s server unless you choose it.</p>
               </Reveal>
@@ -125,7 +125,7 @@ export default function WelcomePage() {
             <Reveal className="head">
               <span className="eyebrow">The product</span>
               <h2>What it looks like, with a real order in it.</h2>
-              <p className="lede">These are screens from a copy of Flöda with a supplier&rsquo;s order read into it, not drawings. Pick one.</p>
+              <p className="lede">These are screens from a copy of Snaben with a supplier&rsquo;s order read into it, not drawings. Pick one.</p>
             </Reveal>
             <Reveal delay={1}><Screens /></Reveal>
           </div>
@@ -138,7 +138,7 @@ export default function WelcomePage() {
             <Reveal className="head">
               <span className="eyebrow dark">Built in a real shop</span>
               <h2>Every rule was settled against real paperwork, not guessed.</h2>
-              <p className="lede">Flöda was built inside a working specialty retailer, and that shop&rsquo;s whole buying season went through it line by line: twenty-odd suppliers, every layout they send, every convention the catalogue had. What that taught it is what makes the first invoice from any supplier read well, whatever the shop sells.</p>
+              <p className="lede">Snaben was built inside a working specialty retailer, and that shop&rsquo;s whole buying season went through it line by line: twenty-odd suppliers, every layout they send, every convention the catalogue had. What that taught it is what makes the first invoice from any supplier read well, whatever the shop sells.</p>
             </Reveal>
             <Reveal delay={1} className="quote-card">
               <p className="quote">&ldquo;A name is the loosest key, so it&rsquo;s the strictest match. Whole words only, never a substring, and a name that fits two products is refused with both named rather than guessed.&rdquo;</p>
@@ -158,7 +158,7 @@ export default function WelcomePage() {
             <Reveal className="head">
               <span className="eyebrow">Who it&rsquo;s for</span>
               <h2>Retailers whose suppliers send paperwork, not feeds.</h2>
-              <p className="lede">Specialty retail runs on order forms and PDFs. If a delivery starts with a pile of them, Flöda is for you. It starts blank and learns your catalogue, so it does not care what you sell.</p>
+              <p className="lede">Specialty retail runs on order forms and PDFs. If a delivery starts with a pile of them, Snaben is for you. It starts blank and learns your catalogue, so it does not care what you sell.</p>
             </Reveal>
             <div className="fit four">
               <Reveal className="card" delay={0}><span className="label">Sizes, colours, seasons</span><h3>Outdoor and sports</h3><p>Apparel, footwear, packs, hardware. Model years that change every season and sizes that run in two scales.</p></Reveal>
@@ -178,8 +178,8 @@ export default function WelcomePage() {
               <p className="lede">A desktop copy keeps its database and every file you upload on your own computer. The only things that leave it are the ones we list, and we list them all.</p>
             </Reveal>
             <div className="data">
-              <Reveal className="dcard" delay={0}><span className="ico" aria-hidden>🖥</span><h3>On your machine</h3><p>Your suppliers, prices, imports and staff accounts live in Flöda&rsquo;s data folder on your PC or Mac. Uninstall it and the folder is still yours.</p></Reveal>
-              <Reveal className="dcard" delay={1}><span className="ico" aria-hidden>🛡</span><h3>Nothing to your store on its own</h3><p>Flöda writes a Shopify file. You look at the grid, download the file and import it. There is no connection that can change a listing without you.</p></Reveal>
+              <Reveal className="dcard" delay={0}><span className="ico" aria-hidden>🖥</span><h3>On your machine</h3><p>Your suppliers, prices, imports and staff accounts live in Snaben&rsquo;s data folder on your PC or Mac. Uninstall it and the folder is still yours.</p></Reveal>
+              <Reveal className="dcard" delay={1}><span className="ico" aria-hidden>🛡</span><h3>Nothing to your store on its own</h3><p>Snaben writes a Shopify file. You look at the grid, download the file and import it. There is no connection that can change a listing without you.</p></Reveal>
               <Reveal className="dcard" delay={2}><span className="ico" aria-hidden>🤖</span><h3>Reading by AI, included</h3><p>Documents are read by Claude through Anthropic&rsquo;s API, which does not train on them. Only the document goes, never your catalogue. <Link href="/privacy">Exactly what leaves your machine.</Link></p></Reveal>
             </div>
           </div>
@@ -196,9 +196,9 @@ export default function WelcomePage() {
             <Reveal delay={1}>
               <Faq items={[
                 { q: "Do I need an Anthropic account or an API key?", a: <p>No. Reading by AI is included in every plan. A shop that would rather have the reading billed to its own Anthropic account can paste a key of its own in Settings.</p> },
-                { q: "What happens on the first invoice from a new supplier?", a: <p>Flöda says it is a new layout and asks you to check the five things a new layout gets wrong. What you fix is remembered for that supplier. In setup you can do this for every supplier at once, from one example each.</p> },
-                { q: "Does it work for shops that are not outdoor or sports?", a: <p>Yes. Flöda starts blank and learns your product types, your menus, your tags and your naming from your own Shopify export. It does not care what you sell.</p> },
-                { q: "How does the free trial work?", a: <p>Every plan starts with 14 days free and no card. You pick a plan when you set up, use everything, and a person from Flöda gets in touch before the trial ends. Nothing is charged until you have said which plan you want.</p> },
+                { q: "What happens on the first invoice from a new supplier?", a: <p>Snaben says it is a new layout and asks you to check the five things a new layout gets wrong. What you fix is remembered for that supplier. In setup you can do this for every supplier at once, from one example each.</p> },
+                { q: "Does it work for shops that are not outdoor or sports?", a: <p>Yes. Snaben starts blank and learns your product types, your menus, your tags and your naming from your own Shopify export. It does not care what you sell.</p> },
+                { q: "How does the free trial work?", a: <p>Every plan starts with 14 days free and no card. You pick a plan when you set up, use everything, and a person from Snaben gets in touch before the trial ends. Nothing is charged until you have said which plan you want.</p> },
               ]} />
             </Reveal>
           </div>
@@ -210,7 +210,7 @@ export default function WelcomePage() {
             <Reveal className="head">
               <span className="eyebrow">Pricing</span>
               <h2>Priced by the fortnight&rsquo;s paperwork, billed every two weeks. Work out what it saves you.</h2>
-              <p className="lede">Listing 100 products by hand is a day of someone&rsquo;s time. Flöda reads, matches and prices them in about 15 minutes, faster per product the bigger the order, and you check the grid. Put your own numbers in.</p>
+              <p className="lede">Listing 100 products by hand is a day of someone&rsquo;s time. Snaben reads, matches and prices them in about 15 minutes, faster per product the bigger the order, and you check the grid. Put your own numbers in.</p>
             </Reveal>
             <Reveal delay={1}><Calculator /></Reveal>
             <div className="plans" aria-label="Plans">
@@ -224,7 +224,7 @@ export default function WelcomePage() {
                     <li>{describePlanSize(p)}</li>
                     <li>{p.people}</li>
                     <li>{p.reading === "included" ? "AI reading included, nothing else to buy" : "Reading on your own Anthropic key, at Anthropic's rates"}</li>
-                    <li>Set up for you by a Flöda engineer</li>
+                    <li>Set up for you by a Snaben engineer</li>
                     {p.id === "unlimited" && <li>An engineer on call through your season</li>}
                   </ul>
                   <Link href={`/account/signup?plan=${p.id}`} className={`btn ${p.founding ? "btn-meta" : "btn-grey"}`}>Start free trial</Link>
@@ -234,8 +234,8 @@ export default function WelcomePage() {
             <div className="signup">
               <Reveal className="fde" delay={1}>
                 <span className="eyebrow">Set up for you</span>
-                <h3>A Flöda engineer sets it up with you. Not a help centre.</h3>
-                <p>Every plan starts the same way: a forward-deployed engineer gets on a call with you, loads your Shopify catalogue so Flöda learns how you file and name things, and reads your first invoices with you, supplier by supplier, fixing anything in the wrong column until it reads the way you would. What you settle together is remembered for every invoice after.</p>
+                <h3>A Snaben engineer sets it up with you. Not a help centre.</h3>
+                <p>Every plan starts the same way: a forward-deployed engineer gets on a call with you, loads your Shopify catalogue so Snaben learns how you file and name things, and reads your first invoices with you, supplier by supplier, fixing anything in the wrong column until it reads the way you would. What you settle together is remembered for every invoice after.</p>
                 <ul className="ticks">
                   <li>14 days free, no card to start</li>
                   <li>Windows and Mac app, or hosted</li>
@@ -258,7 +258,7 @@ export default function WelcomePage() {
           <div className="wrap">
             <Reveal>
               <h2>Your next season&rsquo;s paperwork, read for you.</h2>
-              <p className="lede">Two weeks free on any plan, then $20 a month with your own key or from $49 a fortnight with reading included. A Flöda engineer sets it up with you on one of your own supplier invoices.</p>
+              <p className="lede">Two weeks free on any plan, then $20 a month with your own key or from $49 a fortnight with reading included. A Snaben engineer sets it up with you on one of your own supplier invoices.</p>
               <a href="#register" className="btn btn-meta btn-lg">Start free trial<span aria-hidden>→</span></a>
             </Reveal>
           </div>

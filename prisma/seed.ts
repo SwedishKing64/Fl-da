@@ -1,6 +1,6 @@
 // Usage: npm run catalog:seed [-- --admin you@shop.com "Your Name" password] [--snow]
 //
-// A fresh Flöda is blank: it learns the shop from its own export during setup, and the
+// A fresh Snaben is blank: it learns the shop from its own export during setup, and the
 // snow-and-outdoor rules are seeded when that pack is chosen there. `--snow` seeds them here for a
 // development database; `--admin` makes an account so the setup walk-through can be skipped.
 import { prisma } from "../src/lib/catalog/db";

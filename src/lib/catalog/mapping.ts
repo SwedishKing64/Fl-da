@@ -78,8 +78,8 @@ const NEEDS_CODE_VALUES = /^(material|style|model)( description| desc| name| tex
 /**
  * A column that names a party to the order — who is buying, who is paying, who is selling it —
  * which is never what was bought. Burton's SAP export has Payer Name, Customer Name and a Super Rep
- * on every line, all reading "Alpsport" or a code, and "Payer Name" was taken as the product's name:
- * four hundred lines, all called Alpsport, built as one product.
+ * on every line, all reading the shop's own name or a code, and "Payer Name" was taken as the product's name:
+ * four hundred lines, all called by the shop's name, built as one product.
  */
 export const PARTY = /\b(payer|customer|buyer|account|sold to|ship to|bill to|dealer|retailer|client|rep|sales ?person|agent|consignee|store|warehouse)\b/;
 

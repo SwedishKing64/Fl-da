@@ -1,7 +1,7 @@
 /**
  * The store as the source of truth, synced rather than told.
  *
- * A shop used to teach Flöda how it files, tags and names products by exporting its catalogue to
+ * A shop used to teach Snaben how it files, tags and names products by exporting its catalogue to
  * a file and uploading it, and the file was as old as the day it was made. With the store
  * connected, the same lessons are read off the store itself: its listings (for placing an order
  * line on what the shop already sells), its vocabulary (which kinds of product it has, which tags
@@ -73,6 +73,7 @@ export function toListings(nodes: StoreNode[]): Listing[] {
       price: price !== null && Number.isFinite(price) ? price : null,
       bindingOption: binding,
       barcodes: p.variants.nodes.map((v) => (v.barcode ?? "").trim()).filter(Boolean),
+      options: p.options.map((o) => ({ name: o.name, values: [...new Set(p.variants.nodes.map((v) => v.selectedOptions.find((s) => s.name === o.name)?.value.trim() ?? "").filter(Boolean))] })).filter((o) => o.name && o.name.toLowerCase() !== "title" && o.values.length),
     };
   });
 }

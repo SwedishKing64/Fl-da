@@ -33,15 +33,15 @@ import type { InvoiceRead, PriceRow } from "./invoice";
 const text = (v: unknown): string => (v ?? "").toString().replace(/\s+/g, " ").trim();
 const norm = (v: string): string => v.toLowerCase().replace(/[\s._-]+/g, " ").trim();
 
-/** A number as a form writes it: "1,349", "$642.38". */
-function amount(raw: string): number | null {
-  const v = raw.replace(/[$,\s]/g, "");
+/** A number as a form writes it: "1,349", "$642.38". A cell past the end of a short row is no number. */
+function amount(raw: string | undefined): number | null {
+  const v = text(raw).replace(/[$,\s]/g, "");
   if (!/^-?\d+(\.\d+)?$/.test(v)) return null;
   return Number(v);
 }
 
 /** A quantity somebody wrote in a box: a small whole number. */
-function quantityIn(raw: string): number | null {
+function quantityIn(raw: string | undefined): number | null {
   const n = amount(raw);
   return n !== null && Number.isInteger(n) && n > 0 && n <= 999 ? n : null;
 }
@@ -190,10 +190,15 @@ export function readGridForm(name: string, grid: string[][]): InvoiceRead | null
     if (!isProduct && (sizes.length >= 2 || (priced && !row.some((c) => amount(c) !== null && !sizeHeading(c))))) {
       const find = (re: RegExp) => headings.findIndex((h) => re.test(h));
       const prices: Omit<Layout, "sizes" | "boxes"> | null = priced
-        ? { rrp: find(RRP), cost: find(COST), preorder: find(PREORDER), total: find(TOTAL), qty: find(QTY), size: find(/^size$/), colour: find(/^colou?r$/), code: find(/code/), others: headings.map((h, i) => (RRP.test(h) ? i : -1)).filter((i) => i >= 0).slice(1) }
+        ? { rrp: find(RRP), cost: find(COST), preorder: find(PREORDER), total: find(TOTAL), qty: find(QTY), size: find(/^size$/), colour: find(/^colou?r$/), code: find(/code|^sku$|^part no|^item no/), others: headings.map((h, i) => (RRP.test(h) ? i : -1)).filter((i) => i >= 0).slice(1) }
         : layout ? { rrp: layout.rrp, cost: layout.cost, preorder: layout.preorder, total: layout.total, qty: layout.qty, size: layout.size, colour: layout.colour, code: layout.code, others: layout.others } : null;
       if (!prices) continue;
       const sized: Array<[number, string]> = sizes.length >= 1 && !(sizes.length === 1 && prices.qty >= 0) ? sizes.filter(([i]) => i !== prices.size) : [];
+      // A tab whose first heading row has no sizes across it but a code column beside a quantity
+      // column, or a Size column of its own, is a list — one row per item, read by the column
+      // matcher with every column kept. A flat invoice under a letterhead was being read here as a
+      // grid, its code column taken for the names and the rest thrown away (found 2026-10-28).
+      if (!layout && sized.length === 0 && (prices.size >= 0 || (prices.qty >= 0 && prices.code >= 0))) return null;
       const previous: number[] = layout ? (layout.sizes.length > 0 ? layout.sizes.map(([i]) => i) : layout.boxes) : [];
       const waistAt = headings.findIndex((h) => /^waist( width)?$/.test(h));
       const waistBefore: number | undefined = (layout as Layout | null)?.waist;

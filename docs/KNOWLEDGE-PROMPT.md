@@ -1,4 +1,4 @@
-# Prompt: build a trade knowledge pack for Flöda
+# Prompt: build a trade knowledge pack for Snaben
 
 Give the prompt below to a research agent once per trade, with `{TRADE}` replaced (for example
 "bike shop", "surf shop", "running and footwear", "fashion boutique", "homewares", "toys and games",
@@ -27,8 +27,8 @@ The `.csv` documents are scored without an API key; the `.txt` ones are read by 
 
 ---
 
-You are building reference knowledge for Flöda, a tool that reads supplier invoices and order
-forms for independent retail shops and turns each line into Shopify products and variants. Flöda
+You are building reference knowledge for Snaben, a tool that reads supplier invoices and order
+forms for independent retail shops and turns each line into Shopify products and variants. Snaben
 already reads ski and outdoor shops well. Your job is to teach it the trade of a **{TRADE}**: what
 the shop sells, how each kind of product varies, how sizes are written, and what that trade's
 supplier paperwork looks like. Everything you write is loaded as data and used to check and guide

@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { categoryById, resolveCategory, taxonomyRelease } from "./shopify-taxonomy";
-import { ALPSPORT_CONVENTIONS, BLANK_CONVENTIONS, activateConventions, activeTree, categoryForKind } from "./taxonomy";
+import { SNOW_TEST_CONVENTIONS, BLANK_CONVENTIONS, activateConventions, activeTree, categoryForKind } from "./taxonomy";
 import { SNOW_OUTDOOR_CATEGORIES } from "./trades/shopify-categories";
 import { productCategoryFor } from "./pipeline-pure";
 
-afterEach(() => activateConventions(ALPSPORT_CONVENTIONS));
+afterEach(() => activateConventions(SNOW_TEST_CONVENTIONS));
 
 describe("Shopify's Standard Product Taxonomy", () => {
   it("is the 2026-08 release, with full paths rebuilt from the ids", () => {
@@ -19,7 +19,7 @@ describe("Shopify's Standard Product Taxonomy", () => {
   });
 
   it("places every kind of product the snow-and-outdoor pack has", () => {
-    activateConventions(ALPSPORT_CONVENTIONS);
+    activateConventions(SNOW_TEST_CONVENTIONS);
     const kinds = activeTree().flatMap((s) => s.groups.flatMap((g) => [g.heading, ...g.leaves]));
     const unplaced = [...new Set(kinds)].filter((k) => !categoryForKind(k));
     expect(unplaced).toEqual([]);
@@ -35,7 +35,7 @@ describe("Shopify's Standard Product Taxonomy", () => {
   });
 
   it("is written on every product of a shop outside the snow trade, and only where the ski shop writes it for the ski shop", () => {
-    activateConventions(ALPSPORT_CONVENTIONS);
+    activateConventions(SNOW_TEST_CONVENTIONS);
     expect(productCategoryFor("Skis")).toBe("Sporting Goods > Outdoor Recreation > Winter Sports & Activities > Skiing & Snowboarding > Skis > Downhill Skis");
     expect(productCategoryFor("Tents")).toBeUndefined();
     activateConventions({ ...BLANK_CONVENTIONS, pack: "outdoor" });

@@ -75,17 +75,17 @@ export function describeApiError(err: unknown): string | null {
   }
   if (!(err instanceof Anthropic.APIError)) return null;
   const status = err.status ?? 0;
-  // The reading service refusing for money: on a plan that reads through Flöda that is the
+  // The reading service refusing for money: on a plan that reads through Snaben that is the
   // vendor's account and the shop's problem only in that nothing was read; on the shop's own
   // key it is their Anthropic account. Neither sentence mentions a balance on a plan.
   if (/credit balance|insufficient (credit|funds|balance)|billing/i.test(relayMessage(err) ?? "") || typeOf(err) === "billing_error") {
     return apiKeySource() === "floda"
-      ? "Flöda's reading service is not available right now; nothing was changed. Try again in a little while, and if it keeps happening, write to Flöda."
+      ? "Snaben's reading service is not available right now; nothing was changed. Try again in a little while, and if it keeps happening, write to Snaben."
       : "The Anthropic account behind your key has run out of credit, so nothing was read. Top it up at console.anthropic.com, or move to a plan with reading included.";
   }
   switch (typeOf(err)) {
-    // Flöda's own relay turning a reading away: a lapsed licence or a month's allowance spent. Its sentence is written for the page.
-    case "floda_error": return relayMessage(err) ?? "Flöda turned this reading away. Check the licence under Settings.";
+    // Snaben's own relay turning a reading away: a lapsed licence or a month's allowance spent. Its sentence is written for the page.
+    case "floda_error": return relayMessage(err) ?? "Snaben turned this reading away. Check the licence under Settings.";
     case "overloaded_error": return "The reading service is overloaded right now and turned this away, even after waiting and trying again several times. Nothing was changed. This is on the service's side, not your file — try again in a few minutes.";
     case "rate_limit_error": return "Too much was sent to the reading service at once and it turned this away. Nothing was changed. Wait a minute and try again.";
     case "timeout_error": return "The reading service took too long and this was not read. Nothing was changed. Try again in a minute.";

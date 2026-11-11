@@ -18,7 +18,7 @@ describe("connecting a store through the install link", () => {
     expect(oauthApp({ SHOPIFY_CLIENT_ID: "a" })).toBeNull();
   });
 
-  it("sends the owner to their own admin with Flöda's scopes and the way back", () => {
+  it("sends the owner to their own admin with Snaben's scopes and the way back", () => {
     const url = new URL(authorizeUrl(app, "ridgeway-outdoor.myshopify.com", "st4te"));
     expect(url.origin).toBe("https://ridgeway-outdoor.myshopify.com");
     expect(url.pathname).toBe("/admin/oauth/authorize");

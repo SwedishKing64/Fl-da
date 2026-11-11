@@ -49,4 +49,10 @@ export interface TradePack {
   metafields: MetafieldDef[];
   /** What a pack built from files knows beyond its menu: kinds, sizes, colour shorthand. See knowledge.ts. */
   knowledge?: PackKnowledge;
+  /** Brands the trade knows, so a brand in a file's name or tab can be told from a product's. The shop's own vendors join them. */
+  brands?: string[];
+  /** Distributors who send several brands on one order: never a brand, never a vendor. */
+  distributors?: string[];
+  /** Brands that make snowboard gear and no ski gear (the snow trade's). */
+  snowboardBrands?: string[];
 }

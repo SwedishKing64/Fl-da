@@ -65,7 +65,7 @@ export function StoreForm({ state, canInstall = false }: { state: StoreState; ca
   return (
     <div className="space-y-4 text-[14px]">
       <p className="text-[var(--ink-soft)]">
-        Connect the store once and Flöda reads it instead of being told: which product types it has, which tags go with each, how each brand is listed, and every listing an order line can be placed on. It reads the store again before a batch when the last read is a day old, so a product added in the store last week is known to this week&rsquo;s batch. The connection reads, and on the export page pushes drafts; it never changes a listing on its own.
+        Connect the store once and Snaben reads it instead of being told: which product types it has, which tags go with each, how each brand is listed, and every listing an order line can be placed on. It reads the store again before a batch when the last read is a day old, so a product added in the store last week is known to this week&rsquo;s batch. The connection reads, and on the export page pushes drafts; it never changes a listing on its own.
       </p>
 
       {state.configured && !editing && (
@@ -89,7 +89,7 @@ export function StoreForm({ state, canInstall = false }: { state: StoreState; ca
       )}
 
       {editing && canInstall && (
-        // Flöda's Shopify app: the owner approves it on their own admin, and comes back here.
+        // Snaben's Shopify app: the owner approves it on their own admin, and comes back here.
         <form action="/api/shopify/install" method="get" className="flex flex-wrap items-end gap-3">
           <input type="hidden" name="next" value="/training#store" />
           <Field label="Your store" hint="The name before .myshopify.com, as your Shopify admin shows it.">
@@ -105,7 +105,7 @@ export function StoreForm({ state, canInstall = false }: { state: StoreState; ca
           <Field label="Store domain" hint="Your Shopify admin's address, such as alpine-sports.myshopify.com.">
             <input className={INPUT} value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="your-shop.myshopify.com" autoComplete="off" />
           </Field>
-          <Field label="Admin API access token" hint={state.tokenTail ? `A token ending ${state.tokenTail} is kept; leave this empty to keep it.` : "From a custom app in Shopify admin (Settings → Apps → Develop apps) with read_products, write_products and read_inventory."}>
+          <Field label="Admin API access token" hint={state.tokenTail ? `A token ending ${state.tokenTail} is kept; leave this empty to keep it.` : "From a custom app in Shopify admin (Settings → Apps → Develop apps) with read_products, write_products, read_inventory, read_files and write_files (the files scopes keep your pictures in your store's Files)."}>
             <input className={INPUT} type="password" value={token} onChange={(e) => setToken(e.target.value)} placeholder="shpat_…" autoComplete="off" />
           </Field>
           <div className="flex flex-wrap items-center gap-2 sm:col-span-2">

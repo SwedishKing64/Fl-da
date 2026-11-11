@@ -14,7 +14,7 @@ import type { Mapping } from "@/lib/catalog/mapping";
 export const runtime = "nodejs";
 
 /**
- * What an installed copy of Flöda asks its vendor: "may this key run?" Answered only on the
+ * What an installed copy of Snaben asks its vendor: "may this key run?" Answered only on the
  * vendor's own deployment; everywhere else this route does not exist.
  *
  * `activate` and `check` are the same question. Both record when the copy was last heard from,
@@ -34,7 +34,7 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/licence/[ac
 
   const body = (await req.json().catch(() => null)) as Partial<{ key: string; install: string; shop: string; version: string; platform: string; monthBatches: number; monthProducts: number }> | null;
   const key = normaliseKey(String(body?.key ?? ""));
-  if (!key) return NextResponse.json({ ok: false, status: "UNKNOWN", why: "That is not a Flöda licence key." } satisfies CheckAnswer);
+  if (!key) return NextResponse.json({ ok: false, status: "UNKNOWN", why: "That is not a Snaben licence key." } satisfies CheckAnswer);
 
   const client = await prisma.client.findUnique({ where: { licenceKey: key } });
   const verdict = verdictFor(client);
@@ -70,7 +70,7 @@ async function trial(req: NextRequest) {
   if (!shop || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return NextResponse.json({ ok: false, status: "UNKNOWN", why: "The shop's name and a working email address are needed." } satisfies TrialAnswer);
   const plan = planOf(String(body?.plan ?? ""));
   const had = await prisma.client.findFirst({ where: { email }, select: { id: true } });
-  if (had) return NextResponse.json({ ok: false, status: "UNKNOWN", why: `That email address already has a Flöda account. Enter the key it was sent, or write to ${SUPPORT_EMAIL}.` } satisfies TrialAnswer);
+  if (had) return NextResponse.json({ ok: false, status: "UNKNOWN", why: `That email address already has a Snaben account. Enter the key it was sent, or write to ${SUPPORT_EMAIL}.` } satisfies TrialAnswer);
   const expiresAt = new Date(Date.now() + TRIAL_DAYS * 86_400_000);
   const client = await prisma.client.create({
     data: { name: shop, email, plan: plan.id, status: "TRIAL", expiresAt, licenceKey: newLicenceKey(), aiCapCents: plan.readingCapCents, lastSeenAt: new Date(), lastVersion: String(body?.version ?? "").slice(0, 40), lastInstall: String(body?.install ?? "").slice(0, 80), checkIns: 1, notes: `Started a trial from the app (${String(body?.platform ?? "").slice(0, 40)}).` },
@@ -94,8 +94,8 @@ async function checkout(req: NextRequest) {
   const body = (await req.json().catch(() => null)) as Partial<{ key: string; plan: string }> | null;
   const key = normaliseKey(String(body?.key ?? ""));
   const client = key ? await prisma.client.findUnique({ where: { licenceKey: key } }) : null;
-  if (!client) return NextResponse.json({ ok: false, why: "That is not a Flöda licence key." } satisfies BillingAnswer);
-  if (!stripeConfigured()) return NextResponse.json({ ok: false, why: `Paying online is not set up on this Flöda yet. Write to ${SUPPORT_EMAIL} and a person will sort the plan out.` } satisfies BillingAnswer);
+  if (!client) return NextResponse.json({ ok: false, why: "That is not a Snaben licence key." } satisfies BillingAnswer);
+  if (!stripeConfigured()) return NextResponse.json({ ok: false, why: `Paying online is not set up on this Snaben yet. Write to ${SUPPORT_EMAIL} and a person will sort the plan out.` } satisfies BillingAnswer);
   const plan = planOf(String(body?.plan ?? client.plan));
   try {
     const url = await createCheckout(client, plan.id, originOf(req));
@@ -111,7 +111,7 @@ async function portal(req: NextRequest) {
   const body = (await req.json().catch(() => null)) as Partial<{ key: string }> | null;
   const key = normaliseKey(String(body?.key ?? ""));
   const client = key ? await prisma.client.findUnique({ where: { licenceKey: key } }) : null;
-  if (!client) return NextResponse.json({ ok: false, why: "That is not a Flöda licence key." } satisfies BillingAnswer);
+  if (!client) return NextResponse.json({ ok: false, why: "That is not a Snaben licence key." } satisfies BillingAnswer);
   if (!client.stripeCustomerId || !stripeConfigured()) return NextResponse.json({ ok: false, why: `This copy has not paid online yet, so there is no billing page for it. Write to ${SUPPORT_EMAIL} to change anything.` } satisfies BillingAnswer);
   try {
     const url = await createPortal(client.stripeCustomerId, originOf(req));
@@ -132,7 +132,7 @@ type BillingAnswer = { ok: true; url: string } | { ok: false; why: string };
 async function signin(req: NextRequest) {
   const body = (await req.json().catch(() => null)) as Partial<{ email: string; password: string; install: string; version: string; platform: string }> | null;
   const client = await checkAccount(String(body?.email ?? ""), String(body?.password ?? ""));
-  if (!client) return NextResponse.json({ ok: false, status: "UNKNOWN", why: `That email and password do not match a Flöda account. Make one at ${originOf(req)}/account/signup, or check the password on the website first.` } satisfies TrialAnswer);
+  if (!client) return NextResponse.json({ ok: false, status: "UNKNOWN", why: `That email and password do not match a Snaben account. Make one at ${originOf(req)}/account/signup, or check the password on the website first.` } satisfies TrialAnswer);
   await prisma.client.update({ where: { id: client.id }, data: { lastSeenAt: new Date(), lastVersion: String(body?.version ?? "").slice(0, 40), lastInstall: String(body?.install ?? "").slice(0, 80), checkIns: { increment: 1 } } });
   const verdict = verdictFor(client);
   return NextResponse.json({ ok: true, key: client.licenceKey, client: client.name, plan: client.plan, status: client.status, expiresAt: verdict.ok ? verdict.expiresAt : (client.expiresAt?.toISOString() ?? null) } satisfies TrialAnswer);
@@ -143,7 +143,7 @@ async function usage(req: NextRequest) {
   const body = (await req.json().catch(() => null)) as Partial<{ key: string }> | null;
   const key = normaliseKey(String(body?.key ?? ""));
   const client = key ? await prisma.client.findUnique({ where: { licenceKey: key } }) : null;
-  if (!client) return NextResponse.json({ ok: false, why: "That is not a Flöda licence key." } satisfies UsageAnswer);
+  if (!client) return NextResponse.json({ ok: false, why: "That is not a Snaben licence key." } satisfies UsageAnswer);
   const a = allowanceOf(client);
   return NextResponse.json({ ok: true, spentCents: a.spentCents, capCents: a.capCents, exhausted: a.exhausted, calls: a.calls, resetsAt: periodEnd().toISOString(), ownKey: planOf(client.plan).reading === "own-key" } satisfies UsageAnswer);
 }
@@ -156,20 +156,20 @@ const PICTURE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/g
 
 /**
  * A picture from a copy that has nowhere public to keep one: a desktop copy's own address is
- * 127.0.0.1, and Shopify cannot fetch from that. It is kept in Flöda's Blob store under the
+ * 127.0.0.1, and Shopify cannot fetch from that. It is kept in Snaben's Blob store under the
  * client's name and the public address goes back, to be written on the listing in place of the
  * brand's. Only a key in good standing may add to the store.
  */
 async function picture(req: NextRequest) {
   const key = normaliseKey((req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, ""));
-  if (!key) return NextResponse.json({ ok: false, why: "This copy sent no licence key, so its pictures cannot be kept by Flöda." }, { status: 401 });
+  if (!key) return NextResponse.json({ ok: false, why: "This copy sent no licence key, so its pictures cannot be kept by Snaben." }, { status: 401 });
   const client = await prisma.client.findUnique({ where: { licenceKey: key } });
   const verdict = verdictFor(client);
   if (!client || !verdict.ok) return NextResponse.json({ ok: false, why: `${verdict.ok ? "" : verdict.why} Pictures are kept for copies in good standing.`.trim() }, { status: 403 });
   const type = (req.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
   if (!PICTURE_TYPES.has(type)) return NextResponse.json({ ok: false, why: "Only a JPEG, PNG, WebP or GIF picture is kept." }, { status: 415 });
   const blob = findBlobToken();
-  if (!blob) return NextResponse.json({ ok: false, why: "Flöda has no picture store attached, so the picture stays on your copy." }, { status: 503 });
+  if (!blob) return NextResponse.json({ ok: false, why: "Snaben has no picture store attached, so the picture stays on your copy." }, { status: 503 });
   const bytes = Buffer.from(await req.arrayBuffer());
   if (bytes.length === 0 || bytes.length > PICTURE_MAX) return NextResponse.json({ ok: false, why: `A picture must be under ${PICTURE_MAX / 1024 / 1024}MB.` }, { status: 413 });
   const name = (req.headers.get("x-floda-name") ?? "picture").replace(/[^A-Za-z0-9._-]+/g, "_").slice(0, 120) || "picture";

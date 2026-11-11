@@ -1,5 +1,5 @@
 /**
- * Which build of Flöda the server is running, so a page left open across an update can tell it is
+ * Which build of Snaben the server is running, so a page left open across an update can tell it is
  * out of date (the store asked 2026-10-23: a tab opened before a fix went live kept the old rule).
  * Nothing secret: the commit the deployment was built from.
  */

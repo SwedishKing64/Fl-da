@@ -14,7 +14,7 @@ const UPSTREAM = (process.env.FLODA_AI_UPSTREAM ?? "").trim().replace(/\/+$/, ""
 const PASSED = new Set(["v1/messages", "v1/messages/count_tokens"]);
 
 /**
- * Reading through Flöda.
+ * Reading through Snaben.
  *
  * A shop on a plan has no key of its own: its copy sends each reading here with its licence key
  * as the bearer token, and this forwards it to the reading service with the vendor's key, passes
@@ -26,18 +26,21 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/ai/[...path
   if (!vendorMode()) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const { path } = await ctx.params;
   const route = path.join("/");
-  if (!PASSED.has(route)) return refuse(404, "not_found_error", "That is not something Flöda passes on to the reading service.");
+  if (!PASSED.has(route)) return refuse(404, "not_found_error", "That is not something Snaben passes on to the reading service.");
 
   const key = normaliseKey((req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, ""));
-  if (!key) return refuse(401, "authentication_error", "This copy sent no licence key, so it cannot read through Flöda.");
+  if (!key) return refuse(401, "authentication_error", "This copy sent no licence key, so it cannot read through Snaben.");
   const client = await prisma.client.findUnique({ where: { licenceKey: key } });
   const verdict = verdictFor(client);
-  if (!client || !verdict.ok) return refuse(403, "floda_error", `${verdict.ok ? "" : verdict.why} Reading through Flöda stops with it. A key of your own under Reading documents in Settings still works.`.trim());
-  if (planOf(client.plan).reading === "own-key") return refuse(403, "floda_error", "This plan reads with the shop's own key, not through Flöda. Put your Anthropic key under Reading documents in Settings.");
+  if (!client || !verdict.ok) return refuse(403, "floda_error", `${verdict.ok ? "" : verdict.why} Reading through Snaben stops with it. A key of your own under Reading documents in Settings still works.`.trim());
+  if (planOf(client.plan).reading === "own-key") return refuse(403, "floda_error", "This plan reads with the shop's own key, not through Snaben. Put your Anthropic key under Reading documents in Settings.");
+  // Reading that teaches Snaben (a supplier's example in setup, the shape of the shop's descriptions)
+  // is not counted against the plan, and is not stopped by an allowance that is used up.
+  const training = req.headers.get("x-floda-purpose") === "training";
   const allowance = allowanceOf(client);
-  if (allowance.exhausted) return refuse(403, "floda_error", limitReachedMessage());
+  if (allowance.exhausted && !training) return refuse(403, "floda_error", limitReachedMessage());
   const vendorKey = (process.env.ANTHROPIC_API_KEY ?? "").trim();
-  if (!vendorKey) return refuse(503, "api_error", "Flöda's own reading key is not set, so nothing can be read through it right now.");
+  if (!vendorKey) return refuse(503, "api_error", "Snaben's own reading key is not set, so nothing can be read through it right now.");
 
   const headers = new Headers({
     "x-api-key": vendorKey,
@@ -58,7 +61,7 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/ai/[...path
     upstream = await fetch(`${UPSTREAM}/${route}`, { method: "POST", headers, body, signal: AbortSignal.timeout((maxDuration - 10) * 1000) });
   } catch (err) {
     console.error("[ai relay] could not reach the reading service:", err instanceof Error ? err.message : err);
-    return refuse(502, "api_error", "The reading service could not be reached from Flöda.");
+    return refuse(502, "api_error", "The reading service could not be reached from Snaben.");
   }
 
   const type = upstream.headers.get("content-type") ?? "application/json";
@@ -82,7 +85,7 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/ai/[...path
       } catch (err) {
         console.warn("[ai relay] stream ended early:", err instanceof Error ? err.message : err);
       }
-      await record(client.id, meter.end(), rate);
+      if (!training) await record(client.id, meter.end(), rate);
     });
     return new Response(toCopy, { status: upstream.status, headers: out });
   }
@@ -91,7 +94,7 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/ai/[...path
   if (upstream.ok) {
     let usage: Usage | null = null;
     try { usage = usageOf((JSON.parse(text) as { usage?: unknown }).usage); } catch { /* not a message */ }
-    if (usage && !noUsage(usage)) { const u = usage; after(() => record(client.id, u, rate)); }
+    if (usage && !noUsage(usage) && !training) { const u = usage; after(() => record(client.id, u, rate)); }
   }
   return new Response(text, { status: upstream.status, headers: out });
 }

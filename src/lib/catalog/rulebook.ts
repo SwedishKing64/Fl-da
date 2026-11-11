@@ -1,5 +1,5 @@
 /**
- * The rulebook: everything Flöda does to a listing, in the order it does it, as sentences a shop
+ * The rulebook: everything Snaben does to a listing, in the order it does it, as sentences a shop
  * can read.
  *
  * The rules a shop sets live in six stores — the house conventions, the tag rules, the templates,
@@ -42,7 +42,7 @@ export interface RuleEntry {
   /** The rule in plain words. */
   sentence: string;
   source: RuleSource;
-  /** Where to change it. Empty for a rule that is Flöda's own and not the shop's to change. */
+  /** Where to change it. Empty for a rule that is Snaben's own and not the shop's to change. */
   editHref: string;
   /** A tag rule's row, so the page can switch it off, delete it or try it on a batch. */
   tagRuleId?: string;
@@ -104,7 +104,7 @@ export interface RulebookStage {
 const HOUSE = "/training#house";
 const SOURCE_WORDS: Record<RuleSource, string> = {
   house: "how you list", kind: "a product type", tag: "tag rule", template: "template", pricing: "pricing rule", layout: "supplier layout",
-  supplier: "supplier", website: "your website", export: "your export", setting: "setting", floda: "Flöda",
+  supplier: "supplier", website: "your website", export: "your export", setting: "setting", floda: "Snaben",
 };
 
 /** The source of a rule in a word or two, for a badge. */
@@ -124,9 +124,10 @@ function patternWords(pattern: string): string {
   const plain = !/[.*+?^${}()|[\]\\]/.test(body);
   if (plain && anchored) return `is exactly ${quote(body)}`;
   if (plain) return `contains ${quote(body)}`;
-  // \b(women'?s|womens)\b → one of "women's", "womens"
-  const alternatives = p.replace(/^\\b\(?|\)?\\b$/g, "").split("|").map((a) => a.replace(/\\b/g, "").replace(/\\/g, ""));
-  if (alternatives.length > 1 && alternatives.every((a) => !/[()[\]{}*+^$]/.test(a))) return `says ${alternatives.map((a) => quote(a.replace(/'\?/g, "'"))).join(" or ")}`;
+  if (/^\\b20\(2\[6-9\]\|3\[0-9\]\)\\b$/.test(p)) return "names a model year of 2026 or later";
+  // \b(women'?s|womens)\b → one of "women's", "womens"; "twin[- ]?tip" reads as "twin tip", "jr\.?" as "jr"
+  const alternatives = p.replace(/^\\b\(?|\)?\\b$|\)$/g, "").split("|").map((a) => a.replace(/\\b/g, "").replace(/\[- \]\?/g, " ").replace(/'\?/g, "'").replace(/\\\.\?/g, "").replace(/s\?$/, "s").replace(/\\/g, ""));
+  if (alternatives.every((a) => !/[()[\]{}*+^$|]/.test(a))) return alternatives.length > 1 ? `says ${alternatives.map((a) => quote(a)).join(" or ")}` : `says ${quote(alternatives[0])}`;
   return `matches the pattern ${quote(p)}`;
 }
 
@@ -305,13 +306,13 @@ function exporting(): RuleEntry[] {
   ];
 }
 
-/** The whole rulebook, by stage, from what the shop has set and what Flöda does on its own. */
+/** The whole rulebook, by stage, from what the shop has set and what Snaben does on its own. */
 export function buildRulebook(input: RulebookInput): RulebookStage[] {
   const all = [...reading(input), ...naming(input.house), ...filing(input), ...pricing(input), ...copy(input), ...pictures(input), ...checks(input), ...exporting()];
   return STAGES.map((s) => ({ ...s, rules: all.filter((r) => r.stage === s.key) }));
 }
 
-/** How many rules the shop set itself, against the ones that are Flöda's own. */
+/** How many rules the shop set itself, against the ones that are Snaben's own. */
 export function countRules(stages: RulebookStage[]): { shop: number; floda: number } {
   let shop = 0;
   let floda = 0;

@@ -25,7 +25,7 @@ const MENUS: Array<{ label: string; items: Array<{ href: string; label: string; 
   {
     label: "Company",
     items: [
-      { href: "/about", label: "About Flöda", hint: "Built inside a working shop, by people who set it up with you" },
+      { href: "/about", label: "About Snaben", hint: "Built inside a working shop, by people who set it up with you" },
       { href: "/privacy", label: "Privacy", hint: "Where your data lives and where it goes" },
       { href: "/terms", label: "Terms", hint: "Plans, billing, cancelling, and who is responsible for what" },
       { href: SUPPORT_MAILTO, label: "Contact", hint: `${SUPPORT_EMAIL}, answered by a person` },
@@ -35,7 +35,7 @@ const MENUS: Array<{ label: string; items: Array<{ href: string; label: string; 
     label: "Pricing",
     items: [
       { href: "/welcome#pricing", label: "Plans", hint: "Starter, Shop and Unlimited, billed by the fortnight" },
-      { href: "/welcome#pricing", label: "What it saves", hint: "A 50-product order by hand against through Flöda" },
+      { href: "/welcome#pricing", label: "What it saves", hint: "A 50-product order by hand against through Snaben" },
       { href: "/account/signup", label: "Start the free trial", hint: "Make your account: 14 days on any plan, no card" },
       { href: "/account", label: "Your account", hint: "Your plan, key, reading this fortnight and billing" },
     ],
@@ -96,7 +96,7 @@ export function SiteBar() {
     <header className={`bar ${solid ? "solid" : ""}`}>
       <span className="progress" style={{ transform: `scaleX(${progress})` }} aria-hidden />
       <div className="wrap">
-        <Link href="/welcome" className="mark" aria-label="Flöda home"><Logo size={24} /></Link>
+        <Link href="/welcome" className="mark" aria-label="Snaben home"><Logo size={24} /></Link>
         <nav aria-label="Site">
           {MENUS.map((m) => <Menu key={m.label} label={m.label} items={m.items} open={open === m.label} onOpen={() => openMenu(m.label)} onClose={closeMenu} />)}
         </nav>
@@ -131,7 +131,7 @@ export function SiteFooter() {
         <div className="cols">
           <div className="brand">
             <Logo size={22} />
-            <p>Supplier paperwork in, shop-ready listings out. Built inside a working shop; set up with you by a Flöda engineer.</p>
+            <p>Supplier paperwork in, shop-ready listings out. Built inside a working shop; set up with you by a Snaben engineer.</p>
             <p className="soft">{SUPPORT_EMAIL} · Sydney</p>
           </div>
           <div>
@@ -156,7 +156,7 @@ export function SiteFooter() {
             <Link href="/terms">Terms</Link>
           </div>
         </div>
-        <div className="fine">© {new Date().getFullYear()} Flöda · Flöda is not affiliated with Shopify Inc.</div>
+        <div className="fine">© {new Date().getFullYear()} Snaben · Snaben is not affiliated with Shopify Inc.</div>
       </div>
     </footer>
   );

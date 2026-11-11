@@ -7,7 +7,7 @@ import { SignInForm } from "../AccountForms";
 import "../../welcome/welcome.css";
 import "../account.css";
 
-export const metadata: Metadata = { title: "Sign in to Flöda", description: "Your plan, your key, your billing." };
+export const metadata: Metadata = { title: "Sign in to Snaben", description: "Your plan, your key, your billing." };
 export const dynamic = "force-dynamic";
 
 export default async function LoginPage() {
@@ -16,7 +16,7 @@ export default async function LoginPage() {
     <Site>
       <section className="band page-head">
         <div className="wrap">
-          <Reveal className="head"><span className="eyebrow">Your account</span><h1>Sign in.</h1><p className="lede">The same email and password you use in Flöda itself.</p></Reveal>
+          <Reveal className="head"><span className="eyebrow">Your account</span><h1>Sign in.</h1><p className="lede">The same email and password you use in Snaben itself.</p></Reveal>
         </div>
       </section>
       <section className="band grey">

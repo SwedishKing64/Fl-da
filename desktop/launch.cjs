@@ -1,4 +1,4 @@
-// How the desktop app runs Flöda: the built Next.js server, on this machine, against a SQLite
+// How the desktop app runs Snaben: the built Next.js server, on this machine, against a SQLite
 // database and a files folder in the user's own app-data directory.
 //
 // Plain CommonJS with no Electron in it, so the same launcher can be run under Node to check a

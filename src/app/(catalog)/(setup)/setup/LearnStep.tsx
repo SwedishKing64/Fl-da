@@ -3,12 +3,13 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { learnTemplatesAction, learnVocabularyAction, rememberListingsAction, skipSetupStepAction } from "@/app/(catalog)/actions";
+import { describeStyleAction, learnMoreAction, learnTemplatesAction, learnVocabularyAction, rememberListingsAction, skipSetupStepAction } from "@/app/(catalog)/actions";
 import { Alert, Button, Card } from "@/app/(catalog)/ui";
 import { describeLearned, kindsFromListings, learnVocabulary } from "@/lib/catalog/learn";
 import { listingsFromCsv } from "@/lib/catalog/shop-memory";
 import { analyseShopifyCsvGroups } from "@/lib/catalog/templates";
 import { parseCsv } from "@/lib/catalog/csv";
+import { exportRows, marginsFromRows, sampleBodies, seoPatternFromRows } from "@/lib/catalog/learn-more";
 import type { LearnedVocabulary } from "@/lib/catalog/taxonomy";
 import type { KindRule } from "@/lib/catalog/house";
 import { KindsEditor } from "./KindsEditor";
@@ -19,18 +20,18 @@ function isShopifyExport(header: string[]): boolean {
   return h.has("Handle") && h.has("Title") && (h.has("Variant Price") || h.has("Option1 Name"));
 }
 
-type Outcome = { file: string; lines: string[]; templates: number; remembered: number; warnings: string[]; kinds: KindRule[] };
+type Outcome = { file: string; lines: string[]; templates: number; remembered: number; warnings: string[]; kinds: KindRule[]; more: string[] };
 
 const fmtSize = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`);
 
 /**
- * Teach Flöda the shop from its own Shopify export, one file at a time: a shop exports a
+ * Teach Snaben the shop from its own Shopify export, one file at a time: a shop exports a
  * category at a time, and each file is read here in the browser (they can be tens of megabytes)
  * with three small things going to the server: the vocabulary, the templates per brand and kind,
  * and the listings in chunks, each joined to what earlier files taught. Then the kinds the file
  * showed are laid out for the shop to say what each is called, its tags and how its titles read.
  */
-export function LearnPanel({ learned: before, kinds: saved = [], next, onDone }: { learned: LearnedVocabulary | null; kinds?: KindRule[]; next?: string; onDone?: () => void }) {
+export function LearnPanel({ learned: before, kinds: saved = [], next, onDone, shop }: { learned: LearnedVocabulary | null; kinds?: KindRule[]; next?: string; onDone?: () => void; shop?: { name: string; taxRate: number; pricesIncludeTax: boolean } }) {
   const [pending, start] = useTransition();
   const [chosen, setChosen] = useState<{ file: File; problem?: string } | null>(null);
   const [progress, setProgress] = useState("");
@@ -71,13 +72,33 @@ export function LearnPanel({ learned: before, kinds: saved = [], next, onDone }:
           if (!r.ok) throw new Error(r.error);
           remembered += r.data!.remembered;
         }
+        // Beyond types and tags: the shape of the SEO titles, each brand's margin, how descriptions read.
+        const more: string[] = [];
+        try {
+          setProgress("Reading the shape of your SEO titles, margins and descriptions…");
+          const rows = exportRows(text);
+          const pattern = seoPatternFromRows(rows, shop?.name ?? "");
+          const margins = marginsFromRows(rows, shop?.taxRate ?? 0, shop?.pricesIncludeTax ?? true);
+          const m = await learnMoreAction({ seoTitlePattern: pattern, margins });
+          if (m.ok && m.data) {
+            if (m.data.seoTitlePattern) more.push(`Your SEO titles follow "${m.data.seoTitlePattern}"; new ones will too.`);
+            if (m.data.margins) more.push(`${m.data.margins} brand${m.data.margins === 1 ? "'s margin" : "s' margins"} read off your prices and kept as pricing rules, named as from this export.`);
+          }
+          const bodies = sampleBodies(rows);
+          if (bodies.length >= 2) {
+            const d = await describeStyleAction({ samples: bodies });
+            if (d.ok && d.data?.learned) more.push("The way your descriptions are laid out was read off a few of them and kept as the style to match.");
+          }
+        } catch {
+          // What the file shows beyond its types is a bonus; the teaching above stands without it.
+        }
         // The kinds this file showed, pre-filled from its rows and from what the shop said before.
         const known = new Map(saved.map((k) => [k.type.toLowerCase(), k]));
         const kinds: KindRule[] = kindsFromListings(listings).map((k) => {
           const was = known.get(k.type.toLowerCase());
           return { type: k.type, calledAs: was?.calledAs ?? k.type, tags: was?.tags ?? k.commonTags, variesTags: k.variesTags, titleFormat: was?.titleFormat ?? k.exampleTitle, count: k.count };
         });
-        setOutcome({ file: file.name, lines: describeLearned(learned), templates: t.data!.templates, remembered, warnings: found.warnings, kinds });
+        setOutcome({ file: file.name, lines: describeLearned(learned), templates: t.data!.templates, remembered, warnings: found.warnings, kinds, more });
         setChosen(null);
         setProgress("");
         onDone?.();
@@ -122,6 +143,7 @@ export function LearnPanel({ learned: before, kinds: saved = [], next, onDone }:
               {outcome.lines.map((l) => <li key={l}>{l}</li>)}
               <li>{outcome.templates} convention{outcome.templates === 1 ? "" : "s"} per brand and product type, kept as templates.</li>
               <li>{outcome.remembered.toLocaleString("en-AU")} listings remembered, so next season&rsquo;s product of the same model keeps its shelves, name and price.</li>
+              {outcome.more.map((l) => <li key={l}>{l}</li>)}
             </ul>
             {outcome.warnings.length > 0 && <div className="mt-2 text-[13px] text-[var(--ink-soft)]">{outcome.warnings.join(" ")}</div>}
           </Alert>
@@ -130,7 +152,7 @@ export function LearnPanel({ learned: before, kinds: saved = [], next, onDone }:
         </>
       )}
       {!outcome && saved.length > 0 && (
-        <KindsEditor kinds={saved} title="The product types you have told Flöda about" blurb="From the exports read so far. Change what is wrong; the next export's kinds join this list." />
+        <KindsEditor kinds={saved} title="The product types you have told Snaben about" blurb="From the exports read so far. Change what is wrong; the next export's kinds join this list." />
       )}
     </div>
   );
@@ -140,13 +162,13 @@ export function LearnStep({ learned, kinds }: { learned: LearnedVocabulary | nul
   const [pending, start] = useTransition();
   const router = useRouter();
   return (
-    <Card title="Teach Flöda your catalogue">
+    <Card title="Teach Snaben your catalogue">
       <p className="mb-4 text-[14px] text-[var(--ink-soft)]">
-        Flöda learns how your shop files and tags products from the products you already sell, one export at a time: which product types you have, which tags go with each, how each shelf tag is spelled, and the conventions each brand follows. After each file, say what each kind is called, the tags every one gets, and how its titles read. New listings are then built to match.
+        Snaben learns how your shop files and tags products from the products you already sell, one export at a time: which product types you have, which tags go with each, how each shelf tag is spelled, and the conventions each brand follows. After each file, say what each kind is called, the tags every one gets, and how its titles read. New listings are then built to match.
       </p>
       <LearnPanel learned={learned} kinds={kinds} next="/setup?step=house" />
       <div className="mt-5 flex items-center justify-between border-t border-[var(--line-soft)] pt-4 text-[13px] text-[var(--ink-soft)]">
-        <span>No export to hand? Flöda works without one; it just has less to go on.</span>
+        <span>No export to hand? Snaben works without one; it just has less to go on.</span>
         <Button size="sm" variant="ghost" disabled={pending} onClick={() => start(async () => { await skipSetupStepAction("learn"); router.push("/setup?step=house"); })}>Skip for now</Button>
       </div>
     </Card>

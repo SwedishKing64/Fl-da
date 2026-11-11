@@ -67,7 +67,7 @@ function form(params: Record<string, unknown>, prefix = ""): string[] {
 
 async function stripe<T>(method: "GET" | "POST", path: string, params?: Record<string, unknown>): Promise<T> {
   const key = secretKey();
-  if (!key) throw new Error("Billing is not set up on this Flöda.");
+  if (!key) throw new Error("Billing is not set up on this Snaben.");
   const res = await fetch(`${API}${path}`, {
     method,
     headers: { authorization: `Bearer ${key}`, "content-type": "application/x-www-form-urlencoded" },

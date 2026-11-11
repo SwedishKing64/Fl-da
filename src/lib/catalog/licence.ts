@@ -1,7 +1,7 @@
 /**
- * Licences: how a copy of Flöda knows it is someone's, and how the vendor knows who is running it.
+ * Licences: how a copy of Snaben knows it is someone's, and how the vendor knows who is running it.
  *
- * Flöda is installed per shop, so there are two sides to this and both live in this module:
+ * Snaben is installed per shop, so there are two sides to this and both live in this module:
  *
  *  - The vendor's own deployment (at fl-da.vercel.app, floda.ai once that name exists) runs with FLODA_VENDOR=1. It keeps the
  *    `Client` table, shows the Clients page, and answers `/api/licence`.
@@ -166,7 +166,7 @@ export async function reachVendor<T>(servers: string[], call: (server: string) =
       reasons.push(describeReachFailure(server, err));
     }
   }
-  throw new Error(`${reasons.join("; ")}. Check the internet connection, or set Flöda's address under Settings → Licence.`);
+  throw new Error(`${reasons.join("; ")}. Check the internet connection, or set Snaben's address under Settings → Licence.`);
 }
 
 export type LicenceState =
@@ -183,7 +183,7 @@ export function licenceState(licence: Licence | null, now = new Date()): Licence
   const stale = now.getTime() - checked > CHECK_EVERY_MS;
   if (licence.why && licence.status !== "ACTIVE" && licence.status !== "TRIAL") return { kind: "lapsed", licence, why: licence.why };
   if (licence.why) return { kind: "lapsed", licence, why: licence.why };
-  if (now.getTime() - checked > GRACE_MS) return { kind: "lapsed", licence, why: "This copy has not been able to reach Flöda for a month to confirm its licence." };
+  if (now.getTime() - checked > GRACE_MS) return { kind: "lapsed", licence, why: "This copy has not been able to reach Snaben for a month to confirm its licence." };
   const v = verdictFor({ status: licence.status, expiresAt: licence.expiresAt }, now);
   if (!v.ok) return { kind: "lapsed", licence, why: v.why };
   return { kind: "ok", licence, daysLeft: v.daysLeft, stale };
@@ -213,7 +213,7 @@ export async function askVendor(server: string, path: "activate" | "check", body
     signal: AbortSignal.timeout(15_000),
   });
   const data = (await res.json().catch(() => null)) as CheckAnswer | null;
-  if (!data || typeof data !== "object" || !("ok" in data)) throw new Error(`Flöda answered ${res.status} without a verdict`);
+  if (!data || typeof data !== "object" || !("ok" in data)) throw new Error(`Snaben answered ${res.status} without a verdict`);
   return data;
 }
 
@@ -239,7 +239,7 @@ export async function askForTrial(server: string, body: TrialRequest): Promise<T
     signal: AbortSignal.timeout(15_000),
   });
   const data = (await res.json().catch(() => null)) as TrialAnswer | null;
-  if (!data || typeof data !== "object" || !("ok" in data)) throw new Error(`Flöda answered ${res.status} without a verdict`);
+  if (!data || typeof data !== "object" || !("ok" in data)) throw new Error(`Snaben answered ${res.status} without a verdict`);
   return data;
 }
 
@@ -252,7 +252,7 @@ export async function askToSignIn(server: string, body: { email: string; passwor
     signal: AbortSignal.timeout(15_000),
   });
   const data = (await res.json().catch(() => null)) as TrialAnswer | null;
-  if (!data || typeof data !== "object" || !("ok" in data)) throw new Error(`Flöda answered ${res.status} without a verdict`);
+  if (!data || typeof data !== "object" || !("ok" in data)) throw new Error(`Snaben answered ${res.status} without a verdict`);
   return data;
 }
 
@@ -267,7 +267,7 @@ export async function askUsage(server: string, key: string): Promise<UsageAnswer
     signal: AbortSignal.timeout(10_000),
   });
   const data = (await res.json().catch(() => null)) as UsageAnswer | null;
-  if (!data || typeof data !== "object" || !("ok" in data)) throw new Error(`Flöda answered ${res.status} without a count`);
+  if (!data || typeof data !== "object" || !("ok" in data)) throw new Error(`Snaben answered ${res.status} without a count`);
   return data;
 }
 
@@ -282,7 +282,7 @@ export async function askForBilling(server: string, what: "checkout" | "portal",
     signal: AbortSignal.timeout(20_000),
   });
   const data = (await res.json().catch(() => null)) as BillingAnswer | null;
-  if (!data || typeof data !== "object" || !("ok" in data)) throw new Error(`Flöda answered ${res.status} without a link`);
+  if (!data || typeof data !== "object" || !("ok" in data)) throw new Error(`Snaben answered ${res.status} without a link`);
   return data;
 }
 

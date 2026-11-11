@@ -28,7 +28,7 @@ export function BillingButtons({ mode, current, clientName, licenceKey }: { mode
       setNote({ tone: "success", text: what === "checkout" ? "The payment page is open in your browser. When it says paid, come back here and press “Check the key”; the plan is on within a minute." : "The billing page is open in your browser. Changes show here the next time the key is checked." });
     });
 
-  const mailto = `${SUPPORT_MAILTO}?subject=${encodeURIComponent(`Flöda plan${clientName ? ` for ${clientName}` : ""}`)}&body=${encodeURIComponent(`Hi Flöda,\n\nWe'd like to go on the ${planOf(current).name} plan.${licenceKey ? ` Our licence key is ${licenceKey}.` : ""}\n\nThanks`)}`;
+  const mailto = `${SUPPORT_MAILTO}?subject=${encodeURIComponent(`Snaben plan${clientName ? ` for ${clientName}` : ""}`)}&body=${encodeURIComponent(`Hi Snaben,\n\nWe'd like to go on the ${planOf(current).name} plan.${licenceKey ? ` Our licence key is ${licenceKey}.` : ""}\n\nThanks`)}`;
 
   if (mode === "manage") {
     return (

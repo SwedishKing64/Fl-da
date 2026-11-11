@@ -25,9 +25,10 @@
  */
 
 import { DEFAULT_CATEGORY_RULES, detectCategory, metafieldColumns, type CategoryRuleLike } from "./categorize";
-import { houseConventions } from "./taxonomy";
+import { houseConventions, optionTagPatterns } from "./taxonomy";
+import { optionTagsFor } from "./option-tags";
 import { buildRows, parseCsv, type CsvProduct } from "./csv";
-import { groupLineItems, type GroupedProduct } from "./grouping";
+import { groupLineItems, productOptions, type GroupedProduct } from "./grouping";
 import { audienceOfPrefix, withFit, withoutAudiencePrefix, withoutGender } from "./mapping";
 import { expandShorthand } from "./shorthand";
 import { colourName } from "./colour";
@@ -44,7 +45,7 @@ import { applyInvoice, reconcile, sameSizeText, type InvoiceFields, type Invoice
 import { resolveAgainstReference } from "./reference-match";
 import { asShopPrice, listingsFromCsv, rememberedVendor, type Listing } from "./shop-memory";
 import { brandIn, isDistributor, audienceByModel } from "./brands";
-import { isFlatSki, isPackageBinding, packageProducts } from "./trades/snow/packages";
+import { isFlatSki, isPackageBinding, packageProducts, specsOfList } from "./trades/snow/packages";
 import { syncFootprintBundles } from "./footprints";
 import type { PriceRow } from "./invoice";
 import type { CanonicalLineItem } from "./types";
@@ -103,7 +104,7 @@ export interface DeliveryOptions {
   bindingList?: Array<{ name: string; rrp: number; cost: number | null }>;
   /**
    * The bindings picked for each new ski, by the first line of the ski: names off the binding
-   * list. An empty pick is no package; a ski with none picked takes the defaults.
+   * list. An empty pick, or none, is no package.
    */
   packagePicks?: Record<number, string[]>;
   /**
@@ -719,16 +720,16 @@ function appendFresh(
   }
   // The package bindings ordered with skis go on the skis, not on the shelf. See isPackageBinding.
   const skiDelivery = build.some((g) => isFlatSki(g)) || /^skis?$/i.test(fallback?.productType ?? "");
+  const shopBindings = options.bindingList ?? [];
   if (skiDelivery) {
-    for (const g of build.filter((p) => isPackageBinding(p))) {
+    for (const g of build.filter((p) => isPackageBinding(p, specsOfList(shopBindings)))) {
       build.splice(build.indexOf(g), 1);
       // Accounted for as a line that was not written, with why — not dropped without a word.
       for (const line of lineOf(g)) heldBack.push({ line, reason: "it is the binding the ski packages are made with, ordered to go on the skis, so it is not listed on its own" });
     }
   }
-  // Each new flat ski is also built as its binding package, priced from the order form's own
-  // binding rows. A package the file already has is left alone, like any other product.
-  const shopBindings = options.bindingList ?? [];
+  // Each new flat ski is also built as its binding package, on the bindings picked for it off the
+  // shop's list. A package the file already has is left alone, like any other product.
   const picked = (g: GroupedProduct) => {
     const names = options.packagePicks?.[placeOf(lines[g.variants[0]?.sourceIndex ?? -1])];
     if (!names) return undefined;
@@ -1008,7 +1009,7 @@ function toProduct(g: GroupedProduct, vendor: string): CsvProduct {
     vendor: brand,
     productType: csvType(g.productType, g.collections),
     productCategory: productCategoryFor(csvType(g.productType, g.collections), title),
-    tags: g.tags,
+    tags: [...g.tags, ...optionTagsFor(productOptions(g), optionTagPatterns()).filter((t) => !g.tags.some((x) => x.toLowerCase() === t.toLowerCase()))],
     published: false,
     status: "draft",
     seoTitle: seoTitle(brand, title),

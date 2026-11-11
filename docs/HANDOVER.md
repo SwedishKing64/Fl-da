@@ -1,9 +1,9 @@
 # Rubin — handover
 
-> This copy of the code is **Flöda**, the product made from Rubin. Alpsport's own Rubin lives in
-> the business's repository and is not changed from here. See `FLODA.md` for what Flöda is and
+> This copy of the code is **Snaben**, the product made from Rubin. Alpsport's own Rubin lives in
+> the business's repository and is not changed from here. See `SNABEN.md` for what Snaben is and
 > what differs. Everything below describes what the shop told us and decided while Rubin was
-> built; in Flöda those conventions are the snow-and-outdoor rules pack, and the shop's own are
+> built; in Snaben those conventions are the snow-and-outdoor rules pack, and the shop's own are
 > learned from its export.
 
 Read this first. It is what a new Claude session (or a new developer) needs to know that is not in
@@ -14,7 +14,7 @@ Rubin is an internal tool for Alpsport, a ski and snowboard retailer in Sydney, 
 turns supplier paperwork into Shopify product CSVs, applies price and stock changes to Shopify
 exports, and tidies photographed paperwork into tables. The shop imports the CSVs into Shopify by
 hand; nothing here talks to the store. (Rubin also writes supplier invoices out as bills for
-QuickBooks Online; Flöda does not — that section was taken out of this copy on 2026-10-14.)
+QuickBooks Online; Snaben does not — that section was taken out of this copy on 2026-10-14.)
 
 ## The pages
 
@@ -132,7 +132,7 @@ at a time (Apply all waits for them), and no longer re-reads every export on eac
 73 real changes on a 2,850-product file: 61s before, about 14s now, without freezing.
 
 **History on Prices and stock (asked 2026-10-26).** "A history similar to New Products." (Rubin
-keeps one for its Bills page too; Flöda has no Bills page.) Each download of the updated files (whole, or only some kinds) and each download of the
+keeps one for its Bills page too; Snaben has no Bills page.) Each download of the updated files (whole, or only some kinds) and each download of the
 bills sheet is kept as a run (`WorkRun`): who, when, a title, what was done (each change and its
 lines; each bill's supplier, number, dates, total and any discrepancy), the documents it came from,
 and counts. The files handed over are kept with it (`WorkRunFile`), gzipped in the browser and stored
@@ -353,7 +353,7 @@ shorthand written out and bare codes not matched, pictures read from a page's sc
 32 looked at before the 16 kept. Real outdoor invoices and links that read badly are still wanted
 as test cases.
 
-**Blank slate, any trade (plan of 22 October 2026).** The plan is the Claude doc "Flöda Blank
+**Blank slate, any trade (plan of 22 October 2026).** The plan is the Claude doc "Snaben Blank
 Slate: Any Invoice, Any Shop". Trade knowledge now lives in `src/lib/catalog/trades/`, one data
 file per trade (snow-and-outdoor, outdoor, none), chosen at setup as "Start from" and laid under
 whatever the shop teaches. Reading is measured: `npm run eval:read` scores the reader against
@@ -385,9 +385,9 @@ the snow trade, ski code lives in `trades/snow/`, and `deski.test.ts` holds the 
 that can only shrink. Costs convert into the shop's home currency (`fxRateToHome` and the like in
 code; the database columns keep their AUD names).
 
-**Connecting Shopify.** A hosted copy with Flöda's Shopify app set up connects through an install
+**Connecting Shopify.** A hosted copy with Snaben's Shopify app set up connects through an install
 link in Settings: set SHOPIFY_CLIENT_ID and SHOPIFY_CLIENT_SECRET from the app in Shopify's Dev
-Dashboard, FLODA_APP_URL to where Flöda is served, and list FLODA_APP_URL/api/shopify/callback as
+Dashboard, FLODA_APP_URL to where Snaben is served, and list FLODA_APP_URL/api/shopify/callback as
 an allowed redirect on the app. Tokens are expiring offline ones (an hour, with a 90-day refresh
 token) and are refreshed before they lapse. A copy without the app connects with a pasted token.
 Every product of a shop outside the snow trade goes out with its Shopify Standard Product Taxonomy
@@ -395,14 +395,118 @@ category (release 2026-08, `data/shopify-taxonomy.ts`, `npx tsx scripts/taxonomy
 update); the packs place each of their kinds by hand, and other kinds are found by name or left
 blank. The ski shop keeps its habit of filling only boards, downhill skis and sleeping bags.
 
-**QuickBooks (Rubin only).** Rubin reads supplier invoices into QuickBooks bill sheets. Flöda
+**QuickBooks (Rubin only).** Rubin reads supplier invoices into QuickBooks bill sheets. Snaben
 removed that section; the rules the shop gave for it (its one-row-per-bill sheet, supplier names
 from its QuickBooks list, batch PDFs split into one bill per invoice, each supplier's payment
 terms and the due dates worked from them, PAID stamps) live in Rubin's handover.
 
 ## Decisions and history, newest first
 
-- 2026-10-27 The store's changes from 14–26 October brought into Flöda (everything but Bills and
+- 2026-11-11 **The product is called Snaben.** The name changed from Flöda; the mark (the blue
+  tile with the F) stays, and the wordmark is the new name in the same face, without the umlaut's
+  two dots. Everything a person sees changed: the app, the installers
+  (`Snaben-Setup-<version>.exe`, `Snaben-<version>-<arch>.dmg`), the menus, the pages, the docs
+  (`docs/SNABEN.md`). What did not change, on purpose, so installed copies and the deployment
+  keep working: the app id `ai.floda.app` (an update installs over an old copy rather than beside
+  it); the data folder is named after the app, so on first start under the new name the old
+  `Flöda` folder in app-data is moved to `Snaben` once (`desktop/main.cjs`); the file names
+  `floda.db` and `floda.json`; the audit and settings keys (`floda.*`), the cookies, the
+  `x-floda-*` headers, the `floda_error` field, the `FLODA_*` environment variables, the `FL-`
+  licence-key prefix and the CSS class names; and the addresses (`floda.ai`, `hello@floda.ai`,
+  `fl-da.vercel.app`) and the repository name, until a Snaben domain exists. The support email
+  shown can be set with `NEXT_PUBLIC_FLODA_SUPPORT_EMAIL` meanwhile.
+- 2026-11-02 **No mapping step; training reads are free; a guide on Teach Snaben.** The Column
+  mapping button is gone from the batch page. A layout whose headings could not place the
+  product's name is put to the light model with a few rows (`mapping-ai.ts`), and its answer fills
+  the gaps the heuristics left (`autoApplyMappings`); the mapping screen remains only as the door
+  in a file's own warning, for what neither could place. Reading that teaches Snaben (a supplier's
+  example in a "Setup: " batch, the shape of the shop's descriptions) runs inside `asTraining`
+  (`anthropic.ts`), which marks each relay call with `x-floda-purpose: training`; the relay
+  meters nothing for it and lets it through an exhausted allowance. Teach Snaben opens with a
+  four-step guide (`TeachGuide.tsx`: export, website, read and correct the beliefs, one invoice
+  per supplier), ticked as each is done, folding away when all are or when closed; setup's last
+  step and the AI step point at it and say training reads are not counted.
+- 2026-10-30 **Folders and support.** A whole folder dropped on any drop zone (batch upload, the
+  exports zone and spec sheets on Prices and stock) is walked and every file inside taken, hidden
+  housekeeping files left out; a Choose a folder picker sits beside Choose files
+  (`dropped-files.ts`). Settings → Backups has Send a copy to Snaben support: the backup goes
+  straight into the vendor's Blob store under a one-file token the vendor issues
+  (`/api/support`, since the vendor's host takes no request over a few MB), and lands on the
+  Clients page under Backups sent to support with a download. The founder adds it as a shop on
+  their desktop copy (Settings → Shops on this computer → Add from a backup file, `importShop`),
+  looks, fixes, and sends a rules file back: Teach Snaben has Download your rules and Load a
+  rules file (`rules-file.ts`: house and kinds, tag, pricing and template rules, what the export
+  and website taught, writer settings, bindings; loading replaces each section the file carries,
+  after a backup). Vendor env: `FLODA_BLOB_PRIVATE=1` says the Blob store is private, so the
+  copy sends with private access and the download streams through the vendor.
+- 2026-10-29 **Links read themselves; tags that mirror the variants.** A website address pasted
+  on Teach Snaben is read a moment after it lands (no button); a product page pasted on the review
+  page is kept and read in the same breath, as is a pasted list of pages. The export now teaches
+  which tags mirror a product's own variants, the way filter apps write them ("Size_54",
+  "Colour_Black", "size-m", or the bare value): `option-tags.ts` learns one shape per option where
+  most values follow it (`learned.optionTags`, from the listings' options, which `listingsFromCsv`
+  and the store read now carry). Those tags are set aside from the shelves a kind is offered
+  (never in a kind's common or varying tags, never a menu), and the build writes them from each
+  new product's variants (pipeline and Prices and stock), past the tag gate. Teach Snaben says so
+  under Types, tags and categories.
+- 2026-10-29 **Blank slate.** Nothing of the first shop's own is built into a new copy any more:
+  the built-in binding list (with its wholesale costs) is gone, so are the default packages (men's
+  Griffon, women's Squire), the $59/$49 mount charges and the "Please Mount My Bindings" wording,
+  the seeded tag rules, and the brand and distributor lists outside the packs. A shop lists its own
+  bindings on Settings → Bindings for ski packages (typed in a row at a time, or a sheet), sets
+  its own mounting charges and fitting wording there (`settings.packages`, in force through
+  `trades/snow/terms.ts`), and writes its own tag rules on Teach Snaben. A ski is packaged only with
+  bindings picked for it or named in an instruction; with no list, every ski is built flat. The
+  snow trade's brand knowledge (`trades/snow/brands.ts`) moved into the snow pack as
+  `pack.brands`, `pack.distributors` and `pack.snowboardBrands`; a shop on no trade knows only its
+  own vendors. The snow pack itself (its menu, tag spellings, reading rules) stays as a starting
+  point a shop can tick at setup; the first shop's own database keeps whatever it had. Tests use
+  `SNOW_TEST_CONVENTIONS` (was `ALPSPORT_CONVENTIONS`). The Teach Snaben areas now fold shut and
+  open on a click.
+- 2026-10-29 Training and Rules became **Teach Snaben** (`/training`): three source tiles (export,
+  website, a supplier's paperwork) and then what Snaben believes, in seven areas, every belief a
+  sentence with a Change beside it and Add a rule under each area (`teaching.ts`, `Teach.tsx`,
+  SNABEN.md "Teach Snaben"). The old rulebook-by-stage and the big "How you list" form went from the
+  page; setup's form is unchanged. The export now teaches more: the SEO title pattern
+  (`settings.seoTitlePattern`), a brand's margin as a pricing rule named "From your export: …"
+  (only for a brand with no rule yet; the shop can switch it off or delete it), and the
+  description layout where a key is set. The pack's seeded tag rules now read as Snaben's own,
+  not the shop's, and in plain words. The desktop installers carry the Snaben mark
+  (`desktop/icon.png`, from `src/app/icon.svg`).
+- 2026-10-28 A shop simulator (`npm run eval:shops`, SNABEN.md "Working on Snaben"): made-up shops in
+  five trades, each with an export and a season of deliveries in nine supplier layouts, read and
+  built and scored exactly against the truth they were rendered from. Its first run found, and
+  this fixed: a workbook with a short row crashed the no-code grid reader (`grid-form.ts`
+  `amount`); a flat invoice under a letterhead was claimed by that reader and lost every column
+  (it now declines a first heading row with a code and a quantity column, or a Size column, and
+  no sizes across); a strict "Item No." form with letter sizes (XS–XL, S/M), wetsuit sizes (MS,
+  MT), surfboard lengths (5'10) or a board's 158W lost them (`isSizeHeading`, `sectionsOf`);
+  one tab with a SKIS section and a SKI BOOTS section read every length as a Mondo size (boots
+  are now told per section, and a section's label is the line's kind); every size of a grid's
+  model shared one SKU and blocked the push (`orderToTable` puts the size, and the colour where
+  it takes that too, on the end); a workbook's Subtotal/GST/Total rows became products (a line
+  needs a name or a code); a product on a flat invoice with no category column got no Type at
+  all (now the supplier's category column, the shop's own listing of the model, then the shop's
+  Type the name carries — "Down Jackets" in "Cirrus Down Jacket"); a pack's shelf name was
+  written over the shop's own Type for the kind ("Hiking Packs" for a shop that says
+  "Backpacks"); a sleeping bag's Length was ordered after its zip side once it was typed
+  (`orderByConvention` labels the variant column by its name); and the men's and women's of one
+  model, prefix-stripped together, collapsed a whole range into one product (`normaliseCodes`
+  groups by gender). After: 100% of lines, fields, models and variants on 87 documents, 98.9%
+  exportable; `samples/sim-baseline.json` holds it and `--baseline` fails a trade that drops.
+  With `--ai` (run by the owner on 2026-10-29, 30 printed pages as text, PDF and photo): every
+  line found, 99.5% of fields right, every batch exportable; the model put a tent's 2P and a
+  boardshort's 18" into the variant and so merged two tents into one product (the reader is now
+  told those are part of the name), dropped a board's W from 162W (told to keep it), and named
+  kinds in its own words ("Jerseys", "2 Person Tents"), which now map to the shop's own type that
+  ends in the same word where it has one. Still open from it: a Type is found for only 58% of products with nothing to go on but the
+  name (a category column takes it to 98%); an option column the mapping does not know (Scent,
+  Capacity) is not a mapped field — the build takes it as an option from the kept columns, on
+  every product of the batch with a value under it.
+- 2026-10-27 Launch on Shopify only, the platform the owner knows; other platforms (WooCommerce
+  first) after there are paying Shopify shops. Desktop pictures go to the shop's Shopify Files once
+  its store is connected. One desktop install holds several shops, one open at a time.
+- 2026-10-27 The store's changes from 14–26 October brought into Snaben (everything but Bills and
   "Copy from the old site", which this copy does not have). Where a rule was Alpsport's, it is the
   snow pack's default, not every shop's:
   - Uploads go to a private Blob store where the store is private; reading supplier files tells
@@ -415,13 +519,13 @@ terms and the due dates worked from them, PAID stamps) live in Rubin's handover.
   - Ski packages: bindings picked per ski from the shop's binding list (`trades/snow/binding-*`),
     shown only for the snow pack. Tents with footprints (`footprints.ts`).
   - Prices and stock: price and compare-at in the preview; an Order form box and an Invoices box
-    (`invoice-merge.ts`, which replaces Flöda's own pairing on that page); the buyer's sale sheet;
+    (`invoice-merge.ts`, which replaces Snaben's own pairing on that page); the buyer's sale sheet;
     big exports no longer freeze the page; a history of each download (`WorkRun`).
   - Cheaper reading (Opus for documents, the light model for colour matching, SEO and
     instructions), larger `max_tokens`, invoice photos at standard speed unless
     `CATALOG_FAST_READS=1`; recovery sign-in reads `FLODA_RECOVERY_*` (or the store's `RUBIN_*`).
   - A page left open across an update says so and offers a reload (`UpdateBanner`, `/api/version`).
-  - Flöda's clothing, footwear and pack size grids headed "Style #"/"SKU" (`isSizeHeading`) are kept
+  - Snaben's clothing, footwear and pack size grids headed "Style #"/"SKU" (`isSizeHeading`) are kept
     on top of the store's order-form reader.
 
 - 2026-10-23 First run at Alpsport on the local desktop copy (v0.1.14-local). What the shop said,
@@ -445,16 +549,16 @@ terms and the due dates worked from them, PAID stamps) live in Rubin's handover.
   - Prices and stock takes an order form and its invoice together: quantities and cost (after
     indent discounts) from the invoice, barcodes and RRP from the order form
     (`order-and-invoice.ts`).
-  - The hosted Flöda answered 404 to sign-in, so a `local` desktop build (no licence, own account,
+  - The hosted Snaben answered 404 to sign-in, so a `local` desktop build (no licence, own account,
     own key) exists: the release workflow's `local` input.
 
 - 2026-10-22 Supplier layouts are shared between shops (`shared-layouts.ts`,
   `shared-layouts-store.ts`, the `layout-share` and `layout-find` calls on the licence route). When a
   person saves a supplier's column mapping, the file's headings and the field each one is go to
-  Flöda's deployment under the shop's licence key. Values, prices, the supplier's name and the
+  Snaben's deployment under the shop's licence key. Values, prices, the supplier's name and the
   shop's never go, and which shops taught a layout is never sent back. A file in a layout the shop
   has never seen starts from the reading most other shops agree on ("Taught by N other shops" on
-  the mapping screen). Their choices stand where they differ from Flöda's own guess, unless the
+  the mapping screen). Their choices stand where they differ from Snaben's own guess, unless the
   data rules them out. A shop can turn it off under Settings → Licence, which also stops it asking.
   Each build that used one is logged as `layout.shared-used`.
 

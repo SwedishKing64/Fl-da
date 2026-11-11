@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* Flöda, in Meta blue.
+/* Snaben, in Meta blue.
    One blue, spent on the things you press and the place you are, and a brighter sky it runs into
    where there is room for colour: the rail, the headers, the mark. The workspace is a cool
    off-white with white cards on it — where numbers are read — and the cards stand off it with a
@@ -103,8 +103,7 @@ p {
 }
 
 /* ---------------------------------------------------------------------------
-   The wordmark. Flöda, heavy and tight in the display face, its umlaut drawn as the two
-   dots of the mark (see Logo.tsx): the "o" is set bare and the dots sit over it.
+   The wordmark: Snaben, heavy and tight in the display face (see Logo.tsx).
    --------------------------------------------------------------------------- */
 .wordmark {
   display: inline-flex;
@@ -114,16 +113,6 @@ p {
   letter-spacing: -0.045em;
   line-height: 1;
 }
-.wordmark-o { position: relative; display: inline-block; }
-.wordmark-dots {
-  position: absolute;
-  left: 50%;
-  top: -0.13em;
-  display: flex;
-  gap: 0.1em;
-  transform: translateX(-50%);
-}
-.wordmark-dots i { display: block; width: 0.17em; height: 0.17em; border-radius: 50%; }
 
 .wrap {
   max-width: 1120px;

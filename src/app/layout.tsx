@@ -9,7 +9,7 @@ const inter = Inter({ subsets: ["latin", "latin-ext"], variable: "--font-inter",
 const manrope = Manrope({ subsets: ["latin", "latin-ext"], weight: ["600", "700", "800"], variable: "--font-manrope", display: "swap" });
 
 export const metadata: Metadata = {
-  title: "Flöda",
+  title: "Snaben",
   description: "Supplier paperwork in, shop-ready listings out.",
 };
 

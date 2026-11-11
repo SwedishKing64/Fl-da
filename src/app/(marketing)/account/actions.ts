@@ -20,7 +20,7 @@ async function origin(): Promise<string> {
 }
 
 export async function signUpAction(_prev: AccountResult | null, form: FormData): Promise<AccountResult> {
-  if (!vendorMode()) return { ok: false, error: "Accounts are made on Flöda's own website." };
+  if (!vendorMode()) return { ok: false, error: "Accounts are made on Snaben's own website." };
   const out = await signUpAccount({ shop: String(form.get("shop") ?? ""), email: String(form.get("email") ?? ""), password: String(form.get("password") ?? ""), plan: String(form.get("plan") ?? "shop") });
   if (!out.ok) return { ok: false, error: out.why };
   await logAudit("account.made", { details: { client: out.client.id, plan: out.client.plan } });
@@ -28,7 +28,7 @@ export async function signUpAction(_prev: AccountResult | null, form: FormData):
 }
 
 export async function signInAction(_prev: AccountResult | null, form: FormData): Promise<AccountResult> {
-  if (!vendorMode()) return { ok: false, error: "Accounts are on Flöda's own website." };
+  if (!vendorMode()) return { ok: false, error: "Accounts are on Snaben's own website." };
   const out = await signInAccount(String(form.get("email") ?? ""), String(form.get("password") ?? ""));
   if (!out.ok) return { ok: false, error: out.why };
   redirect("/account");

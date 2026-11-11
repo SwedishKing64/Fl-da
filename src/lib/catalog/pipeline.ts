@@ -6,12 +6,12 @@ import { isOfType, isSkipped, parseDirectives, typeKey } from "./instructions";
 import { prisma, parseJson } from "./db";
 import { extractFile, type UploadKind } from "./extract";
 import { applyMapping, headerHash, looksLikeReference, mappingProblems, repairTemplate, seasonFrom, suggestMapping, suggestOptions, type Mapping, type MappingOptions, type SavedOptions, nearestTemplate, trimToHeaders, type LayoutDrift } from "./mapping";
-import { groupLineItems } from "./grouping";
+import { groupLineItems, productOptions } from "./grouping";
 import { houseTags, retagForType } from "./product-tags";
 import { DEFAULT_CATEGORY_RULES, type CategoryRuleLike } from "./categorize";
 import { enrichFromSpecs, normKey } from "./specs";
 import { keepOrderedLines, resolveAgainstReference } from "./reference-match";
-import { isFlatSki, isPackageBinding, packageProducts, specFromName, type ChosenBindings } from "./trades/snow/packages";
+import { isFlatSki, isPackageBinding, packageProducts, specFromName, specsOfList, type ChosenBindings } from "./trades/snow/packages";
 import { readInvoiceGrids, type PriceRow } from "./invoice";
 import { asShopPrice, existingHandle, listingByBarcode, listingsAsReference, rememberedVendor } from "./shop-memory";
 import { dueInWindow, parseWindow } from "./deliveries";
@@ -20,11 +20,15 @@ import { writeOutColour } from "./colour";
 import { audienceByModel, brandIn, isBrand } from "./brands";
 import { askToJoin } from "./reference-ai";
 import { aiAvailable } from "./anthropic";
+import { asTraining } from "./training-mark";
+import { aiMapping, fillMapping } from "./mapping-ai";
+import { fieldsInForce } from "./taxonomy";
 import { repairCategoryRules, repairProductTags, repairTagRuleSpelling } from "./seed";
 import { applyTagRules, type TagRuleLike } from "./rules";
 import { conventionGrams, conventionIdentifiers } from "./house";
 import { shopBody } from "./description-style";
-import { houseConventions, metafieldDefs } from "./taxonomy";
+import { houseConventions, metafieldDefs, optionTagPatterns } from "./taxonomy";
+import { optionTagsFor } from "./option-tags";
 import { homeCurrency } from "./shop-profile";
 import { applyTemplates, type ProductTemplateLike } from "./templates";
 import { allocateFreight, exGstCostHome, priceVariant } from "./pricing";
@@ -46,6 +50,7 @@ import { scoreProduct, tallyConfidence } from "./confidence";
 import { isValidType, typesAreKnown } from "./taxonomy";
 import type { MatchCandidate } from "./match-candidates";
 import { filePath, pictureHosting, publicFileUrl, readFile, saveFile, usingBlob } from "./storage";
+import { publishLocalPictures } from "./picture-publish";
 import { logAudit } from "./audit";
 import { contributeLayout, findSharedLayout } from "./shared-layouts-store";
 import { fillFromForm, formAndInvoice, invoiceOf, overlapOf } from "./order-and-invoice";
@@ -196,9 +201,16 @@ async function supplierReadsKnown(batchId: string): Promise<boolean> {
 
 /** Read a file that is already stored, and record what came of it. */
 export async function extractStoredFile(fileId: string, origin?: string): Promise<IngestResult> {
-  const record = await prisma.sourceFile.findUniqueOrThrow({ where: { id: fileId } });
+  const record = await prisma.sourceFile.findUniqueOrThrow({ where: { id: fileId }, include: { batch: { select: { name: true } } } });
   const buffer = await readFile(record.storagePath);
-  return ingestFile(record.batchId, { filename: record.filename, mimeType: record.mimeType, buffer, kind: record.kind as UploadKind, origin, existingFileId: record.id });
+  const read = () => ingestFile(record.batchId, { filename: record.filename, mimeType: record.mimeType, buffer, kind: record.kind as UploadKind, origin, existingFileId: record.id });
+  // A supplier's example read during setup or on Teach Snaben is training, not work: it is not counted against the shop's plan.
+  return isTrainingBatch(record.batch.name) ? asTraining(read) : read();
+}
+
+/** The batches setup and Teach Snaben make to read one example of a supplier's paperwork. */
+export function isTrainingBatch(name: string): boolean {
+  return /^Setup: /.test(name);
 }
 
 export async function ingestFile(batchId: string, given: { filename: string; mimeType: string; buffer: Buffer; kind?: UploadKind; origin?: string; existingFileId?: string }): Promise<IngestResult> {
@@ -408,8 +420,9 @@ export async function mappingState(batchId: string): Promise<HeaderGroup[]> {
  *
  * Mapping columns was a step of its own, and it should not have been: the suggestion is right
  * almost every time, and where it is not, the place to fix it is the review grid, which is where
- * the operator is looking anyway. So every layout the suggestion can build from is built, and only
- * a layout with no recognisable product name is left for the mapping screen to sort out.
+ * the operator is looking anyway. So every layout the suggestion can build from is built; one
+ * with no recognisable product name is put to the model, and only what neither can place is left
+ * for the mapping screen, which is no longer a step but a door opened from the file's own warning.
  */
 export async function autoApplyMappings(batchId: string, userId: string | null): Promise<{ applied: boolean; products: number; variants: number; unmapped: string[]; drifted: string[] }> {
   const groups = await mappingState(batchId);
@@ -417,10 +430,20 @@ export async function autoApplyMappings(batchId: string, userId: string | null):
   // columns that moved are the ones a remembered mapping gets wrong, so a person confirms them
   // once, on the mapping screen, and the new layout is remembered beside the old.
   const usable = groups.filter((g) => !g.drift && mappingProblems(g.suggestion).length === 0);
+  // A layout the headings could not place is put to the model before it is put to a person: the
+  // headings and a few rows, against the fields Snaben writes. Its answer fills the gaps the
+  // heuristics left; where that settles the product's name, the layout builds like any other.
+  const stuck = groups.filter((g) => !usable.includes(g) && !g.drift && !g.isCanonical);
+  const mapped = new Map<string, Mapping>();
+  for (const g of stuck) {
+    const guessed = aiAvailable() ? await aiMapping(g.headers, g.sampleRows, fieldsInForce()) : null;
+    const filled = fillMapping(g.suggestion, guessed);
+    if (mappingProblems(filled).length === 0) { mapped.set(g.hash, filled); usable.push(g); await logAudit("layout.ai-mapped", { batchId, userId, details: { files: g.filenames } }).catch(() => undefined); }
+  }
   const drifted = groups.filter((g) => g.drift).map((g) => describeDrift(g));
   const unmapped = groups.filter((g) => !usable.includes(g) && !g.drift).flatMap((g) => g.filenames);
   if (usable.length === 0) return { applied: false, products: 0, variants: 0, unmapped, drifted };
-  const result = await applyMappings(batchId, usable.map((g) => ({ hash: g.hash, mapping: g.suggestion, options: g.options, saveTemplate: null })), userId);
+  const result = await applyMappings(batchId, usable.map((g) => ({ hash: g.hash, mapping: mapped.get(g.hash) ?? g.suggestion, options: g.options, saveTemplate: null })), userId);
   for (const g of usable.filter((x) => x.sharedBy)) {
     await logAudit("layout.shared-used", { batchId, userId, details: { files: g.filenames.length, shops: g.sharedBy } }).catch(() => undefined);
   }
@@ -637,7 +660,7 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
     for (const entry of items) entry.item = { ...entry.item, season: toldYear };
   } else if (items.length > 0 && items.every((entry) => !/^20\d{2}$/.test(entry.item.season))) {
     // No season on any line: the file's own name says it, where it does — Burton's confirmation
-    // sheet is "Alpsport_W27_Burton_Confirmed…" and its lines carry no season column at all.
+    // sheet is "<Shop>_W27_Burton_Confirmed…" and its lines carry no season column at all.
     // The latest year the name gives: "…_NOV_2026_boot_pole_-2027-Retail" is the 2027 range,
     // delivered in November 2026.
     const fromName = batch.files.flatMap((f) => f.filename.split(/[^A-Za-z0-9/]+/)).map(seasonFrom).filter((y) => /^20[2-3]\d$/.test(y)).sort().at(-1);
@@ -827,8 +850,10 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
       // Through the house speller last: tag rules and batch instructions add tags after the
       // categoriser has been vetted, and theirs used to reach the column unchecked.
       tags: (() => {
-        // A tag the batch instructions asked for is the shop's own word and always stays.
-        const gated = partitionTags(houseTags([...out.tags, ...directives.addTags]), gate, directives.addTags);
+        // The tags the shop's export showed it keeps for each size and colour, written from the variants.
+        const mirrored = optionTagsFor(productOptions({ ...g, option1Name: viaTemplate.optionNames[0] ?? g.option1Name, option2Name: viaTemplate.optionNames[1] ?? g.option2Name, option3Name: viaTemplate.optionNames[2] ?? g.option3Name }), optionTagPatterns());
+        // A tag the batch instructions asked for is the shop's own word and always stays; so does a mirrored one.
+        const gated = partitionTags(houseTags([...out.tags, ...directives.addTags, ...mirrored]), gate, [...directives.addTags, ...mirrored]);
         for (const t of gated.proposed) if (!proposedTags.has(t)) proposedTags.set(t, g.title);
         return gated.kept;
       })(),
@@ -895,7 +920,7 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
     }
   }
   // The package bindings ordered with the skis go on the skis, not on the shelf. See isPackageBinding.
-  const setAside = directives.packages !== "none" && grouped.some((g) => isFlatSki(g)) ? grouped.filter((g) => isPackageBinding(g, Object.values(chosen))) : [];
+  const setAside = directives.packages !== "none" && grouped.some((g) => isFlatSki(g)) ? grouped.filter((g) => isPackageBinding(g, [...Object.values(chosen), ...specsOfList(bindingList)])) : [];
   for (const g of setAside) grouped.splice(grouped.indexOf(g), 1);
   if (setAside.length > 0) {
     for (const fileId of [...new Set(items.map((i) => i.fileId))]) {
@@ -1541,6 +1566,8 @@ function planExport(review: ReviewData): { ok: true; planned: PlannedPart[]; rep
  * before they could have their file at all was the same refusal wearing a different hat.
  */
 export async function exportBatch(batchId: string, userId: string): Promise<ExportResult> {
+  // Pictures still on this computer go to the shop's Shopify Files first, where Shopify can fetch them.
+  if (pictureHosting()) await publishLocalPictures(batchId).catch((err) => console.warn("[export] local pictures not sent:", err instanceof Error ? err.message : err));
   const review = await loadReview(batchId);
   const warnings = warningList(review.products);
   if (review.products.length === 0) return { ok: false, errors: ["Nothing to export - map the files first."], warnings, files: [], repairs: [] };

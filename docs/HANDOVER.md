@@ -402,6 +402,20 @@ terms and the due dates worked from them, PAID stamps) live in Rubin's handover.
 
 ## Decisions and history, newest first
 
+- 2026-11-19 **The shop's voice; teaching by talking and by correcting.** Decided: a shop never
+  fills in a form to describe itself; it shows an example, corrects a result or says it in a
+  sentence, and that becomes a belief on Teach Snaben. Built: the voice (`voice.ts`,
+  `shop.voice`): audience, words used and never used, spellings per brand, up to ten of the
+  shop's listings as the writer's examples chosen by type and brand, sections of the shop's own
+  after the copy, fit/care/origin notes per brand, tags never written; applied by the writer
+  (`seo.ts`) and the build (`delivery.ts`), carried by the rules file, edited on the Your voice
+  card. The Tell Snaben how you list chat (`teach-chat.ts`): proposals in the existing rule
+  shapes, each with Accept; nothing kept until accepted; reading marked as training. Lessons
+  (`lessons.ts`, `shop.lessons`): a title word replaced, a tag added or removed on the grid,
+  counted per brand, asked at three; yes becomes a spelling, a tag rule or a never-tag. The
+  rewriter (`rewrite.ts`, `word-diff.ts`): a supplier's paragraph in the shop's voice, the
+  person's edit read for swapped words. The full customisation roadmap, with prompts for the
+  owner's research agents, is in SNABEN.md.
 - 2026-11-11 **The product is called Snaben.** The name changed from Flöda; the mark (the blue
   tile with the F) stays, and the wordmark is the new name in the same face, without the umlaut's
   two dots. Everything a person sees changed: the app, the installers

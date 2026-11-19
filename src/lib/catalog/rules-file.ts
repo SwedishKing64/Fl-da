@@ -11,6 +11,7 @@ import { cleanHouse, type HouseConventions } from "./house";
 import type { LearnedVocabulary } from "./taxonomy";
 import type { WebsiteCategories } from "./website";
 import type { PackageTerms } from "./types";
+import { cleanVoice, voiceTaught, type Voice } from "./voice";
 
 export const RULES_FILE_KIND = "floda-rules";
 export const RULES_FILE_VERSION = 1;
@@ -29,6 +30,8 @@ export interface RulesFile {
   settings?: Partial<{ seoTone: string; seoTitlePattern: string; houseRules: string; defaultRoundTo: string; minMarginPct: number; packages: PackageTerms }>;
   /** The parts a product can be packaged with (the list on Settings), each with its retail and wholesale. */
   packageParts?: Array<{ name: string; rrp: number; cost: number | null }>;
+  /** The shop's voice: its words, examples, sections and brand notes. */
+  voice?: Voice;
 }
 
 const str = (v: unknown, max: number) => String(v ?? "").slice(0, max);
@@ -95,6 +98,7 @@ export function cleanRulesFile(input: unknown): RulesFile | null {
     return { name, rrp, cost: b.cost === null || b.cost === undefined ? null : Math.max(0, num(b.cost)) };
   });
   if (packageParts) out.packageParts = packageParts;
+  if (f.voice && typeof f.voice === "object") out.voice = cleanVoice(f.voice);
   return out;
 }
 
@@ -109,5 +113,6 @@ export function describeRulesFile(f: RulesFile): string {
   if (f.website) parts.push(`the website's ${f.website.categories.length} categories`);
   if (f.settings) parts.push("writer settings");
   if (f.packageParts) parts.push(`${f.packageParts.length} package part${f.packageParts.length === 1 ? "" : "s"}`);
+  if (f.voice && voiceTaught(f.voice)) parts.push("the shop's voice");
   return parts.length ? parts.join(", ") : "nothing";
 }

@@ -38,6 +38,7 @@ import { csvType, productCategoryFor, spellType } from "./pipeline-pure";
 import { pageProductTitle } from "./page-title";
 import { genderedTitle } from "./trades/snow/gender-title";
 import { houseBody } from "./body";
+import { applySpellings, voiceInForce, withShopSections, withoutNeverTags } from "./voice";
 import { enrichFromSpecs } from "./specs";
 import { productTitle, seoTitle, titleYear } from "./titles";
 import { buildHandle } from "./handle";
@@ -999,17 +1000,19 @@ function canonical(line: InvoiceLine, vendor: string, season: string): Canonical
  * Compare At is left empty: a product on the shelf at its recommended retail is not on sale.
  */
 function toProduct(g: GroupedProduct, vendor: string): CsvProduct {
-  const title = productTitle(g.title, titleYear(g.tags, g.productType));
   const brand = g.brand || vendor;
+  const voice = voiceInForce();
+  const title = applySpellings(productTitle(g.title, titleYear(g.tags, g.productType)), voice, brand);
+  const type = csvType(g.productType, g.collections);
   return {
     handle: g.handle,
     title,
     // Already the house body when the spec sheet wrote it; wrapping it again gave "<p><p>…".
-    bodyHtml: !g.description.trim() ? "" : /^\s*</.test(g.description) ? g.description : houseBody(g.description, []),
+    bodyHtml: withShopSections(!g.description.trim() ? "" : /^\s*</.test(g.description) ? g.description : houseBody(g.description, []), voice, { vendor: brand, productType: type }),
     vendor: brand,
-    productType: csvType(g.productType, g.collections),
-    productCategory: productCategoryFor(csvType(g.productType, g.collections), title),
-    tags: [...g.tags, ...optionTagsFor(productOptions(g), optionTagPatterns()).filter((t) => !g.tags.some((x) => x.toLowerCase() === t.toLowerCase()))],
+    productType: type,
+    productCategory: productCategoryFor(type, title),
+    tags: withoutNeverTags([...g.tags, ...optionTagsFor(productOptions(g), optionTagPatterns()).filter((t) => !g.tags.some((x) => x.toLowerCase() === t.toLowerCase()))], voice, brand),
     published: false,
     status: "draft",
     seoTitle: seoTitle(brand, title),

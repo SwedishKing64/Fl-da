@@ -521,6 +521,160 @@ model reading: four days. (2) Apply with undo for titles, tags, types and SEO: t
 **Open.** Whether sharing product data is on by default like layouts, or asked in setup. What the
 page is called to a shop. Whether the catalogue check is in every plan or from the Shop plan up.
 
+## Customisation: the shop's own voice and touch (2026-11-19)
+
+Decided 2026-11-19: a shop should never fill in a form to describe itself. It shows an example,
+corrects a result, or says it in a sentence, and Snaben turns that into a rule it can see on
+Teach Snaben and undo. Everything below is that principle applied, in the order it is being
+built. Phase 1 shipped on 2026-11-19; the rest is the plan.
+
+### Phase 1, shipped: voice, talking, correcting
+
+- **The shop's voice** (`voice.ts`, kept under `shop.voice`, in force like the house
+  conventions): who it writes for; words it uses and never uses; spellings (from → to, per brand
+  or all); up to ten of its own listings as the writer's examples, chosen by product type and
+  brand for each new product; sections of the shop's own ("Fitted in store", "Our warranty")
+  added after every copy they apply to; fit, care and origin notes per brand; tags never
+  written. The writer hears all of it on every call (`seo.ts`), the build spells titles the
+  shop's way and drops the never-tags (`delivery.ts` `toProduct`), and the sections and brand
+  notes are appended to the copy at build and whenever the writer writes a body. The rules file
+  carries it. Teach Snaben shows each piece as a belief under Descriptions and edits it on the
+  Your voice card.
+- **Conversational teaching** (`teach-chat.ts`, the Tell Snaben how you list card): the shop
+  says it in words; the model answers with proposals in the shapes a rule can take (tag rule,
+  pricing rule, house convention, a type's tags, a template's notes, the voice, a section, a
+  brand note, a setting), each as a sentence with Accept beside it. Nothing is written until
+  accepted; `acceptChangeAction` calls the same save each belief's editor calls. Reading here
+  is marked as training and not counted against the plan.
+- **Learning from every edit** (`lessons.ts`, kept under `shop.lessons`): a word replaced in a
+  title, a tag added or taken off on the review grid, counted per brand. At three it is asked
+  on Teach Snaben: "You replace 'Jacket' with 'Shell' in titles on Arc'teryx products, 3 times.
+  Always?" Yes makes a spelling, a tag rule or a never-tag; no puts it away for good.
+  corrections.ts keeps doing the two changes that have no wrong answer (a renamed option, a
+  changed Type) without asking.
+- **Teaching by correction** (`rewrite.ts`, `word-diff.ts`, the Rewriter on the voice card): a
+  supplier's paragraph written in the shop's voice beside the original; the person edits the
+  result and each word they swapped is offered as a spelling.
+- **Per-brand and per-type voice**: examples carry a type and a brand and the closest are
+  chosen; sections and brand notes are scoped; template notes per brand or type remain the
+  place for instructions to the writer.
+
+### Phase 2: the review page, suppliers, and safety (about two weeks)
+
+- **Ask the batch**: a chat on the review page over the batch, with tools for what a person
+  does there (filter, retag, set draft or live, drop a product, find a page). The model
+  proposes a plan of writes; the page shows each before it happens; the audit log records it.
+- **Supplier recipes and trust**: plain-word procedures per supplier or brand ("the size is
+  the last two characters of the SKU", "ignore the second tab") handed to the reader for that
+  supplier; per-supplier trust (which columns to believe, which to always check, whose
+  descriptions to keep). A recipe is tried on the supplier's last file before it takes effect,
+  and the diff of line items shown.
+- **Staff picks and notes** in review: a one-line field that becomes a quoted line in the
+  copy, with the first name where the shop wants it.
+- **What blocks and what warns**: each hard check becomes the shop's choice (barcodes required
+  or not, margin floor as a block or a warning).
+- **Default status and publish timing**; **what the batch agent may touch** (widen or narrow
+  the fixed set).
+- **Preview before commit**: every accepted rule shows three real products before and after,
+  from the latest batch. **Undo everywhere**: the rules file is snapshotted before each accept,
+  and Teach Snaben offers "Back to before" for the last ten changes.
+
+### Phase 3: naming, filing and merchandising (about two weeks)
+
+- **Title grammar by example**: three titles typed the way the shop wants them; the pattern is
+  inferred and said back as a sentence to confirm.
+- **Shelves, their words**: an editor to rename, merge and nest collections, tags and types,
+  and mark which are seasonal. **Shop-specific shelves** no supplier knows (Rental fleet,
+  Ex-demo, Staff favourites, Gift under $100, Last season) by price, age, tag or hand-pick.
+- **Hemisphere and season vocabulary**: the shop's season names and when they turn over;
+  titles and tags follow.
+- **Metafields the shop defines**: custom fields per type with a source each (supplier, page,
+  rule, typed once), written to the export and the push.
+- **Export shape**: extra CSV columns, the metafields the theme needs, per-channel variants.
+- **The shop's words in the interface**: a dictionary for the app itself ("drops" for
+  deliveries, "listing" for product).
+
+### Phase 4: money, pictures, roles, and scoring (about two weeks)
+
+- **Pricing**: rounding and ending by price band; landed-cost rules per supplier (freight and
+  duty); compare-at policy per brand; bundle pricing for packages; the margin floor said in
+  words.
+- **Pictures**: background, padding and order by example; which angle leads; a house badge
+  for sale and new; how many is enough per type.
+- **Sold with**: the binding list generalised to any pairing (pedals, fins, footprints).
+- **Who may do what**: owner approves pricing, staff build and tag.
+- **Scoring on their own history**: a changed rule run against the shop's past batches with
+  the simulator's scorer, and what it would have changed said in a sentence.
+- **Reset per area** to Snaben's default.
+
+### Phase 5: Snaben as an MCP server
+
+The same tools the review chat uses, exposed over the Model Context Protocol with a per-shop
+token, so a shop's own Claude or ChatGPT can drive Snaben; and Snaben consuming Shopify's own
+MCP servers where they replace hand-written calls.
+
+### Prompts for your agents
+
+Each is self-contained; give it to an agent with web access and the repository.
+
+1. **MCP server in Next 16.** "Snaben is a Next.js 16 App Router app (server actions, route
+   handlers, Prisma; desktop copies run the same server in Electron on 127.0.0.1, the hosted
+   copy on Vercel). Design an MCP server inside it: which transport the TypeScript MCP SDK
+   offers for a stateless route handler (Streamable HTTP), how to authenticate a per-shop token
+   on the hosted copy and a local-only check on the desktop, how Claude Desktop and ChatGPT
+   connect to each, and the tool list for: list batches, describe a batch, list products with
+   filters, retag, set status, drop a product, find a page, list beliefs, propose and accept a
+   rule. Deliver a route file skeleton, the SDK version to pin, and the auth design, with the
+   SDK's own docs cited."
+2. **Shopify's MCP servers.** "List the MCP servers Shopify publishes (Dev MCP, Storefront MCP,
+   any Admin or Catalog server), what each exposes, how a custom app authenticates to them,
+   and which of Snaben's hand-written Admin GraphQL calls (productSet, productUpdate,
+   fileCreate, inventory) they could replace. Say what cannot be replaced and why."
+3. **Catalogue check writes with undo.** "For a Shopify Admin GraphQL integration that edits
+   existing products (title, tags, type, SEO, body, media) a group at a time and must offer
+   Undo for thirty days: which mutations to use (productUpdate vs productSet), how to read
+   the before-state cheaply, rate limits at 2,000 products, and the metafield definitions API
+   for shop-defined fields. Deliver mutation shapes and a before/after record design."
+4. **Supplier recipes with evaluation.** "Design how a plain-English procedure per supplier
+   ('the size is the last two characters of the SKU') is applied in a reader that uses both
+   heuristics and a model, and how to score a recipe against that supplier's previous files
+   before it takes effect (line counts, fields filled, variants, against the last confirmed
+   build). Include the prompt shape and the guard against instructions found inside a supplier
+   document being obeyed."
+5. **OCR sidecar for the desktop app.** "Compare PaddleOCR, Tesseract and docTR for reading
+   photographed invoices offline on Windows and macOS, bundled with an Electron app: accuracy on
+   printed tables with handwriting, bundle size, start time, licence (must not be AGPL), and how
+   to package a Python sidecar with electron-builder. Recommend one and give the packaging
+   steps."
+6. **Local embeddings for matching.** "For matching supplier product names to a shop's
+   catalogue titles on the shop's own computer with no API cost: evaluate Transformers.js with a
+   small sentence-embedding model plus sqlite-vec (desktop) and pgvector (hosted). Give model
+   choice, size, speed on a laptop CPU for 5,000 titles, and a schema."
+7. **Invoices by email.** "Design inbound email for supplier invoices: Postmark or Mailgun
+   inbound webhooks versus the Gmail and Microsoft Graph APIs; a per-shop address; how the
+   hosted app hands the attachment to a desktop copy that is offline; spam and spoofing
+   defences. Recommend one path with costs."
+8. **Xero and MYOB bills.** "For pushing a confirmed supplier invoice with matched cost prices
+   as a bill: the Xero Bills (Invoices type ACCPAY) API and MYOB AccountRight equivalent, OAuth
+   flows for a desktop app, attachment of the PDF, and idempotency. Deliver the request shapes."
+9. **Vercel project failing every build.** "A Vercel project (Next.js 16) has failed every
+   deployment within three seconds since 21 October, on every branch, while the same commits
+   build locally. List the project-level causes that fail before the build starts (root
+   directory, framework preset, Node version, environment variable or secret references,
+   build command override, Git integration) and how to read the inspect log for each."
+10. **Signing the installers.** "Give the steps and current costs to sign and notarise an
+    electron-builder app for macOS (Apple Developer identity, notarytool in GitHub Actions)
+    and to sign the Windows NSIS installer (OV/EV certificate or Azure Trusted Signing),
+    including the GitHub Actions secrets needed and what electron-updater requires for a Mac
+    copy to self-update."
+11. **Desktop to cloud sync.** "Compare PowerSync and ElectricSQL for syncing a desktop SQLite
+    database (Prisma schema, about 40 tables) to Postgres, for a shop using the app on two
+    computers: conflict handling, schema migrations, offline writes, licence, cost. Recommend."
+12. **Season vocabulary.** "Survey how Australian and New Zealand outdoor, snow, surf and bike
+    retailers on Shopify tag and title seasons (model year, 'Winter 2026', SS/AW, Northern
+    supplier years), and propose a per-shop season vocabulary with turnover dates that titles
+    and tags can follow."
+
 ## Working on Snaben
 
 Everything in `HANDOVER.md` under "Working on it" applies. In addition:

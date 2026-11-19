@@ -2,7 +2,7 @@ import Link from "next/link";
 import { prisma, parseJson } from "@/lib/catalog/db";
 import { requireUser } from "@/lib/catalog/auth";
 import { Card, Details, PageHeader, fmtDate } from "@/app/(catalog)/ui";
-import { getHouseConventions, getLearnedVocabulary, getWebsiteCategories, shopName, taxName } from "@/lib/catalog/shop-profile";
+import { getHouseConventions, getLearnedVocabulary, getLessons, getVoice, getWebsiteCategories, shopName, taxName } from "@/lib/catalog/shop-profile";
 import { fieldsInForce, productTypes, snowTrade } from "@/lib/catalog/taxonomy";
 import { packagesForTeaching } from "@/lib/catalog/trades/snow/teach";
 import { optionPlanFor } from "@/lib/catalog/options";
@@ -18,7 +18,12 @@ import { Teach } from "./Teach";
 import { Sources, type SourceTile } from "./Sources";
 import { RulesFile } from "./RulesFile";
 import { TeachGuide } from "./TeachGuide";
-import { apiKeySource } from "@/lib/catalog/anthropic";
+import { TeachChat } from "./TeachChat";
+import { VoiceCard } from "./VoiceCard";
+import { Rewriter } from "./Rewriter";
+import { Lessons } from "./Lessons";
+import { lessonKey, lessonOutcome, lessonSentence, ripeLessons } from "@/lib/catalog/lessons";
+import { aiAvailable, apiKeySource } from "@/lib/catalog/anthropic";
 import { buildAreas, countBeliefs } from "@/lib/catalog/teaching";
 import { getSettings } from "@/lib/catalog/settings";
 import { supplierRecords } from "@/lib/catalog/supplier-score";
@@ -38,7 +43,7 @@ const plural = (x: number, one: string, many = `${one}s`) => `${n(x)} ${x === 1 
  */
 export default async function TrainingPage() {
   await requireUser("ADMIN");
-  const [website, learned, house, layouts, tagRules, templates, pricingRules, suppliers, records, settings, store, proposals] = await Promise.all([
+  const [website, learned, house, layouts, tagRules, templates, pricingRules, suppliers, records, settings, store, proposals, voice, lessons] = await Promise.all([
     getWebsiteCategories(),
     getLearnedVocabulary(),
     getHouseConventions(),
@@ -51,7 +56,10 @@ export default async function TrainingPage() {
     getSettings(),
     storeState(),
     prisma.tagProposal.findMany({ orderBy: [{ status: "desc" }, { count: "desc" }, { createdAt: "asc" }] }).catch(() => []),
+    getVoice(),
+    getLessons(),
   ]);
+  const ripe = ripeLessons(lessons).map((l) => ({ key: lessonKey(l), sentence: lessonSentence(l), outcome: lessonOutcome(l), examples: l.examples }));
   const packages = snowTrade() ? await packagesForTeaching(settings.packages) : null;
   const types = productTypes();
   const list = (s: string) => s.split(",").map((x) => x.trim()).filter(Boolean);
@@ -72,6 +80,7 @@ export default async function TrainingPage() {
     optionPlan: (type) => optionPlanFor(type),
     shopName: shopName(),
     packages,
+    voice,
   });
   const counts = countBeliefs(areas);
   const tags = [...new Set([...(learned?.sections ?? []), ...house.kinds.flatMap((k) => [...k.tags, ...(k.variesTags ?? [])]), ...templateRows.flatMap((t) => t.tags), ...tagRules.flatMap((r) => list(r.addTags))])].sort((a, b) => a.localeCompare(b));
@@ -152,7 +161,26 @@ export default async function TrainingPage() {
 
       <TeachGuide state={{ exportTaught: Boolean(learned) || store.configured, websiteRead: Boolean(website), rulesTouched: Boolean(house.savedAt) || tagRules.length > 0 || pricingRules.length > 0, supplierTaught: layouts.length > 0, readingIncluded: apiKeySource() === "floda" }} />
 
+      <TeachChat aiEnabled={aiAvailable()} />
+
       <Sources tiles={tiles} />
+
+      {ripe.length > 0 && (
+        <div id="lessons" className="mb-6 scroll-mt-6">
+          <Card title={`Needs you: ${plural(ripe.length, "thing")} you keep changing`}>
+            <Lessons lessons={ripe} />
+          </Card>
+        </div>
+      )}
+
+      <div id="voice" className="mb-6 scroll-mt-6">
+        <Card title="Your voice" actions={<span className="text-[12.5px] text-[var(--ink-soft)]">The writer hears all of this on every product</span>}>
+          <VoiceCard voice={voice} types={types} brands={brands} />
+          <Details summary="Teach by correcting: a supplier's paragraph in your voice" hint="reading here is free" className="mt-4 !shadow-none">
+            <Rewriter aiEnabled={aiAvailable()} types={types} brands={brands} />
+          </Details>
+        </Card>
+      </div>
 
       <div id="tags" className="mb-6 scroll-mt-6">
         {pending > 0 ? (

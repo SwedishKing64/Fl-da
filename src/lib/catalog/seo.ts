@@ -11,6 +11,7 @@ import { prisma, parseJson } from "./db";
 import { getSettings } from "./settings";
 
 import { templateGuidance, type ProductTemplateLike } from "./templates";
+import { voiceGuidance, voiceInForce, withShopSections } from "./voice";
 
 const SeoSchema = z.object({
   seoTitle: z.string().describe("Max 60 characters"),
@@ -95,7 +96,7 @@ export async function enrichBatchSeo(batchId: string, opts: { onlyMissing: boole
       guidance: templateGuidance(
         { vendor: p.vendor, productType: p.productType, category: p.category },
         templates,
-        [houseGuidance(houseConventions()), settings.houseRules].filter((t) => t.trim()).join("\n"),
+        [houseGuidance(houseConventions()), settings.houseRules, voiceGuidance(voiceInForce(), { vendor: p.vendor, productType: p.productType })].filter((t) => t.trim()).join("\n"),
         titleExamplesFor({ vendor: p.vendor, productType: p.productType, category: p.category }, templates),
       ),
       title: p.title,
@@ -112,7 +113,7 @@ export async function enrichBatchSeo(batchId: string, opts: { onlyMissing: boole
       data: {
         seoTitle: p.seoTitle && opts.onlyMissing ? p.seoTitle : result.seoTitle,
         seoDescription: p.seoDescription && opts.onlyMissing ? p.seoDescription : result.seoDescription,
-        bodyHtml: p.bodyHtml && opts.onlyMissing ? p.bodyHtml : result.bodyHtml,
+        bodyHtml: withShopSections(p.bodyHtml && opts.onlyMissing ? p.bodyHtml : result.bodyHtml, voiceInForce(), { vendor: p.vendor, productType: p.productType }),
       },
     });
     updated++;

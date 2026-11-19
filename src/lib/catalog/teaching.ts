@@ -11,6 +11,7 @@
  */
 
 import type { HouseConventions, KindRule } from "./house";
+import { describeVoice, type Voice } from "./voice";
 import { fromGrams } from "./house";
 import type { TagRuleLike } from "./rules";
 import type { ProductTemplateLike } from "./templates";
@@ -78,6 +79,8 @@ export interface TeachingInput {
   shopName: string;
   /** For a shop on the snow trade: what it packages together and its fitting charges. Null elsewhere. */
   packages?: PackageTeaching | null;
+  /** The shop's voice; left out where the caller has none to show. */
+  voice?: Voice;
 }
 
 export const SOURCE_LABELS: Record<Source, string> = { export: "from your export", website: "from your website", you: "you set this", floda: "Snaben's own", supplier: "from paperwork" };
@@ -159,6 +162,7 @@ function descriptions(input: TeachingInput): Belief[] {
   ];
   if (input.house.notes.trim()) out.push({ id: "house.notes", source: "you", sentence: `Standing instruction on every product: ${input.house.notes.trim()}`, edit: { kind: "house-text", path: "notes", label: "Standing instruction", multiline: true } });
   else out.push({ id: "house.notes", source: "floda", sentence: "No standing instruction. Anything the writer should always do or never do goes here.", edit: { kind: "house-text", path: "notes", label: "Standing instruction", multiline: true, placeholder: "Never say 'premium'. Spell it colour. Mention the warranty." } });
+  if (input.voice) for (const v of describeVoice(input.voice)) out.push({ id: v.id, source: v.taught ? "you" : "floda", sentence: v.sentence, edit: { kind: "link", href: "#voice", label: "Your voice" } });
   out.push({ id: "floda.no-invention", source: "floda", sentence: "A writer may only use facts it was given: nothing from the paperwork, the brand's page or your notes is ever made up." });
   return out;
 }

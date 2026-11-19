@@ -9,7 +9,7 @@ import { LicenceServerForm } from "@/app/(catalog)/(app)/settings/LicenceServerF
 import { TRIAL_DAYS } from "@/lib/catalog/plans";
 
 /**
- * The copy's licence: sign in with the account made on Flöda's website, which hands this copy
+ * The copy's licence: sign in with the account made on Snaben's website, which hands this copy
  * its key, or type a key a shop already has. The trial and the plan are chosen on the website
  * when the account is made; nothing is started from here. Only shown on a copy that checks a
  * licence.
@@ -23,9 +23,9 @@ export function SignInStep({ email, next, site, servers, override }: { email: st
   const signup = `${site}/account/signup`;
 
   return (
-    <Card title="Your Flöda account">
+    <Card title="Your Snaben account">
       <p className="mb-4 text-[14px] text-[var(--ink-soft)]">
-        Flöda is used with an account made on its website. Making one starts the {TRIAL_DAYS}-day trial, no card, and picks a plan; signing in here licenses this copy. No account yet? <a href={signup} target="_blank" rel="noreferrer" className="font-semibold text-[var(--meta)] underline">Make one at {site.replace(/^https?:\/\//, "")}/account/signup</a>, then come back and sign in.
+        Snaben is used with an account made on its website. Making one starts the {TRIAL_DAYS}-day trial, no card, and picks a plan; signing in here licenses this copy. No account yet? <a href={signup} target="_blank" rel="noreferrer" className="font-semibold text-[var(--meta)] underline">Make one at {site.replace(/^https?:\/\//, "")}/account/signup</a>, then come back and sign in.
       </p>
       <div className="mb-4 flex gap-2 text-[13px]">
         <button type="button" onClick={() => setMode("account")} className={`rounded-full px-3 py-1.5 font-semibold ${mode === "account" ? "bg-[var(--meta)] text-white" : "bg-[var(--canvas)] text-[var(--ink-2)]"}`}>Sign in with my account</button>
@@ -51,7 +51,7 @@ export function SignInStep({ email, next, site, servers, override }: { email: st
             <input name="licence" className={INPUT} placeholder="FL-XXXX-XXXX-XXXX-XXXX" autoComplete="off" />
           </Field>
           {keyed && (keyed.ok ? <Alert tone="success">{keyed.message}</Alert> : <Alert tone="danger">{keyed.error}</Alert>)}
-          <Button type="submit" variant="primary" icon="🪪" disabled={entering}>{entering ? "Asking Flöda…" : "Use this key"}</Button>
+          <Button type="submit" variant="primary" icon="🪪" disabled={entering}>{entering ? "Asking Snaben…" : "Use this key"}</Button>
         </ActionForm>
       )}
     </Card>

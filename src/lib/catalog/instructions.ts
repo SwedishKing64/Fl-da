@@ -11,7 +11,7 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
-import { anthropicClient, cachedSystem, WORKING_MODEL, aiAvailable } from "./anthropic";
+import { anthropicClient, cachedSystem, LIGHT_MODEL, aiAvailable } from "./anthropic";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 
@@ -64,7 +64,7 @@ const SYSTEM = `A member of staff at a ski and snowboard shop in Australia is ab
 
 Turn what they say into directives that apply to every product in the batch. Take them at their word: if they say every product needs the 2998 tag, that is the tag, spelled as they spelled it. If they say everything is 30% off, that is 30.
 
-Skis are built twice as a matter of course: flat, and as a package with a binding (men's with the Marker Griffon, women's with the Marker Squire), priced from the binding on the supplier's own price list. When they talk about packaging, partnering or selling skis with a binding, that is the packages and packageBindings fields.
+Skis are built flat, and as a package only with the bindings the shop picks for each ski (on the review page) or names in an instruction: no binding is chosen for a ski by default. When they talk about packaging, partnering or selling skis with a binding, that is the packages and packageBindings fields.
 
 An order form can span several deliveries — a column of quantities per month, or a delivery date per line. "Only the December 2026 delivery", "just the April order" or "only the lines with an estimated delivery of 26" is the deliveries field. "Only add the new products" / "leave out what we already have" is onlyNew. "These are all new products" / "nothing here is in the shop" / "don't match against the shop" is allNew: the lines are built as new products without being matched against the shop's listings, which is quicker. A sheet can carry two brands (Burton and Anon on one Burton order): "only Burton" / "start with Burton, Anon later" is the brands field. Products they say not to build — "don't build the Kore 94", "leave out the socks", "skip the beanies and the neck warmers" — go in skip, one entry per product or kind named, as they named it. An order that spans many kinds of product — a Burton order with boards, bindings, boots, outerwear and gloves on it — can be worked one kind at a time: "only the snowboards", "just do the boards for now", "boards and bindings only" is the types field, in the shop's type names; "all of them now" or "the rest as well" empties it. The kinds the order was found to hold are in typesSeen: copy it through unchanged.
 
@@ -79,7 +79,7 @@ export function instructionsAvailable(): boolean {
 }
 
 const ReadSchema = z.object({
-  reply: z.string().describe("One or two short sentences confirming what will be done, in the person's own terms. Plain text."),
+  reply: z.string().describe("One or two short sentences saying what has been done, in the person's own terms and the past tense — the products are rebuilt with it straight after, so never “will”, “next build” or “when you rebuild”. Plain text."),
   directives: DirectivesSchema,
 });
 
@@ -99,8 +99,8 @@ export async function readInstructions(thread: Array<{ role: "USER" | "ASSISTANT
   ];
 
   const response = await retrying(() => getClient().messages.stream({
-    model: WORKING_MODEL,
-    max_tokens: 3000,
+    model: LIGHT_MODEL,
+    max_tokens: 32_000,
     system: cachedSystem(SYSTEM),
     thinking: { type: "adaptive" },
     output_config: { format: zodOutputFormat(ReadSchema), effort: "low" },

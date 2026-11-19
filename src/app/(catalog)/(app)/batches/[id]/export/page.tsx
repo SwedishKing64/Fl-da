@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/catalog/db";
 import { loadReview } from "@/lib/catalog/pipeline";
 import { blockingErrors, hardErrors, warningList } from "@/lib/catalog/validate";
+import { offTotals } from "@/lib/catalog/totals";
 import { getSettings } from "@/lib/catalog/settings";
 import { requireUser } from "@/lib/catalog/auth";
 import { Badge, Card, LinkButton, PageHeader, cx, fmtDate, money, pct, statusTone } from "@/app/(catalog)/ui";
@@ -17,7 +18,12 @@ export default async function ExportPage(props: PageProps<"/batches/[id]/export"
   const batch = await prisma.importBatch.findUnique({ where: { id }, include: { exports: { orderBy: { partIndex: "asc" } }, feedback: { orderBy: { createdAt: "asc" } }, auditLogs: { orderBy: { createdAt: "desc" }, take: 20, include: { user: true } } } });
   if (!batch) notFound();
   const [review, settings] = await Promise.all([loadReview(id), getSettings()]);
-  const hard = hardErrors(review.products);
+  // A document whose lines did not add up, not yet settled on the review page, is the first thing to check.
+  const offFiles = await prisma.sourceFile.findMany({ where: { batchId: id, extractionError: { contains: "Does not add up:" } }, select: { filename: true, extractionError: true } });
+  const hard = [
+    ...offFiles.filter((f) => offTotals(f.extractionError)).map((f) => `${f.filename}: its lines do not add up to its own totals — read it again or settle it on the review page`),
+    ...hardErrors(review.products),
+  ];
   // The repairable ones, listed as what the export will do; the hard ones as what to check before importing.
   const errors = blockingErrors(review.products).filter((e) => !hard.includes(e));
   const warnings = warningList(review.products);

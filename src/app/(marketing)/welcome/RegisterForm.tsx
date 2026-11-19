@@ -10,7 +10,7 @@ export function RegisterForm({ plan = "shop" }: { plan?: PlanId }) {
     return (
       <div className="thanks" role="status">
         <h3>Thanks. Your trial is on its way.</h3>
-        <p className="soft">Within one working day you&rsquo;ll hear from a Flöda engineer with your key, the download and a time to set it up with you on a call, on one of your own supplier invoices. Nothing to install in the meantime.</p>
+        <p className="soft">Within one working day you&rsquo;ll hear from a Snaben engineer with your key, the download and a time to set it up with you on a call, on one of your own supplier invoices. Nothing to install in the meantime.</p>
       </div>
     );
   }

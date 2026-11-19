@@ -4,20 +4,24 @@
 // is visible in a product photo. Structured outputs keep the response schema-valid.
 
 import Anthropic from "@anthropic-ai/sdk";
-import { retailer, taxName } from "../shop-profile";
+import { isOwnShop, retailer, shopProfile, taxName } from "../shop-profile";
 import { anthropicClient, cachedSystem, READING_MODEL, WORKING_MODEL } from "../anthropic";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import type { ExtractedTable } from "./types";
+import type { Mapping } from "../mapping";
 import { retrying } from "../api-errors";
+import { activeConventions, packKnowledge, productTypes, snowTrade, typesAreKnown } from "../taxonomy";
+import { packFor } from "../trades";
+import { checkTotals, totalsDistance, type TotalsCheck } from "../totals";
 
 export { EXTRACTION_MODEL } from "../anthropic";
 
 export type DocumentType = "INVOICE" | "SPEC_SHEET" | "PRICE_LIST" | "PRODUCT_PHOTO" | "OTHER";
 
 const LineItemSchema = z.object({
-  title: z.string().describe("Product name without size/length/colour suffixes, e.g. 'Bent 90'"),
-  brand: z.string().describe("The brand ON the product — Volkl, Atomic, Marker. NEVER the distributor, agent or wholesaler the document came from."),
+  title: z.string().describe("Product name without size/length/colour suffixes, e.g. 'Bent 90', 'Atmos AG', 'Hubba Hubba Tent'"),
+  brand: z.string().describe("The brand ON the product — Volkl, Atomic, Osprey, MSR. NEVER the distributor, agent or wholesaler the document came from."),
   modelCode: z.string().describe("Model/style code shared across sizes of the same product, else empty"),
   sku: z.string().describe("Supplier SKU / item code for this exact variant, else empty"),
   barcode: z.string().describe("EAN/UPC if present, digits only, else empty"),
@@ -25,13 +29,16 @@ const LineItemSchema = z.object({
   currency: z.string().describe("ISO currency code if stated on the document, else empty"),
   quantity: z.number().nullable().describe("Units ordered/invoiced for this line; null when not an order"),
   rrp: z.number().nullable().describe("Recommended retail price if stated — printed in an RRP column, or written by hand against the line (see the handwriting rules)"),
-  length: z.string().describe("Ski/snowboard length in cm, digits only, else empty"),
-  size: z.string().describe("Boot size (mondopoint) or apparel size (S, M, L, XL, 8, 10, 12…), else empty. On a size-grid invoice this is the column header the quantity sat under."),
-  width: z.string().describe("Boot last width in mm or ski waist width, else empty"),
-  colour: z.string().describe("Colourway, else empty"),
+  length: z.string().describe("A length in cm for skis, snowboards and poles, digits only, keeping a wide board's W as printed (158W); else empty. A length written as a word (Regular, Long, Short) is a variant, not a length."),
+  size: z.string().describe("The size the line is sold in, as printed: apparel (XS–XXXL, 8, 10, 12), footwear with its system where printed (US 9.5, UK 8, EU 42), boot mondopoint (26.5), pack, harness or glove size (S/M, M/L), One Size. Else empty. On a size-grid invoice this is the column header the quantity sat under."),
+  width: z.string().describe("Fit or width: Wide, Regular, Narrow, a boot last or ski waist in mm. Else empty."),
+  colour: z.string().describe("The colourway's name. Where the line prints only a colour code (001, BLK, 4417) and the document names that code somewhere — a legend, another line, a heading — give the name; otherwise the code as printed. Else empty."),
+  variant: z.string().describe("Any other option that tells this line apart from the same product's other lines and is not its length, size, width or colour: a pack's or bag's volume (35L, 65L), a sleeping bag's length (Regular, Long) or zip side (Left Zip), a bottle's capacity (750ml). As printed. Else empty."),
+  variantName: z.string().describe("What that option is called on a listing: Capacity, Volume, Length, Zip. Empty when variant is empty."),
+  productType: z.string().describe("What kind of product this is, in the shop's own words: one of the shop's kinds listed in the message when there are any, else the plainest name for it (Tents, Hiking Packs, Sleeping Bags, Trail Shoes, Rain Jackets). Empty if you cannot tell."),
   gender: z.string().describe("Mens/Womens/Unisex/Kids if stated, else empty"),
   season: z.string().describe("Season/model year like '2026' or 'FW25', else empty. A two-digit year written by hand against the line — 23, 24, 27 — is that year: '2023', '2024', '2027'. A handwritten 2998 or 2999 is copied as written."),
-  category: z.string().describe("One of: skis, snowboards, boots, bindings, poles, helmets, goggles, apparel, accessories, other"),
+  category: z.string().describe("One of: skis, snowboards, boots, bindings, poles, helmets, goggles, apparel, accessories, other. Boots means ski and snowboard boots; hiking boots, shoes, tents, packs, sleeping gear, cooking and climbing gear are other; clothing of any kind is apparel."),
   description: z.string().describe("Marketing description and key features in plain prose, else empty"),
   flex: z.string().describe("Flex rating if stated"),
   abilityLevel: z.string().describe("Ability level if stated (Beginner/Intermediate/Advanced/Expert)"),
@@ -42,17 +49,47 @@ const LineItemSchema = z.object({
   notes: z.string().describe("What was written by hand against this line that is not a season, a retail price, a discount or a quantity, in plain words — 'QTY if it exists', 'should be 148cm', '+ SLR 10 binding', 'could also read 1699'. Empty when nothing was."),
 });
 
-const ExtractionSchema = z.object({
+/**
+ * The line as a shop outside the snow trade has it read: no flex, ability level, DIN range or
+ * terrain, which are a ski's, but any specs the line prints under the name the document gives them
+ * (material, capacity, dimensions, wattage), which become the product's own traits.
+ */
+const TradeLineItemSchema = LineItemSchema.omit({ flex: true, abilityLevel: true, dinRange: true, terrain: true }).extend({
+  title: z.string().describe("Product name without size, colour or other option suffixes, e.g. 'Hubba Hubba Tent', 'Ridge Fleece Jacket', 'Trail 900 Lamp'"),
+  brand: z.string().describe("The brand ON the product. NEVER the distributor, agent or wholesaler the document came from."),
+  length: z.string().describe("A length the product is sold in, as a number with its unit where printed (e.g. 160cm, 50m), when it is one of the options it comes in; else empty. A length written as a word (Regular, Long, Short) is a variant, not a length."),
+  category: z.string().describe("What kind of product this is in one or two plain words (tents, jackets, bikes, lamps); apparel for clothing of any kind; else other."),
+  specs: z.array(z.object({ name: z.string().describe("The spec's name as the document prints it: Material, Capacity, Weight, Dimensions"), value: z.string().describe("Its value as printed") })).describe("Specs printed for this line that no other field holds. Empty on an invoice or price list."),
+});
+
+/** Which line a read asks for: the ski shop's, or every other trade's. */
+const lineSchema = (snow: boolean) => (snow ? LineItemSchema : TradeLineItemSchema);
+
+const extractionSchema = (snow: boolean) => z.object({
   documentType: z.enum(["INVOICE", "SPEC_SHEET", "PRICE_LIST", "PRODUCT_PHOTO", "OTHER"]).describe("What this document is"),
   summary: z.string().describe("One sentence on what the document contains and what was extracted"),
   supplier: z.string().describe("Supplier/company name issuing the document, else empty"),
   invoiceNumber: z.string().describe("Invoice / order confirmation number, else empty"),
   currency: z.string().describe("Document currency ISO code if determinable, else empty"),
   gstTreatment: z.enum(["INCLUSIVE", "EXCLUSIVE", "NONE", "UNKNOWN"]).describe("How unit prices are expressed with respect to Australian GST"),
-  items: z.array(LineItemSchema),
+  statedTotals: z.object({
+    units: z.number().nullable().describe("The total number of units the document states (Total Units, Total Qty, the sum line of the quantity column). Null when it prints none."),
+    subtotal: z.number().nullable().describe("The value of the goods the document states, before freight, surcharges and tax, in the document's currency. Null when it prints none, or prints only a total that includes freight or tax."),
+  }).describe("The totals printed on the document itself, copied as printed: they are checked against the lines read."),
+  items: z.array(lineSchema(snow)),
 });
 
-export type AiExtraction = z.infer<typeof ExtractionSchema>;
+const ExtractionSchema = extractionSchema(true);
+const TradeExtractionSchema = extractionSchema(false);
+
+/** A line as either read gives it: the ski fields where the shop sells skis, specs where it does not. */
+type AiLine = Omit<z.infer<typeof LineItemSchema>, "flex" | "abilityLevel" | "dinRange" | "terrain"> & Partial<Pick<z.infer<typeof LineItemSchema>, "flex" | "abilityLevel" | "dinRange" | "terrain">> & { specs?: Array<{ name: string; value: string }> };
+
+export type AiExtraction = Omit<z.infer<typeof ExtractionSchema>, "items"> & {
+  items: AiLine[];
+  /** Whether the lines read add up to the totals the document states. Set after the read; not asked of the model. */
+  check?: TotalsCheck;
+};
 
 const SYSTEM = `You read documents uploaded by a retailer who is building Shopify products. Work out what each document is, then extract only what is relevant.
 
@@ -60,11 +97,11 @@ Document types:
 - INVOICE / order confirmation: one item per purchasable variant line (each length/size/colour is its own item) with unit cost and quantity.
 - PRICE_LIST / pre-book form: like an invoice but quantities may be absent; still one item per variant with the unit cost.
 - SPEC_SHEET / catalogue page / workbook: one item per product (not per size) carrying brand, model, description, specs (flex, ability level, terrain, DIN, widths), the list of available lengths/sizes in the length/size field separated by commas, colourways, RRP if shown, and suggested tags. costPrice and quantity are null.
-- PRODUCT_PHOTO: a photo of a product (skis, boots, apparel…). Return one item with the brand, model name, model code (if printed), colour and category you can see, everything else empty/null.
+- PRODUCT_PHOTO: a photo of a product (skis, boots, apparel, a tent, a pack…). Return one item with the brand, model name, model code (if printed), colour and category you can see, everything else empty/null.
 - OTHER: nothing useful; return no items.
 
 Size grids (very common on apparel invoices, and the shape most often got wrong):
-- Some invoices do not list one row per variant. Instead the sizes run ACROSS as column headers (S M L XL XXL XXXL, or 0 2 4 6 8 10 12 14 16 18 20, or 36 38 40 42) and each product row carries a quantity in the cell under each size it was ordered in. Empty cells were not ordered.
+- Some invoices do not list one row per variant. Instead the sizes run ACROSS as column headers (S M L XL XXL XXXL, or 0 2 4 6 8 10 12 14 16 18 20, or 36 38 40 42, or US 8 8.5 9 9.5, or S/M M/L, or Regular Long) and each product row carries a quantity in the cell under each size it was ordered in. Empty cells were not ordered.
 - When you see that, emit ONE ITEM PER SIZE THAT HAS A QUANTITY, not one item per row. Each item takes that size, that cell's quantity, and the row's name, code, colour and prices. A row with quantities under M and L is two items, not one.
 - Quantities in those cells are often HANDWRITTEN, and may be circled or ticked. Read them as the quantity. A circle around a number does not change the number.
 - Check your work against the row's printed total quantity ("2 EA", "3 EA") and the stated Total Units: the quantities you emit for a row should add up to it.
@@ -73,7 +110,7 @@ Size grids (very common on apparel invoices, and the shape most often got wrong)
 The brand is the brand on the product, never the company that sent the document:
 - An order form, an invoice and a price list all carry a letterhead: a name, an address, a phone number, an email, usually top-right. That company is the DISTRIBUTOR — the agent this shop buys through. "Sportrade Australia" is who sells them Volkl; it is not the brand of a single ski, and it must never be the brand on an item.
 - The brand is what is printed on the goods, and it is what the range is called: RACETIGER, BLAZE and MANTRA are Volkl; SQUIRE and GRIFFON are Marker. It is usually in the document's title, in a logo, in the sheet's name, or in the model codes — and it is the same for most or all of the rows.
-- One workbook can hold two brands, most often a ski brand and the binding brand on the same order. Give each item the brand of the thing that item IS.
+- One workbook can hold two brands, most often a ski brand and the binding brand on the same order, or an outdoor agency's order spanning several of the brands it carries (Osprey packs and Sea to Summit sleeping mats). Give each item the brand of the thing that item IS.
 - If the document names no brand at all, leave it empty. An empty brand is fixed in one click on the batch; a distributor's name is fixed by someone noticing it first, and nobody does.
 
 Section headers:
@@ -85,6 +122,7 @@ Prices — the most important thing on the document:
 - When a row shows both an RRP column and a wholesale column (W/S, Price net, Your price, Cost), rrp is the RECOMMENDED RETAIL and costPrice is the WHOLESALE one. Getting these the wrong way round is the single most damaging mistake here, so read the column headings rather than assuming the larger number is either one.
 - A wholesale invoice commonly runs: Qty | RRP | W/S (ex. GST) | Disc% | Price net (ex. GST) | Total (ex. GST). Read it as: rrp is the RRP column; costPrice is Price net, the unit amount actually charged after the discount; Total is the line total and is never a unit price. Disc% describes the wholesale side only — it is NOT a retail discount and it does not change the rrp.
 - rrp is the single field this shop cannot do without: it is what the product sells for. If an RRP column exists, EVERY item you return from a row under it carries that row's rrp — including every size of the same colourway on a size grid. Do not put the price on the first size and leave the rest null.
+- A boot size printed with an X — "24X", "25X" — is the half size: 24.5, 25.5. Write it that way.
 - If the page is rotated or sideways, read it rotated. The column headings are on the same edge as the numbers and they say which column is which; never guess a column's meaning from the size of the numbers in it.
 - If, having read the headings, no RRP is stated anywhere on the document, leave rrp null. Do not put the wholesale price there — it will be looked up on the brand's website instead, and a wholesale price written into rrp would be sold at.
 
@@ -97,7 +135,7 @@ Handwriting — a printed document the shop's staff have written on in pen, whic
 - Where a handwritten figure could be read two ways, take the likelier and say in notes what else it could read.
 
 Rules:
-- title is the product name only; put length/size/colour in their own fields. Keep the brand out of the title when it is identifiable separately.
+- title is the product name only; put length, size, width, colour and any other option (capacity, volume, zip side) in their own fields, so the lines of one product share one title: "Atmos AG" in 65L and 50L is one product with a Volume option, not two products. Keep the brand out of the title when it is identifiable separately. A number that is part of the model's name stays in the title: "Bent 100", "Hubba Hubba 2" when that is what the brand calls it. A tent's person count (2P, 3P, 2 Person) and a boardshort's inseam (18", 20") are part of the name — a 2P and a 3P tent are two products, not one with a capacity option.
 - modelCode is the code shared across sizes of the same product (style number); sku is the code unique to this variant. If only one code exists, put it in sku and derive modelCode by stripping the size/colour suffix when obvious, otherwise leave modelCode empty.
 - costPrice is the UNIT price for one item, never the line total. Strip currency symbols.
 - Never invent values. Leave a string empty or a number null when the document does not state it.
@@ -105,8 +143,46 @@ Rules:
 - On an INVOICE or PRICE_LIST, leave description, flex, abilityLevel, dinRange, terrain, tags and imageUrls empty on every item and keep summary to one short sentence: the shop fills those in from the brand's own pages, and a photographed invoice has to be read quickly.
 - gstTreatment: EXCLUSIVE when prices are marked ex tax / plus tax (GST, VAT or whatever the shop's sales tax is called), INCLUSIVE when marked inc tax, NONE when the supplier is overseas and no local sales tax applies, otherwise UNKNOWN.`;
 
+/**
+ * The reader's instructions for a shop outside the snow trade. The rules are the same; the examples
+ * that were a ski shop's — Völkl's ranges, a ski brand and its binding brand on one order, flex and
+ * DIN among a spec sheet's specs — are put in any trade's words, so a bike or homewares order is not
+ * read with skis in mind. The ski shop's instructions stay byte for byte as they were.
+ */
+const TRADE_WORDING: Array<[string, string]> = [
+  ["specs (flex, ability level, terrain, DIN, widths)", "specs (in specs, each under the name the document gives it)"],
+  ["(skis, boots, apparel, a tent, a pack…)", "(clothing, footwear, a tent, a bike, a lamp…)"],
+  ["\"Sportrade Australia\" is who sells them Volkl; it is not the brand of a single ski, and it must never be the brand on an item.", "The distributor is who sells the shop its brands; it is not the brand of a single product, and it must never be the brand on an item."],
+  ["RACETIGER, BLAZE and MANTRA are Volkl; SQUIRE and GRIFFON are Marker. ", "a range's model names belong to the brand that makes them. "],
+  ["most often a ski brand and the binding brand on the same order, or an outdoor agency's order spanning several of the brands it carries (Osprey packs and Sea to Summit sleeping mats)", "most often an agency's order spanning several of the brands it carries"],
+  ["\"FORMULA RS 130 / 25.5 x1 / 26.5 x1\"", "\"TRAIL 900 / M x1 / L x2\""],
+  ["'should be 148cm', '+ SLR 10 binding'", "'should be the large', '+ spare strap'"],
+  ["\"should be 148cm\" or \"+ SLR 10\"", "\"should be the large\" or \"+ spare strap\""],
+  ["\"Bent 100\", \"Hubba Hubba 2\"", "\"Hubba Hubba 2\", \"Trail 900\""],
+  ["leave description, flex, abilityLevel, dinRange, terrain, tags and imageUrls empty", "leave description, specs, tags and imageUrls empty"],
+];
+
+const TRADE_SYSTEM = TRADE_WORDING.reduce((text, [from, to]) => text.split(from).join(to), SYSTEM);
+
+/** The reader's instructions, for a test to read. */
+export const readerInstructions = (snow: boolean): string => readerFor(snow).system;
+
+/** The instructions and the shape of the answer, for the shop in force. */
+const readerFor = (snow: boolean) => (snow ? { system: SYSTEM, schema: ExtractionSchema } : { system: TRADE_SYSTEM, schema: TradeExtractionSchema });
+
 /** What differs by shop, after the fixed prompt so the fixed prompt is the same bytes for every shop. */
-const SHOP = () => `The retailer is ${retailer()}; its sales tax is called ${taxName()}.`;
+const SHOP = () => {
+  const kinds = typesAreKnown() ? productTypes().slice(0, 120) : [];
+  // How this trade's lines read, from the trade pack the shop started from (none for a blank shop).
+  const examples = packFor(activeConventions().pack).readerExamples;
+  // What the trade's kinds vary by, and how their codes carry the size, from a pack built from files.
+  const known = (packKnowledge()?.kinds ?? []).slice(0, 30).map((k) => {
+    const parts = [k.options.length ? `sold by ${k.options.map((o) => o.name).join(" and ")}` : "", k.notOptions.length ? `not an option: ${k.notOptions.join("; ")}` : "", k.codeHints ? k.codeHints : ""].filter(Boolean);
+    return parts.length ? `- ${k.kind}${k.supplierWords.length ? ` (${k.supplierWords.slice(0, 4).join(", ")})` : ""}: ${parts.join(". ")}` : "";
+  }).filter(Boolean);
+  const own = shopProfile().name.trim();
+  return `The retailer is ${retailer()}; its sales tax is called ${taxName()}.${own ? ` The retailer is called ${own}: it is the buyer, printed as bill to, ship to, sold to or deliver to, and it is never the supplier and never a product's brand.` : ""}${kinds.length ? ` The shop's kinds of product, for productType: ${kinds.join(", ")}.` : ""}${examples.length ? `\n\nHow lines in this trade read:\n${examples.map((e) => `- ${e}`).join("\n")}` : ""}${known.length ? `\n\nThis trade's kinds of product and what each varies by:\n${known.join("\n")}` : ""}`;
+};
 
 const getClient = (): Anthropic => anthropicClient(6);
 
@@ -135,28 +211,65 @@ export function ranOutOfTime(message: string | null | undefined): boolean {
 /**
  * One read of a document, inside the budget.
  *
- * A photograph is read at the API's fast speed — the same model, answering up to two and a half
- * times faster — because the time a read takes is almost all the answer being written, and a
- * photographed invoice read at standard speed ran past the minute. Fast speed is a beta with its
- * own rate limit and not every model has it, so a refusal of it falls back to standard speed with
- * whatever time is left; a read that cannot finish in the time says so rather than being killed.
+ * Read at standard speed. A photograph used to be read at the API's fast speed — answering up to
+ * two and a half times faster, at twice the price — when a read had a minute; it now has four
+ * (READ_BUDGET_MS), and the shop chose the saving over the speed (2026-10-15). Setting
+ * CATALOG_FAST_READS=1 in Vercel turns fast speed back on for photographs. Fast speed is a beta
+ * with its own rate limit, so a refusal of it falls back to standard speed with whatever time is
+ * left; a read that cannot finish in the time says so rather than being killed.
  */
 /** How a document is read: a photograph at the service's fast speed, a known supplier's on the lighter model. */
 export interface ReadOptions {
   visual?: boolean;
   /** The supplier's paperwork reads clean on its record, so the lighter model reads it at half the price. */
   known?: boolean;
+  /** How this supplier's lines were read before, as the shop settled them. See read-examples.ts. */
+  guide?: string;
 }
 
+/** The supplier's settled examples, as a block ahead of the document, where there are any. */
+const guided = (options: ReadOptions): Anthropic.TextBlockParam[] => (options.guide ? [{ type: "text", text: options.guide }] : []);
+
+/** Lines that count toward a document's totals: those with a quantity and a cost of their own. */
+const countable = (r: AiExtraction) => r.items.map((i) => ({ quantity: i.quantity, costPrice: i.costPrice }));
+
+/**
+ * Read a document, and read it once more when its lines do not add up to the totals it states.
+ *
+ * The second read is told what the first one added up to and what the document says, which is
+ * usually enough for it to find the line it skipped or doubled. The better of the two is kept, and
+ * one that still does not add up carries the check, so the batch says so before anything is built.
+ */
 async function runExtraction(content: ContentBlocks, options: ReadOptions = {}): Promise<AiExtraction> {
-  const deadline = Date.now() + READ_BUDGET_MS;
+  const started = Date.now();
+  const first = await readOnce(content, options, READ_BUDGET_MS);
+  const check = checkTotals(countable(first), first.statedTotals);
+  if (check.ok || !check.checked) return { ...first, check };
+  const left = READ_BUDGET_MS - (Date.now() - started);
+  if (left < 60_000) return { ...first, check };
+  const told: ContentBlocks = [
+    ...(Array.isArray(content) ? content : [{ type: "text" as const, text: content }]),
+    { type: "text", text: `A first reading of this document found ${first.items.length} lines adding up to ${check.units.read} units and ${check.subtotal.read.toFixed(2)} in goods, but the document states ${check.units.stated ?? "no unit total"}${check.units.stated !== null ? " units" : ""} and ${check.subtotal.stated !== null ? check.subtotal.stated.toFixed(2) : "no goods subtotal"}. Read it again, line by line, and find what was missed, read twice, or misread: a size-grid cell, a second page, a line total taken for a unit price.` },
+  ];
+  try {
+    const second = await readOnce(told, options, left);
+    const again = checkTotals(countable(second), second.statedTotals);
+    return totalsDistance(again) < totalsDistance(check) ? { ...second, check: again } : { ...first, check };
+  } catch {
+    return { ...first, check };
+  }
+}
+
+async function readOnce(content: ContentBlocks, options: ReadOptions, budgetMs: number): Promise<AiExtraction> {
+  const reader = readerFor(snowTrade());
+  const deadline = Date.now() + budgetMs;
   const left = () => Math.max(5_000, deadline - Date.now());
   const params = {
     model: options.known ? WORKING_MODEL : READING_MODEL,
-    max_tokens: 16000,
-    system: cachedSystem(SYSTEM, SHOP()),
+    max_tokens: 32_000,
+    system: cachedSystem(reader.system, SHOP()),
     thinking: { type: "adaptive" as const },
-    output_config: { format: zodOutputFormat(ExtractionSchema), effort: "medium" as const },
+    output_config: { format: zodOutputFormat(reader.schema), effort: "medium" as const },
     messages: [{ role: "user" as const, content }],
   };
   const standard = () => getClient().messages.stream(params, { timeout: left(), maxRetries: 0 }).finalMessage();
@@ -165,8 +278,9 @@ async function runExtraction(content: ContentBlocks, options: ReadOptions = {}):
   let message: Anthropic.Message | Anthropic.Beta.BetaMessage;
   try {
     message = await retrying(async () => {
-      // Fast speed is the reading model's alone; the lighter model is quick as it is.
-      if (!options.visual || options.known) return standard();
+      // Standard speed, at half the price, unless CATALOG_FAST_READS=1 (the ski shop chose the
+      // saving, 2026-10-15). Fast speed is the reading model's alone; the lighter model is quick as it is.
+      if (!options.visual || options.known || process.env.CATALOG_FAST_READS !== "1") return standard();
       try {
         return await fast();
       } catch (err) {
@@ -183,7 +297,7 @@ async function runExtraction(content: ContentBlocks, options: ReadOptions = {}):
   if (message.stop_reason === "refusal") throw new Error("The AI declined to process this document");
   if (message.stop_reason === "max_tokens") throw new Error("Document too large for a single extraction; split the file");
   const text = message.content.filter((b): b is Anthropic.TextBlock | Anthropic.Beta.BetaTextBlock => b.type === "text").map((b) => b.text).join("");
-  return ExtractionSchema.parse(JSON.parse(text));
+  return reader.schema.parse(JSON.parse(text));
 }
 
 function hintFor(kind?: string): string {
@@ -196,11 +310,12 @@ function hintFor(kind?: string): string {
 }
 
 export async function extractFromText(text: string, kind?: string, options: ReadOptions = {}): Promise<AiExtraction> {
-  return runExtraction([{ type: "text", text: `${hintFor(kind)} Extract what is relevant from this document:\n\n<document>\n${text}\n</document>` }], { known: options.known });
+  return runExtraction([...guided(options), { type: "text", text: `${hintFor(kind)} Extract what is relevant from this document:\n\n<document>\n${text}\n</document>` }], { known: options.known });
 }
 
 export async function extractFromPdf(buffer: Buffer, kind?: string, options: ReadOptions = {}): Promise<AiExtraction> {
   return runExtraction([
+    ...guided(options),
     { type: "document", source: { type: "base64", media_type: "application/pdf", data: buffer.toString("base64") } },
     { type: "text", text: `${hintFor(kind)} Extract what is relevant from this document.` },
   ], { visual: true, known: options.known });
@@ -211,6 +326,7 @@ const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp
 export async function extractFromImage(buffer: Buffer, mimeType: string, kind?: string, options: ReadOptions = {}): Promise<AiExtraction> {
   if (!IMAGE_TYPES.has(mimeType)) throw new Error(`Unsupported image type ${mimeType}`);
   return runExtraction([
+    ...guided(options),
     { type: "image", source: { type: "base64", media_type: mimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: buffer.toString("base64") } },
     { type: "text", text: `${hintFor(kind)} This is an uploaded image: it may be a photo or scan of an invoice, a catalogue page, or a photo of a product.` },
   ], { visual: true, known: options.known });
@@ -220,29 +336,52 @@ export async function extractFromImage(buffer: Buffer, mimeType: string, kind?: 
 export const AI_HEADERS = [
   "title", "brand", "modelCode", "sku", "barcode", "costPrice", "quantity", "rrp", "length", "size", "width",
   "colour", "gender", "season", "category", "description", "flex", "abilityLevel", "dinRange", "terrain", "tags", "imageUrls", "notes",
+  "variant", "variantName", "productType",
 ] as const;
 
+/**
+ * Whether a table is the reader's own: its columns are the reader's fields, and any after them are
+ * the specs it read, each under the document's name for it, which the build keeps as traits.
+ */
+export function isReaderTable(headers: string[]): boolean {
+  return headers.length >= AI_HEADERS.length && AI_HEADERS.every((h, i) => headers[i] === h);
+}
+
+/** The reader's columns map to themselves; the specs after them map to nothing, and are kept as traits. */
+export function readerMapping(headers: string[]): Mapping {
+  return Object.fromEntries(headers.map((h) => [h, (AI_HEADERS as readonly string[]).includes(h) ? h : ""])) as Mapping;
+}
+
 export function aiExtractionToTable(result: AiExtraction, method: ExtractedTable["method"], text?: string): ExtractedTable {
+  const specNames: string[] = [];
+  for (const item of result.items) for (const spec of item.specs ?? []) {
+    const name = spec.name.trim();
+    if (name && !specNames.some((n) => n.toLowerCase() === name.toLowerCase()) && !(AI_HEADERS as readonly string[]).includes(name)) specNames.push(name);
+  }
   const rows = result.items.map((item) => {
     const row: Record<string, string> = {};
     for (const key of AI_HEADERS) {
       const value = item[key as keyof typeof item];
-      row[key] = Array.isArray(value) ? value.join(" | ") : value === null || value === undefined ? "" : String(value);
+      row[key] = Array.isArray(value) ? value.map((v) => (typeof v === "string" ? v : "")).filter(Boolean).join(" | ") : value === null || value === undefined ? "" : String(value);
     }
+    for (const name of specNames) row[name] = item.specs?.find((sp) => sp.name.trim().toLowerCase() === name.toLowerCase())?.value.trim() ?? "";
+    // The shop's own name, read as the brand, is the bill-to line and not a brand.
+    if (row.brand && isOwnShop(row.brand)) row.brand = "";
     return row;
   });
   const warnings: string[] = [];
   if (result.summary) warnings.push(result.summary);
   if (result.documentType === "INVOICE" && result.gstTreatment === "UNKNOWN") warnings.push("Could not tell whether prices include GST; check the batch GST setting.");
   if (result.documentType === "OTHER") warnings.push("The AI could not find product information in this file.");
-  return { headers: [...AI_HEADERS], rows, method, text, warnings };
+  if (result.check && !result.check.ok) warnings.unshift(`Does not add up: ${result.check.message}`);
+  return { headers: [...AI_HEADERS, ...specNames], rows, method, text, warnings };
 }
 
 /** Metadata the AI noticed about the document as a whole, for pre-filling the batch. */
 export function aiDocumentMeta(result: AiExtraction) {
   return {
     documentType: result.documentType,
-    supplier: result.supplier,
+    supplier: isOwnShop(result.supplier) ? "" : result.supplier,
     invoiceNumber: result.invoiceNumber,
     currency: result.currency || result.items.find((i) => i.currency)?.currency || "",
     gstTreatment: result.gstTreatment,

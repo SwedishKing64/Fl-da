@@ -16,7 +16,7 @@
  * is required is a far smaller problem than an application that will not start.
  */
 
-import { SCHEMA_SQL, schemaStatements } from "./schema-sql";
+import { SCHEMA_SQL, SCHEMA_SQL_SQLITE, schemaStatements } from "./schema-sql";
 
 const CREATE_TABLE = /CREATE TABLE "(\w+)" \(([\s\S]*?)\n\);/g;
 
@@ -53,14 +53,39 @@ export function isMissingColumn(error: unknown): boolean {
  * repair, which only ever adds columns, had nothing to add. A foreign key has no IF NOT EXISTS,
  * so those are applied and a failure on one already there is ignored by the caller.
  */
-export function tableStatements(): string[] {
-  return schemaStatements()
+export function tableStatements(dialect: "postgres" | "sqlite" = "postgres"): string[] {
+  return schemaStatements(dialect)
     .map((statement) =>
       statement
         .replace(/^CREATE TABLE "/, 'CREATE TABLE IF NOT EXISTS "')
         .replace(/^CREATE UNIQUE INDEX "/, 'CREATE UNIQUE INDEX IF NOT EXISTS "')
         .replace(/^CREATE INDEX "/, 'CREATE INDEX IF NOT EXISTS "'),
     );
+}
+
+/**
+ * The columns of each table, as SQLite adds them to a table that already has rows.
+ *
+ * A desktop copy keeps its own database across upgrades, and SQLite has no ADD COLUMN IF NOT
+ * EXISTS: the caller asks each table which columns it has (PRAGMA table_info) and adds the rest.
+ * SQLite also refuses to add a column whose default is not a constant, or one that is NOT NULL with
+ * no default; such a column is added nullable and with no default, as Postgres's are above.
+ */
+export function sqliteColumns(): Array<{ table: string; column: string; statement: string }> {
+  const out: Array<{ table: string; column: string; statement: string }> = [];
+  for (const [, table, body] of SCHEMA_SQL_SQLITE.matchAll(CREATE_TABLE)) {
+    for (const raw of body.split("\n")) {
+      const line = raw.trim().replace(/,$/, "");
+      if (!line.startsWith('"') || /PRIMARY KEY/i.test(line)) continue;
+      const match = /^"(\w+)"\s+(.+)$/.exec(line);
+      if (!match) continue;
+      const [, column, rest] = match;
+      const constantDefault = /DEFAULT/i.test(rest) && !/DEFAULT\s+CURRENT_TIMESTAMP/i.test(rest);
+      const definition = constantDefault ? rest : rest.replace(/\s*DEFAULT\s+CURRENT_TIMESTAMP\s*/i, " ").replace(/\s*NOT NULL\s*/i, " ").trim();
+      out.push({ table, column, statement: `ALTER TABLE "${table}" ADD COLUMN "${column}" ${definition}` });
+    }
+  }
+  return out;
 }
 
 /** True for the Prisma error that means a whole table the code expects is not there. */

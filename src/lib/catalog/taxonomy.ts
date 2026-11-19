@@ -3,7 +3,7 @@
  *
  * Nothing about one shop is fixed here. The vocabulary in force is built from two things: a
  * *rules pack* the shop switched on (the snow-and-outdoor menu below, transcribed from the ski
- * shop Flöda was built in, or nothing at all) and what was *learned* from the shop's own Shopify
+ * shop Snaben was built in, or nothing at all) and what was *learned* from the shop's own Shopify
  * export — its Types, which menu tags go with each, and how each shelf tag is spelled. See
  * `activateConventions` at the foot of the file; `shop-profile.ts` loads the shop's choice and
  * calls it once per request.
@@ -25,9 +25,14 @@
  * a Type that has nowhere to live on the website.
  */
 
-import { LIVE_TAG_SPELLING, TAG_ALSO } from "./tag-spelling";
+import { packFor, type PackId, type TradePack } from "./trades";
+import type { PackKnowledge } from "./trades/knowledge";
+import { setTradeColours } from "./colour";
 import { DEFAULT_HOUSE, type HouseConventions } from "./house";
 import type { WebsiteCategories } from "./website";
+import type { OptionTagPattern } from "./option-tags";
+import { categoryById, resolveCategory, type TaxonomyCategory } from "./shopify-taxonomy";
+import { CANONICAL_FIELDS, type CanonicalFieldDef, type MetafieldDef } from "./types";
 
 export interface TaxonomyGroup {
   /** The bold heading. This is the value written to the Shopify `Type` column. */
@@ -42,65 +47,7 @@ export interface TaxonomySection {
   groups: TaxonomyGroup[];
 }
 
-export const SNOW_OUTDOOR_TAXONOMY: TaxonomySection[] = [
-  {
-    top: "Clothing",
-    groups: [
-      { heading: "Mens Clothing", leaves: ["Down Jackets", "Rainwear", "Snow Jackets", "Snow Pants", "Synthetic Insulation", "Midlayers", "Baselayers", "Socks"] },
-      { heading: "Womens Clothing", leaves: ["Rainwear", "Snow Jackets", "Snow Pants", "Down Jackets", "Synthetic Insulation", "Midlayers", "Baselayers", "Socks"] },
-      { heading: "Kids Clothing", leaves: ["Snow Jackets", "Snow Pants", "Rainwear", "Midlayers", "Baselayers"] },
-      { heading: "Snow Clothing", leaves: ["Snow Jackets", "Snow Pants", "Midlayers", "Baselayers", "Headwear", "Snow Socks", "Streetwear"] },
-      { heading: "Outdoor Clothing", leaves: ["Pants & Shorts", "Shirts", "Rainwear", "Down Jackets", "Midlayers", "Synthetic Insulation", "Hiking Socks"] },
-      { heading: "Clothing Accessories", leaves: ["Gloves", "Hats", "Gaiters"] },
-    ],
-  },
-  {
-    top: "Ski",
-    groups: [
-      { heading: "Skis", leaves: ["Mens Skis", "Womens Skis", "Kids Skis", "Ski Packages"] },
-      { heading: "Ski Categories", leaves: ["Frontside & All-Mountain Skis", "Carving Skis", "Freeride & Powder Skis", "Park & Twin Tip Skis", "Race Skis", "Mogul Skis", "Touring Skis"] },
-      { heading: "Ski Boots", leaves: ["Mens Boots", "Womens Boots", "Kids Boots", "Alpine Boots", "Race Boots", "Touring Boots"] },
-      { heading: "Ski Bindings", leaves: ["Alpine Bindings", "Touring Bindings"] },
-      // "Helmets", "Gloves" and "Mitts" are here as well as under Snowboard Accessories because
-      // that is where the shop files them: every snow helmet, all 27 goggles and 127 of 129 pairs
-      // of gloves in their exports are typed Ski Accessories. See PREFERS_SKI in headingsFor.
-      { heading: "Ski Accessories", leaves: ["Goggles", "Ski Helmets", "Helmets", "Ski Gloves", "Gloves", "Mitts", "Ski Poles", "Ski & Boot Bags", "Ski Tuning", "Other Ski Accessories"] },
-    ],
-  },
-  {
-    top: "Snowboard",
-    groups: [
-      { heading: "Snowboards", leaves: ["Mens Snowboards", "Womens Snowboards", "Kids Snowboards", "Snowboard Packages"] },
-      { heading: "Snowboard Categories", leaves: ["Freestyle & All-Mountain Boards", "Freeride & Powder Boards", "Park Boards"] },
-      { heading: "Snowboard Boots", leaves: ["Mens Boots", "Womens Boots", "Kids Boots"] },
-      { heading: "Snowboard Bindings", leaves: ["Mens Bindings", "Womens Bindings", "Kids Bindings"] },
-      { heading: "Snowboard Accessories", leaves: ["Goggles", "Helmets", "Gloves", "Body Protection", "Snowboard Bags", "Snowboard Tuning", "Other Snowboard Accessories"] },
-    ],
-  },
-  {
-    top: "Backcountry",
-    groups: [
-      { heading: "Alpine Touring", leaves: ["Alpine Touring Skis", "Alpine Touring Bindings", "Alpine Touring Boots", "Skins", "Alpine Touring Accessories"] },
-      { heading: "Cross-Country Skiing", leaves: ["Cross-Country Skis", "Cross-Country Bindings", "Cross-Country Boots", "Cross-Country Poles", "Cross-Country Accessories"] },
-      { heading: "Backcountry Gear", leaves: ["Avalanche Equipment", "Climbing Skins", "Snow Packs", "Ice Tools", "Other Back-Country Gear"] },
-      { heading: "Avalanche Gear", leaves: ["Snow Shovels and Ice Tools", "Beacons and Probes"] },
-    ],
-  },
-  {
-    top: "Outdoor",
-    groups: [
-      { heading: "Tents", leaves: ["1 Person Tents", "2 Person Tents", "3+ Person Tents", "Ultralight Tents", "Winter Tents", "Tarps & Bivies", "Tent Accessories & Spares"] },
-      { heading: "Sleeping Bags", leaves: ["Down Sleeping Bags", "Synthetic Sleeping Bags", "Sleeping Bag Accessories", "Sleeping Bag Cleaning & Servicing"] },
-      { heading: "Sleeping Mats", leaves: ["Air Mats", "Self-Inflating Mats", "Closed Cell Foam Mats", "Winter Mats", "Sleeping Mat Accessories"] },
-      { heading: "Packs & Bags", leaves: ["Daypacks", "Hiking Packs", "Hydration Packs", "Travel Packs", "Duffels"] },
-      { heading: "Climbing & Abseiling", leaves: ["Ropes and Cords", "Climbing Helmets", "Climbing Harnesses", "Climbing Shoes", "Carabiners and Quickdraws", "Belay Devices", "Ascenders & Descenders", "Climbing Accessories"] },
-      { heading: "Footwear", leaves: ["Hiking Boots", "Trail Shoes", "Travel Shoes", "Apres Boots", "Climbing Shoes"] },
-      { heading: "Stoves & Cooking", leaves: ["Stoves", "Cookware", "Freeze-Dried Meals", "Cooking Accessories"] },
-      { heading: "Hydration", leaves: ["Water Bottles", "Hydration Packs & Bladders", "Filters & Purifiers", "Hydration Accessories"] },
-      { heading: "Outdoor Accessories", leaves: ["Trekking Poles", "Compasses and GPS", "Maps", "Multitools", "Storage & Compression Sacks", "Gaiters", "Torches & Lighting", "Other Outdoor Accessories"] },
-    ],
-  },
-];
+export { SNOW_OUTDOOR_TAXONOMY } from "./trades/snow-outdoor";
 
 /** Top-level menu entries that hold no product types — they are merchandising, not categories. */
 export const NON_TYPE_MENUS = ["Brands", "Clearance", "Rentals", "Gift Cards"] as const;
@@ -160,10 +107,12 @@ export interface LearnedVocabulary {
   products: number;
   file: string;
   learnedAt: string;
+  /** How the shop's tags mirror its variants ("Size_54", "Colour_Black"), per option, where they do. See option-tags.ts. */
+  optionTags?: OptionTagPattern[];
 }
 
-/** Which rules pack is on: the snow-and-outdoor menu and its rules, or a blank vocabulary. */
-export type RulesPack = "snow-outdoor" | "general";
+/** Which trade packs are on: one id, several joined by "+", or "general" for none. See trades/. */
+export type RulesPack = PackId | (string & {});
 
 /** What decides the vocabulary: the pack, what was learned, and the shop's marker tag. */
 export interface Conventions {
@@ -194,8 +143,9 @@ interface Vocabulary {
 /** Blank: no pack, nothing learned, no marker. What a fresh install runs on until setup. */
 export const BLANK_CONVENTIONS: Conventions = { pack: "general", learned: null, marker: "", house: DEFAULT_HOUSE };
 
-/** The conventions of the shop Flöda was built in; the tests are written against them. */
-export const ALPSPORT_CONVENTIONS: Conventions = { pack: "snow-outdoor", learned: null, marker: "123abc", house: DEFAULT_HOUSE };
+/** The conventions of the shop Snaben was built in; the tests are written against them. */
+/** A snow shop that has taught nothing yet, for tests. */
+export const SNOW_TEST_CONVENTIONS: Conventions = { pack: "snow-outdoor", learned: null, marker: "123abc", house: DEFAULT_HOUSE };
 
 /**
  * The menu draws an ampersand and the catalogue spells it out, so the two have to meet: without
@@ -236,10 +186,12 @@ function fromTree(tree: TaxonomySection[]): Pick<Vocabulary, "productTypes" | "t
 }
 
 function build(conventions: Conventions): Vocabulary {
-  const tree = conventions.pack === "snow-outdoor" ? SNOW_OUTDOOR_TAXONOMY : [];
+  // What the trade pack brings: its menu, its tag spellings. The engine knows no trade of its own.
+  const pack = packFor(conventions.pack);
+  const tree = pack.tree;
   const base = fromTree(tree);
-  const spelling: Record<string, string> = conventions.pack === "snow-outdoor" ? { ...LIVE_TAG_SPELLING } : {};
-  const also: Record<string, readonly string[]> = conventions.pack === "snow-outdoor" ? { ...TAG_ALSO } : {};
+  const spelling: Record<string, string> = { ...pack.tagSpelling };
+  const also: Record<string, readonly string[]> = { ...pack.tagAlso };
   const sections = [...base.sections];
   const learned = conventions.learned;
   if (learned) {
@@ -282,19 +234,69 @@ let active: Vocabulary = build(conventions);
 
 /**
  * Put a shop's conventions in force for this process. Called by `shop-profile.ts` with what the
- * shop chose and learned, and by tests with `ALPSPORT_CONVENTIONS`. The vocabulary is process-wide:
- * Flöda runs one shop per install.
+ * shop chose and learned, and by tests with `SNOW_TEST_CONVENTIONS`. The vocabulary is process-wide:
+ * Snaben runs one shop per install.
  */
 export function activateConventions(next: Conventions): void {
   conventions = next;
   active = build(next);
+  setTradeColours(packFor(next.pack).knowledge?.colours ?? {});
+}
+
+/** What the shop's trade pack knows beyond its menu: kinds, sizes, colour shorthand. None for most packs. */
+/** The trade pack in force: the one the shop ticked at setup, or the blank one. */
+export function packInForce(): TradePack {
+  return packFor(conventions.pack);
+}
+
+export function packKnowledge(): PackKnowledge | null {
+  return packFor(conventions.pack).knowledge ?? null;
 }
 
 export function activeConventions(): Conventions {
   return conventions;
 }
 
-/** True once the shop has told Flöda its kinds of product, from its website or its export, so a Type can be checked against them. */
+/** The fields that are a ski's alone: offered to a column, and asked of the reader, only in the snow trade. */
+export const SNOW_FIELDS = new Set<string>(["flex", "abilityLevel", "dinRange", "terrain"]);
+
+/** The fields a supplier's column can be mapped to in this shop. Elsewhere a ski's columns are kept as traits. */
+export function fieldsInForce(): CanonicalFieldDef[] {
+  return snowTrade() ? CANONICAL_FIELDS : CANONICAL_FIELDS.filter((f) => !SNOW_FIELDS.has(f.key));
+}
+
+/**
+ * A kind of product's place in Shopify's Standard Product Taxonomy: as the pack places it, or its
+ * heading as the pack places that, or — for a kind the shop taught Snaben — found by name, where the
+ * name says plainly what it is. Null where none of these says: no category beats the wrong one.
+ */
+export function categoryForKind(kind: string): TaxonomyCategory | null {
+  const placed = packFor(conventions.pack).shopifyCategories;
+  const name = resolveType(kind) ?? kind;
+  const id = placed[name] ?? (active.typeParents[name] ?? []).map((h) => placed[h]).find(Boolean);
+  if (id) return categoryById(id);
+  return resolveCategory(name, (active.typeSections[name] ?? []).join(" "));
+}
+
+/** Whether every product goes out with its Shopify category filled in. See TradePack.fillsCategory. */
+export function fillsCategory(): boolean {
+  return packFor(conventions.pack).fillsCategory;
+}
+
+/** The product metafields this shop writes, from its pack. See types.ts. */
+export function metafieldDefs(): MetafieldDef[] {
+  return packFor(conventions.pack).metafields;
+}
+
+/**
+ * True where the ski and snowboard rules apply: the shop started from the snow pack, or its own
+ * store or exports have taught Snaben that it sells skis or snowboards.
+ */
+export function snowTrade(): boolean {
+  return packFor(conventions.pack).snowRules || active.productTypes.some((t) => /\b(skis?|snowboards?)\b/i.test(t));
+}
+
+/** True once the shop has told Snaben its kinds of product, from its website or its export, so a Type can be checked against them. */
 export function typesAreKnown(): boolean {
   return active.productTypes.length > 0;
 }
@@ -434,7 +436,71 @@ export function resolveType(value: string): string | undefined {
   const exact = active.productTypes.find((t) => norm(t) === want);
   if (exact) return exact;
   const alias = ALIASES[want];
-  return alias && active.productTypes.includes(alias) ? alias : undefined;
+  if (alias && active.productTypes.includes(alias)) return alias;
+  // What the trade's suppliers call a kind: "FS" is a full-suspension mountain bike, "TLR" a tyre.
+  const called = packKnowledge()?.kinds.find((k) => k.supplierWords.some((w) => norm(w) === want));
+  return called ? active.productTypes.find((t) => norm(t) === norm(called.kind)) : undefined;
+}
+
+/**
+ * The shop's own Type nearest to a name the build or a reader came up with, so a product is filed
+ * under one of the shop's types without anyone picking it: "Snowboard Boots" is a shop's "Mens
+ * Snowboard Boots", "Snowboard" its "Snowboards". The last word (what the thing is) must match,
+ * and more than half the words: a bare "Boots" is not a shop's "Apres Boots". Then the one sharing
+ * most words wins, the shorter on a tie. Undefined when nothing is close.
+ */
+export function closestType(value: string, among: readonly string[] = active.productTypes): string | undefined {
+  const exact = resolveType(value);
+  if (exact && among.includes(exact)) return exact;
+  const singular = (w: string) => (w.length > 3 && w.endsWith("s") && !w.endsWith("ss") ? w.slice(0, -1) : w);
+  const words = (s: string) => norm(s).split(" ").filter((w) => w.length > 1).map(singular);
+  const want = words(value);
+  if (want.length === 0) return undefined;
+  const head = want[want.length - 1];
+  let best: { type: string; score: number } | null = null;
+  for (const type of among) {
+    const have = words(type);
+    // The head word, or a word that ends in it: "pack" is the head of "backpack" too.
+    if (!have.includes(head) && !(head.length >= 4 && have.some((w) => w.endsWith(head)))) continue;
+    const shared = want.filter((w) => have.includes(w)).length;
+    const score = shared / Math.max(want.length, have.length);
+    if (score > 0.5 && (!best || score > best.score || (score === best.score && type.length < best.type.length))) best = { type, score };
+  }
+  if (best) return best.type;
+  // Among the shop's own types, the one type that ends in the same word is it: "Jerseys" is the
+  // shop's "Cycling Jerseys", "2 Person Tents" its "Tents", where it has one such type.
+  if (among !== active.productTypes) {
+    const sameHead = among.filter((type) => { const have = words(type); return have.length > 0 && have[have.length - 1] === head; });
+    if (sameHead.length === 1) return sameHead[0];
+  }
+  return undefined;
+}
+
+/**
+ * The shop's own Type whose every word is in a product's name — "Down Jackets" in "Cirrus Hooded
+ * Down Jacket", "Mugs" in "Speckle Mug Set of 4" — the longest where several are. A product no rule,
+ * no reading and no listing has filed is filed by its own name before it is left untyped.
+ */
+export function typeNamedIn(name: string): string | undefined {
+  const singular = (w: string) => (w.length > 3 && w.endsWith("s") && !w.endsWith("ss") ? w.slice(0, -1) : w);
+  const have = new Set(norm(name).split(" ").filter(Boolean).map(singular));
+  let best: { type: string; words: number } | null = null;
+  for (const type of active.productTypes) {
+    const words = norm(type).split(" ").filter((w) => w.length > 1).map(singular);
+    if (words.length === 0 || !words.every((w) => have.has(w))) continue;
+    if (!best || words.length > best.words) best = { type, words: words.length };
+  }
+  return best?.type;
+}
+
+/** The Types the shop itself uses, as its export taught them; none where it has taught none. */
+export function learnedTypes(): string[] {
+  return conventions.learned?.types.map((t) => t.type) ?? [];
+}
+
+/** The shapes the shop's tags take for its variants' values, as its export showed; none until it has. */
+export function optionTagPatterns(): OptionTagPattern[] {
+  return conventions.learned?.optionTags ?? [];
 }
 
 /** True when this names a place a product can legitimately be filed. */

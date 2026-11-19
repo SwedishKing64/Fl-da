@@ -13,14 +13,18 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { retailer } from "./shop-profile";
-import { anthropicClient, WORKING_MODEL, aiAvailable } from "./anthropic";
+import { anthropicClient, LIGHT_MODEL, aiAvailable } from "./anthropic";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import sharp from "sharp";
 
 
-/** The most pictures shown in one look. A page rarely has more that are the product's own. */
-export const MOST_PICTURES = 16;
+/**
+ * The most pictures shown in one look. A jacket in six colours with six angles each has 36, and
+ * the colour ordered may be anywhere among them; looking at 32 finds it, and what is kept is cut
+ * to the 16 a listing needs afterwards.
+ */
+export const MOST_PICTURES = 32;
 /** The thumbnail's longer side: enough to tell black from brown, small enough to be quick. */
 const THUMB = 384;
 const LOOK_MS = 45_000;
@@ -58,8 +62,8 @@ const getClient = (): Anthropic => anthropicClient(1);
 export type Looker = (system: string, content: Anthropic.MessageParam["content"]) => Promise<string | undefined>;
 const askModel: Looker = async (system, content) => {
   const response = await getClient().messages.stream({
-    model: WORKING_MODEL,
-    max_tokens: 2000,
+    model: LIGHT_MODEL,
+    max_tokens: 32_000,
     system,
     output_config: { format: zodOutputFormat(Verdict), effort: "low" },
     messages: [{ role: "user", content }],

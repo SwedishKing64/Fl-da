@@ -14,7 +14,7 @@ import type { MonthUse } from "./plans";
 const INSTALL_KEY = "install.id";
 const SERVER_KEY = "licence.server";
 
-/** The address a person set for Flöda on this copy, when the built-in one could not be reached. */
+/** The address a person set for Snaben on this copy, when the built-in one could not be reached. */
 export async function getServerOverride(): Promise<string> {
   const row = await prisma.appSetting.findUnique({ where: { key: SERVER_KEY } });
   return parseJson<string>(row?.value, "");
@@ -22,7 +22,7 @@ export async function getServerOverride(): Promise<string> {
 
 export async function saveServerOverride(url: string): Promise<void> {
   const clean = url.trim().replace(/\/+$/, "");
-  if (clean && !isServerUrl(clean)) throw new Error("That is not an address Flöda can be asked at. It looks like https://fl-da.vercel.app");
+  if (clean && !isServerUrl(clean)) throw new Error("That is not an address Snaben can be asked at. It looks like https://fl-da.vercel.app");
   if (!clean) await prisma.appSetting.deleteMany({ where: { key: SERVER_KEY } });
   else await prisma.appSetting.upsert({ where: { key: SERVER_KEY }, create: { key: SERVER_KEY, value: JSON.stringify(clean) }, update: { value: JSON.stringify(clean) } });
 }

@@ -1,5 +1,5 @@
 /**
- * The shop this install belongs to: who it is, what it sells, and what Flöda has learned about it.
+ * The shop this install belongs to: who it is, what it sells, and what Snaben has learned about it.
  *
  * Everything about one shop that used to be written into the code lives here as data in the
  * `AppSetting` table, under three keys:
@@ -12,18 +12,23 @@
  * `ensureConventions()` loads the three and puts them in force for the process: the vocabulary in
  * `taxonomy.ts`, the key in `anthropic.ts`, the retailer's description for the prompts here. It is
  * called from `requireUser`, which every page, action and route goes through, and is cheap after
- * the first call. Flöda runs one shop per install, so process-wide state is the right scope.
+ * the first call. Snaben runs one shop per install, so process-wide state is the right scope.
  */
 
 import { planOf } from "./plans";
 import { prisma, parseJson } from "./db";
 import { setRelay, setStoredApiKey } from "./anthropic";
-import { setPictureHost, usingBlob } from "./storage";
+import { setPictureHost, setShopifyPictures, usingBlob } from "./storage";
+import { getSettings } from "./settings";
 import { LICENCE_KEY_SETTING, licenceServer, licenceState, type Licence } from "./licence";
 import { activateConventions, type LearnedVocabulary } from "./taxonomy";
+import { setPackageTerms } from "./trades/snow/terms";
 import type { WebsiteCategories } from "./website";
 import { COUNTRIES, DEFAULT_PROFILE, type ShopProfile } from "./shop";
-import { cleanHouse, DEFAULT_HOUSE, type HouseConventions } from "./house";
+import { cleanHouse, defaultHouseFor, type HouseConventions } from "./house";
+import { activateCorrections, CORRECTIONS_KEY, type Correction } from "./corrections";
+import { cleanVoice, setVoice, VOICE_KEY, type Voice } from "./voice";
+import { LESSONS_KEY, type Lesson } from "./lessons";
 
 export { COUNTRIES, DEFAULT_PROFILE, type ShopProfile } from "./shop";
 
@@ -58,15 +63,54 @@ export async function saveLearnedVocabulary(learned: LearnedVocabulary | null): 
   await refreshConventions();
 }
 
+/** How the shop writes a listing; what it has not said comes from its pack's starting point. */
 export async function getHouseConventions(): Promise<HouseConventions> {
-  const row = await prisma.appSetting.findUnique({ where: { key: HOUSE_KEY } });
-  return row ? cleanHouse(parseJson<Partial<HouseConventions>>(row.value, {})) : DEFAULT_HOUSE;
+  const [row, profile] = await Promise.all([prisma.appSetting.findUnique({ where: { key: HOUSE_KEY } }), getShopProfile()]);
+  const base = defaultHouseFor(profile.pack);
+  return row ? cleanHouse(parseJson<Partial<HouseConventions>>(row.value, {}), base) : base;
 }
 
 export async function saveHouseConventions(house: HouseConventions): Promise<void> {
-  const value = JSON.stringify(cleanHouse(house));
+  const value = JSON.stringify(cleanHouse(house, defaultHouseFor((await getShopProfile()).pack)));
   await prisma.appSetting.upsert({ where: { key: HOUSE_KEY }, create: { key: HOUSE_KEY, value }, update: { value } });
   await refreshConventions();
+}
+
+/** What people have corrected on the review grid, kept as the shop's rules. See corrections.ts. */
+export async function getCorrections(): Promise<Correction[]> {
+  const row = await prisma.appSetting.findUnique({ where: { key: CORRECTIONS_KEY } }).catch(() => null);
+  const list = parseJson<Correction[]>(row?.value, []);
+  return Array.isArray(list) ? list : [];
+}
+
+export async function saveCorrections(list: Correction[]): Promise<void> {
+  const value = JSON.stringify(list);
+  await prisma.appSetting.upsert({ where: { key: CORRECTIONS_KEY }, create: { key: CORRECTIONS_KEY, value }, update: { value } });
+  activateCorrections(list);
+}
+
+/** The shop's voice: its words, examples, sections and brand notes. See voice.ts. */
+export async function getVoice(): Promise<Voice> {
+  const row = await prisma.appSetting.findUnique({ where: { key: VOICE_KEY } }).catch(() => null);
+  return cleanVoice(parseJson<unknown>(row?.value, null));
+}
+
+export async function saveVoice(voice: Voice): Promise<void> {
+  const value = JSON.stringify(cleanVoice(voice));
+  await prisma.appSetting.upsert({ where: { key: VOICE_KEY }, create: { key: VOICE_KEY, value }, update: { value } });
+  setVoice(cleanVoice(voice));
+}
+
+/** What people have changed on the review grid, counted, waiting to be asked about. See lessons.ts. */
+export async function getLessons(): Promise<Lesson[]> {
+  const row = await prisma.appSetting.findUnique({ where: { key: LESSONS_KEY } }).catch(() => null);
+  const list = parseJson<Lesson[]>(row?.value, []);
+  return Array.isArray(list) ? list : [];
+}
+
+export async function saveLessons(list: Lesson[]): Promise<void> {
+  const value = JSON.stringify(list);
+  await prisma.appSetting.upsert({ where: { key: LESSONS_KEY }, create: { key: LESSONS_KEY, value }, update: { value } });
 }
 
 export async function getWebsiteCategories(): Promise<WebsiteCategories | null> {
@@ -104,20 +148,28 @@ let loading: Promise<void> | null = null;
 const TRUST_MS = 30_000;
 
 async function load(): Promise<void> {
-  const [profile, learned, key, house, website, licenceRow] = await Promise.all([
+  const [profile, learned, key, house, website, licenceRow, corrections, settings, voice] = await Promise.all([
     getShopProfile(), getLearnedVocabulary(), getStoredApiKey(), getHouseConventions(), getWebsiteCategories(),
     prisma.appSetting.findUnique({ where: { key: LICENCE_KEY_SETTING } }),
+    getCorrections(),
+    getSettings(),
+    getVoice(),
   ]);
   activeProfile = profile;
   activateConventions({ pack: profile.pack, learned, marker: profile.marker, house, website });
+  activateCorrections(corrections);
+  setVoice(voice);
   setStoredApiKey(key);
-  // A copy in good standing with its vendor reads through Flöda when it has no key of its own.
+  // A copy in good standing with its vendor reads through Snaben when it has no key of its own.
   const standing = licenceState(parseJson<Licence | null>(licenceRow?.value, null));
-  // A copy in good standing with its vendor reads through Flöda when it has no key of its own,
+  // A copy in good standing with its vendor reads through Snaben when it has no key of its own,
   // unless its plan is the one that reads with the shop's own key.
   setRelay(standing.kind === "ok" && planOf(standing.licence.plan).reading === "included" ? { server: licenceServer(), key: standing.licence.key } : null);
   // And sends its pictures to the vendor's store on any plan, since its own address is no use to Shopify.
   setPictureHost(standing.kind === "ok" && !usingBlob() ? { server: licenceServer(), key: standing.licence.key } : null);
+  // Better still, a shop that has connected its store keeps them in its own Shopify Files.
+  setShopifyPictures(!usingBlob() && Boolean(settings.shopify.storeDomain && settings.shopify.accessToken));
+  setPackageTerms(settings.packages);
   loadedAt = Date.now();
 }
 
@@ -150,6 +202,19 @@ export function shopName(): string {
   return activeProfile.name.trim() || "our shop";
 }
 
+const nameKey = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "");
+
+/**
+ * Whether a name read off a document is the shop's own. An invoice names the shop as the buyer
+ * (bill to, ship to, sold to), often in larger type than the supplier, and a reader took the shop
+ * for the supplier of a Burton invoice; the shop's own name is never the supplier or the brand.
+ */
+export function isOwnShop(name: string, shop = activeProfile.name): boolean {
+  const own = nameKey(shop);
+  const read = nameKey(name);
+  return own.length >= 3 && read.length > 0 && (read === own || (own.length >= 5 && read.includes(own)));
+}
+
 /**
  * The retailer, as the prompts describe it: "a ski and snowboard retailer in Australia". Built
  * from the profile so a bike shop in Leeds is read as one.
@@ -171,6 +236,11 @@ export function englishVariant(): string {
     case "CA": return "Canadian English";
     default: return "plain English";
   }
+}
+
+/** The currency the shop sells and keeps its books in: costs in any other are converted into it. */
+export function homeCurrency(): string {
+  return activeProfile.currency.trim().toUpperCase() || "AUD";
 }
 
 /** What the sales tax is called in prompts and labels: "GST", "VAT", or "tax". */

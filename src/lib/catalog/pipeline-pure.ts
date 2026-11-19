@@ -1,7 +1,8 @@
 // Pure helpers shared by the DB pipeline and the offline/regression pipeline.
 
 import { metafieldColumns } from "./categorize";
-import { headingsFor } from "./taxonomy";
+import { categoryForKind, fillsCategory, headingsFor } from "./taxonomy";
+import { categoryById, type TaxonomyCategory } from "./shopify-taxonomy";
 import type { CsvProduct } from "./csv";
 import type { ReviewProduct } from "./review-types";
 
@@ -40,30 +41,38 @@ export function csvType(productType: string, collections: string[]): string {
  * as the shop leaves it.
  */
 const PRODUCT_CATEGORY: Record<string, string> = {
-  Snowboards: "Sporting Goods > Outdoor Recreation > Winter Sports & Activities > Skiing & Snowboarding > Snowboards",
-  Skis: "Sporting Goods > Outdoor Recreation > Winter Sports & Activities > Skiing & Snowboarding > Skis > Downhill Skis",
-  "Sleeping Bags": "Sporting Goods > Outdoor Recreation > Camping & Hiking > Sleeping Bags",
+  Snowboards: "sg-4-17-2-17", // Sporting Goods > … > Skiing & Snowboarding > Snowboards
+  Skis: "sg-4-17-2-13-2", // Sporting Goods > … > Skiing & Snowboarding > Skis > Downhill Skis
+  "Sleeping Bags": "sg-4-2-14", // Sporting Goods > Outdoor Recreation > Camping & Hiking > Sleeping Bags
 };
 
-export function productCategoryFor(csvProductType: string, title = ""): string | undefined {
+/** A product's Shopify category, where it goes out with one. */
+export function productCategoryOf(csvProductType: string, title = ""): TaxonomyCategory | null {
+  // Every shop but the ski shop gets the category Shopify asks for. See TradePack.fillsCategory.
+  if (fillsCategory()) return categoryForKind(csvProductType.trim());
   // A package is a board or ski with bindings on it; the shop leaves those uncategorised.
-  if (/\binc\b|\bpackage\b/i.test(title)) return undefined;
-  return PRODUCT_CATEGORY[csvProductType.trim()];
+  if (/\binc\b|\bpackage\b/i.test(title)) return null;
+  const id = PRODUCT_CATEGORY[csvProductType.trim()];
+  return id ? categoryById(id) : null;
+}
+
+/** The category as the CSV's Product Category column writes it: its full path. */
+export function productCategoryFor(csvProductType: string, title = ""): string | undefined {
+  return productCategoryOf(csvProductType, title)?.path;
 }
 
 export function toCsvProducts(products: ReviewProduct[]): CsvProduct[] {
   return products.map((p) => {
     const productImages = p.images; // every image belongs to the product gallery; variant images also link via Variant Image
     const variantImage = new Map(p.images.filter((i) => i.variantId).map((i) => [i.variantId!, i.url]));
-    // A picture put on one variant of a colour is that colour's picture: the other sizes of the
-    // same colour show it too, so every black binding in the drop-down is the black one.
+    // A colour's picture is every variant of that colour's: one picture is tied to the colour's
+    // first variant (see applyColourPictures), and its other sizes show it too.
     const colourAt = [p.option1Name, p.option2Name, p.option3Name].findIndex((n) => /colou?r/i.test(n ?? ""));
-    const colourOf = (v: { option1Value: string | null; option2Value: string | null; option3Value: string | null }) => (colourAt < 0 ? "" : ([v.option1Value, v.option2Value, v.option3Value][colourAt] ?? "").trim().toLowerCase());
-    const byColour = new Map<string, string>();
-    for (const v of p.variants) {
-      const url = variantImage.get(v.id);
-      const colour = colourOf(v);
-      if (url && colour && !byColour.has(colour)) byColour.set(colour, url);
+    if (colourAt >= 0) {
+      const colourOf = (v: (typeof p.variants)[number]) => ([v.option1Value, v.option2Value, v.option3Value][colourAt] ?? "").trim().toLowerCase();
+      const byColour = new Map<string, string>();
+      for (const v of p.variants) { const url = variantImage.get(v.id); if (url && colourOf(v) && !byColour.has(colourOf(v))) byColour.set(colourOf(v), url); }
+      for (const v of p.variants) if (!variantImage.has(v.id) && byColour.has(colourOf(v))) variantImage.set(v.id, byColour.get(colourOf(v))!);
     }
     return {
       handle: p.handle,
@@ -93,8 +102,8 @@ export function toCsvProducts(products: ReviewProduct[]): CsvProduct[] {
         quantity: v.quantity,
         price: v.retailPrice,
         compareAtPrice: v.compareAtPrice,
-        costPerItem: v.landedCostAud,
-        imageUrl: variantImage.get(v.id) ?? byColour.get(colourOf(v)) ?? null,
+        costPerItem: v.landedCostHome,
+        imageUrl: variantImage.get(v.id) ?? null,
       })),
     };
   });

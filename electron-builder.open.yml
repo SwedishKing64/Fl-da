@@ -5,13 +5,13 @@
 #   FLODA_OPEN=1 npm run desktop:build && npx electron-builder --config electron-builder.open.yml
 extends: ./electron-builder.yml
 appId: ai.floda.open
-productName: Floda Open
+productName: Snaben Open
 win:
-  artifactName: "Floda-Open-Setup-${version}.${ext}"
+  artifactName: "Snaben-Open-Setup-${version}.${ext}"
 nsis:
-  shortcutName: Flöda Open
-  uninstallDisplayName: Flöda Open
+  shortcutName: Snaben Open
+  uninstallDisplayName: Snaben Open
 mac:
-  artifactName: "Floda-Open-${version}-${arch}.${ext}"
+  artifactName: "Snaben-Open-${version}-${arch}.${ext}"
 linux:
-  artifactName: "Floda-Open-${version}.${ext}"
+  artifactName: "Snaben-Open-${version}.${ext}"

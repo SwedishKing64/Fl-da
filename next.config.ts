@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // The build a page was opened with, so it can tell when the site has moved on. See UpdateBanner.
+  env: { NEXT_PUBLIC_BUILD: process.env.VERCEL_GIT_COMMIT_SHA || "dev" },
   // The desktop app runs the server as a folder of its own (see scripts/desktop-build.mjs).
   ...(process.env.FLODA_DESKTOP_BUILD ? { output: "standalone" as const } : {}),
   // Ship the SQLite template used when no database is configured (see scripts/vercel-build.mjs),

@@ -17,7 +17,7 @@
     "variants": [
       {
         "sku": "",
-        "landedCostAud": 450,
+        "landedCostHome": 450,
         "retailPrice": 999,
         "exGstRevenue": 908.18,
         "gstComponent": 90.82,
@@ -26,7 +26,7 @@
       },
       {
         "sku": "",
-        "landedCostAud": 450,
+        "landedCostHome": 450,
         "retailPrice": 999,
         "exGstRevenue": 908.18,
         "gstComponent": 90.82,
@@ -35,7 +35,7 @@
       },
       {
         "sku": "",
-        "landedCostAud": 450,
+        "landedCostHome": 450,
         "retailPrice": 999,
         "exGstRevenue": 908.18,
         "gstComponent": 90.82,
@@ -44,7 +44,7 @@
       },
       {
         "sku": "",
-        "landedCostAud": 320,
+        "landedCostHome": 320,
         "retailPrice": 749,
         "exGstRevenue": 680.91,
         "gstComponent": 68.09,
@@ -53,7 +53,7 @@
       },
       {
         "sku": "",
-        "landedCostAud": 320,
+        "landedCostHome": 320,
         "retailPrice": 749,
         "exGstRevenue": 680.91,
         "gstComponent": 68.09,
@@ -62,7 +62,7 @@
       },
       {
         "sku": "",
-        "landedCostAud": 320,
+        "landedCostHome": 320,
         "retailPrice": 749,
         "exGstRevenue": 680.91,
         "gstComponent": 68.09,
@@ -71,7 +71,7 @@
       },
       {
         "sku": "",
-        "landedCostAud": 9.5,
+        "landedCostHome": 9.5,
         "retailPrice": 29.95,
         "exGstRevenue": 27.23,
         "gstComponent": 2.72,
@@ -111,7 +111,7 @@
     "variants": [
       {
         "sku": "V2410170",
-        "landedCostAud": 868.61,
+        "landedCostHome": 868.61,
         "retailPrice": 0,
         "exGstRevenue": 0,
         "gstComponent": 0,
@@ -120,7 +120,7 @@
       },
       {
         "sku": "V2410177",
-        "landedCostAud": 868.61,
+        "landedCostHome": 868.61,
         "retailPrice": 0,
         "exGstRevenue": 0,
         "gstComponent": 0,
@@ -129,7 +129,7 @@
       },
       {
         "sku": "V2410184",
-        "landedCostAud": 868.61,
+        "landedCostHome": 868.61,
         "retailPrice": 0,
         "exGstRevenue": 0,
         "gstComponent": 0,
@@ -138,7 +138,7 @@
       },
       {
         "sku": "M7201100",
-        "landedCostAud": 252.69,
+        "landedCostHome": 252.69,
         "retailPrice": 0,
         "exGstRevenue": 0,
         "gstComponent": 0,
@@ -147,7 +147,7 @@
       },
       {
         "sku": "M7201110",
-        "landedCostAud": 252.69,
+        "landedCostHome": 252.69,
         "retailPrice": 0,
         "exGstRevenue": 0,
         "gstComponent": 0,
@@ -184,7 +184,7 @@
     "variants": [
       {
         "sku": "BUR-CUST-154",
-        "landedCostAud": 425,
+        "landedCostHome": 425,
         "retailPrice": 0,
         "exGstRevenue": 0,
         "gstComponent": 0,
@@ -193,7 +193,7 @@
       },
       {
         "sku": "BUR-CUST-158",
-        "landedCostAud": 425,
+        "landedCostHome": 425,
         "retailPrice": 0,
         "exGstRevenue": 0,
         "gstComponent": 0,
@@ -202,7 +202,7 @@
       },
       {
         "sku": "BUR-CUST-162",
-        "landedCostAud": 425,
+        "landedCostHome": 425,
         "retailPrice": 0,
         "exGstRevenue": 0,
         "gstComponent": 0,
@@ -211,7 +211,7 @@
       },
       {
         "sku": "BUR-CART-M",
-        "landedCostAud": 215,
+        "landedCostHome": 215,
         "retailPrice": 0,
         "exGstRevenue": 0,
         "gstComponent": 0,
@@ -220,7 +220,7 @@
       },
       {
         "sku": "BUR-CART-L",
-        "landedCostAud": 215,
+        "landedCostHome": 215,
         "retailPrice": 0,
         "exGstRevenue": 0,
         "gstComponent": 0,

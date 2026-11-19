@@ -4,6 +4,7 @@ import { prisma, parseJson } from "@/lib/catalog/db";
 import { Badge, Card, Details, Empty, LinkButton, PageHeader, fmtDate, statusTone } from "@/app/(catalog)/ui";
 import { getSettings } from "@/lib/catalog/settings";
 import { describeDirectives, parseDirectives } from "@/lib/catalog/instructions";
+import { FirstInvoiceNote } from "./FirstInvoiceNote";
 import { Steps } from "./Steps";
 import { NextStep } from "./NextStep";
 import { UploadPanel } from "./UploadPanel";
@@ -15,9 +16,13 @@ import { BatchSettingsForm } from "./BatchSettingsForm";
 import { BuildProductsButton, DeleteFileButton, DeleteBatchButton, RetryExtractionButton } from "./BatchButtons";
 import { ExtractedRows } from "./ExtractedRows";
 import { LinksPanel } from "./review/LinksPanel";
+import { PackagesPanel } from "./review/PackagesPanel";
+import { packageSkisOf } from "@/lib/catalog/trades/snow/package-skis";
+import { colourLinksOf, coloursOfProduct } from "@/lib/catalog/page-types";
 import { BuildList } from "./BuildList";
 import { TypeList } from "./TypeList";
 import { guarded } from "@/app/(catalog)/page-failed";
+import { homeCurrency } from "@/lib/catalog/shop-profile";
 
 /**
  * The build check, the chat's rebuilds and the page reads are each a long model call, and a
@@ -51,13 +56,16 @@ async function renderBatchPage(props: PageProps<"/batches/[id]">) {
   // The products, for their page links: asked for here, right after the build, where the person
   // is — the review page asks too, but a step on another page was a step nobody saw.
   const products = batch._count.products > 0
-    ? await prisma.product.findMany({ where: { batchId: id }, select: { id: true, title: true, handle: true, productType: true, lookupStatus: true, lookupSource: true }, orderBy: { sortOrder: "asc" } })
+    ? await prisma.product.findMany({ where: { batchId: id }, select: { id: true, title: true, handle: true, productType: true, tags: true, lookupStatus: true, lookupSource: true, colourLinks: true, option1Name: true, option2Name: true, option3Name: true, variants: { select: { option1Value: true, option2Value: true, option3Value: true } } }, orderBy: { sortOrder: "asc" } })
     : [];
   // A product the shop already lists keeps the page it has — unless every product here is new,
   // which the person has said, and a handle that happens to match is not a listing.
   const inShop = allNew || products.length === 0
     ? new Set<string>()
     : new Set((await prisma.shopListing.findMany({ where: { handle: { in: products.map((p) => p.handle) } }, select: { handle: true } })).map((l) => l.handle));
+  // Each new ski's package bindings, picked here as well as on the review page: right after the
+  // build is where the person is (asked 2026-10-20). See package-skis.ts.
+  const packaging = products.length > 0 ? await packageSkisOf(id, products) : { skis: [], bindings: [] };
 
   return (
     <>
@@ -67,11 +75,11 @@ async function renderBatchPage(props: PageProps<"/batches/[id]">) {
         actions={<>
           {batch._count.products > 0 && <LinkButton href={`/batches/${id}/review`} variant="primary" icon="🔍">Review &amp; price →</LinkButton>}
           {batch._count.products === 0 && extracted.length > 0 && !locked && <BuildProductsButton batchId={id} />}
-          {extracted.length > 0 && <LinkButton href={`/batches/${id}/map`}>Column mapping</LinkButton>}
           <DeleteBatchButton batchId={id} disabled={batch.status === "PUSHED"} />
         </>}
       />
       <Steps batchId={id} current="upload" status={batch.status} />
+      <FirstInvoiceNote stage="upload" />
       <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <div className="min-w-0 space-y-6">
           {batch._count.products > 0 && <BuildCheck batchId={id} needed={!reviewed} aiEnabled={aiAvailable()} locked={locked} />}
@@ -84,7 +92,7 @@ async function renderBatchPage(props: PageProps<"/batches/[id]">) {
             initial={batch.instructions.map((m) => ({ id: m.id, role: m.role, body: m.body, createdAt: m.createdAt.toISOString() }))}
           />
           <Card title="Supplier files">
-            {locked ? <Empty>This batch has been exported; files are locked for audit.</Empty> : <UploadPanel batchId={id} aiEnabled={settings ? aiAvailable() : false} hasProducts={batch._count.products > 0} productCount={batch._count.products} reading={batch.files.filter((f) => f.extractionStatus === "PENDING" && !stalled(f)).length} pendingSince={batch.files.filter((f) => f.extractionStatus === "PENDING" && !stalled(f)).map(startedAt)} allNew={allNew} buildNow={batch._count.products === 0 && !batch.files.some((f) => f.extractionStatus === "PENDING" && !stalled(f)) && batch.files.some((f) => f.extractionStatus === "DONE" && !["SPEC_SHEET", "PRODUCT_PHOTO", "SHOP_EXPORT"].includes(f.detectedKind ?? f.kind))} retryable={batch.files.filter((f) => !locked && (stalled(f) || (f.extractionStatus === "FAILED" && ranOutOfTime(f.extractionError)))).map((f) => ({ id: f.id, filename: f.filename }))} />}
+            {locked ? <Empty>This batch has been exported; files are locked for audit.</Empty> : <UploadPanel batchId={id} maxBytes={process.env.VERCEL ? undefined : 2 * 1024 * 1024 * 1024} aiEnabled={settings ? aiAvailable() : false} hasProducts={batch._count.products > 0} productCount={batch._count.products} reading={batch.files.filter((f) => f.extractionStatus === "PENDING" && !stalled(f)).length} pendingSince={batch.files.filter((f) => f.extractionStatus === "PENDING" && !stalled(f)).map(startedAt)} allNew={allNew} buildNow={batch._count.products === 0 && !batch.files.some((f) => f.extractionStatus === "PENDING" && !stalled(f)) && batch.files.some((f) => f.extractionStatus === "DONE" && !["SPEC_SHEET", "PRODUCT_PHOTO", "SHOP_EXPORT"].includes(f.detectedKind ?? f.kind))} retryable={batch.files.filter((f) => !locked && (stalled(f) || (f.extractionStatus === "FAILED" && ranOutOfTime(f.extractionError)))).map((f) => ({ id: f.id, filename: f.filename }))} />}
             {batch.files.length > 0 && (
               <table className="mt-4 w-full text-sm">
                 <thead className="text-left text-xs text-[var(--ink-soft)]"><tr><th className="py-1">File</th><th>Kind</th><th>Extraction</th><th className="text-right">Rows</th><th /></tr></thead>
@@ -127,17 +135,19 @@ async function renderBatchPage(props: PageProps<"/batches/[id]">) {
             <LinksPanel
               batchId={id}
               locked={locked}
-              products={products.map((p) => ({ id: p.id, title: p.title, handle: p.handle, url: ["LINKED", "RELINKED", "LINK_FAILED", "PAGE", "PAGE_UNSURE"].includes(p.lookupStatus) ? p.lookupSource : "", status: p.lookupStatus, inShop: inShop.has(p.handle) }))}
+              products={products.map((p) => ({ id: p.id, title: p.title, handle: p.handle, url: ["LINKED", "RELINKED", "LINK_FAILED", "PAGE", "PAGE_UNSURE"].includes(p.lookupStatus) ? p.lookupSource : "", status: p.lookupStatus, inShop: inShop.has(p.handle), colours: coloursOfProduct(p), colourLinks: colourLinksOf(p.colourLinks) }))}
             />
           )}
+          {packaging.skis.length > 0 && <PackagesPanel batchId={id} locked={locked} skis={packaging.skis} bindings={packaging.bindings} />}
         </div>
         <NextStep href={`/batches/${id}/review`} label="Next: Review & price" disabledWhy={products.length === 0 ? "Build the products first; then the review grid is next." : undefined} />
         <div className="space-y-6">
-          <Details summary="Currency, GST and freight" hint="Set once per batch. Only open it if this invoice is not in plain AUD.">
+          <Details summary="Currency, GST and freight" hint={`Set once per batch. Only open it if this invoice is not in plain ${homeCurrency()}.`}>
             <BatchSettingsForm
-              batch={{ id: batch.id, supplierId: batch.supplierId, currency: batch.currency, fxRateToAud: batch.fxRateToAud, gstTreatment: batch.gstTreatment, freightTotalAud: batch.freightTotalAud, freightMode: batch.freightMode, splitExportBy: batch.splitExportBy, builtBy: batch.builtBy, notes: batch.notes ?? "" }}
+              batch={{ id: batch.id, supplierId: batch.supplierId, currency: batch.currency, fxRateToHome: batch.fxRateToHome, gstTreatment: batch.gstTreatment, freightTotalHome: batch.freightTotalHome, freightMode: batch.freightMode, splitExportBy: batch.splitExportBy, builtBy: batch.builtBy, notes: batch.notes ?? "" }}
               suppliers={suppliers.map((s) => ({ id: s.id, name: s.name }))}
               disabled={locked}
+              home={homeCurrency()}
             />
           </Details>
         </div>

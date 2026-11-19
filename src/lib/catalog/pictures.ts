@@ -183,6 +183,9 @@ export interface HostedOfColour {
  * colour ordered, and the rest framed and kept here. A picture that could not be fetched is kept
  * as the address it was, unlooked at — the review page is where to catch it.
  */
+/** The most pictures a product keeps from its page. */
+const KEEP_AT_MOST = 16;
+
 export async function hostPicturesOfColour(urls: string[], name: string, colours: string[], deps: { fetcher?: typeof fetch; publicBaseUrl?: string; until?: number; ask?: Looker } = {}): Promise<HostedOfColour> {
   const none: HostedOfColour = { images: urls, leftOut: 0, otherColours: [], shown: "", colours: urls.map(() => ""), looked: false };
   if (urls.length === 0) return none;
@@ -220,5 +223,10 @@ export async function hostPicturesOfColour(urls: string[], name: string, colours
     images.push(hosted ?? urls[i]);
     pictureColours.push(colourOf.get(i) ?? "");
   }
-  return { images, leftOut: got.length - look.keep.length, otherColours: look.otherColours, shown: look.shown, colours: pictureColours, looked: look.looked };
+  // A listing needs no more than 16. Where there are more, the ones the look saw the ordered colour
+  // in go first, in the page's order; the doubtful ones (a detail, a close-up) after them.
+  const order = images.map((_, i) => i);
+  if (images.length > KEEP_AT_MOST) order.sort((a, b) => Number(!pictureColours[a]) - Number(!pictureColours[b]) || a - b);
+  const kept = order.slice(0, KEEP_AT_MOST);
+  return { images: kept.map((i) => images[i]), leftOut: got.length - look.keep.length, otherColours: look.otherColours, shown: look.shown, colours: kept.map((i) => pictureColours[i]), looked: look.looked };
 }

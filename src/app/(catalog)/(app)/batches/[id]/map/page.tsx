@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/catalog/db";
 import { mappingState } from "@/lib/catalog/pipeline";
 import { Alert, LinkButton, PageHeader } from "@/app/(catalog)/ui";
-import { CANONICAL_FIELDS } from "@/lib/catalog/types";
+import { fieldsInForce } from "@/lib/catalog/taxonomy";
 import { Steps } from "../Steps";
 import { MappingEditor } from "./MappingEditor";
 
@@ -20,7 +20,7 @@ export default async function MapPage(props: PageProps<"/batches/[id]/map">) {
       {groups.length === 0 ? (
         <Alert tone="warning">No extracted rows yet. Upload a file that extracted successfully first.</Alert>
       ) : (
-        <MappingEditor batchId={id} groups={groups} fields={CANONICAL_FIELDS.map((f) => ({ key: f.key, label: f.label, required: Boolean(f.required) }))} supplierName={batch.supplier?.name ?? null} hasProducts={batch._count.products > 0} disabled={locked} />
+        <MappingEditor batchId={id} groups={groups} fields={fieldsInForce().map((f) => ({ key: f.key, label: f.label, required: Boolean(f.required) }))} supplierName={batch.supplier?.name ?? null} hasProducts={batch._count.products > 0} disabled={locked} />
       )}
     </>
   );

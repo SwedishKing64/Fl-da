@@ -1,5 +1,6 @@
 // Plain data shapes shared between the server (Prisma -> view) and the review grid (client).
 
+import type { Confidence } from "./confidence";
 import type { RowFlag } from "./types";
 import type { MatchCandidate } from "./match-candidates";
 
@@ -25,13 +26,13 @@ export interface ReviewVariant {
   costPrice: number;
   costCurrency: string;
   gstTreatment: string;
-  fxRateToAud: number;
-  freightPerUnitAud: number;
+  fxRateToHome: number;
+  freightPerUnitHome: number;
   pricingRuleId: string | null;
   pricingRuleName: string | null;
   retailOverride: number | null;
   compareAtPrice: number | null;
-  landedCostAud: number;
+  landedCostHome: number;
   retailPrice: number;
   exGstRevenue: number;
   gstComponent: number;
@@ -61,6 +62,8 @@ export interface ReviewProduct {
   /** What the web lookup did about the columns the invoice left empty. */
   lookupStatus: string;
   lookupSource: string;
+  /** Each colour's own page, where one was given: JSON [{ colour, url, status }]. See page-link.ts. */
+  colourLinks?: string;
   option1Name: string | null;
   option2Name: string | null;
   option3Name: string | null;
@@ -73,6 +76,8 @@ export interface ReviewProduct {
   images: ReviewImage[];
   variants: ReviewVariant[];
   flags: RowFlag[];
+  /** How sure the system is of the title, tags, picture and price, and the lowest of those. */
+  confidence: Confidence;
 }
 
 export interface ReviewSummary {
@@ -88,9 +93,12 @@ export interface ReviewSummary {
   lowMarginVariants: number;
   errors: number;
   warnings: number;
+  /** Products over the confidence bar, which need nobody's eyes, and the rest. */
+  ready?: number;
+  needLook?: number;
 }
 
 /** Fields editable inline on a product row. */
 export const PRODUCT_EDITABLE = ["handle", "title", "vendor", "productType", "category", "tags", "collections", "status", "seoTitle", "seoDescription", "bodyHtml"] as const;
 /** Fields editable inline on a variant row. */
-export const VARIANT_EDITABLE = ["sku", "barcode", "option1Value", "option2Value", "option3Value", "grams", "quantity", "costPrice", "gstTreatment", "retailOverride", "compareAtPrice", "freightPerUnitAud"] as const;
+export const VARIANT_EDITABLE = ["sku", "barcode", "option1Value", "option2Value", "option3Value", "grams", "quantity", "costPrice", "gstTreatment", "retailOverride", "compareAtPrice", "freightPerUnitHome"] as const;

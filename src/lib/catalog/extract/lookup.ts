@@ -76,7 +76,7 @@ export async function lookupProduct(request: LookupRequest): Promise<ProductLook
 
   const research = await retrying(() => getClient().messages.stream({
     model: WORKING_MODEL,
-    max_tokens: 8000,
+    max_tokens: 32_000,
     system: RESEARCH_SYSTEM(),
     thinking: { type: "adaptive" },
     output_config: { effort: "low" },
@@ -93,7 +93,7 @@ export async function lookupProduct(request: LookupRequest): Promise<ProductLook
 
   const shaped = await retrying(() => getClient().messages.stream({
     model: LIGHT_MODEL,
-    max_tokens: 4000,
+    max_tokens: 32_000,
     system: SHAPE_SYSTEM,
     output_config: { format: zodOutputFormat(FoundSchema), effort: "low" },
     messages: [{ role: "user", content: `${describe(request)}\n\nResearch notes:\n${notes}` }],

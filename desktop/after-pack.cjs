@@ -24,7 +24,7 @@ function danglingLinks(dir, out = []) {
   return out;
 }
 
-const SHOWN_NAME = "Flöda";
+const SHOWN_NAME = "Snaben";
 
 /** The value of one string key in an Info.plist, read as text. */
 function plistString(plist, key) {

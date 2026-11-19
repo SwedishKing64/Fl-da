@@ -1,14 +1,14 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { forgetWebsiteAction, readWebsiteAction, saveWebsiteAction } from "@/app/(catalog)/actions";
 import { Alert, Badge, Button, INPUT } from "@/app/(catalog)/ui";
-import type { WebsiteCategories, WebsiteCategory } from "@/lib/catalog/website";
+import { siteOrigin, type WebsiteCategories, type WebsiteCategory } from "@/lib/catalog/website";
 
 /**
  * The shop's website, read for its categories. What comes back is shown with a tick beside each
- * entry; the ticked ones are kept as the shop's kinds of product. A category can be added by hand
+ * entry; the ticked ones are kept as the shop's product types. A category can be added by hand
  * for a menu the reader could not see, and the whole list can be read again after the site changes.
  */
 export function WebsiteForm({ saved }: { saved: WebsiteCategories | null }) {
@@ -20,17 +20,30 @@ export function WebsiteForm({ saved }: { saved: WebsiteCategories | null }) {
   const [note, setNote] = useState<{ tone: "success" | "danger" | "info"; text: string } | null>(null);
   const [pending, start] = useTransition();
 
-  const read = () =>
+  const lastRead = useRef(saved?.url ?? "");
+  const read = (address = url) =>
     start(async () => {
+      lastRead.current = siteOrigin(address) ?? address;
       setNote(null); setFound(null);
-      const r = await readWebsiteAction(url);
+      const r = await readWebsiteAction(address);
       if (!r.ok) return setNote({ tone: "danger", text: r.error });
       const data = r.data;
       if (!data) return setNote({ tone: "danger", text: "Nothing came back from the site." });
       setFound(data);
       setTicked(Object.fromEntries(data.categories.map((c) => [c.title, true])));
-      setNote({ tone: "info", text: `${data.categories.length} categor${data.categories.length === 1 ? "y" : "ies"} found${data.source === "shopify" ? " (a Shopify store: its collections)" : " (from the site's menus)"}. Untick any that are not a kind of product, add any that are missing, then keep the list.` });
+      setNote({ tone: "info", text: `${data.categories.length} categor${data.categories.length === 1 ? "y" : "ies"} found${data.source === "types" ? " (the Product Types your store's listings already use, the most used first)" : data.source === "shopify" ? " (a Shopify store: its collections)" : " (from the site's menus)"}. Untick any that are not a product type, add any that are missing, then keep the list.` });
     });
+
+  // An address pasted or typed in is read as soon as it is one, with no button to find: a moment
+  // after the typing stops, and only once per address.
+  useEffect(() => {
+    const origin = siteOrigin(url);
+    if (!origin || origin === lastRead.current || origin === siteOrigin(saved?.url ?? "")) return;
+    const t = setTimeout(() => read(url), 700);
+    return () => clearTimeout(t);
+    // read is stable enough for this: it closes over nothing but state setters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [url]);
 
   const addExtra = () => {
     const title = extra.trim();
@@ -55,7 +68,7 @@ export function WebsiteForm({ saved }: { saved: WebsiteCategories | null }) {
   const forget = () =>
     start(async () => {
       const r = await forgetWebsiteAction();
-      setNote(r.ok ? { tone: "info", text: "Forgotten. Kinds of product now come from your Shopify export alone." } : { tone: "danger", text: r.error });
+      setNote(r.ok ? { tone: "info", text: "Forgotten. Product types now come from your Shopify export alone." } : { tone: "danger", text: r.error });
       router.refresh();
     });
 
@@ -64,7 +77,7 @@ export function WebsiteForm({ saved }: { saved: WebsiteCategories | null }) {
   return (
     <div className="space-y-4 text-[14px]">
       <p className="text-[var(--ink-soft)]">
-        Every product has a place it must appear on your site, and that place is a category the site already has. Flöda reads the categories off your website and uses them, and nothing else, as the kinds of product it may write in the Type column. A reader that proposes a kind you do not have is stopped on the review grid, so nothing is invented.
+        Every product has a place it must appear on your site, and that place is a category the site already has. Snaben reads the categories off your website and uses them, and nothing else, as the product types it may write in the Type column. A reader that proposes a kind you do not have is stopped on the review grid, so nothing is invented.
       </p>
 
       {saved && !found && (
@@ -82,9 +95,9 @@ export function WebsiteForm({ saved }: { saved: WebsiteCategories | null }) {
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex-1 min-w-[16rem]">
           <span className="mb-1 block text-[13px] font-semibold">Your website</span>
-          <input className={INPUT} value={url} onChange={(e) => setUrl(e.target.value)} placeholder="aussieskier.com.au" onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); read(); } }} />
+          <input className={INPUT} value={url} onChange={(e) => setUrl(e.target.value)} placeholder="yourshop.com.au — paste it and it is read" onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); read(); } }} />
         </label>
-        <Button variant="primary" disabled={pending || !url.trim()} onClick={read}>{pending && !found ? "Reading…" : saved ? "Read it again" : "Read the website"}</Button>
+        <Button variant="primary" disabled={pending || !url.trim()} onClick={() => read()}>{pending && !found ? "Reading…" : saved ? "Read it again" : "Read the website"}</Button>
         {saved && <Button variant="ghost" disabled={pending} onClick={forget}>Forget the website</Button>}
       </div>
 
@@ -104,7 +117,7 @@ export function WebsiteForm({ saved }: { saved: WebsiteCategories | null }) {
                   <input type="checkbox" className="mt-1" checked={Boolean(ticked[c.title])} onChange={(e) => setTicked((t) => ({ ...t, [c.title]: e.target.checked }))} />
                   <span className="min-w-0">
                     <span className="block text-[13.5px] font-medium">{c.title}</span>
-                    {c.path && <span className="block truncate text-[11.5px] text-[var(--ink-soft)]">{c.path}</span>}
+                    {c.count !== undefined ? <span className="block text-[11.5px] text-[var(--ink-soft)]">{c.count} product{c.count === 1 ? "" : "s"}</span> : c.path && <span className="block truncate text-[11.5px] text-[var(--ink-soft)]">{c.path}</span>}
                   </span>
                 </label>
               </li>
@@ -118,7 +131,7 @@ export function WebsiteForm({ saved }: { saved: WebsiteCategories | null }) {
             <Button variant="secondary" size="sm" disabled={!extra.trim()} onClick={addExtra}>Add it</Button>
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-[var(--line-soft)] pt-3">
-            <Button variant="primary" disabled={pending || count === 0} onClick={keep}>{pending ? "Keeping…" : `Keep these ${count} as my kinds of product`}</Button>
+            <Button variant="primary" disabled={pending || count === 0} onClick={keep}>{pending ? "Keeping…" : `Keep these ${count} as my product types`}</Button>
             <Button variant="ghost" disabled={pending} onClick={() => { setFound(null); setNote(null); }}>Cancel</Button>
           </div>
         </div>

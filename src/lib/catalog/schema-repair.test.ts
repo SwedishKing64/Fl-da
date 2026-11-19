@@ -87,3 +87,15 @@ describe("a whole table the database is missing", () => {
     expect(isMissingTable(new Error("Connection refused"))).toBe(false);
   });
 });
+
+describe("the columns a desktop copy's SQLite database is missing", () => {
+  it("are added the way SQLite allows: a constant default kept, a timestamp default and NOT NULL without one dropped", async () => {
+    const { sqliteColumns } = await import("./schema-repair");
+    const cols = sqliteColumns();
+    expect(cols.find((c) => c.table === "SourceFile" && c.column === "layout")?.statement).toBe('ALTER TABLE "SourceFile" ADD COLUMN "layout" TEXT');
+    expect(cols.find((c) => c.table === "SourceFile" && c.column === "priceList")?.statement).toBe(`ALTER TABLE "SourceFile" ADD COLUMN "priceList" TEXT NOT NULL DEFAULT '[]'`);
+    expect(cols.find((c) => c.table === "SourceFile" && c.column === "createdAt")?.statement).toBe('ALTER TABLE "SourceFile" ADD COLUMN "createdAt" DATETIME');
+    expect(cols.some((c) => c.column === "id")).toBe(false);
+    expect(cols.every((c) => !/IF NOT EXISTS/.test(c.statement))).toBe(true);
+  });
+});

@@ -31,6 +31,8 @@ export interface Listing {
   bindingOption?: string;
   /** Every variant's barcode, so an order line can be placed on the listing by its EAN alone. */
   barcodes?: string[];
+  /** The options the listing is sold by and every value each takes, for learning which tags mirror them. */
+  options?: Array<{ name: string; values: string[] }>;
 }
 
 /** Every riding-style tag the shop uses, board and ski. */
@@ -77,7 +79,16 @@ export function listingsFromCsv(csv: string): Listing[] {
     if (!handle) continue;
     const code = B >= 0 ? (row[B] ?? "").replace(/^'/, "").trim() : "";
     const had = seen.get(handle);
-    if (had) { if (code && !had.barcodes!.includes(code)) had.barcodes!.push(code); continue; }
+    if (had) {
+      if (code && !had.barcodes!.includes(code)) had.barcodes!.push(code);
+      // A later row carries only its variant's values, under the first row's option names.
+      for (const [i, [, v]] of bindingAt.entries()) {
+        const value = v >= 0 ? (row[v] ?? "").trim() : "";
+        const option = had.options?.[i];
+        if (option && value && !option.values.includes(value)) option.values.push(value);
+      }
+      continue;
+    }
     const title = (row[T] ?? "").trim();
     if (!title) continue;
     const listing: Listing = {
@@ -89,10 +100,12 @@ export function listingsFromCsv(csv: string): Listing[] {
       price: priceOf(C >= 0 ? row[C] : "") ?? priceOf(P >= 0 ? row[P] : ""),
       bindingOption: bindingAt.map(([n, v]) => (n >= 0 && v >= 0 && /^binding option$/i.test((row[n] ?? "").trim()) ? (row[v] ?? "").trim() : "")).find(Boolean) ?? "",
       barcodes: code ? [code] : [],
+      options: bindingAt.map(([n, v]) => ({ name: n >= 0 ? (row[n] ?? "").trim() : "", values: v >= 0 && (row[v] ?? "").trim() ? [(row[v] ?? "").trim()] : [] })),
     };
     seen.set(handle, listing);
     out.push(listing);
   }
+  for (const l of out) l.options = l.options!.filter((o) => o.name && o.name.toLowerCase() !== "title" && o.values.length);
   return out;
 }
 
@@ -217,13 +230,18 @@ export function disciplinesFromTerrain(productType: string, text: string): strin
     if (/\bpark\b|\bjib|\bpipe\b/.test(t)) out.push("Park Boards");
     if (/freeride|powder|big[\s-]?mountain|backcountry/.test(t)) out.push("Freeride & Powder Boards");
   } else if (ski) {
-    if (/all[\s-]?mountain|frontside|all[\s-]?round/.test(t)) out.push("Frontside & All-Mountain Skis");
+    if (/all[\s-]?mountain|all[\s-]?terrain|frontside|all[\s-]?round/.test(t)) out.push("Frontside & All-Mountain Skis");
     if (/carv|on[\s-]?piste/.test(t)) out.push("Carving Skis");
     if (/freeride|powder|big[\s-]?mountain/.test(t)) out.push("Freeride & Powder Skis");
     if (/freestyle|\bpark\b|twin[\s-]?tip/.test(t)) out.push("Park & Twin Tip Skis");
     if (/\brac(e|ing)\b|world ?cup/.test(t)) out.push("Race Skis");
     if (/mogul/.test(t)) out.push("Mogul Skis");
     if (/touring|skitour|backcountry/.test(t)) out.push("Touring Skis");
+    // Nothing said in words: the waist does. The shop files a ski of 100mm and wider under
+    // Freeride & Powder and anything narrower under Frontside & All-Mountain (Black Crows'
+    // "BIRDIE SKIS" section says only that they are women's).
+    const waist = /(\d{2,3})\s*mm waist/.exec(t);
+    if (out.length === 0 && waist) out.push(Number(waist[1]) >= 100 ? "Freeride & Powder Skis" : "Frontside & All-Mountain Skis");
   }
   return out.flatMap((d) => tagsFor(d).slice(0, 1));
 }

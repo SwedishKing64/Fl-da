@@ -12,6 +12,7 @@ export async function getSettings(): Promise<AppSettings> {
     fxRates: { ...DEFAULT_SETTINGS.fxRates, ...(stored.fxRates ?? {}) },
     shopify: { ...DEFAULT_SETTINGS.shopify, ...(stored.shopify ?? {}) },
     locations: stored.locations ?? [],
+    packages: { ...DEFAULT_SETTINGS.packages, ...(stored.packages ?? {}) },
   };
 }
 
@@ -22,6 +23,7 @@ export async function saveSettings(patch: Partial<AppSettings>): Promise<AppSett
     ...patch,
     fxRates: { ...current.fxRates, ...(patch.fxRates ?? {}) },
     shopify: { ...current.shopify, ...(patch.shopify ?? {}) },
+    packages: { ...current.packages, ...(patch.packages ?? {}) },
   };
   await prisma.appSetting.upsert({
     where: { key: KEY },

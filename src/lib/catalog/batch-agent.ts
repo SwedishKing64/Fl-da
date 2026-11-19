@@ -22,9 +22,11 @@ import { z } from "zod";
 import { prisma } from "./db";
 
 import { retrying } from "./api-errors";
+import { retailer } from "./shop-profile";
 import { logAudit } from "./audit";
 import { isValidType, productTypes } from "./taxonomy";
 import { houseTags } from "./product-tags";
+import { loadTagGate, partitionTags, recordTagProposals } from "./tag-gate";
 import { buildHandle } from "./handle";
 import { productTitle, seasonTagFrom } from "./titles";
 import { parseDirectives, describeDirectives } from "./instructions";
@@ -49,6 +51,9 @@ const Review = z.object({
 
 export type BatchReview = z.infer<typeof Review>;
 
+/** The instructions, written for the shop in force rather than the ski shop they were first written for. */
+const forThisShop = (system: string): string => system.split("a ski and snowboard shop in Australia").join(retailer());
+
 const SYSTEM = `You check a batch of Shopify products that has just been built from a supplier's order form, for a ski and snowboard shop in Australia, before a person looks at it. You know the shop's conventions and you have the shop's own listings of the same brands beside you.
 
 The shop's conventions:
@@ -72,7 +77,7 @@ type Ask = (system: string, content: string) => Promise<string | undefined>;
 const askModel: Ask = async (system, content) => {
   const response = await retrying(() => getClient().messages.stream({
     model: READING_MODEL,
-    max_tokens: 6000,
+    max_tokens: 32_000,
     // Both prompts are fixed text, so the service keeps them between batches.
     system: cachedSystem(system),
     thinking: { type: "adaptive" },
@@ -239,7 +244,7 @@ export async function auditReading(batchId: string, userId: string | null, ask: 
     return { summary: "The files were read by the model itself — a photograph or a scan has no columns to check.", verdict: "right", findings: [], columnFixes: [], instructionsOnSheet: [], questions: [], remapped: [], rebuilt: false };
   }
   const content = await describeReading(batchId);
-  const text = await ask(AUDIT_SYSTEM.replace("FIELD_KEYS", FIELD_KEYS.join(", ")), content);
+  const text = await ask(forThisShop(AUDIT_SYSTEM).replace("FIELD_KEYS", FIELD_KEYS.join(", ")), content);
   if (!text) return null;
   const parsed = ReadingAudit.safeParse(JSON.parse(text));
   if (!parsed.success) return null;
@@ -306,7 +311,7 @@ export async function reviewBatch(batchId: string, userId: string | null, ask: A
   // review without the audit once the audit has been run.
   const audit = options.audit === false ? null : await auditReading(batchId, userId, ask).catch(() => null);
   const content = await describeBatch(batchId);
-  const text = await ask(SYSTEM, content);
+  const text = await ask(forThisShop(SYSTEM), content);
   if (!text) return null;
   const parsed = Review.safeParse(JSON.parse(text));
   if (!parsed.success) return null;
@@ -317,6 +322,7 @@ export async function reviewBatch(batchId: string, userId: string | null, ask: A
   const shopHandles = new Set((await prisma.shopListing.findMany({ where: { handle: { in: products.map((p) => p.handle) } }, select: { handle: true } })).map((l) => l.handle));
   const applied: ReviewOutcome["applied"] = [];
   const skipped: ReviewOutcome["skipped"] = [];
+  const gate = await loadTagGate();
 
   for (const fix of review.fixes) {
     const p = byHandle.get(fix.handle.trim());
@@ -342,7 +348,10 @@ export async function reviewBatch(batchId: string, userId: string | null, ask: A
       continue;
     }
     if (fix.field === "tags") {
-      const tags = houseTags(value.split(",").map((t) => t.trim()).filter(Boolean)).join(", ");
+      // Matched, never invented: a tag the shop has never used is proposed, not written.
+      const gated = partitionTags(houseTags(value.split(",").map((t) => t.trim()).filter(Boolean)), gate);
+      if (gated.proposed.length) await recordTagProposals(new Map(gated.proposed.map((t) => [t, p.title])));
+      const tags = gated.kept.join(", ");
       await prisma.product.update({ where: { id: p.id }, data: { tags } });
       applied.push({ handle: p.handle, field: "tags", from: p.tags, to: tags });
       continue;

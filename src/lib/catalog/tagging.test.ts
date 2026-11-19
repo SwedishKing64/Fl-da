@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { backcountryShelfTags, isBackcountryShelf, isSkin, skinType, sectionsFor, productTypeFor, headingTags, spellHeading, BACKCOUNTRY_BINDING_TAG, BACKCOUNTRY_BOOT_TAG, BOARD_DISCIPLINES, crossShelfTags, DEFAULT_TAGGING, EVERGREEN_SEASON, SKI_DISCIPLINES, BAG_TAGS, MANUAL_SEASON, TOURING_SKI_TAG, bagTags, clothingContextTags, isSkinAccessory, bindingType, bootTags, disciplinesFor, snowboardBindingTags, needsBindingKind, TAG_SPELLING, generalTags, isHardgood, isManualTag, isNotOurs, isNotLearnable, isRuleGenerated, isShopifyGenerated, needsSectionChoice, normaliseGenders, seasonFor, slugTag, tagsFor, withoutGenerated, HOUSE_TAG_PREFIX, houseTagFor, initialsFrom } from "./tagging";
+import { backcountryShelfTags, isBackcountryShelf, isSkin, skinType, sectionsFor, productTypeFor, headingTags, spellHeading, BACKCOUNTRY_BINDING_TAG, BACKCOUNTRY_BOOT_TAG, BOARD_DISCIPLINES, crossShelfTags, DEFAULT_TAGGING, EVERGREEN_SEASON, SKI_DISCIPLINES, BAG_TAGS, MANUAL_SEASON, TOURING_SKI_TAG, bagTags, clothingContextTags, isSkinAccessory, bindingType, bootTags, disciplinesFor, snowboardBindingTags, needsBindingKind, TAG_SPELLING, generalTags, isHardgood, isManualTag, isNotOurs, isNotLearnable, isRuleGenerated, isShopifyGenerated, needsSectionChoice, normaliseGenders, seasonFor, slugTag, tagsFor, withoutGenerated, houseTagFor, initialsFrom } from "./tagging";
 import { SNOW_OUTDOOR_TAXONOMY, resolveType } from "./taxonomy";
 
 describe("the six general tags", () => {
@@ -115,7 +115,7 @@ describe("the six general tags", () => {
    * derivable from the product and a constant was right 12% of the time.
    */
   it("carries whoever built the listing, and defaults to nobody in particular", () => {
-    expect(DEFAULT_TAGGING.houseTag).toBe(HOUSE_TAG_PREFIX);
+    expect(DEFAULT_TAGGING.houseTag).toBe("123abc");
     expect(DEFAULT_TAGGING.houseTag).not.toMatch(/-[a-z]{2}$/);
     expect(houseTagFor("js")).toBe("123abc-js");
     expect(houseTagFor("ZB")).toBe("123abc-zb");

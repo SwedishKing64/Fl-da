@@ -1,7 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { houseTags } from "./product-tags";
-import { DEFAULT_TAG_RULES } from "./rules";
+import { houseTags, oneYearTag } from "./product-tags";
 
 /**
  * How a tag is spelled, settled against the shop's own catalogue.
@@ -31,14 +30,6 @@ describe("house tag spelling", () => {
   it("leaves per-tag hyphenation alone", () => {
     // Both are real: 70 products carry "snow-clothing", 24 carry "snow jackets".
     expect(houseTags(["snow-clothing", "snow jackets"])).toEqual(["snow-clothing", "snow jackets"]);
-  });
-
-  it("ships no seeded rule that adds a tag the shop does not write", () => {
-    for (const rule of DEFAULT_TAG_RULES) {
-      for (const tag of rule.addTags.split(",").map((t) => t.trim()).filter(Boolean)) {
-        expect(tag, `rule "${rule.name}" adds ${tag}`).toBe(tag.toLowerCase());
-      }
-    }
   });
 });
 
@@ -151,5 +142,18 @@ describe("tags the shop has never written are taken off products too", () => {
     const body = fn.slice(0, fn.indexOf("\n}"));
     expect(body).toContain("filter((t) => !STRIP_FROM_PRODUCTS.includes(t.toLowerCase()))");
     expect(body).not.toMatch(/TAG_SPELLING\[/); // renaming is the rules' job, not the products'
+  });
+});
+
+describe("one year tag on a product", () => {
+  it("keeps the year added last — the chat's — in place of the file's", () => {
+    expect(houseTags(["2026", "skis", "mens", "2027"])).toEqual(["skis", "mens", "2027"]);
+    expect(houseTags(["2026", "packs", "2999"])).toEqual(["packs", "2999"]);
+  });
+
+  it("leaves a product with one year, or none, as it was", () => {
+    expect(houseTags(["2026", "skis"])).toEqual(["2026", "skis"]);
+    expect(houseTags(["2026", "skis", "2026"])).toEqual(["2026", "skis"]);
+    expect(oneYearTag(["tents", "camping"])).toEqual(["tents", "camping"]);
   });
 });

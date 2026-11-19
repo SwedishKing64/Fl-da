@@ -1,0 +1,7 @@
+[
+  "A line \"RL140-GB-M Ridgeline 140 Carbon Gloss Black M | 1 | 3120.00\" reads as title Ridgeline 140 Carbon, colour Gloss Black, size M, quantity 1, cost 3120.",
+  "A tyre line \"TB2924TR Trailblazer 29 x 2.4 TR EXO 61-622 | 6 | 42.00\" reads as title Trailblazer 29 x 2.4 Tubeless Ready, size 29 x 2.4, variant EXO with variantName Casing, quantity 6, cost 42.",
+  "A road bike line \"TSL105-54 Tempo SL 105 Satin Sage 54cm\" reads as title Tempo SL 105, colour Satin Sage, size 54: the number on the end is the frame size in cm, not part of the name.",
+  "A chain line \"CN-M6100 12sp Chain 126L | 10\" reads as title Deore 12-Speed Chain with variant 12 and variantName Speed; 126L is the link count, a spec, not an option.",
+  "A rotor line \"RT-CL800 Centerline 180mm 6B\" reads as title Centerline Rotor, size 180mm, variant 6-Bolt with variantName Mount."
+]

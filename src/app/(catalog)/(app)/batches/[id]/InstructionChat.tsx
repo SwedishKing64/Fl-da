@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { clearInstructionsAction, sendInstructionAction, setAllNewAction, type InstructionMessage } from "@/app/(catalog)/actions";
 import { Alert, Card } from "@/app/(catalog)/ui";
 import { Chat } from "@/app/(catalog)/Chat";
@@ -27,6 +28,7 @@ export function InstructionChat({
   locked: boolean;
   allNew?: boolean;
 }) {
+  const router = useRouter();
   const [turns, setTurns] = useState(initial);
   const [inForce, setInForce] = useState(directives);
   const [pending, start] = useTransition();
@@ -90,6 +92,8 @@ export function InstructionChat({
           if (!r.ok) return r.error;
           setTurns(r.data!.messages);
           setInForce(r.data!.directives);
+          // The products were rebuilt with it: show them as they now are.
+          router.refresh();
           return null;
         }}
       />

@@ -30,14 +30,15 @@ describe("a page's pictures made right for the colour ordered", () => {
     expect(out.pictureNote).toBe("2 pictures of other colours (red) left out; the 1 kept show the black.");
   });
 
-  it("takes none and says what to do when the page has only another colour", async () => {
+  it("keeps the pictures, and says what to do, when the page has only another colour", async () => {
     const out = await picturesForColour(details(urls), "Freestyle Bindings", ["Black"], {
       fetcher, publicBaseUrl: "https://tools.example.com",
       ask: async () => JSON.stringify({ pictures: [{ number: 1, colour: "red", ordered: "no" }, { number: 2, colour: "red", ordered: "no" }, { number: 3, colour: "red", ordered: "no" }], note: "" }),
     });
-    expect(out.images).toEqual([]);
+    // Better than none (asked 2026-10-20): all three are kept, and the note says to swap them.
+    expect(out.images).toHaveLength(3);
     expect(out.pictureNote).toContain("none of the Black ordered");
-    expect(out.pictureNote).toContain("Open the page with Black selected");
+    expect(out.pictureNote).toContain("that colour's own link box");
   });
 
   it("matches each kept picture to one of several colours ordered and says which had none", async () => {

@@ -430,31 +430,41 @@ export function validateProducts(products: CsvProduct[]): CsvIssue[] {
 
 /** Minimal RFC 4180 parser used to re-validate generated files (and read simple uploads). */
 export function parseCsv(text: string): string[][] {
+  // Read in runs, not a character at a time: a 2,500-product export is five megabytes, and building
+  // every cell one character at a time made each read take a third of a second and churn memory, so
+  // a sheet of seventy changes froze the page (2026-10-26). Same rules as before, exactly: a quote
+  // anywhere opens a quoted run, "" inside one is a quote, CR, LF or CRLF ends a row.
+  const src = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
   const rows: string[][] = [];
   let row: string[] = [];
   let field = "";
   let inQuotes = false;
-  const src = text.replace(/^\ufeff/, "");
-  for (let i = 0; i < src.length; i++) {
-    const ch = src[i];
+  const n = src.length;
+  const special = /[",\r\n]/g;
+  let i = 0;
+  while (i < n) {
     if (inQuotes) {
-      if (ch === '"') {
-        if (src[i + 1] === '"') {
-          field += '"';
-          i++;
-        } else inQuotes = false;
-      } else field += ch;
-    } else if (ch === '"') inQuotes = true;
-    else if (ch === ",") {
-      row.push(field);
-      field = "";
-    } else if (ch === "\n" || ch === "\r") {
-      if (ch === "\r" && src[i + 1] === "\n") i++;
+      const j = src.indexOf('"', i);
+      if (j === -1) { field += src.slice(i); i = n; break; }
+      field += src.slice(i, j);
+      if (src.charCodeAt(j + 1) === 34) { field += '"'; i = j + 2; } else { inQuotes = false; i = j + 1; }
+      continue;
+    }
+    special.lastIndex = i;
+    const m = special.exec(src);
+    if (!m) { field += src.slice(i); i = n; break; }
+    const j = m.index;
+    if (j > i) field += src.slice(i, j);
+    const ch = src.charCodeAt(j);
+    if (ch === 34) { inQuotes = true; i = j + 1; }
+    else if (ch === 44) { row.push(field); field = ""; i = j + 1; }
+    else {
       row.push(field);
       rows.push(row);
       row = [];
       field = "";
-    } else field += ch;
+      i = ch === 13 && src.charCodeAt(j + 1) === 10 ? j + 2 : j + 1;
+    }
   }
   if (field !== "" || row.length > 0) {
     row.push(field);

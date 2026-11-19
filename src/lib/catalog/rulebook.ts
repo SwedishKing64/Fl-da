@@ -1,5 +1,5 @@
 /**
- * The rulebook: everything Flöda does to a listing, in the order it does it, as sentences a shop
+ * The rulebook: everything Snaben does to a listing, in the order it does it, as sentences a shop
  * can read.
  *
  * The rules a shop sets live in six stores — the house conventions, the tag rules, the templates,
@@ -42,7 +42,7 @@ export interface RuleEntry {
   /** The rule in plain words. */
   sentence: string;
   source: RuleSource;
-  /** Where to change it. Empty for a rule that is Flöda's own and not the shop's to change. */
+  /** Where to change it. Empty for a rule that is Snaben's own and not the shop's to change. */
   editHref: string;
   /** A tag rule's row, so the page can switch it off, delete it or try it on a batch. */
   tagRuleId?: string;
@@ -103,8 +103,8 @@ export interface RulebookStage {
 
 const HOUSE = "/training#house";
 const SOURCE_WORDS: Record<RuleSource, string> = {
-  house: "how you list", kind: "a kind of product", tag: "tag rule", template: "template", pricing: "pricing rule", layout: "supplier layout",
-  supplier: "supplier", website: "your website", export: "your export", setting: "setting", floda: "Flöda",
+  house: "how you list", kind: "a product type", tag: "tag rule", template: "template", pricing: "pricing rule", layout: "supplier layout",
+  supplier: "supplier", website: "your website", export: "your export", setting: "setting", floda: "Snaben",
 };
 
 /** The source of a rule in a word or two, for a badge. */
@@ -124,9 +124,10 @@ function patternWords(pattern: string): string {
   const plain = !/[.*+?^${}()|[\]\\]/.test(body);
   if (plain && anchored) return `is exactly ${quote(body)}`;
   if (plain) return `contains ${quote(body)}`;
-  // \b(women'?s|womens)\b → one of "women's", "womens"
-  const alternatives = p.replace(/^\\b\(?|\)?\\b$/g, "").split("|").map((a) => a.replace(/\\b/g, "").replace(/\\/g, ""));
-  if (alternatives.length > 1 && alternatives.every((a) => !/[()[\]{}*+^$]/.test(a))) return `says ${alternatives.map((a) => quote(a.replace(/'\?/g, "'"))).join(" or ")}`;
+  if (/^\\b20\(2\[6-9\]\|3\[0-9\]\)\\b$/.test(p)) return "names a model year of 2026 or later";
+  // \b(women'?s|womens)\b → one of "women's", "womens"; "twin[- ]?tip" reads as "twin tip", "jr\.?" as "jr"
+  const alternatives = p.replace(/^\\b\(?|\)?\\b$|\)$/g, "").split("|").map((a) => a.replace(/\\b/g, "").replace(/\[- \]\?/g, " ").replace(/'\?/g, "'").replace(/\\\.\?/g, "").replace(/s\?$/, "s").replace(/\\/g, ""));
+  if (alternatives.every((a) => !/[()[\]{}*+^$|]/.test(a))) return alternatives.length > 1 ? `says ${alternatives.map((a) => quote(a)).join(" or ")}` : `says ${quote(alternatives[0])}`;
   return `matches the pattern ${quote(p)}`;
 }
 
@@ -199,11 +200,11 @@ function filing(input: RulebookInput): RuleEntry[] {
   const out: RuleEntry[] = [];
   const { house, website, learned } = input;
   if (website && website.categories.length) {
-    out.push({ id: "website.types", stage: "filing", source: "website", editHref: "/training#website", sentence: `Your website's ${plural(website.categories.length, "category", "categories")} are the kinds of product; a Type outside them is flagged and never invented by a reader.` });
+    out.push({ id: "website.types", stage: "filing", source: "website", editHref: "/training#website", sentence: `Your website's ${plural(website.categories.length, "category", "categories")} are the product types; a Type outside them is flagged and never invented by a reader.` });
   } else if (learned && learned.types.length) {
     out.push({ id: "learned.types", stage: "filing", source: "export", editHref: "/training#export", sentence: `Your export taught ${plural(learned.types.length, "kind")} of product; a Type outside them is flagged.` });
   } else {
-    out.push({ id: "types.none", stage: "filing", source: "website", editHref: "/training#website", sentence: "No kinds of product yet: plug in your website or read an export, and the Type on every listing is picked from that list." });
+    out.push({ id: "types.none", stage: "filing", source: "website", editHref: "/training#website", sentence: "No product types yet: plug in your website or read an export, and the Type on every listing is picked from that list." });
   }
   if (learned?.sections.length) out.push({ id: "learned.sections", stage: "filing", source: "export", editHref: "/training#export", sentence: `Menu tags that run across kinds: ${learned.sections.join(", ")}. A product gets its kind's menu tag as well as its own.` });
   for (const k of house.kinds) {
@@ -212,6 +213,7 @@ function filing(input: RulebookInput): RuleEntry[] {
     if (k.tags.length) bits.push(`every one is tagged ${k.tags.join(", ")}`);
     if (bits.length) out.push({ id: `kind.filing.${k.type}`, stage: "filing", source: "kind", editHref: "/training#export", sentence: `${k.calledAs || k.type}: ${bits.join("; ")}.` });
   }
+  out.push({ id: "floda.tags.closed", stage: "filing", source: "floda", editHref: "", sentence: "Tags are matched, never invented: a tag your shop has never used is taken off the product and proposed to you on this page; approved, it is one of yours from then on." });
   const kindRule = (r: TagRuleLike) => /^kind: /.test(r.name);
   for (const r of [...input.tagRules].sort((a, b) => b.priority - a.priority)) {
     if (kindRule(r)) continue; // said above, by the kind
@@ -298,19 +300,19 @@ function reading(input: RulebookInput): RuleEntry[] {
 function exporting(): RuleEntry[] {
   return [
     { id: "floda.export.drafts", stage: "export", source: "floda", editHref: "", sentence: "Products leave as drafts, so each can be checked in Shopify before it goes live." },
-    { id: "floda.export.split", stage: "export", source: "floda", editHref: "", sentence: "One CSV per brand or per kind of product, as each batch is set; split again only where Shopify's size limit needs it." },
+    { id: "floda.export.split", stage: "export", source: "floda", editHref: "", sentence: "One CSV per brand or per product type, as each batch is set; split again only where Shopify's size limit needs it." },
     { id: "floda.export.repair", stage: "export", source: "floda", editHref: "", sentence: "What Shopify would reject is repaired on the way out and listed: a missing title, a bad handle, a SKU on two variants, a picture at an address Shopify cannot fetch. Nothing stops the export." },
     { id: "floda.export.push", stage: "export", source: "floda", editHref: "/settings", sentence: "A push straight to the live store needs the warnings reviewed and a tick, and can be rolled back." },
   ];
 }
 
-/** The whole rulebook, by stage, from what the shop has set and what Flöda does on its own. */
+/** The whole rulebook, by stage, from what the shop has set and what Snaben does on its own. */
 export function buildRulebook(input: RulebookInput): RulebookStage[] {
   const all = [...reading(input), ...naming(input.house), ...filing(input), ...pricing(input), ...copy(input), ...pictures(input), ...checks(input), ...exporting()];
   return STAGES.map((s) => ({ ...s, rules: all.filter((r) => r.stage === s.key) }));
 }
 
-/** How many rules the shop set itself, against the ones that are Flöda's own. */
+/** How many rules the shop set itself, against the ones that are Snaben's own. */
 export function countRules(stages: RulebookStage[]): { shop: number; floda: number } {
   let shop = 0;
   let floda = 0;

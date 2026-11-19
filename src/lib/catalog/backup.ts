@@ -1,7 +1,7 @@
 /**
  * Backups of a copy that keeps its database in a file.
  *
- * An installed copy holds everything the shop has taught Flöda — the suppliers' layouts, the
+ * An installed copy holds everything the shop has taught Snaben — the suppliers' layouts, the
  * learned vocabulary, every batch — in one SQLite file on one machine. A disk that dies takes it
  * all. So the file is copied, with SQLite's own VACUUM INTO (a consistent copy while the app is
  * running), into a `backups` folder beside it: once a night while the app is open, whenever

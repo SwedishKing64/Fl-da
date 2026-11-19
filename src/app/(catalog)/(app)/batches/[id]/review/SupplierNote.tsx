@@ -13,7 +13,7 @@ export function SupplierNote({ record }: { record: SupplierRecord }) {
           <h2 id="first-invoice" className="text-[16px] font-bold">First invoice from {record.name}</h2>
           <Badge tone="info">new layout</Badge>
         </div>
-        <p className="mb-3 text-[13.5px] text-[var(--ink-2)]">Nobody has checked this supplier&rsquo;s paperwork through Flöda before, so this one deserves a closer look. What you fix here is remembered: the next invoice from {record.name} reads the way you left this one.</p>
+        <p className="mb-3 text-[13.5px] text-[var(--ink-2)]">Nobody has checked this supplier&rsquo;s paperwork through Snaben before, so this one deserves a closer look. What you fix here is remembered: the next invoice from {record.name} reads the way you left this one.</p>
         <ol className="grid gap-2 md:grid-cols-2">
           {FIRST_INVOICE_CHECKS.map((c, i) => (
             <li key={c.what} className="flex gap-3 rounded-[12px] bg-white/80 p-3">

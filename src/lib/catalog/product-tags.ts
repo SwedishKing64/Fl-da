@@ -150,7 +150,21 @@ function dedupe(tags: string[]): string[] {
  * from another only by case is the same tag.
  */
 export function houseTags(tags: string[]): string[] {
-  return dedupe(tags.map((t) => t.trim().toLowerCase()).filter(Boolean));
+  return oneYearTag(dedupe(tags.map((t) => t.trim().toLowerCase()).filter(Boolean)));
+}
+
+const YEAR_TAG = /^(20\d{2}|2998|2999)$/;
+/**
+ * A product carries one year tag: its season, or the evergreen or by-hand marker in its place
+ * (asked 2026-10-19). Where several arrive, the last added wins — the batch's instructions are
+ * added after the file's season, so a year said in the chat replaces the file's rather than
+ * sitting beside it.
+ */
+export function oneYearTag(tags: string[]): string[] {
+  const years = tags.filter((t) => YEAR_TAG.test(t.trim()));
+  if (years.length <= 1) return tags;
+  const keep = years[years.length - 1];
+  return tags.filter((t) => !YEAR_TAG.test(t.trim()) || t === keep);
 }
 
 /** The tags that say where a Type sits: its own shelf, the heading above it, and the menu. */

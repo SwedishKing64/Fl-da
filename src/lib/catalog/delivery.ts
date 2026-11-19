@@ -25,27 +25,32 @@
  */
 
 import { DEFAULT_CATEGORY_RULES, detectCategory, metafieldColumns, type CategoryRuleLike } from "./categorize";
-import { houseConventions } from "./taxonomy";
+import { houseConventions, optionTagPatterns } from "./taxonomy";
+import { optionTagsFor } from "./option-tags";
 import { buildRows, parseCsv, type CsvProduct } from "./csv";
-import { groupLineItems, type GroupedProduct } from "./grouping";
-import { audienceOfPrefix, withFit, withoutAudiencePrefix } from "./mapping";
+import { groupLineItems, productOptions, type GroupedProduct } from "./grouping";
+import { audienceOfPrefix, withFit, withoutAudiencePrefix, withoutGender } from "./mapping";
 import { expandShorthand } from "./shorthand";
 import { colourName } from "./colour";
 import { writeOutSize } from "./options";
 import { quote, verifyOnlyIntended, type Change } from "./adjust";
 import { csvType, productCategoryFor, spellType } from "./pipeline-pure";
+import { pageProductTitle } from "./page-title";
+import { genderedTitle } from "./trades/snow/gender-title";
 import { houseBody } from "./body";
+import { applySpellings, voiceInForce, withShopSections, withoutNeverTags } from "./voice";
 import { enrichFromSpecs } from "./specs";
-import { productTitle, seasonTagFrom, seoTitle } from "./titles";
+import { productTitle, seoTitle, titleYear } from "./titles";
 import { buildHandle } from "./handle";
 import { applyInvoice, reconcile, sameSizeText, type InvoiceFields, type InvoiceLine, type Match, type Reconciliation } from "./reconcile";
 import { resolveAgainstReference } from "./reference-match";
 import { asShopPrice, listingsFromCsv, rememberedVendor, type Listing } from "./shop-memory";
 import { brandIn, isDistributor, audienceByModel } from "./brands";
-import { isFlatSki, isPackageBinding, packageProducts } from "./packages";
+import { isFlatSki, isPackageBinding, packageProducts, specsOfList } from "./trades/snow/packages";
+import { syncFootprintBundles } from "./footprints";
 import type { PriceRow } from "./invoice";
 import type { CanonicalLineItem } from "./types";
-import type { PageDetails } from "./page-types";
+import { fitlessOf, type PageDetails } from "./page-types";
 
 export interface DeliveryOptions {
   /** The season the delivery is for, which an order form never says and the matcher needs. */
@@ -90,6 +95,19 @@ export interface DeliveryOptions {
    * ski's page without being asked.
    */
   pages?: Record<number, PageDetails>;
+  /**
+   * A colour's own page (asked 2026-10-19), keyed by the first line of that colour: its pictures go
+   * on the product and the first becomes the picture of that colour's variants. Where the product
+   * has no page of its own, the first colour's page gives the description as well.
+   */
+  colourPages?: Record<number, PageDetails>;
+  /** The shop's binding list (Settings), which prices a package's bindings. See binding-list.ts. */
+  bindingList?: Array<{ name: string; rrp: number; cost: number | null }>;
+  /**
+   * The bindings picked for each new ski, by the first line of the ski: names off the binding
+   * list. An empty pick, or none, is no package.
+   */
+  packagePicks?: Record<number, string[]>;
   /**
    * What the person said about each line matched on its NAME rather than a barcode: the same
    * product (its stock goes up), a new year's model of it (built as a new product), or not that
@@ -165,6 +183,8 @@ export interface FreshProduct {
   rows: number;
   /** Which lines of the invoice it was built from, for matching a link to it. */
   lines: number[];
+  /** Its colours, each with the first line of that colour, for a page per colour. */
+  colours: Array<{ colour: string; line: number }>;
 }
 
 export interface DeliveryResult {
@@ -273,6 +293,14 @@ export function buildDelivery(csv: string, invoiced: InvoiceLine[], options: Del
   appended += mirrored.appended;
   reorder.changes.push(...mirrored.changes);
   warnings.push(...mirrored.warnings);
+
+  // Pass 2c. A tent's with-footprint variant, from the tent alone and its footprint. See footprints.ts.
+  if (fields.quantity) {
+    const bundles = syncFootprintBundles(csvSoFar, new Set(reconciliation.matched.map((m) => m.handle)));
+    csvSoFar = bundles.csv;
+    reorder.changes.push(...bundles.changes);
+    warnings.push(...bundles.warnings);
+  }
 
   if (options.reorderOnly || reconciliation.unmatched.length === 0) {
     return { csv: regroupByHandle(csvSoFar), changes: reorder.changes, carryOver: reconciliation.matched, fresh: [], freshSizes: sizes.added, appended, heldBack, reconciliation, warnings };
@@ -667,7 +695,7 @@ function appendFresh(
     // Nothing in this product's own wording said what it is; only the rest of the delivery did.
     const unrecognised = grouped.filter((g) => g.variants.every((v) => !detectCategory(v.item, rules)));
     if (unrecognised.length > 0) {
-      warnings.push(`${unrecognised.length === 1 ? "One new product was" : `${unrecognised.length} new products were`} filed as ${fallback.productType} because that is what everything else in this delivery is — ${unrecognised.slice(0, 4).map((g) => productTitle(g.title, seasonTagFrom(g.tags))).join(", ")}${unrecognised.length > 4 ? `, and ${unrecognised.length - 4} more` : ""}. An order form seldom says what a thing is, so check ${unrecognised.length === 1 ? "it is" : "they are"} not something else that came in the same order.`);
+      warnings.push(`${unrecognised.length === 1 ? "One new product was" : `${unrecognised.length} new products were`} filed as ${fallback.productType} because that is what everything else in this delivery is — ${unrecognised.slice(0, 4).map((g) => productTitle(g.title, titleYear(g.tags, g.productType))).join(", ")}${unrecognised.length > 4 ? `, and ${unrecognised.length - 4} more` : ""}. An order form seldom says what a thing is, so check ${unrecognised.length === 1 ? "it is" : "they are"} not something else that came in the same order.`);
     }
   }
   if (!fallback && grouped.some((g) => !g.productType.trim())) {
@@ -693,16 +721,22 @@ function appendFresh(
   }
   // The package bindings ordered with skis go on the skis, not on the shelf. See isPackageBinding.
   const skiDelivery = build.some((g) => isFlatSki(g)) || /^skis?$/i.test(fallback?.productType ?? "");
+  const shopBindings = options.bindingList ?? [];
   if (skiDelivery) {
-    for (const g of build.filter((p) => isPackageBinding(p))) {
+    for (const g of build.filter((p) => isPackageBinding(p, specsOfList(shopBindings)))) {
       build.splice(build.indexOf(g), 1);
       // Accounted for as a line that was not written, with why — not dropped without a word.
       for (const line of lineOf(g)) heldBack.push({ line, reason: "it is the binding the ski packages are made with, ordered to go on the skis, so it is not listed on its own" });
     }
   }
-  // Each new flat ski is also built as its binding package, priced from the order form's own
-  // binding rows. A package the file already has is left alone, like any other product.
-  const { packages, skipped } = packageProducts(build, options.priceList ?? [], [...(options.listings ?? []), ...listingsFromCsv(csv)]);
+  // Each new flat ski is also built as its binding package, on the bindings picked for it off the
+  // shop's list. A package the file already has is left alone, like any other product.
+  const picked = (g: GroupedProduct) => {
+    const names = options.packagePicks?.[placeOf(lines[g.variants[0]?.sourceIndex ?? -1])];
+    if (!names) return undefined;
+    return names.map((n) => shopBindings.find((e) => e.name.toLowerCase() === n.toLowerCase())).filter((e): e is NonNullable<typeof e> => Boolean(e)).map((e) => ({ label: e.name, shortName: e.name, rrp: e.rrp, cost: e.cost }));
+  };
+  const { packages, skipped } = packageProducts(build, options.priceList ?? [], [...(options.listings ?? []), ...listingsFromCsv(csv)], {}, picked, shopBindings);
   for (const pack of packages) if (!taken.has(pack.handle)) build.push(pack);
   for (const k of skipped) warnings.push(`No binding package was built for ${k.title}: ${k.reason}.`);
   if (build.length === 0) return { csv, fresh: [], appended: 0, heldBack, warnings };
@@ -713,12 +747,30 @@ function appendFresh(
     for (const v of g.variants) { const page = withPages[placeOf(lines[v.sourceIndex])]; if (page) return page; }
     return undefined;
   };
+  const withColourPages = options.colourPages ?? {};
   for (const g of build) {
     const page = pageOf(g);
-    if (!page) continue;
-    const body = houseBody(page.description, page.features, houseConventions().descriptions.specsHeading);
+    const byColour = new Map<string, PageDetails>();
+    for (const v of g.variants) {
+      const colour = (v.item.colour ?? "").trim().toLowerCase();
+      const cp = withColourPages[placeOf(lines[v.sourceIndex])];
+      if (cp && colour && !byColour.has(colour)) byColour.set(colour, cp);
+    }
+    const describe = page ?? [...byColour.values()][0];
+    if (!describe) continue;
+    // Titled as the page titles it, as on the review page (asked 2026-10-16, again 2026-10-20): the
+    // year goes after it when the product is written out. Not a package or a fit sharing the page.
+    const own = !/\binc\b/i.test(g.title) && fitlessOf(g.title) === g.title.replace(/\s+/g, " ").trim().toLowerCase();
+    const named = describe.confident && own ? pageProductTitle(describe.pageTitle, g.brand || vendor, null, g.variants.map((v) => v.item.colour)) : "";
+    if (named) g.title = genderedTitle(named, { productType: g.productType, tags: g.tags, gender: g.audience ?? "" });
+    const body = houseBody(describe.description, describe.features, houseConventions().descriptions.specsHeading);
     if (body) g.description = body;
-    if (page.images.length > 0) g.imageUrls = [...new Set([...g.imageUrls, ...page.images])];
+    const pictures = [...(page?.images ?? []), ...[...byColour.values()].flatMap((cp) => cp.images)];
+    if (pictures.length > 0) g.imageUrls = [...new Set([...g.imageUrls, ...pictures])];
+    for (const v of g.variants) {
+      const first = byColour.get((v.item.colour ?? "").trim().toLowerCase())?.images[0];
+      if (first) v.imageUrl = first;
+    }
   }
   const products = build.map((g) => toProduct(g, vendor));
   const rows = buildRows(products);
@@ -761,6 +813,11 @@ function appendFresh(
       described: (product.bodyHtml ?? "").trim() !== "",
       rows: counted.get(product.handle) ?? g.variants.length,
       lines: g.variants.map((v) => placeOf(lines[v.sourceIndex])),
+      colours: g.variants.reduce<Array<{ colour: string; line: number }>>((out, v) => {
+        const colour = (v.item.colour ?? "").trim();
+        if (colour && !out.some((c) => c.colour.toLowerCase() === colour.toLowerCase())) out.push({ colour, line: placeOf(lines[v.sourceIndex]) });
+        return out;
+      }, []),
     };
   });
 
@@ -814,7 +871,7 @@ function typeFromCarryOver(
  * taken is the one reported, because that is the product somebody has to go and look at.
  */
 function handlesFor(product: GroupedProduct, vendor: string): string[] {
-  const title = productTitle(product.title, seasonTagFrom(product.tags));
+  const title = productTitle(product.title, titleYear(product.tags, product.productType));
   const brand = product.brand || vendor;
   return [...new Set([product.handle, buildHandle({ title }), buildHandle({ brand, title })])].filter(Boolean);
 }
@@ -906,10 +963,10 @@ function canonical(line: InvoiceLine, vendor: string, season: string): Canonical
   // The order's shorthand, read as an import batch reads it: "M HIGHSHOT SO" is a men's "Highshot
   // Step On", with the audience in the gender and not the name. See expandShorthand.
   const brandOf = (line.brand ?? "").trim() || vendor;
-  const gender = audienceByModel(brandOf, line.title) || (line.gender ?? "").trim() || audienceOfPrefix(line.title);
+  const gender = audienceByModel(brandOf, line.title) || (line.gender ?? "").trim() || audienceOfPrefix(line.title) || withoutGender(line.title).gender;
   // A fit that is not the default is part of the name — "Photon BOA Wide" — not an option. See withFit.
   return withFit({
-    title: expandShorthand(withoutAudiencePrefix(line.title.trim(), gender)),
+    title: withoutGender(expandShorthand(withoutAudiencePrefix(withoutGender(line.title).title, gender))).title,
     brand: (line.brand ?? "").trim() || vendor,
     modelCode: line.sku.trim(),
     sku: "",
@@ -943,17 +1000,19 @@ function canonical(line: InvoiceLine, vendor: string, season: string): Canonical
  * Compare At is left empty: a product on the shelf at its recommended retail is not on sale.
  */
 function toProduct(g: GroupedProduct, vendor: string): CsvProduct {
-  const title = productTitle(g.title, seasonTagFrom(g.tags));
   const brand = g.brand || vendor;
+  const voice = voiceInForce();
+  const title = applySpellings(productTitle(g.title, titleYear(g.tags, g.productType)), voice, brand);
+  const type = csvType(g.productType, g.collections);
   return {
     handle: g.handle,
     title,
     // Already the house body when the spec sheet wrote it; wrapping it again gave "<p><p>…".
-    bodyHtml: !g.description.trim() ? "" : /^\s*</.test(g.description) ? g.description : houseBody(g.description, []),
+    bodyHtml: withShopSections(!g.description.trim() ? "" : /^\s*</.test(g.description) ? g.description : houseBody(g.description, []), voice, { vendor: brand, productType: type }),
     vendor: brand,
-    productType: csvType(g.productType, g.collections),
-    productCategory: productCategoryFor(csvType(g.productType, g.collections), title),
-    tags: g.tags,
+    productType: type,
+    productCategory: productCategoryFor(type, title),
+    tags: withoutNeverTags([...g.tags, ...optionTagsFor(productOptions(g), optionTagPatterns()).filter((t) => !g.tags.some((x) => x.toLowerCase() === t.toLowerCase()))], voice, brand),
     published: false,
     status: "draft",
     seoTitle: seoTitle(brand, title),
@@ -973,6 +1032,7 @@ function toProduct(g: GroupedProduct, vendor: string): CsvProduct {
       price: v.item.rrp ?? 0,
       compareAtPrice: null,
       costPerItem: v.item.costPrice,
+      imageUrl: v.imageUrl ?? null,
     })),
   };
 }

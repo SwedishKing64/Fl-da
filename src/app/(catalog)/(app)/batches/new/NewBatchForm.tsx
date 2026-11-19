@@ -8,10 +8,10 @@ import { CURRENCIES } from "@/lib/catalog/types";
 
 interface SupplierOpt { id: string; name: string; defaultCurrency: string; defaultGstTreatment: string }
 
-export function NewBatchForm({ suppliers, fxRates }: { suppliers: SupplierOpt[]; fxRates: Record<string, number> }) {
+export function NewBatchForm({ suppliers, fxRates, home }: { suppliers: SupplierOpt[]; fxRates: Record<string, number>; home: string }) {
   const [state, action, pending] = useActionState(createBatchAction, null);
   const [supplierId, setSupplierId] = useState("");
-  const [currency, setCurrency] = useState("AUD");
+  const [currency, setCurrency] = useState(home);
   const [gst, setGst] = useState("EXCLUSIVE");
   const [fx, setFx] = useState(1);
 
@@ -21,7 +21,7 @@ export function NewBatchForm({ suppliers, fxRates }: { suppliers: SupplierOpt[];
     if (s) {
       setCurrency(s.defaultCurrency);
       setGst(s.defaultGstTreatment);
-      setFx(s.defaultCurrency === "AUD" ? 1 : fxRates[s.defaultCurrency] ?? 1);
+      setFx(s.defaultCurrency === home ? 1 : fxRates[s.defaultCurrency] ?? 1);
     }
   };
 
@@ -42,12 +42,12 @@ export function NewBatchForm({ suppliers, fxRates }: { suppliers: SupplierOpt[];
       <Card title="How the invoice prices work">
         <div className="grid gap-4 sm:grid-cols-3">
           <Field label="Invoice currency">
-            <select name="currency" value={currency} onChange={(e) => { setCurrency(e.target.value); setFx(e.target.value === "AUD" ? 1 : fxRates[e.target.value] ?? 1); }} className={INPUT}>
+            <select name="currency" value={currency} onChange={(e) => { setCurrency(e.target.value); setFx(e.target.value === home ? 1 : fxRates[e.target.value] ?? 1); }} className={INPUT}>
               {CURRENCIES.map((c) => <option key={c}>{c}</option>)}
             </select>
           </Field>
-          <Field label="FX rate → AUD" hint={currency === "AUD" ? "Not needed for AUD" : `Default from Settings: ${fxRates[currency] ?? "–"}`}>
-            <input name="fxRateToAud" type="number" step="0.0001" min="0.0001" value={fx} onChange={(e) => setFx(Number(e.target.value))} disabled={currency === "AUD"} className={INPUT} />
+          <Field label={`FX rate → ${home}`} hint={currency === home ? `Not needed for ${home}` : `Default from Settings: ${fxRates[currency] ?? "–"}`}>
+            <input name="fxRateToHome" type="number" step="0.0001" min="0.0001" value={fx} onChange={(e) => setFx(Number(e.target.value))} disabled={currency === home} className={INPUT} />
           </Field>
           <Field label="GST on cost prices">
             <select name="gstTreatment" value={gst} onChange={(e) => setGst(e.target.value)} className={INPUT}>
@@ -56,7 +56,7 @@ export function NewBatchForm({ suppliers, fxRates }: { suppliers: SupplierOpt[];
               <option value="NONE">No GST (overseas supplier)</option>
             </select>
           </Field>
-          <Field label="Freight / landed cost loading (AUD)" hint="Total freight for the whole batch, spread across units."><input name="freightTotalAud" type="number" step="0.01" min="0" defaultValue={0} className={INPUT} /></Field>
+          <Field label={`Freight / landed cost loading (${home})`} hint="Total freight for the whole batch, spread across units."><input name="freightTotalHome" type="number" step="0.01" min="0" defaultValue={0} className={INPUT} /></Field>
           <Field label="Spread freight">
             <select name="freightMode" className={INPUT}>
               <option value="PER_UNIT">Evenly per unit</option>

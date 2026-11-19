@@ -17,7 +17,9 @@
     "desktop:build": "node scripts/desktop-build.mjs",
     "desktop:check": "node desktop/launch.cjs --check",
     "desktop:dev": "electron .",
-    "desktop:dist": "electron-builder --publish never"
+    "desktop:dist": "electron-builder --publish never",
+    "eval:read": "tsx scripts/corpus.ts",
+    "eval:shops": "tsx scripts/simulate.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
@@ -28,6 +30,7 @@
     "exceljs": "^4.4.0",
     "heic-convert": "^2.1.0",
     "heic-to": "^1.6.5",
+    "jszip": "^3.10.2",
     "next": "16.2.12",
     "papaparse": "^5.7.0",
     "prisma": "^6.19.3",
@@ -53,6 +56,6 @@
     "vitest": "^4"
   },
   "description": "Supplier paperwork in, shop-ready listings out.",
-  "author": "Flöda",
+  "author": "Snaben",
   "main": "desktop/main.cjs"
 }

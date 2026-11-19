@@ -3,13 +3,19 @@
 // with a custom-app access token configured in Settings.
 
 import { prisma, parseJson } from "./db";
-import { getSettings } from "./settings";
+import { getSettings, saveSettings } from "./settings";
 import { logAudit } from "./audit";
 import { loadReview, toCsvProducts } from "./pipeline";
 import { candidatesFor, type CatalogueRow, type MatchCandidate } from "./match-candidates";
 import type { ReviewProduct } from "./review-types";
-import { SKI_METAFIELDS, type ShopifyLocation } from "./types";
+import { type ShopifyLocation } from "./types";
+import { metafieldDefs } from "./taxonomy";
+import { productCategoryOf, csvType } from "./pipeline-pure";
+import { categoryGid } from "./shopify-taxonomy";
 import { blockingErrors } from "./validate";
+import { offTotals } from "./totals";
+import { pictureHosting } from "./storage";
+import { publishLocalPictures } from "./picture-publish";
 
 export interface ShopifyConfig {
   storeDomain: string;
@@ -26,8 +32,22 @@ export class ShopifyError extends Error {
 
 export async function shopifyConfig(): Promise<ShopifyConfig> {
   const s = await getSettings();
-  if (!s.shopify.storeDomain || !s.shopify.accessToken) throw new ShopifyError("Shopify is not configured. Add the store domain and Admin API token in Settings.");
-  return { storeDomain: s.shopify.storeDomain.replace(/^https?:\/\//, "").replace(/\/+$/, ""), accessToken: s.shopify.accessToken, apiVersion: s.shopify.apiVersion || "2025-07" };
+  if (!s.shopify.storeDomain || !s.shopify.accessToken) throw new ShopifyError("Shopify is not connected. Connect your store in Settings.");
+  const storeDomain = s.shopify.storeDomain.replace(/^https?:\/\//, "").replace(/\/+$/, "");
+  let accessToken = s.shopify.accessToken;
+  // A token from the install link lasts an hour; the next one is fetched just before it lapses.
+  const { dueForRefresh, oauthApp, refreshToken } = await import("./shopify-oauth");
+  const app = oauthApp();
+  if (app && s.shopify.connectedBy === "oauth" && dueForRefresh({ expiresAt: s.shopify.expiresAt ?? 0, refreshToken: s.shopify.refreshToken ?? "" })) {
+    try {
+      const next = await refreshToken(app, storeDomain, s.shopify.refreshToken ?? "");
+      await saveSettings({ shopify: { ...s.shopify, accessToken: next.accessToken, refreshToken: next.refreshToken, expiresAt: next.expiresAt, refreshExpiresAt: next.refreshExpiresAt, scope: next.scope || s.shopify.scope } });
+      accessToken = next.accessToken;
+    } catch (err) {
+      throw new ShopifyError(`The store's connection has lapsed and could not be renewed (${err instanceof Error ? err.message : String(err)}). Connect the store again in Settings.`);
+    }
+  }
+  return { storeDomain, accessToken, apiVersion: s.shopify.apiVersion || "2025-07" };
 }
 
 interface GraphQLResponse<T> {
@@ -283,6 +303,8 @@ export interface ProductSetInput {
     inventoryQuantities?: Array<{ locationId: string; name: "available"; quantity: number }>;
   }>;
   files?: Array<{ originalSource: string; contentType: "IMAGE"; alt: string }>;
+  /** Shopify's Standard Product Taxonomy category, as its id. */
+  category?: string;
   metafields?: Array<{ namespace: string; key: string; type: string; value: string }>;
 }
 
@@ -313,16 +335,18 @@ export function buildProductSetInput(p: ReviewProduct, opts: { publish: boolean;
         price: v.retailPrice.toFixed(2),
         compareAtPrice: v.compareAtPrice && v.compareAtPrice > v.retailPrice ? v.compareAtPrice.toFixed(2) : null,
         optionValues: optionNames.length ? optionNames.map((name, i) => ({ optionName: name, name: [v.option1Value, v.option2Value, v.option3Value][i] ?? "" })) : undefined,
-        inventoryItem: { cost: v.landedCostAud.toFixed(2), tracked: true, ...(v.grams > 0 ? { measurement: { weight: { unit: "GRAMS" as const, value: v.grams } } } : {}) },
+        inventoryItem: { cost: v.landedCostHome.toFixed(2), tracked: true, ...(v.grams > 0 ? { measurement: { weight: { unit: "GRAMS" as const, value: v.grams } } } : {}) },
         inventoryQuantities: quantities,
       };
     }),
   };
   if (productOptions.length) input.productOptions = productOptions;
+  const category = productCategoryOf(csvType(p.productType, p.collections.split(",")), p.title);
+  if (category) input.category = categoryGid(category.id);
   if (p.shopifyProductId) input.id = p.shopifyProductId;
   const files = p.images.map((i) => ({ originalSource: i.url, contentType: "IMAGE" as const, alt: p.title }));
   if (files.length) input.files = files;
-  const metafields = SKI_METAFIELDS.filter((d) => p.metafields[d.key]).map((d) => ({ namespace: d.namespace, key: d.key, type: d.type, value: p.metafields[d.key] }));
+  const metafields = metafieldDefs().filter((d) => p.metafields[d.key]).map((d) => ({ namespace: d.namespace, key: d.key, type: d.type, value: p.metafields[d.key] }));
   if (metafields.length) input.metafields = metafields;
   return input;
 }
@@ -349,15 +373,24 @@ export interface PushResult {
  * reconcile to an existing Shopify product are updated in place (productSet with id replaces
  * the product's variant set, which is why reconcile must run first and the user must confirm).
  */
-export async function pushBatch(batchId: string, userId: string, opts: { confirm: boolean; overrideWarnings: boolean }): Promise<PushResult> {
+export async function pushBatch(batchId: string, userId: string, opts: { confirm: boolean; overrideWarnings: boolean; productIds?: string[] }): Promise<PushResult> {
   if (!opts.confirm) return { ok: false, errors: ["Push not confirmed."], created: 0, updated: 0 };
   const cfg = await shopifyConfig();
   const settings = await getSettings();
-  const review = await loadReview(batchId);
+  // A picture on this computer is an address Shopify cannot fetch: it goes to the shop's Files first.
+  if (pictureHosting()) await publishLocalPictures(batchId).catch((err) => console.warn("[push] local pictures not sent:", err instanceof Error ? err.message : err));
+  const whole = await loadReview(batchId);
+  // Only the products named, when some are: the ones that have earned it go, the rest wait.
+  const chosen = opts.productIds ? new Set(opts.productIds) : null;
+  const review = chosen ? { ...whole, products: whole.products.filter((p) => chosen.has(p.id)) } : whole;
+  if (review.products.length === 0) return { ok: false, errors: ["Nothing to push."], created: 0, updated: 0 };
   const errors = blockingErrors(review.products);
   if (errors.length) return { ok: false, errors, created: 0, updated: 0 };
   const hasWarnings = review.products.some((p) => p.flags.length || p.variants.some((v) => v.flags.length));
   if (hasWarnings && !opts.overrideWarnings) return { ok: false, errors: ["Batch has warnings; confirm the override to push anyway."], created: 0, updated: 0 };
+  // A document whose lines did not add up to its own totals, not settled on the review page.
+  const off = (await prisma.sourceFile.findMany({ where: { batchId, extractionError: { contains: "Does not add up:" } }, select: { filename: true, extractionError: true } })).filter((f) => offTotals(f.extractionError));
+  if (off.length && !opts.overrideWarnings) return { ok: false, errors: [`${off.map((f) => f.filename).join(", ")} ${off.length === 1 ? "does" : "do"} not add up to ${off.length === 1 ? "its" : "their"} own totals; settle ${off.length === 1 ? "it" : "them"} on the review page, or confirm the override to push anyway.`], created: 0, updated: 0 };
 
   const locationId = settings.locations.find((l) => l.isDefault)?.id ?? settings.locations[0]?.id ?? null;
   const locationQuantities: Record<string, Record<string, number>> = {};
@@ -415,8 +448,10 @@ export async function pushBatch(batchId: string, userId: string, opts: { confirm
     }
   }
 
-  await logAudit("batch.pushed", { batchId, userId, details: { created, updated, failures, snapshot } });
-  if (failures.length === 0) await prisma.importBatch.update({ where: { id: batchId }, data: { status: "PUSHED", exportedAt: new Date() } });
+  await logAudit("batch.pushed", { batchId, userId, details: { created, updated, failures, snapshot, partial: Boolean(chosen) } });
+  // The batch is pushed once every product of it is in the store; a part of it going leaves the rest to come.
+  const left = chosen ? await prisma.product.count({ where: { batchId, shopifyProductId: null } }) : 0;
+  if (failures.length === 0 && left === 0) await prisma.importBatch.update({ where: { id: batchId }, data: { status: "PUSHED", exportedAt: new Date() } });
   return { ok: failures.length === 0, errors: failures, created, updated };
 }
 

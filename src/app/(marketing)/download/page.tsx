@@ -5,7 +5,7 @@ import { Reveal } from "../welcome/Motion";
 import "../welcome/welcome.css";
 import { SUPPORT_MAILTO } from "@/lib/catalog/support";
 
-export const metadata: Metadata = { title: "Download Flöda", description: "Flöda for Windows and Mac. Everything on your machine; the app keeps itself current." };
+export const metadata: Metadata = { title: "Download Snaben", description: "Snaben for Windows and Mac. Everything on your machine; the app keeps itself current." };
 
 const RELEASES = "https://github.com/SwedishKing64/Fl-da/releases";
 const LATEST = "https://api.github.com/repos/SwedishKing64/Fl-da/releases/latest";
@@ -41,7 +41,7 @@ export default async function DownloadPage() {
     <Site>
       <section className="band page-head">
         <div className="wrap">
-          <Reveal className="head"><span className="eyebrow">Download</span><h1>Flöda for Windows and Mac.</h1><p className="lede">An app you install, with your database and your files on your own machine. {l ? <>The current version is <strong>{l.version}</strong>, released {when}.</> : <>The current version is on the <a href={RELEASES}>releases page</a>.</>}</p></Reveal>
+          <Reveal className="head"><span className="eyebrow">Download</span><h1>Snaben for Windows and Mac.</h1><p className="lede">An app you install, with your database and your files on your own machine. {l ? <>The current version is <strong>{l.version}</strong>, released {when}.</> : <>The current version is on the <a href={RELEASES}>releases page</a>.</>}</p></Reveal>
         </div>
       </section>
       <section className="band grey">
@@ -72,7 +72,7 @@ export default async function DownloadPage() {
             <ol>
               <li>Create your admin account. Everything stays on this machine.</li>
               <li>Pick a plan and start the 14-day free trial from inside the app. No card.</li>
-              <li>Tell us when you would like your set-up call. A Flöda engineer loads your catalogue and reads your first invoices with you.</li>
+              <li>Tell us when you would like your set-up call. A Snaben engineer loads your catalogue and reads your first invoices with you.</li>
             </ol>
             <p className="soft">Would rather not install anything? A hosted copy is available on every plan; <a href={SUPPORT_MAILTO}>write to us</a>. Every version and its notes are on the <a href={RELEASES}>releases page</a>. <Link href="/privacy">What leaves your machine.</Link></p>
           </Reveal>

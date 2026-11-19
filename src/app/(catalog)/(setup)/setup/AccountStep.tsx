@@ -10,7 +10,7 @@ export function AccountStep() {
   const [state, action, pending] = useActionState(setupAction, null);
   return (
     <Card title="Create your account">
-      <p className="mb-4 text-[14px] text-[var(--ink-soft)]">This is the admin account: it can add staff, change settings and teach Flöda about the shop. Staff accounts come later, in Settings.</p>
+      <p className="mb-4 text-[14px] text-[var(--ink-soft)]">This is the admin account: it can add staff, change settings and teach Snaben about the shop. Staff accounts come later, in Settings.</p>
       <ActionForm action={action} state={state} className="space-y-4">
         <Field label="Your name"><input name="name" required className={INPUT} autoComplete="name" /></Field>
         <Field label="Email"><input name="email" type="email" required className={INPUT} autoComplete="email" /></Field>

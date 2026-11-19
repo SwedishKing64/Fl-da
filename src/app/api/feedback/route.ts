@@ -6,7 +6,7 @@ import { FEEDBACK_KEY, type FeedbackRow } from "@/lib/catalog/feedback-box";
 export const runtime = "nodejs";
 
 /**
- * What an installed copy of Flöda sends when someone presses Feedback. Answered only on the
+ * What an installed copy of Snaben sends when someone presses Feedback. Answered only on the
  * vendor's own deployment, where it lands on the Clients page; everywhere else this route does
  * not exist.
  */

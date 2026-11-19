@@ -30,7 +30,7 @@ describe("what a product is sold by", () => {
   });
 
   it("sells a sleeping bag by size, loft and which side the zip is on", () => {
-    expect(optionPlanFor("Sleeping Bags")).toEqual(["Size", "Loft", "Zip Side"]);
+    expect(optionPlanFor("Sleeping Bags")).toEqual(["Size", "Length", "Loft", "Zip Side"]);
   });
 
   it("sells everything else by colour then size", () => {
@@ -149,10 +149,11 @@ describe("what a ski sold with bindings costs and sells for", () => {
 
   /** A flat ski is mounted with bindings from elsewhere, which is the full job; a package is $39. */
   it("charges $55 to mount a flat ski and $39 to mount a package", () => {
-    expect(mountingFee()).toBe(55);
-    expect(mountingFee({ withBindings: true })).toBe(39);
-    expect(packagePrice({ rrp: 999 }, { mounted: true })).toBe(999 + 55);
-    expect(packagePrice({ rrp: 999, bindingRrp: 449 }, { mounted: true })).toBe(1448 + 39);
+    expect(mountingFee()).toBe(59);
+    expect(mountingFee({ withBindings: true })).toBe(59);
+    expect(mountingFee({ withBindings: true, system: true })).toBe(49);
+    expect(packagePrice({ rrp: 999 }, { mounted: true })).toBe(999 + 59);
+    expect(packagePrice({ rrp: 999, bindingRrp: 449 }, { mounted: true })).toBe(1448 + 59);
   });
 
   it("costs what the invoice says, plus the binding when one is on it", () => {

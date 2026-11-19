@@ -11,6 +11,7 @@ import { FeedbackButton } from "./FeedbackButton";
 import { Paywall } from "./Paywall";
 import { CommandPalette, type PaletteItem } from "@/app/(catalog)/CommandPalette";
 import { Kbd } from "@/app/(catalog)/ui";
+import { UpdateBanner } from "@/app/(catalog)/UpdateBanner";
 import { Logo } from "@/app/Logo";
 import { vendorMode } from "@/lib/catalog/licence";
 import { openMode } from "@/lib/catalog/open";
@@ -30,7 +31,7 @@ const PAGES: PaletteItem[] = [
   { id: "p-tidy", label: "Tidy a document", hint: "a photo into a table", group: "Pages", href: "/tidy" },
   { id: "p-pricing", label: "Price calculator", group: "Pages", href: "/pricing" },
   { id: "p-history", label: "History", group: "Pages", href: "/history" },
-  { id: "p-training", label: "Training and Rules", hint: "your website, suppliers, export and rules", group: "Pages", href: "/training" },
+  { id: "p-training", label: "Teach Snaben", hint: "your export, website, suppliers and every rule", group: "Pages", href: "/training" },
   { id: "p-settings", label: "Settings", group: "Pages", href: "/settings" },
   { id: "p-setup", label: "Setup", hint: "the shop, its catalogue, the key", group: "Pages", href: "/setup" },
 ];
@@ -61,7 +62,7 @@ export default async function CatalogLayout({ children }: { children: React.Reac
   });
   const items: PaletteItem[] = [
     ...PAGES,
-    ...(vendor ? [{ id: "p-clients", label: "Clients", hint: "who runs Flöda, and their keys", group: "Pages", href: "/clients" }] : []),
+    ...(vendor ? [{ id: "p-clients", label: "Clients", hint: "who runs Snaben, and their keys", group: "Pages", href: "/clients" }] : []),
     ...recent.map((b) => ({
       id: b.id,
       label: b.name,
@@ -108,13 +109,14 @@ export default async function CatalogLayout({ children }: { children: React.Reac
         </div>
       </aside>
       <main className="min-w-0 flex-1 px-4 py-6 md:px-9 md:py-8">
+        <UpdateBanner />
         <div className="mb-4 flex items-center justify-between md:hidden">
           <Link href="/"><Logo size={18} /></Link>
           <NavLinks isAdmin={user.role === "ADMIN"} vendor={vendor} compact />
         </div>
         {endingSoon && standing && (
           <div className="mb-4 rounded-[12px] border border-[#f5c87a] bg-[#fff7e6] px-4 py-3 text-[13.5px] text-[#7a4b00]">
-            <strong>Your free trial ends in {standing.daysLeft} day{standing.daysLeft === 1 ? "" : "s"}.</strong> Nothing is lost when it does: your batches, suppliers and what Flöda has learned stay on this machine, and a paid plan or a key from {SUPPORT_EMAIL} opens it again. <Link href="/settings" className="font-semibold underline">Your plan</Link>
+            <strong>Your free trial ends in {standing.daysLeft} day{standing.daysLeft === 1 ? "" : "s"}.</strong> Nothing is lost when it does: your batches, suppliers and what Snaben has learned stay on this machine, and a paid plan or a key from {SUPPORT_EMAIL} opens it again. <Link href="/settings" className="font-semibold underline">Your plan</Link>
           </div>
         )}
         {pastPlan && (

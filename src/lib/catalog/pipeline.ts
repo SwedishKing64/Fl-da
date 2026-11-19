@@ -1,17 +1,17 @@
 // Server-side orchestration: ingest -> extract -> map -> group -> price -> images -> review -> export.
 
 import type { Prisma } from "@prisma/client";
-import { productTitle, seasonTagFrom, seoTitle, titledForShop } from "./titles";
+import { productTitle, seasonTagFrom, seoTitle, titleYear, titledForShop } from "./titles";
 import { isOfType, isSkipped, parseDirectives, typeKey } from "./instructions";
 import { prisma, parseJson } from "./db";
 import { extractFile, type UploadKind } from "./extract";
 import { applyMapping, headerHash, looksLikeReference, mappingProblems, repairTemplate, seasonFrom, suggestMapping, suggestOptions, type Mapping, type MappingOptions, type SavedOptions, nearestTemplate, trimToHeaders, type LayoutDrift } from "./mapping";
-import { groupLineItems } from "./grouping";
+import { groupLineItems, productOptions } from "./grouping";
 import { houseTags, retagForType } from "./product-tags";
 import { DEFAULT_CATEGORY_RULES, type CategoryRuleLike } from "./categorize";
 import { enrichFromSpecs, normKey } from "./specs";
 import { keepOrderedLines, resolveAgainstReference } from "./reference-match";
-import { isFlatSki, isPackageBinding, packageProducts, specFromName, type ChosenBindings } from "./packages";
+import { isFlatSki, isPackageBinding, packageProducts, specFromName, specsOfList, type ChosenBindings } from "./trades/snow/packages";
 import { readInvoiceGrids, type PriceRow } from "./invoice";
 import { asShopPrice, existingHandle, listingByBarcode, listingsAsReference, rememberedVendor } from "./shop-memory";
 import { dueInWindow, parseWindow } from "./deliveries";
@@ -20,29 +20,41 @@ import { writeOutColour } from "./colour";
 import { audienceByModel, brandIn, isBrand } from "./brands";
 import { askToJoin } from "./reference-ai";
 import { aiAvailable } from "./anthropic";
+import { asTraining } from "./training-mark";
+import { aiMapping, fillMapping } from "./mapping-ai";
+import { fieldsInForce } from "./taxonomy";
 import { repairCategoryRules, repairProductTags, repairTagRuleSpelling } from "./seed";
 import { applyTagRules, type TagRuleLike } from "./rules";
 import { conventionGrams, conventionIdentifiers } from "./house";
 import { shopBody } from "./description-style";
-import { houseConventions } from "./taxonomy";
+import { houseConventions, metafieldDefs, optionTagPatterns } from "./taxonomy";
+import { optionTagsFor } from "./option-tags";
+import { homeCurrency } from "./shop-profile";
 import { applyTemplates, type ProductTemplateLike } from "./templates";
-import { allocateFreight, exGstCostAud, priceVariant } from "./pricing";
+import { allocateFreight, exGstCostHome, priceVariant } from "./pricing";
 import { getSettings } from "./settings";
 import { checkImageUrl, findLibraryImages, recordLibraryImages } from "./images";
 import { framePicture, hostPictures } from "./pictures";
+import { keeper } from "./rebuild-keep";
 import { generateCsvParts, validateCsvFile, validateProducts } from "./csv";
 import { toCsvProducts } from "./pipeline-pure";
 import { repairForExport, type Repair } from "./repair";
 export { toCsvProducts };
-import { SKI_METAFIELDS, metafieldColumn, type AppSettings, type CanonicalLineItem, type GstTreatment, CANONICAL_FIELDS } from "./types";
+import { metafieldColumn, type AppSettings, type CanonicalLineItem, type GstTreatment, CANONICAL_FIELDS } from "./types";
 import type { ReviewProduct, ReviewSummary, ReviewVariant } from "./review-types";
 import { hardErrors, summarise, validateReview, warningList } from "./validate";
 import { readsKnown } from "./supplier-record";
 import { supplierRecordFor } from "./supplier-score";
+import { loadTagGate, partitionTags, recordTagProposals } from "./tag-gate";
+import { scoreProduct, tallyConfidence } from "./confidence";
+import { isValidType, typesAreKnown } from "./taxonomy";
 import type { MatchCandidate } from "./match-candidates";
 import { filePath, pictureHosting, publicFileUrl, readFile, saveFile, usingBlob } from "./storage";
+import { publishLocalPictures } from "./picture-publish";
 import { logAudit } from "./audit";
-import { AI_HEADERS } from "./extract/ai";
+import { contributeLayout, findSharedLayout } from "./shared-layouts-store";
+import { fillFromForm, formAndInvoice, invoiceOf, overlapOf } from "./order-and-invoice";
+import { isReaderTable, readerMapping } from "./extract/ai";
 
 // ---------------------------------------------------------------------------
 // Rules & settings helpers
@@ -189,9 +201,16 @@ async function supplierReadsKnown(batchId: string): Promise<boolean> {
 
 /** Read a file that is already stored, and record what came of it. */
 export async function extractStoredFile(fileId: string, origin?: string): Promise<IngestResult> {
-  const record = await prisma.sourceFile.findUniqueOrThrow({ where: { id: fileId } });
+  const record = await prisma.sourceFile.findUniqueOrThrow({ where: { id: fileId }, include: { batch: { select: { name: true } } } });
   const buffer = await readFile(record.storagePath);
-  return ingestFile(record.batchId, { filename: record.filename, mimeType: record.mimeType, buffer, kind: record.kind as UploadKind, origin, existingFileId: record.id });
+  const read = () => ingestFile(record.batchId, { filename: record.filename, mimeType: record.mimeType, buffer, kind: record.kind as UploadKind, origin, existingFileId: record.id });
+  // A supplier's example read during setup or on Teach Snaben is training, not work: it is not counted against the shop's plan.
+  return isTrainingBatch(record.batch.name) ? asTraining(read) : read();
+}
+
+/** The batches setup and Teach Snaben make to read one example of a supplier's paperwork. */
+export function isTrainingBatch(name: string): boolean {
+  return /^Setup: /.test(name);
 }
 
 export async function ingestFile(batchId: string, given: { filename: string; mimeType: string; buffer: Buffer; kind?: UploadKind; origin?: string; existingFileId?: string }): Promise<IngestResult> {
@@ -224,13 +243,17 @@ export async function ingestFile(batchId: string, given: { filename: string; mim
     // A supplier whose paperwork reads clean on its record is read on the lighter model, at about
     // half the price; the record keeps watching, so one that starts reading badly goes back.
     const known = await supplierReadsKnown(batchId);
+    // How the supplier's lines were read before, as the shop settled them: given to the reader as
+    // examples, and its layouts tell a document from a system it has not sent before. See read-examples.ts.
+    const history = await (await import("./read-examples-store")).supplierHistory(batchId).catch(() => ({ examples: [], layouts: [] }));
     const started = Date.now();
-    const { table, meta } = await extractFile(file.buffer, file.filename, file.mimeType, requested, { known });
+    const { table, meta } = await extractFile(file.buffer, file.filename, file.mimeType, requested, { known }, history);
     // How long the read took is the number behind "this is slow", so it is kept where it can be
     // seen: the server log, and the History page.
     const tookMs = Date.now() - started;
-    console.log(`[read] ${file.filename}: ${table.method} in ${(tookMs / 1000).toFixed(1)}s, ${table.rows.length} rows${known ? ", lighter model" : ""}`);
-    await logAudit("file.read", { batchId, details: { fileId: record.id, filename: file.filename, method: table.method, rows: table.rows.length, tookMs, reader: known ? "lighter" : "full" } }).catch(() => undefined);
+    const lighter = known && !table.warnings.some((w) => w.startsWith("A layout this supplier has not sent before"));
+    console.log(`[read] ${file.filename}: ${table.method} in ${(tookMs / 1000).toFixed(1)}s, ${table.rows.length} rows${lighter ? ", lighter model" : ""}`);
+    await logAudit("file.read", { batchId, details: { fileId: record.id, filename: file.filename, method: table.method, rows: table.rows.length, tookMs, reader: lighter ? "lighter" : "full", examples: history.examples.length } }).catch(() => undefined);
     const detected = meta?.documentType ?? null;
     // A spreadsheet never reached the model, so nothing classified it and everything came through
     // as a delivery. Its columns say what it is: see looksLikeReference.
@@ -284,6 +307,7 @@ export async function ingestFile(batchId: string, given: { filename: string; mim
         headers: JSON.stringify(table.headers),
         rawRows: JSON.stringify(table.rows),
         extractedText: table.text ?? null,
+        layout: table.layout ?? null,
         extractionError: warnings.length ? warnings.join(" ") : null,
         priceList: JSON.stringify(await priceListOf(file.filename, file.buffer)),
       },
@@ -291,7 +315,7 @@ export async function ingestFile(batchId: string, given: { filename: string; mim
     if (meta && effective === "INVOICE") {
       const batch = await prisma.importBatch.findUnique({ where: { id: batchId }, select: { currency: true } });
       const data: Prisma.ImportBatchUpdateInput = {};
-      if (meta.currency && batch?.currency === "AUD" && meta.currency !== "AUD") data.currency = meta.currency;
+      if (meta.currency && batch?.currency === homeCurrency() && meta.currency !== homeCurrency()) data.currency = meta.currency;
       if (meta.gstTreatment && meta.gstTreatment !== "UNKNOWN") data.gstTreatment = meta.gstTreatment;
       if (Object.keys(data).length) await prisma.importBatch.update({ where: { id: batchId }, data });
     }
@@ -323,6 +347,8 @@ export interface HeaderGroup {
   confident: boolean; // safe to apply without showing the mapping screen
   /** Set when the supplier has a remembered layout and this file's columns differ from it. */
   drift: LayoutDrift | null;
+  /** How many other shops taught the reading in use, where it came from them rather than this shop. */
+  sharedBy: number | null;
 }
 
 export async function mappingState(batchId: string): Promise<HeaderGroup[]> {
@@ -337,7 +363,7 @@ export async function mappingState(batchId: string): Promise<HeaderGroup[]> {
     const hash = headerHash(headers);
     let group = groups.get(hash);
     if (!group) {
-      const isCanonical = headers.every((h) => (AI_HEADERS as readonly string[]).includes(h));
+      const isCanonical = isReaderTable(headers);
       const exact = templates.find((t) => t.headerHash === hash) ?? null;
       // No layout matches exactly: the nearest remembered one is carried over where its columns
       // still exist, and the difference is reported rather than the file being read from scratch.
@@ -345,9 +371,12 @@ export async function mappingState(batchId: string): Promise<HeaderGroup[]> {
       const template = exact ?? near?.template ?? null;
       const saved = template ? parseJson<SavedOptions>(template.options, {}) : null;
       const fresh = suggestMapping(headers, rows);
+      // A layout this shop has never seen may be one other shops buying from the same supplier
+      // have: their reading stands where it differs from the fresh one, unless the data rules it out.
+      const shared = !template && !isCanonical ? await findSharedLayout(headers) : null;
       const suggestion = template
         ? repairTemplate(trimToHeaders(parseJson<Mapping>(template.mappings, {}), headers) ?? {}, fresh, rows, trimToHeaders(saved?.suggestedAtSave, headers))
-        : isCanonical ? Object.fromEntries(headers.map((h) => [h, h])) as Mapping : fresh;
+        : isCanonical ? readerMapping(headers) : shared ? repairTemplate(shared.mappings, fresh, rows, fresh) : fresh;
       group = {
         hash,
         headers,
@@ -366,10 +395,11 @@ export async function mappingState(batchId: string): Promise<HeaderGroup[]> {
             }
           : { ...(isCanonical ? {} : suggestOptions(fresh)), ...(batch.supplier?.defaultBrand ? { fixed: { brand: batch.supplier.defaultBrand } } : {}) },
         templateId: exact?.id ?? null,
-        templateName: template?.name ?? null,
+        templateName: template?.name ?? (shared ? `Taught by ${shared.shops} other ${shared.shops === 1 ? "shop" : "shops"}` : null),
         isCanonical,
         confident: false,
         drift: near?.drift ?? null,
+        sharedBy: shared?.shops ?? null,
       };
       groups.set(hash, group);
     }
@@ -390,8 +420,9 @@ export async function mappingState(batchId: string): Promise<HeaderGroup[]> {
  *
  * Mapping columns was a step of its own, and it should not have been: the suggestion is right
  * almost every time, and where it is not, the place to fix it is the review grid, which is where
- * the operator is looking anyway. So every layout the suggestion can build from is built, and only
- * a layout with no recognisable product name is left for the mapping screen to sort out.
+ * the operator is looking anyway. So every layout the suggestion can build from is built; one
+ * with no recognisable product name is put to the model, and only what neither can place is left
+ * for the mapping screen, which is no longer a step but a door opened from the file's own warning.
  */
 export async function autoApplyMappings(batchId: string, userId: string | null): Promise<{ applied: boolean; products: number; variants: number; unmapped: string[]; drifted: string[] }> {
   const groups = await mappingState(batchId);
@@ -399,10 +430,23 @@ export async function autoApplyMappings(batchId: string, userId: string | null):
   // columns that moved are the ones a remembered mapping gets wrong, so a person confirms them
   // once, on the mapping screen, and the new layout is remembered beside the old.
   const usable = groups.filter((g) => !g.drift && mappingProblems(g.suggestion).length === 0);
+  // A layout the headings could not place is put to the model before it is put to a person: the
+  // headings and a few rows, against the fields Snaben writes. Its answer fills the gaps the
+  // heuristics left; where that settles the product's name, the layout builds like any other.
+  const stuck = groups.filter((g) => !usable.includes(g) && !g.drift && !g.isCanonical);
+  const mapped = new Map<string, Mapping>();
+  for (const g of stuck) {
+    const guessed = aiAvailable() ? await aiMapping(g.headers, g.sampleRows, fieldsInForce()) : null;
+    const filled = fillMapping(g.suggestion, guessed);
+    if (mappingProblems(filled).length === 0) { mapped.set(g.hash, filled); usable.push(g); await logAudit("layout.ai-mapped", { batchId, userId, details: { files: g.filenames } }).catch(() => undefined); }
+  }
   const drifted = groups.filter((g) => g.drift).map((g) => describeDrift(g));
   const unmapped = groups.filter((g) => !usable.includes(g) && !g.drift).flatMap((g) => g.filenames);
   if (usable.length === 0) return { applied: false, products: 0, variants: 0, unmapped, drifted };
-  const result = await applyMappings(batchId, usable.map((g) => ({ hash: g.hash, mapping: g.suggestion, options: g.options, saveTemplate: null })), userId);
+  const result = await applyMappings(batchId, usable.map((g) => ({ hash: g.hash, mapping: mapped.get(g.hash) ?? g.suggestion, options: g.options, saveTemplate: null })), userId);
+  for (const g of usable.filter((x) => x.sharedBy)) {
+    await logAudit("layout.shared-used", { batchId, userId, details: { files: g.filenames.length, shops: g.sharedBy } }).catch(() => undefined);
+  }
   return { applied: result.problems.length === 0 && drifted.length === 0, products: result.products, variants: result.variants, unmapped, drifted };
 }
 
@@ -444,6 +488,13 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
   const problems: string[] = [];
   for (const input of inputs) for (const p of mappingProblems(input.mapping)) problems.push(`${input.hash}: ${p}`);
   if (problems.length) return { products: 0, variants: 0, problems };
+  // The store, read again when its last read is a day old, so the listings and vocabulary this
+  // build places products against are the store's as it is now. See store-sync.ts.
+  {
+    const { refreshStoreIfStale } = await import("./store-sync");
+    await refreshStoreIfStale(userId);
+    phase("store");
+  }
 
   const byHash = new Map(inputs.map((i) => [i.hash, i]));
   const items: Array<{ item: CanonicalLineItem; fileId: string; rowIndex: number; raw: Record<string, string> }> = [];
@@ -468,6 +519,38 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
   // sheet uses in full elsewhere ("Rum Raisin", "Chinchilla Gray"). See writeOutColour.
   const colourNames = [...items.map((e) => e.item.colour), ...specItems.map((s) => s.colour)].filter((c) => c.trim() && !c.includes("/"));
   for (const entry of items) if (entry.item.colour.includes("/")) entry.item = { ...entry.item, colour: writeOutColour(entry.item.colour, colourNames, /goggle/i.test(`${entry.item.category} ${entry.item.productType} ${entry.item.title}`)) };
+
+  /**
+   * An order form and its invoice in one batch are one delivery, not two. Both carry quantities,
+   * and read as two deliveries every product came out with twice the stock. Two files most of
+   * whose lines are the same goods are taken as the pair: the invoice's lines are what arrived and
+   * what it cost, indent discounts and all, and each is filled in from its order-form line with
+   * what the invoice leaves out (barcodes, retail prices). The order form adds no lines of its own.
+   */
+  {
+    const fileIds = [...new Set(items.map((i) => i.fileId))];
+    const linesOf = (id: string) => items.filter((i) => i.fileId === id);
+    const nameOf = (id: string) => batch.files.find((f) => f.id === id)?.filename ?? "";
+    const paired = new Set<string>();
+    for (let a = 0; a < fileIds.length; a++) {
+      for (let b = a + 1; b < fileIds.length; b++) {
+        const [x, y] = [fileIds[a], fileIds[b]];
+        if (paired.has(x) || paired.has(y)) continue;
+        const [lx, ly] = [linesOf(x), linesOf(y)];
+        if (overlapOf(lx.map((e) => e.item), ly.map((e) => e.item)) < 0.5) continue;
+        const { invoice, form } = invoiceOf({ name: nameOf(x), lines: lx.length, id: x }, { name: nameOf(y), lines: ly.length, id: y });
+        // Two shipments of one order share their lines as well; only a form and its invoice are joined.
+        if (!formAndInvoice({ name: form.name, lines: linesOf(form.id).map((e) => e.item) }, { name: invoice.name, lines: linesOf(invoice.id).map((e) => e.item) })) continue;
+        const invoiceEntries = linesOf(invoice.id);
+        const filled = fillFromForm(linesOf(form.id).map((e) => e.item), invoiceEntries.map((e) => e.item));
+        invoiceEntries.forEach((e, i) => { e.item = filled.lines[i]; });
+        items.splice(0, items.length, ...items.filter((e) => e.fileId !== form.id));
+        paired.add(x); paired.add(y);
+        await noteOnFile(invoice.id, `Read as the invoice for ${form.name}: what arrived and what it cost come from here, and ${filled.matched} of ${invoiceEntries.length} lines took their barcode and retail price from the order form.`);
+        await noteOnFile(form.id, `Read as the order form for ${invoice.name}, which is what arrived: its lines fill in the invoice's barcodes and retail prices and add no products of their own.`);
+      }
+    }
+  }
 
   // A spec-sheet-only batch still builds products: one variant per listed length/size, no cost yet.
   if (items.length === 0 && specItems.length > 0) {
@@ -546,6 +629,8 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
       const data = { name: input.saveTemplate.name, mappings: JSON.stringify(input.mapping), options: JSON.stringify(options), headerHash: input.hash };
       if (existing) await prisma.mappingTemplate.update({ where: { id: existing.id }, data });
       else await prisma.mappingTemplate.create({ data: { ...data, supplierId: batch.supplierId } });
+      // A layout a person confirmed is offered to the other shops: its headings and fields only.
+      if (file) void contributeLayout(parseJson<string[]>(file.headers, []), input.mapping);
     }
   }
 
@@ -568,15 +653,30 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
 
   // A year said in the instruction chat wins over whatever the supplier's file calls the season:
   // Burton's "27WIN" is 2027, and an April order for the 2026 range is still tagged 2026.
-  if (/^20\d{2}$/.test(directives.season.trim())) {
-    for (const entry of items) entry.item = { ...entry.item, season: directives.season.trim() };
+  // A year given as a tag in the chat is the season too (asked 2026-10-19): it is the product's one
+  // year tag, not a second beside the file's, and the title and handle carry it.
+  const toldYear = /^20\d{2}$/.test(directives.season.trim()) ? directives.season.trim() : [...directives.addTags].reverse().map((t) => t.trim()).find((t) => /^20\d{2}$/.test(t)) ?? "";
+  if (toldYear) {
+    for (const entry of items) entry.item = { ...entry.item, season: toldYear };
   } else if (items.length > 0 && items.every((entry) => !/^20\d{2}$/.test(entry.item.season))) {
     // No season on any line: the file's own name says it, where it does — Burton's confirmation
-    // sheet is "Alpsport_W27_Burton_Confirmed…" and its lines carry no season column at all.
-    const fromName = batch.files.flatMap((f) => f.filename.split(/[^A-Za-z0-9/]+/)).map(seasonFrom).find((y) => /^20[2-3]\d$/.test(y));
+    // sheet is "<Shop>_W27_Burton_Confirmed…" and its lines carry no season column at all.
+    // The latest year the name gives: "…_NOV_2026_boot_pole_-2027-Retail" is the 2027 range,
+    // delivered in November 2026.
+    const fromName = batch.files.flatMap((f) => f.filename.split(/[^A-Za-z0-9/]+/)).map(seasonFrom).filter((y) => /^20[2-3]\d$/.test(y)).sort().at(-1);
     if (fromName) {
       for (const entry of items) entry.item = { ...entry.item, season: fromName };
       for (const fileId of [...new Set(items.map((i) => i.fileId))]) await noteOnFile(fileId, `No column on this sheet says the season, so it was taken from the file's name: ${fromName}. Say "year tags 2026" in the chat if that is wrong.`);
+    }
+  }
+
+  // No brand on any line, none said in the chat and no supplier to go by: the file's own name says
+  // it, where it does — Dalbello's order form never names Dalbello, "Dalbello_MAY_2027_Order_.xlsx" does.
+  if (!directives.vendor.trim() && !supplierBrand && items.length > 0 && items.every((entry) => !entry.item.brand.trim())) {
+    const fromName = brandIn(batch.files.map((f) => f.filename.replace(/\.[a-z0-9]+$/i, "").replace(/[_.\-]+/g, " ")).join(" "), knownVendors);
+    if (fromName) {
+      for (const entry of items) entry.item = { ...entry.item, brand: fromName };
+      for (const fileId of [...new Set(items.map((i) => i.fileId))]) await noteOnFile(fileId, `No column on this sheet says the brand, so it was taken from the file's name: ${fromName}. Say "the brand is …" in the chat if that is wrong.`);
     }
   }
 
@@ -726,6 +826,10 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
     }
   }
 
+  // Tags are matched, never invented: the shop's own vocabulary is the gate, and what it turns
+  // away is proposed to the shop once, with the product it was meant for. See tag-gate.ts.
+  const gate = await loadTagGate();
+  const proposedTags = new Map<string, string>();
   const grouped = enrichFromSpecs(groupLineItems(items.map((i) => i.item), categoryRules, { builtBy: batch.builtBy, listings }), specItems).map((raw) => {
     const told = directives.vendor.trim();
     // A brand filled in here, after the tags were made, never became one — and every listing the
@@ -745,7 +849,14 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
       productType: directives.productType.trim() || out.productType,
       // Through the house speller last: tag rules and batch instructions add tags after the
       // categoriser has been vetted, and theirs used to reach the column unchecked.
-      tags: houseTags([...out.tags, ...directives.addTags]),
+      tags: (() => {
+        // The tags the shop's export showed it keeps for each size and colour, written from the variants.
+        const mirrored = optionTagsFor(productOptions({ ...g, option1Name: viaTemplate.optionNames[0] ?? g.option1Name, option2Name: viaTemplate.optionNames[1] ?? g.option2Name, option3Name: viaTemplate.optionNames[2] ?? g.option3Name }), optionTagPatterns());
+        // A tag the batch instructions asked for is the shop's own word and always stays; so does a mirrored one.
+        const gated = partitionTags(houseTags([...out.tags, ...directives.addTags, ...mirrored]), gate, [...directives.addTags, ...mirrored]);
+        for (const t of gated.proposed) if (!proposedTags.has(t)) proposedTags.set(t, g.title);
+        return gated.kept;
+      })(),
       collections: out.collections,
       metafields: out.metafields,
       option1Name: viaTemplate.optionNames[0] ?? g.option1Name,
@@ -756,6 +867,7 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
       variants: g.variants.map((v) => ({ ...v, item: { ...v.item, rrp: asShopPrice(v.item.rrp, g.brand, listings) } })),
     };
   });
+  if (proposedTags.size) await recordTagProposals(proposedTags);
 
   /**
    * Every flat ski is also built as its binding package — "M7 Mantra 2027 inc Marker Griffon
@@ -775,7 +887,12 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
     if (!spec) continue;
     for (const who of b.for === "all" ? (["mens", "womens", "kids"] as const) : [b.for]) chosen[who] = spec;
   }
-  const { packages, skipped } = directives.packages === "none" ? { packages: [], skipped: [] } : packageProducts(grouped, priceList, listings, chosen);
+  // The bindings picked for each ski on the review page, from the shop's binding list. See binding-list.ts.
+  const { getBindingList, getBatchPicks } = await import("./trades/snow/binding-store");
+  const { pickerFor } = await import("./trades/snow/binding-list");
+  const bindingList = (await getBindingList().catch(() => null))?.entries ?? [];
+  const picks = await getBatchPicks(batchId).catch(() => ({}));
+  const { packages, skipped } = directives.packages === "none" ? { packages: [], skipped: [] } : packageProducts(grouped, priceList, listings, chosen, pickerFor(bindingList, picks), bindingList);
   grouped.push(...(packages as typeof grouped));
   // A product the shop already sells keeps the handle it sells it under, so importing the file
   // updates it rather than listing it twice. See existingHandle.
@@ -784,7 +901,7 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
     // First the listing the lines were placed on by barcode — the shop has these very items, and
     // the handle is known for certain — then a listing with this very name and season.
     const placedOn = [...new Set(g.variants.map((v) => v.item.shopHandle).filter((h): h is string => Boolean(h)))];
-    const handle = placedOn.length === 1 ? placedOn[0] : existingHandle({ title: productTitle(g.title, seasonTagFrom(g.tags)), brand: g.brand, season: seasonTagFrom(g.tags) ?? "" }, listings);
+    const handle = placedOn.length === 1 ? placedOn[0] : existingHandle({ title: productTitle(g.title, titleYear(g.tags, g.productType)), brand: g.brand, season: seasonTagFrom(g.tags) ?? "" }, listings);
     if (handle && handle !== g.handle) { g.handle = handle; kept.push(handle); }
     else if (handle) kept.push(handle);
   }
@@ -803,7 +920,7 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
     }
   }
   // The package bindings ordered with the skis go on the skis, not on the shelf. See isPackageBinding.
-  const setAside = directives.packages !== "none" && grouped.some((g) => isFlatSki(g)) ? grouped.filter((g) => isPackageBinding(g, Object.values(chosen))) : [];
+  const setAside = directives.packages !== "none" && grouped.some((g) => isFlatSki(g)) ? grouped.filter((g) => isPackageBinding(g, [...Object.values(chosen), ...specsOfList(bindingList)])) : [];
   for (const g of setAside) grouped.splice(grouped.indexOf(g), 1);
   if (setAside.length > 0) {
     for (const fileId of [...new Set(items.map((i) => i.fileId))]) {
@@ -835,11 +952,11 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
 
   // What the person said not to build, by name or by unticking it on the batch page.
   if (directives.skip.length > 0) {
-    const left = grouped.filter((g) => isSkipped({ title: productTitle(g.title, seasonTagFrom(g.tags)), handle: g.handle }, directives.skip));
+    const left = grouped.filter((g) => isSkipped({ title: productTitle(g.title, titleYear(g.tags, g.productType)), handle: g.handle }, directives.skip));
     for (const g of left) grouped.splice(grouped.indexOf(g), 1);
     if (left.length > 0) {
       for (const fileId of [...new Set(items.map((i) => i.fileId))]) {
-        await noteOnFile(fileId, `Not built, as asked: ${left.map((g) => productTitle(g.title, seasonTagFrom(g.tags))).join(", ")}.`);
+        await noteOnFile(fileId, `Not built, as asked: ${left.map((g) => productTitle(g.title, titleYear(g.tags, g.productType))).join(", ")}.`);
       }
     }
   }
@@ -872,6 +989,25 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
 
   // Rebuild the batch's products from scratch (mapping is re-runnable until export).
   phase("placed against the shop");
+  // What the products had gathered since they were built — a link, its page's description and
+  // pictures, pictures added by hand — goes back onto the products made in their place.
+  const keep = keeper((await prisma.product.findMany({
+    where: { batchId },
+    select: {
+      handle: true, title: true, tags: true, bodyHtml: true, lookupStatus: true, lookupSource: true, lookupAt: true, colourLinks: true,
+      option1Name: true, option2Name: true, option3Name: true,
+      variants: { select: { id: true, option1Value: true, option2Value: true, option3Value: true } },
+      images: { select: { url: true, source: true, altText: true, position: true, validated: true, variantId: true } },
+    },
+  })).map((p) => {
+    // A picture tied to a variant is kept as the colour that variant is, to be tied again after.
+    const at = [p.option1Name, p.option2Name, p.option3Name].findIndex((n) => /colou?r/i.test(n ?? ""));
+    const colourOf = (variantId: string | null) => {
+      const v = variantId && at >= 0 ? p.variants.find((x) => x.id === variantId) : undefined;
+      return v ? ([v.option1Value, v.option2Value, v.option3Value][at] ?? "").trim() : "";
+    };
+    return { ...p, images: p.images.map(({ variantId, ...i }) => ({ ...i, colour: colourOf(variantId) || undefined })) };
+  }));
   await prisma.$transaction([
     prisma.extractedLineItem.deleteMany({ where: { batchId } }),
     prisma.product.deleteMany({ where: { batchId } }),
@@ -883,10 +1019,12 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
   // were, so a slow brand site cannot make a build of fifty products wait on each.
   const picturesUntil = Date.now() + 90_000;
   for (const g of grouped) {
-    // A seasonal product carries its year after the name — the same products that carry a year tag.
-    // The SEO title is that title with the brand in front of it, which is the one place it appears.
-    const season = seasonTagFrom(g.tags);
-    const title = titledForShop(g.brand, productTitle(g.title, season));
+    // A seasonal product carries its year after the name — the same products that carry a year tag,
+    // or only those the shop chose (see titleYear). The SEO title is that title with the brand in
+    // front of it, which is the one place it appears. A rebuild gives back the title a page gave it.
+    const built = titledForShop(g.brand, productTitle(g.title, titleYear(g.tags, g.productType)));
+    const kept = keep({ handle: g.handle, title: built, tags: g.tags.join(", ") });
+    const title = kept?.title ?? built;
     // Everything the product owns goes in with it: its variants, each with the order line it came
     // from, and its pictures. One round trip per product instead of one per row — a build on a
     // database in another region was waiting on the network a dozen times per product.
@@ -913,8 +1051,14 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
         }
       }
     }
+    for (const { colour: _colour, ...img } of kept?.images ?? []) {
+      void _colour;
+      if (urls.has(img.url)) continue;
+      urls.add(img.url);
+      images.push(img);
+    }
     let vsort = 0;
-    await prisma.product.create({
+    const created = await prisma.product.create({
       data: {
         batchId,
         handle: g.handle,
@@ -922,7 +1066,8 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
         seoTitle: seoTitle(g.brand, title),
         // A body the spec sheet already laid out in the house format is used as it is. Wrapping it
         // again — in a <p>, escaped — turned its <h2> and <li> into text a customer would read.
-        bodyHtml: /^\s*</.test(g.description) ? g.description : await shopBody(g.description, []),
+        bodyHtml: kept?.bodyHtml ?? (/^\s*</.test(g.description) ? g.description : await shopBody(g.description, [])),
+        ...(kept ? { lookupStatus: kept.lookupStatus, lookupSource: kept.lookupSource, lookupAt: kept.lookupAt, ...(kept.colourLinks ? { colourLinks: kept.colourLinks } : {}) } : {}),
         vendor: g.brand,
         productType: g.productType,
         category: g.category,
@@ -952,7 +1097,7 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
               costPrice: v.item.costPrice ?? 0,
               costCurrency: batch.currency,
               gstTreatment: batch.gstTreatment,
-              fxRateToAud: batch.fxRateToAud,
+              fxRateToHome: batch.fxRateToHome,
               // The recommended retail is what the product sells for, so it sets the price rather
               // than sitting beside it as a strikethrough. Without one the markup rules price it.
               retailOverride: v.item.rrp ?? null,
@@ -963,10 +1108,18 @@ export async function applyMappings(batchId: string, inputs: ApplyMappingInput[]
             };
           }),
         },
-        // Supplier URLs first, then the library.
+        // Supplier URLs first, then the library, then what the product had gathered before this build.
         images: { create: images.map((img, i) => ({ ...img, position: i + 1 })) },
       },
+      select: { id: true, variants: { select: { id: true, option1Value: true, option2Value: true, option3Value: true }, orderBy: { sortOrder: "asc" } }, images: { select: { id: true, url: true } } },
     });
+    // A colour's picture tied again to the first variant of that colour, as it was before the rebuild.
+    const colourAt = [g.option1Name, g.option2Name, g.option3Name].findIndex((n) => /colou?r/i.test(n ?? ""));
+    for (const img of colourAt >= 0 ? (kept?.images ?? []).filter((i) => i.colour) : []) {
+      const v = created.variants.find((x) => ([x.option1Value, x.option2Value, x.option3Value][colourAt] ?? "").trim().toLowerCase() === img.colour!.toLowerCase());
+      const row = created.images.find((x) => x.url === img.url);
+      if (v && row) await prisma.productImage.update({ where: { id: row.id }, data: { variantId: v.id } });
+    }
   }
 
   await attachUnassignedPhotos(batchId);
@@ -1036,7 +1189,7 @@ export async function noteOnFile(fileId: string, note: string): Promise<void> {
 }
 
 /** What counts as somebody having changed a batch's products by hand. A rebuild would undo it. */
-export const HAND_EDITS = ["product.edited", "variant.edited", "variant.deleted", "batch.bulk_edit", "batch.seo"];
+export const HAND_EDITS = ["product.edited", "product.checked", "variant.edited", "variant.deleted", "batch.bulk_edit", "batch.seo"];
 
 /**
  * Whether a batch's products are still exactly what the files built.
@@ -1086,9 +1239,9 @@ export async function allocateBatchFreight(batchId: string): Promise<void> {
   const batch = await prisma.importBatch.findUniqueOrThrow({ where: { id: batchId } });
   const settings = await getSettings();
   const variants = await prisma.variant.findMany({ where: { product: { batchId } } });
-  const lines = variants.map((v) => ({ id: v.id, quantity: v.quantity, exGstCostAud: exGstCostAud(v.costPrice, v.gstTreatment as GstTreatment, v.fxRateToAud, settings.gstRate) }));
-  const alloc = allocateFreight(batch.freightTotalAud, batch.freightMode as "PER_UNIT" | "BY_VALUE", lines);
-  await prisma.$transaction(variants.map((v) => prisma.variant.update({ where: { id: v.id }, data: { freightPerUnitAud: alloc[v.id] ?? 0 } })));
+  const lines = variants.map((v) => ({ id: v.id, quantity: v.quantity, exGstCostHome: exGstCostHome(v.costPrice, v.gstTreatment as GstTreatment, v.fxRateToHome, settings.gstRate) }));
+  const alloc = allocateFreight(batch.freightTotalHome, batch.freightMode as "PER_UNIT" | "BY_VALUE", lines);
+  await prisma.$transaction(variants.map((v) => prisma.variant.update({ where: { id: v.id }, data: { freightPerUnitHome: alloc[v.id] ?? 0 } })));
 }
 
 export async function repriceBatch(batchId: string): Promise<void> {
@@ -1116,15 +1269,15 @@ export async function repriceVariant(variantId: string): Promise<void> {
   await prisma.variant.update({ where: { id: v.id }, data: computePricing(v, settings, discountPct) });
 }
 
-type VariantRow = { costPrice: number; gstTreatment: string; fxRateToAud: number; freightPerUnitAud: number; quantity: number; retailOverride: number | null };
+type VariantRow = { costPrice: number; gstTreatment: string; fxRateToHome: number; freightPerUnitHome: number; quantity: number; retailOverride: number | null };
 
 export function computePricing(v: VariantRow, settings: AppSettings, discountPct: number | null = null) {
   const r = priceVariant(
-    { costPrice: v.costPrice, gstTreatment: v.gstTreatment as GstTreatment, fxRateToAud: v.fxRateToAud, freightPerUnitAud: v.freightPerUnitAud, quantity: v.quantity, retailOverride: v.retailOverride, discountPct },
+    { costPrice: v.costPrice, gstTreatment: v.gstTreatment as GstTreatment, fxRateToHome: v.fxRateToHome, freightPerUnitHome: v.freightPerUnitHome, quantity: v.quantity, retailOverride: v.retailOverride, discountPct },
     { gstRate: settings.gstRate, pricesIncludeGst: settings.pricesIncludeGst, minMarginPct: settings.minMarginPct },
   );
   return {
-    landedCostAud: r.landedCostAud,
+    landedCostHome: r.landedCostHome,
     retailPrice: r.retailPrice,
     // The strikethrough, written whenever the product is selling for less than it would have.
     compareAtPrice: r.compareAtPrice,
@@ -1166,9 +1319,9 @@ export interface ReviewData {
     name: string;
     status: string;
     currency: string;
-    fxRateToAud: number;
+    fxRateToHome: number;
     gstTreatment: string;
-    freightTotalAud: number;
+    freightTotalHome: number;
     freightMode: string;
     splitExportBy: string;
     supplierName: string | null;
@@ -1195,6 +1348,27 @@ export async function loadReview(batchId: string): Promise<ReviewData> {
     orderBy: { sortOrder: "asc" },
     include: { variants: { orderBy: { sortOrder: "asc" } }, images: { orderBy: { position: "asc" } } },
   });
+  // What the confidence score is worked out from: the order lines each product came from (so a
+  // title's words can be checked against the paperwork), what a person set by hand, and the
+  // shop's vocabulary of tags.
+  const [lines, edits, gate] = await Promise.all([
+    prisma.extractedLineItem.findMany({ where: { batchId, variantId: { not: null } }, select: { variantId: true, raw: true } }),
+    prisma.auditLog.findMany({ where: { batchId, action: { in: ["product.edited", "product.checked", "variant.edited"] } }, select: { details: true } }),
+    loadTagGate(),
+  ]);
+  const rawByVariant = new Map<string, string>();
+  for (const l of lines) if (l.variantId) rawByVariant.set(l.variantId, Object.values(parseJson<Record<string, unknown>>(l.raw, {})).map((v) => String(v ?? "")).join(" "));
+  const touchedProducts = new Map<string, Set<string>>();
+  const touchedVariants = new Map<string, Set<string>>();
+  for (const e of edits) {
+    const d = parseJson<{ productId?: string; variantId?: string; fields?: string[] }>(e.details, {});
+    const into = d.productId ? touchedProducts : d.variantId ? touchedVariants : null;
+    const id = d.productId ?? d.variantId;
+    if (!into || !id) continue;
+    const set = into.get(id) ?? new Set<string>();
+    for (const f of d.fields ?? []) set.add(f);
+    into.set(id, set);
+  }
   const view: ReviewProduct[] = products.map((p) => ({
     id: p.id,
     handle: p.handle,
@@ -1211,6 +1385,7 @@ export async function loadReview(batchId: string): Promise<ReviewData> {
     seoDescription: p.seoDescription,
     lookupStatus: p.lookupStatus,
     lookupSource: p.lookupSource,
+    colourLinks: p.colourLinks,
     option1Name: p.option1Name,
     option2Name: p.option2Name,
     option3Name: p.option3Name,
@@ -1234,13 +1409,13 @@ export async function loadReview(batchId: string): Promise<ReviewData> {
         costPrice: v.costPrice,
         costCurrency: v.costCurrency,
         gstTreatment: v.gstTreatment,
-        fxRateToAud: v.fxRateToAud,
-        freightPerUnitAud: v.freightPerUnitAud,
+        fxRateToHome: v.fxRateToHome,
+        freightPerUnitHome: v.freightPerUnitHome,
         pricingRuleId: v.pricingRuleId,
         pricingRuleName: null, // nothing prices off a rule; the price is the recommended retail
         retailOverride: v.retailOverride,
         compareAtPrice: v.compareAtPrice,
-        landedCostAud: v.landedCostAud,
+        landedCostHome: v.landedCostHome,
         retailPrice: v.retailPrice,
         exGstRevenue: v.exGstRevenue,
         gstComponent: v.gstComponent,
@@ -1254,11 +1429,33 @@ export async function loadReview(batchId: string): Promise<ReviewData> {
       };
     }),
     flags: [],
+    confidence: scoreProduct({
+      title: p.title,
+      vendor: p.vendor,
+      typeKnown: !typesAreKnown() || isValidType(p.productType),
+      tags: p.tags.split(",").map((t) => t.trim()).filter(Boolean),
+      tagKnown: gate.known,
+      sourceText: p.variants.map((v) => rawByVariant.get(v.id) ?? "").join(" "),
+      touched: touchedProducts.get(p.id) ?? new Set<string>(),
+      images: p.images.map((i) => ({ source: i.source, validated: i.validated })),
+      retail: (() => {
+        const priced = p.variants.filter((v) => v.retailPrice > 0);
+        const value = priced.length ? Math.min(...priced.map((v) => v.retailPrice)) : 0;
+        const person = p.variants.some((v) => touchedVariants.get(v.id)?.has("retailOverride"));
+        const paperwork = p.variants.length > 0 && p.variants.every((v) => v.retailOverride !== null && v.retailOverride > 0);
+        return {
+          value,
+          from: person ? "person" : paperwork ? "paperwork" : value > 0 ? "rule" : "none",
+          belowCost: p.variants.some((v) => v.retailPrice > 0 && v.profitPerUnit < 0),
+          underFloor: p.variants.some((v) => v.retailPrice > 0 && v.costPrice > 0 && v.marginPct < settings.minMarginPct),
+        };
+      })(),
+    }),
   }));
 
   const catalog = await shopifyLookups(view);
   validateReview(view, { minMarginPct: settings.minMarginPct, shopifySkus: catalog.skus, shopifyHandles: catalog.handles });
-  const summary = summarise(view);
+  const summary = { ...summarise(view), ...tallyConfidence(view) };
   await prisma.importBatch.update({ where: { id: batchId }, data: { summary: JSON.stringify(summary) } });
 
   return {
@@ -1267,9 +1464,9 @@ export async function loadReview(batchId: string): Promise<ReviewData> {
       name: batch.name,
       status: batch.status,
       currency: batch.currency,
-      fxRateToAud: batch.fxRateToAud,
+      fxRateToHome: batch.fxRateToHome,
       gstTreatment: batch.gstTreatment,
-      freightTotalAud: batch.freightTotalAud,
+      freightTotalHome: batch.freightTotalHome,
       freightMode: batch.freightMode,
       splitExportBy: batch.splitExportBy,
       supplierName: batch.supplier?.name ?? null,
@@ -1289,7 +1486,7 @@ export async function loadReview(batchId: string): Promise<ReviewData> {
       // this deployment's own, or nowhere (a desktop copy's own address is not public).
       publicBaseUrl: usingBlob() ? "blob" : pictureHosting() ? "floda" : publicFileUrl("images/x.jpg", settings.publicBaseUrl) ? (settings.publicBaseUrl || process.env.APP_PUBLIC_URL || `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`) : "",
     },
-    metafieldColumns: SKI_METAFIELDS.map(metafieldColumn),
+    metafieldColumns: metafieldDefs().map(metafieldColumn),
   };
 }
 
@@ -1369,6 +1566,8 @@ function planExport(review: ReviewData): { ok: true; planned: PlannedPart[]; rep
  * before they could have their file at all was the same refusal wearing a different hat.
  */
 export async function exportBatch(batchId: string, userId: string): Promise<ExportResult> {
+  // Pictures still on this computer go to the shop's Shopify Files first, where Shopify can fetch them.
+  if (pictureHosting()) await publishLocalPictures(batchId).catch((err) => console.warn("[export] local pictures not sent:", err instanceof Error ? err.message : err));
   const review = await loadReview(batchId);
   const warnings = warningList(review.products);
   if (review.products.length === 0) return { ok: false, errors: ["Nothing to export - map the files first."], warnings, files: [], repairs: [] };

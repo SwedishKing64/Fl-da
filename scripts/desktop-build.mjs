@@ -1,4 +1,4 @@
-// Build Flöda for the desktop app: the Next.js server as a standalone folder, on SQLite, with an
+// Build Snaben for the desktop app: the Next.js server as a standalone folder, on SQLite, with an
 // empty database template beside it. `electron-builder` then wraps the result (see
 // electron-builder.yml). Usage: `npm run desktop:build`, then `npm run desktop:dist`.
 //
@@ -18,10 +18,11 @@ const run = (cmd, env = {}) => {
 };
 
 const pkg = JSON.parse(readFileSync("package.json", "utf8"));
-const licenceServer = (process.env.FLODA_LICENCE_SERVER ?? "https://fl-da.vercel.app").replace(/\/+$/, "");
+// "none" builds a copy that checks no licence: its own account on the computer, the shop's own key.
+const licenceServer = process.env.FLODA_LICENCE_SERVER === "none" ? "" : (process.env.FLODA_LICENCE_SERVER ?? "https://fl-da.vercel.app").replace(/\/+$/, "");
 const open = process.env.FLODA_OPEN === "1";
 const anthropicApiKey = open ? (process.env.FLODA_ANTHROPIC_API_KEY ?? "").trim() : "";
-// An open copy has no licence to send pictures through, so it keeps them in Flöda's own picture
+// An open copy has no licence to send pictures through, so it keeps them in Snaben's own picture
 // store with a token of its own (the store's read-write token, as the website holds it).
 const blobToken = open ? (process.env.FLODA_BLOB_TOKEN ?? "").trim() : "";
 

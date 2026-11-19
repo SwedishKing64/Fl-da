@@ -35,7 +35,7 @@ const WAIT_MS = 4 * 60_000;
 
 /**
  * One example of each supplier's paperwork, one file at a time: the file is read as soon as the
- * supplier is named, every column is shown against what Flöda took it for, the person corrects
+ * supplier is named, every column is shown against what Snaben took it for, the person corrects
  * anything in the wrong place, and the corrected layout is kept for that supplier. Then the next
  * supplier's file. The real invoices read the way these were left.
  */
@@ -114,7 +114,7 @@ export function SuppliersStep({ fields, templates, next, standalone }: { fields:
   return (
     <Card title="Your suppliers' paperwork">
       <p className="mb-4 text-[14px] text-[var(--ink-soft)]">
-        One example from each supplier, one at a time: an invoice, an order confirmation or an order form, as a spreadsheet, a PDF or a photo. Flöda reads it straight away and shows you what it took every column for. Change anything in the wrong place, keep it, and it is remembered for that supplier, so their real invoices read the way you left this one. Then the next supplier&rsquo;s.
+        One example from each supplier, one at a time: an invoice, an order confirmation or an order form, as a spreadsheet, a PDF or a photo. Snaben reads it straight away and shows you what it took every column for. Change anything in the wrong place, keep it, and it is remembered for that supplier, so their real invoices read the way you left this one. Then the next supplier&rsquo;s.
         {templates > 0 && <> So far <strong>{templates}</strong> layout{templates === 1 ? " is" : "s are"} remembered.</>}
       </p>
 
@@ -136,7 +136,7 @@ export function SuppliersStep({ fields, templates, next, standalone }: { fields:
       {!example && (
         <div className="flex flex-wrap items-center gap-3">
           <Button type="button" variant="primary" icon="📄" onClick={() => input.current?.click()}>{done.length > 0 || templates > 0 ? "Choose the next supplier's file" : "Choose a supplier's file"}</Button>
-          <span className="text-[13px] text-[var(--ink-soft)]">One file. You name the supplier, Flöda reads it, you check the columns.</span>
+          <span className="text-[13px] text-[var(--ink-soft)]">One file. You name the supplier, Snaben reads it, you check the columns.</span>
         </div>
       )}
 
@@ -183,7 +183,7 @@ export function SuppliersStep({ fields, templates, next, standalone }: { fields:
                   </div>
                   <div className="overflow-auto rounded-[10px] border border-[var(--line-soft)] bg-white">
                     <table className="w-full text-[13px]">
-                      <thead className="text-left text-[11px] uppercase tracking-wide text-[var(--ink-soft)]"><tr><th className="px-3 py-1.5">Supplier column</th><th className="px-3 py-1.5">Sample values</th><th className="px-3 py-1.5">Flöda takes it as</th></tr></thead>
+                      <thead className="text-left text-[11px] uppercase tracking-wide text-[var(--ink-soft)]"><tr><th className="px-3 py-1.5">Supplier column</th><th className="px-3 py-1.5">Sample values</th><th className="px-3 py-1.5">Snaben takes it as</th></tr></thead>
                       <tbody>
                         {g.headers.map((h) => (
                           <tr key={h} className="border-t border-[var(--line-soft)]">
@@ -223,7 +223,7 @@ export function SuppliersStep({ fields, templates, next, standalone }: { fields:
 
       {!standalone && next && (
         <div className="mt-5 flex items-center justify-between border-t border-[var(--line-soft)] pt-4 text-[13px] text-[var(--ink-soft)]">
-          <span>{anyRead || templates > 0 ? "You can add more suppliers any time from Training and Rules." : "You can do this later, one supplier at a time, as their paperwork comes in."}</span>
+          <span>{anyRead || templates > 0 ? "You can add more suppliers any time from Teach Snaben." : "You can do this later, one supplier at a time, as their paperwork comes in."}</span>
           <Button size="sm" variant={anyRead || templates > 0 ? "primary" : "ghost"} disabled={pending || busy} onClick={() => start(async () => { if (!anyRead && templates === 0) await skipSetupStepAction("suppliers"); router.push(next); })}>{anyRead || templates > 0 ? "Continue →" : "Skip for now"}</Button>
         </div>
       )}

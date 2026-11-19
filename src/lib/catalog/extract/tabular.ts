@@ -60,19 +60,45 @@ function uniqueHeaders(raw: string[]): string[] {
  * supplier writes it, and a per-length SKU — "V2610112.000.170" — which is exactly the spelling
  * the PIM export uses in its "SKU no. // LENGTH" column and what carries the barcode.
  */
-export function orderToTable(order: { lines: InvoiceLine[]; sheet: string; warnings: string[] }): ExtractedTable {
+export function orderToTable(order: { lines: InvoiceLine[]; sheet: string; warnings: string[] }, method: ExtractedTable["method"] = "XLSX"): ExtractedTable {
   // Cost and colour too: dropping them left every Volkl line with no cost, though the form prices
   // every row, and the Griffon with no colour to tell its black from its orange.
-  const headers = ["Item No.", "SKU", "Brand", "Description", "Colour", "Length", "RRP", "Cost", "Qty"];
+  // Barcode, gender and size too: the reader finds them on any supplier's form, and a form with a
+  // line per size (Osprey's S/M and L/XL) has a size where a ski has a length.
+  // The kind of thing a line is, where the form's own section says ("ALL TERRAIN SKIS", "POLES").
+  const kinds = order.lines.some((l) => (l.kind ?? "").trim());
+  // What a ski is for, where the form says — its section and waist (see grid-form.ts).
+  const terrains = order.lines.some((l) => (l.terrain ?? "").trim());
+  const headers = ["Item No.", "SKU", "Barcode", "Brand", "Description", ...(kinds ? ["Category"] : []), ...(terrains ? ["Terrain"] : []), "Gender", "Colour", "Length", "Size", "RRP", "Cost", "Qty"];
+  // A code on more than one line is the model's, not the variant's: a size grid writes the style's
+  // code once per size ordered. Each variant needs a SKU of its own, so the size goes on the end
+  // ("OW3101.S", "PK2745.SM"), the way a length already did; the model's code stays in Item No.
+  // A model ordered in two colours repeats once more, so the colour goes on too where the size alone
+  // does not tell the lines apart ("OW3101-Navy.S").
+  const count = (keys: string[]) => keys.reduce((m, k) => m.set(k, (m.get(k) ?? 0) + 1), new Map<string, number>());
+  const condensed = (v: string | undefined) => (v ?? "").replace(/[^A-Za-z0-9.]/g, "");
+  const bySku = count(order.lines.map((l) => l.sku));
+  const bySkuSize = count(order.lines.map((l) => `${l.sku}.${condensed(l.size)}`));
   const rows = order.lines.map((line) => {
-    const length = (line.size ?? "").trim();
+    const size = (line.size ?? "").trim();
+    // A ski or pole length is a whole number of centimetres, 60 and up; a boot's 24.5 is a size.
+    // A board's wide length, 158W, is a length too.
+    const length = /^\d{2,3}(\.\d)?w?$/i.test(size) && parseInt(size, 10) >= 60 && !(line.kind ?? "").match(/boot/i) ? size : "";
+    const colourToo = (bySkuSize.get(`${line.sku}.${condensed(size)}`) ?? 0) > 1 && condensed(line.colour) ? `-${condensed(line.colour)}` : "";
+    const perSize = size && (bySku.get(line.sku) ?? 0) > 1 ? `${line.sku}${colourToo}.${condensed(size)}` : "";
     return {
       "Item No.": line.sku,
-      SKU: length ? `${line.sku}.${length}` : line.sku,
+      // The per-length SKU the spec sheets use — but a code that is already per size stands alone.
+      SKU: length ? `${line.sku}${colourToo}.${length}` : perSize || line.sku,
+      Barcode: (line.barcode ?? "").trim(),
       Brand: (line.brand ?? "").trim(),
       Description: line.title,
+      ...(kinds ? { Category: (line.kind ?? "").trim() } : {}),
+      ...(terrains ? { Terrain: (line.terrain ?? "").trim() } : {}),
+      Gender: (line.gender ?? "").trim(),
       Colour: (line.colour ?? "").trim(),
       Length: length,
+      Size: length ? "" : size,
       RRP: line.rrp === null ? "" : String(line.rrp),
       Cost: line.costPrice === null ? "" : String(Math.round(line.costPrice * 100) / 100),
       Qty: line.quantity === null ? "" : String(line.quantity),
@@ -81,7 +107,7 @@ export function orderToTable(order: { lines: InvoiceLine[]; sheet: string; warni
   return {
     headers,
     rows,
-    method: "XLSX",
+    method,
     warnings: [
       `Read as an order: ${rows.length} line${rows.length === 1 ? "" : "s"} from the quantities written on ${order.sheet}. The rest of the form is the supplier's price list, not this delivery, so it was left out.`,
       ...order.warnings.filter((w) => !w.startsWith("Read as an order")),
@@ -114,7 +140,17 @@ export function extractCsv(buffer: Buffer): ExtractedTable {
   const text = buffer.toString("utf8").replace(/^﻿/, "");
   const parsed = Papa.parse<string[]>(text, { skipEmptyLines: "greedy" });
   const warnings = parsed.errors.slice(0, 5).map((e) => `CSV parse warning (row ${e.row ?? "?"}): ${e.message}`);
-  return gridToTable(parsed.data.map((r) => r.map((c) => (c ?? "").toString())), "CSV", warnings);
+  const grid = parsed.data.map((r) => r.map((c) => (c ?? "").toString()));
+  // A size grid sent as a CSV is the same order as one sent as a workbook: one line per size
+  // ordered, not one per row. It went straight to the column matcher, which cannot read a grid.
+  const order = readInvoiceGrids([{ name: "CSV", grid }]);
+  // Only a real size grid: a flat CSV with an item code and a quantity is a table already, and read
+  // as one it keeps every column.
+  if (order && order.shape === "grid" && order.columns.size === "the column heading" && order.lines.some((l) => l.quantity !== null)) {
+    const table = orderToTable(order);
+    return { ...table, method: "CSV", warnings: [...warnings, ...table.warnings] };
+  }
+  return gridToTable(grid, "CSV", warnings);
 }
 
 function cellToString(value: ExcelJS.CellValue): string {

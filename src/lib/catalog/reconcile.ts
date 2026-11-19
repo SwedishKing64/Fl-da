@@ -19,6 +19,7 @@
  * for the rows that do carry one.
  */
 
+import { tentAloneRow } from "./footprints";
 import { parseCsv } from "./csv";
 import { fitPhraseOf } from "./shop-names";
 import { siblingsOfPlaced } from "./siblings";
@@ -621,7 +622,13 @@ export function reconcile(csv: string, lines: InvoiceLine[], options: ReconcileO
       if (rows.length <= 1) return rows;
       const wantsPackage = line.form === "package";
       const kept = rows.filter((r) => isPackage(titleOf.get(handleOf.get(r) ?? "") ?? "") === wantsPackage);
-      return kept.length > 0 && kept.length < rows.length ? kept : rows;
+      if (kept.length > 0 && kept.length < rows.length) return kept;
+      // A tent's barcode is on its tent-alone variant and on its with-footprint variant: the line is
+      // the tent, and the with-footprint variant follows from it and the footprint (see footprints.ts).
+      const oneProduct = new Set(rows.map((r) => handleOf.get(r))).size === 1;
+      const first = rowsOf.get(handleOf.get(rows[0]) ?? "")?.[0] ?? rows[0];
+      const alone = oneProduct ? tentAloneRow(rows, (r) => [1, 2, 3].map((n) => `${at(grid[r], `Option${n} Name`) || at(grid[first], `Option${n} Name`)}: ${at(grid[r], `Option${n} Value`)}`)) : null;
+      return alone !== null ? [alone] : rows;
     };
     if (barcode) tries.push({ key: "barcode", value: barcode, rows: flatOrPackage(byBarcode.get(barcode) ?? []), onInvoice: lineBarcodes.get(barcode) ?? 0 });
     if (sku) tries.push({ key: "sku", value: sku, rows: bySku.get(sku) ?? [], onInvoice: lineSkus.get(sku) ?? 0 });

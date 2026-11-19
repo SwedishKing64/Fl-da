@@ -68,6 +68,14 @@ export interface CanonicalLineItem {
   size: string; // boot size / apparel size
   width: string; // boot last width (e.g. 98mm) or ski waist width
   colour: string;
+  /**
+   * Any other option that tells a variant apart and is not its length, size, width or colour: a
+   * tent's capacity (2P), a pack's volume (65L), a sleeping bag's length or zip side, a bottle's
+   * capacity. Outdoor and general goods vary on these, and a ski-shaped line had nowhere for them.
+   */
+  variant?: string;
+  /** What that option is called on the listing: Capacity, Volume, Zip. Empty for "Option". */
+  variantName?: string;
   gender: string;
   season: string;
   category: string; // if the supplier states it; otherwise detected
@@ -117,6 +125,7 @@ export const CANONICAL_FIELDS: CanonicalFieldDef[] = [
   { key: "grams", label: "Weight (grams)", kind: "number", synonyms: ["weight", "grams", "weight g", "weight (g)", "unit weight", "mass"] },
   { key: "length", label: "Length (cm)", kind: "text", synonyms: ["length", "len", "ski length", "size ski length", "board length", "size cm", "length cm", "cm"] },
   { key: "size", label: "Size", kind: "text", synonyms: ["size", "sizes", "sz", "sz.", "size range", "garment size", "apparel size", "clothing size", "size name", "size code", "size desc", "size description", "boot size", "mondo", "mondopoint", "mp", "shoe size", "size us", "us size", "eu size", "uk size"] },
+  { key: "variant", label: "Other option (capacity, volume, zip…)", kind: "text", synonyms: ["volume", "capacity", "litres", "liters", "volume l", "capacity l", "persons", "person", "sleeps", "berth", "zip", "zip side", "zip position", "torso", "torso size", "bag length", "option", "variant"] },
   { key: "width", label: "Width / fit", kind: "text", synonyms: ["width", "last", "last width", "waist", "waist width", "last mm", "fit", "fit type", "fitting"] },
   { key: "colour", label: "Colour", kind: "text", synonyms: ["colour", "color", "col", "colour name", "color name", "colour description", "color description", "basic colour", "basic color", "colourway", "colorway", "farbe"] },
   { key: "gender", label: "Gender", kind: "text", synonyms: ["gender", "sex", "suitable for", "mens/womens", "m/w", "unisex"] },
@@ -165,7 +174,7 @@ export function emptyLineItem(): CanonicalLineItem {
   };
 }
 
-/** Ski-specific product metafields written as `<name> (product.metafields.<ns>.<key>)`. */
+/** A product metafield, written as `<name> (product.metafields.<ns>.<key>)`. Which ones a shop writes comes from its pack. */
 export interface MetafieldDef {
   key: string;
   namespace: string;
@@ -174,6 +183,7 @@ export interface MetafieldDef {
   source: keyof CanonicalLineItem;
 }
 
+/** The snow pack's metafields, under the namespace the ski shop's store already uses. */
 export const SKI_METAFIELDS: MetafieldDef[] = [
   { key: "length_cm", namespace: "ski", name: "Length (cm)", type: "single_line_text_field", source: "length" },
   { key: "flex", namespace: "ski", name: "Flex", type: "single_line_text_field", source: "flex" },
@@ -184,6 +194,16 @@ export const SKI_METAFIELDS: MetafieldDef[] = [
   { key: "gender", namespace: "ski", name: "Gender", type: "single_line_text_field", source: "gender" },
   { key: "season", namespace: "ski", name: "Season", type: "single_line_text_field", source: "season" },
   { key: "model_code", namespace: "ski", name: "Model Code", type: "single_line_text_field", source: "modelCode" },
+];
+
+/**
+ * Every other shop's: the few that mean the same in any trade, under Shopify's own namespace for
+ * a shop's definitions. A tent written to `ski.length_cm` was the first thing a second trade saw.
+ */
+export const GENERAL_METAFIELDS: MetafieldDef[] = [
+  { key: "gender", namespace: "custom", name: "Gender", type: "single_line_text_field", source: "gender" },
+  { key: "season", namespace: "custom", name: "Season", type: "single_line_text_field", source: "season" },
+  { key: "model_code", namespace: "custom", name: "Model Code", type: "single_line_text_field", source: "modelCode" },
 ];
 
 export function metafieldColumn(def: MetafieldDef): string {
@@ -212,14 +232,40 @@ export interface AppSettings {
   fxRates: FxRates;
   shopify: {
     storeDomain: string; // my-store.myshopify.com
-    accessToken: string; // Admin API access token (custom app)
+    accessToken: string; // Admin API access token: from the install link, or pasted from a custom app
     apiVersion: string; // e.g. 2025-07
+    /** How the store was connected: through Snaben's install link (its token expires and is refreshed), or a pasted token. */
+    connectedBy?: "oauth" | "token";
+    /** For a connection made through the install link: the refresh token, and when each token lapses (ms since epoch). */
+    refreshToken?: string;
+    expiresAt?: number;
+    refreshExpiresAt?: number;
+    scope?: string;
   };
   locations: ShopifyLocation[];
   publicBaseUrl: string; // where uploaded images are served for the CSV, e.g. https://tools.example.com
   seoTone: string; // tone instructions for AI-written descriptions
+  /** How an SEO title reads, in placeholders: "{title} | {shop}", "{brand} {title}". Empty means title | shop. */
+  seoTitlePattern: string;
   houseRules: string; // free text: how this shop builds products, fed to the AI on every product
+  /** Offer confirmed supplier layouts (headings only) to other shops, and start from theirs. */
+  shareLayouts: boolean;
+  /** For a shop that packages skis with bindings: its mounting charges and the wording of the two fittings. */
+  packages: PackageTerms;
 }
+
+export interface PackageTerms {
+  /** Added to a package's recommended retail when the binding is drilled onto the ski. */
+  drillMountFee: number;
+  /** Added when the binding clicks onto a rail the ski already has. */
+  systemMountFee: number;
+  /** The Binding Fitting value that means "mount it", as the shop writes it. */
+  fittingMount: string;
+  /** The Binding Fitting value that means "leave it flat". */
+  fittingNoMount: string;
+}
+
+export const DEFAULT_PACKAGE_TERMS: PackageTerms = { drillMountFee: 0, systemMountFee: 0, fittingMount: "Mounted", fittingNoMount: "Not Mounted" };
 
 export const DEFAULT_SETTINGS: AppSettings = {
   gstRate: 0.1,
@@ -232,7 +278,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   publicBaseUrl: "",
   seoTone:
     "Friendly, knowledgeable specialist shop. Plain English, no hype, mention who the product suits and key specs.",
+  seoTitlePattern: "",
   houseRules: "",
+  shareLayouts: true,
+  packages: DEFAULT_PACKAGE_TERMS,
 };
 
 // ---------------------------------------------------------------------------

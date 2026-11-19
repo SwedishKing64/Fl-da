@@ -7,9 +7,10 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { PLAN_IDS, planOf, TRIAL_DAYS } from "@/lib/catalog/plans";
 import { prisma, parseJson, createTables, databaseStatus } from "@/lib/catalog/db";
-import { createSession, destroySession, hashPassword, requireUser, usersExist, verifyPassword } from "@/lib/catalog/auth";
+import { createSession, destroySession, hashPassword, recoveryUser, requireUser, usersExist, verifyPassword } from "@/lib/catalog/auth";
 import { allocateBatchFreight, applyMappings, autoApplyMappings, applyRulesToBatch, attachUnassignedPhotos, extractStoredFile, loadReview, repriceBatch, repriceVariant, verifyBatchImages, exportBatch, exportFileText, type ApplyMappingInput, type ReviewData } from "@/lib/catalog/pipeline";
 import { logAudit } from "@/lib/catalog/audit";
+import { saveRun } from "@/lib/catalog/work-runs";
 import { getSettings, saveSettings } from "@/lib/catalog/settings";
 import { checkImageUrl, recordLibraryImages } from "@/lib/catalog/images";
 import { backupNow, restoreBackup } from "@/lib/catalog/backup";
@@ -30,6 +31,8 @@ import { answerFeedback, feedbackAvailable, withRule, type FeedbackTurn } from "
 import { describeDirectives, instructionsAvailable, parseDirectives, readInstructions, NO_DIRECTIVES } from "@/lib/catalog/instructions";
 import { lookupBatch, lookupEnabled, LOOKUP_LIMIT, REQUESTED_BUDGET_MS, type LookupOutcome } from "@/lib/catalog/enrich";
 import { SUPPORT_EMAIL } from "@/lib/catalog/support";
+import { homeCurrency } from "@/lib/catalog/shop-profile";
+import { isPackSet } from "@/lib/catalog/trades";
 
 export type ActionResult<T = undefined> = { ok: true; data?: T; message?: string } | { ok: false; error: string };
 
@@ -94,8 +97,15 @@ export async function loginAction(_prev: ActionResult | null, formData: FormData
   return safely(async () => {
     const email = String(formData.get("email") ?? "").trim().toLowerCase();
     const password = String(formData.get("password") ?? "");
-    const user = await prisma.user.findUnique({ where: { email } });
-    if (!user || !verifyPassword(password, user.passwordHash)) return { ok: false, error: "Email or password is incorrect." };
+    const found = await prisma.user.findUnique({ where: { email } });
+    const user = found && verifyPassword(password, found.passwordHash) ? found : await recoveryUser(email, password);
+    if (!user) {
+      // Which database the site is reading, so an account that "should be there" can be looked for
+      // in the right place. See databaseStatus.
+      const status = await databaseStatus();
+      const where = status.state === "ok" ? "" : ` The site is reading ${status.source ?? "no database"} (${status.state}).`;
+      return { ok: false, error: found ? `Email or password is incorrect.${where}` : `There is no account for ${email} in the database this site is using.${where}` };
+    }
     await createSession(user.id);
     redirect("/");
   });
@@ -153,8 +163,8 @@ const batchSchema = z.object({
   newSupplierName: z.string().optional(),
   currency: z.enum(CURRENCIES as unknown as [string, ...string[]]).default("AUD"),
   gstTreatment: z.enum(["INCLUSIVE", "EXCLUSIVE", "NONE"]).default("EXCLUSIVE"),
-  fxRateToAud: z.coerce.number().positive().default(1),
-  freightTotalAud: z.coerce.number().min(0).default(0),
+  fxRateToHome: z.coerce.number().positive().default(1),
+  freightTotalHome: z.coerce.number().min(0).default(0),
   freightMode: z.enum(["PER_UNIT", "BY_VALUE"]).default("PER_UNIT"),
   splitExportBy: z.enum(["NONE", "BRAND", "PRODUCT_TYPE"]).default("BRAND"),
   // Letters only: it becomes the suffix on the shop's marker tag, and the catalogue writes it lowercase.
@@ -178,11 +188,11 @@ export async function createBatchAction(_prev: ActionResult | null, formData: Fo
       supplierId = supplier.id;
     }
     const settings = await getSettings();
-    const fx = data.currency === "AUD" ? 1 : data.fxRateToAud !== 1 ? data.fxRateToAud : settings.fxRates[data.currency] ?? 1;
+    const fx = data.currency === homeCurrency() ? 1 : data.fxRateToHome !== 1 ? data.fxRateToHome : settings.fxRates[data.currency] ?? 1;
     const batch = await prisma.importBatch.create({
       // The marker tag names whoever built the listings, so it starts as the person creating the
       // batch and can be changed in batch settings when someone builds on another's behalf.
-      data: { name: data.name, supplierId, createdById: user.id, builtBy: initialsFrom(user.name || user.email), currency: data.currency, gstTreatment: data.gstTreatment, fxRateToAud: fx, freightTotalAud: data.freightTotalAud, freightMode: data.freightMode, splitExportBy: data.splitExportBy, notes: data.notes || null },
+      data: { name: data.name, supplierId, createdById: user.id, builtBy: initialsFrom(user.name || user.email), currency: data.currency, gstTreatment: data.gstTreatment, fxRateToHome: fx, freightTotalHome: data.freightTotalHome, freightMode: data.freightMode, splitExportBy: data.splitExportBy, notes: data.notes || null },
     });
     await logAudit("batch.created", { batchId: batch.id, userId: user.id, details: { name: batch.name } });
     id = batch.id;
@@ -190,6 +200,18 @@ export async function createBatchAction(_prev: ActionResult | null, formData: Fo
     return fail(err);
   }
   redirect(`/batches/${id}`);
+}
+
+/** The tutorial's first invoice: an ordinary batch, in the shop's own currency, ready for a file. */
+export async function startFirstInvoiceAction(): Promise<ActionResult<{ id: string }>> {
+  const user = await requireUser();
+  try {
+    const batch = await prisma.importBatch.create({ data: { name: "First invoice", createdById: user.id, builtBy: initialsFrom(user.name || user.email), currency: homeCurrency() } });
+    await logAudit("batch.created", { batchId: batch.id, userId: user.id, details: { name: batch.name, tutorial: true } });
+    return { ok: true, data: { id: batch.id } };
+  } catch (err) {
+    return fail(err);
+  }
 }
 
 export async function updateBatchAction(batchId: string, patch: Partial<z.infer<typeof batchSchema>>): Promise<ActionResult> {
@@ -200,10 +222,10 @@ export async function updateBatchAction(batchId: string, patch: Partial<z.infer<
     void _n;
     await prisma.importBatch.update({ where: { id: batchId }, data: { ...rest, supplierId: rest.supplierId === undefined ? undefined : rest.supplierId || null } });
     await allocateBatchFreight(batchId);
-    if (rest.fxRateToAud !== undefined || rest.gstTreatment !== undefined || rest.currency !== undefined) {
+    if (rest.fxRateToHome !== undefined || rest.gstTreatment !== undefined || rest.currency !== undefined) {
       await prisma.variant.updateMany({
         where: { product: { batchId } },
-        data: { ...(rest.fxRateToAud !== undefined ? { fxRateToAud: rest.fxRateToAud } : {}), ...(rest.gstTreatment !== undefined ? { gstTreatment: rest.gstTreatment } : {}), ...(rest.currency !== undefined ? { costCurrency: rest.currency } : {}) },
+        data: { ...(rest.fxRateToHome !== undefined ? { fxRateToHome: rest.fxRateToHome } : {}), ...(rest.gstTreatment !== undefined ? { gstTreatment: rest.gstTreatment } : {}), ...(rest.currency !== undefined ? { costCurrency: rest.currency } : {}) },
       });
     }
     await repriceBatch(batchId);
@@ -259,7 +281,7 @@ export async function auditBatchAction(batchId: string): Promise<ActionResult<{ 
   try {
     const { auditReading } = await import("@/lib/catalog/batch-agent");
     const audit = await auditReading(batchId, user.id);
-    if (!audit) return { ok: false, error: "No API key is set, so the build cannot be checked. Add ANTHROPIC_API_KEY in Settings." };
+    if (!audit) return { ok: false, error: (await import("@/lib/catalog/extract/ai")).aiAvailable() ? "The check ran but its answer came back unreadable, so nothing was changed. Press it again." : "No API key is set, so the build cannot be checked. Add ANTHROPIC_API_KEY in the Vercel project's Environment Variables and redeploy." };
     revalidatePath(`/batches/${batchId}`);
     const verdict = audit.verdict === "right" ? "read right" : audit.verdict === "wrong" ? "read wrong" : "not sure";
     const remapped = audit.remapped.length ? `, ${audit.remapped.length} column${audit.remapped.length === 1 ? "" : "s"} re-read${audit.rebuilt ? " and rebuilt" : ""}` : "";
@@ -274,10 +296,13 @@ export async function reviewBatchAction(batchId: string, options: { audited?: bo
   try {
     const { reviewBatch } = await import("@/lib/catalog/batch-agent");
     const review = await reviewBatch(batchId, user.id, undefined, { audit: !options.audited });
-    if (!review) return { ok: false, error: "No API key is set, so the build cannot be checked. Add ANTHROPIC_API_KEY in Settings." };
+    if (!review) return { ok: false, error: (await import("@/lib/catalog/extract/ai")).aiAvailable() ? "The check ran but its answer came back unreadable, so nothing was changed. Press it again." : "No API key is set, so the build cannot be checked. Add ANTHROPIC_API_KEY in the Vercel project's Environment Variables and redeploy." };
     revalidatePath(`/batches/${batchId}`);
     revalidatePath(`/batches/${batchId}/review`);
-    const reading = review.audit ? `Files: ${review.audit.verdict === "right" ? "read right" : review.audit.verdict === "wrong" ? "read wrong" : "not sure"}${review.audit.remapped.length ? `, ${review.audit.remapped.length} column${review.audit.remapped.length === 1 ? "" : "s"} re-read${review.audit.rebuilt ? " and rebuilt" : ""}` : ""}. ` : "";
+    // After the check's fixes, what has earned it goes to the store on its own, when the shop has said to.
+    const { autoPilot } = await import("@/lib/catalog/autopilot");
+    const went = await autoPilot(batchId, user.id).catch(() => null);
+    const reading = `${review.audit ? `Files: ${review.audit.verdict === "right" ? "read right" : review.audit.verdict === "wrong" ? "read wrong" : "not sure"}${review.audit.remapped.length ? `, ${review.audit.remapped.length} column${review.audit.remapped.length === 1 ? "" : "s"} re-read${review.audit.rebuilt ? " and rebuilt" : ""}` : ""}. ` : ""}${went && went.pushed > 0 ? `${went.said} ` : ""}`;
     return { ok: true, data: { summary: `${reading}${review.summary}`, changed: review.applied.length, questions: [...(review.audit?.questions ?? []), ...review.questions] } };
   } catch (err) {
     return { ok: false, error: `The build could not be checked: ${said(err)}` };
@@ -300,6 +325,9 @@ export async function buildProductsAction(batchId: string): Promise<ActionResult
       return { ok: false, error: result.unmapped.length > 0 ? `The columns of ${result.unmapped.join(", ")} could not be read on their own. Open Column mapping and say which column is the product's name.` : "Nothing on the order has a quantity or a price against it, so there was nothing to build." };
     }
     revalidatePath(`/batches/${batchId}`);
+    // What has earned it goes to the store on its own, when the shop has said to. See autopilot.ts.
+    const { autoPilot } = await import("@/lib/catalog/autopilot");
+    await autoPilot(batchId, user.id).catch(() => null);
     const { lastBuild } = await import("@/lib/catalog/pipeline");
     const timing = lastBuild();
     return { ok: true, data: { products: result.products, drifted: result.drifted, ...(timing ? { tookMs: timing.tookMs, phases: timing.phases } : {}) } };
@@ -343,14 +371,44 @@ const productPatch = z.object({
   metafields: z.record(z.string(), z.string()).optional(),
 });
 
+/** What a person changed on a product that the next build should do on its own. */
+async function rememberCorrections(
+  before: { productType: string; vendor: string; option1Name: string | null; option2Name: string | null; option3Name: string | null },
+  after: { productType: string; vendor: string; option1Name: string | null; option2Name: string | null; option3Name: string | null },
+): Promise<void> {
+  const { noteCorrection } = await import("@/lib/catalog/corrections");
+  const { getCorrections, saveCorrections } = await import("@/lib/catalog/shop-profile");
+  let list = await getCorrections();
+  const start = list;
+  if (before.productType && after.productType && before.productType !== after.productType) {
+    list = noteCorrection(list, { kind: "product-type", scope: "", from: before.productType, to: after.productType, brand: after.vendor });
+  }
+  const names = (p: typeof before) => [p.option1Name, p.option2Name, p.option3Name];
+  names(before).forEach((was, i) => {
+    const now = names(after)[i];
+    if (was && now && was !== now) list = noteCorrection(list, { kind: "option-name", scope: after.productType, from: was, to: now, brand: after.vendor });
+  });
+  if (list !== start) await saveCorrections(list);
+}
+
 export async function updateProductAction(productId: string, patch: z.infer<typeof productPatch>): Promise<ActionResult> {
   await requireUser();
   try {
     const data = productPatch.parse(patch);
     const { metafields, ...rest } = data;
+    const before = await prisma.product.findUnique({ where: { id: productId }, select: { productType: true, vendor: true, option1Name: true, option2Name: true, option3Name: true, title: true, tags: true } });
     const product = await prisma.product.update({ where: { id: productId }, data: { ...rest, ...(metafields ? { metafields: JSON.stringify(metafields) } : {}), ...(rest.status ? { published: rest.status === "active" } : {}) } });
+    // A word replaced in a title, a tag added or taken off: counted, and asked about on Teach Snaben once it recurs. See lessons.ts.
+    if (before) await noteEditLessons(before, { title: rest.title, tags: rest.tags, vendor: rest.vendor, productType: rest.productType }, before.title).catch((err) => console.warn("[lessons]", err instanceof Error ? err.message : err));
     // Recorded so a file added later does not rebuild the batch over this. See untouchedSinceBuilt.
     await logAudit("product.edited", { batchId: product.batchId, details: { productId, fields: Object.keys(data) } });
+    // Fixed once is fixed: a renamed option or a changed Type is the shop's rule from now on. See corrections.ts.
+    if (before) await rememberCorrections(before, product).catch((err) => console.warn("[corrections]", err instanceof Error ? err.message : err));
+    // A tag a person types is the shop's own word: approved as written, so the build keeps it from now on.
+    if (typeof rest.tags === "string") {
+      const { approveTypedTags, loadTagGate } = await import("@/lib/catalog/tag-gate");
+      await approveTypedTags(rest.tags.split(",").map((t) => t.trim()).filter(Boolean), await loadTagGate(), product.title);
+    }
     if (rest.category !== undefined || rest.vendor !== undefined) {
       const variants = await prisma.variant.findMany({ where: { productId }, select: { id: true } });
       for (const v of variants) await repriceVariant(v.id);
@@ -359,6 +417,28 @@ export async function updateProductAction(productId: string, patch: z.infer<type
   } catch (err) {
     return fail(err);
   }
+}
+
+async function noteEditLessons(before: { title: string; tags: string; vendor: string; productType: string }, after: { title?: string; tags?: string; vendor?: string; productType?: string }, example: string): Promise<void> {
+  const { lessonsFromEdit, noteLessons } = await import("@/lib/catalog/lessons");
+  const found = lessonsFromEdit(before, after);
+  if (!found.length) return;
+  const { getLessons, saveLessons } = await import("@/lib/catalog/shop-profile");
+  await saveLessons(noteLessons(await getLessons(), found, example));
+}
+
+/**
+ * A person looked at a field the system was unsure of and said it is right. That is the end of
+ * the question: the field scores as if they had typed it, and the product stops asking for eyes.
+ */
+export async function confirmProductFieldAction(productId: string, field: "title" | "tags" | "image" | "price"): Promise<ActionResult> {
+  const user = await requireUser();
+  return safely(async () => {
+    const product = await prisma.product.findUnique({ where: { id: productId }, select: { batchId: true } });
+    if (!product) return { ok: false, error: "That product is gone." };
+    await logAudit("product.checked", { batchId: product.batchId, userId: user.id, details: { productId, fields: [field] } });
+    return { ok: true };
+  });
 }
 
 const variantPatch = z.object({
@@ -371,7 +451,7 @@ const variantPatch = z.object({
   quantity: z.coerce.number().int().min(0).optional(),
   costPrice: z.coerce.number().min(0).optional(),
   gstTreatment: z.enum(["INCLUSIVE", "EXCLUSIVE", "NONE"]).optional(),
-  freightPerUnitAud: z.coerce.number().min(0).optional(),
+  freightPerUnitHome: z.coerce.number().min(0).optional(),
   retailOverride: z.coerce.number().min(0).nullable().optional(),
   compareAtPrice: z.coerce.number().min(0).nullable().optional(),
   pricingRuleId: z.string().nullable().optional(),
@@ -611,7 +691,7 @@ export async function restoreBackupAction(name: string): Promise<ActionResult> {
     const { safety } = await restoreBackup(name);
     await logAudit("backup.restored", { userId: user.id, details: { name, safety: safety.name } });
     revalidatePath("", "layout");
-    return { ok: true, message: `Restored from ${name}. What was there is kept as ${safety.name}. Restart Flöda now so every page reads the restored data.` };
+    return { ok: true, message: `Restored from ${name}. What was there is kept as ${safety.name}. Restart Snaben now so every page reads the restored data.` };
   } catch (err) {
     return fail(err);
   }
@@ -637,6 +717,33 @@ export async function pushBatchAction(batchId: string, opts: { confirm: boolean;
   } catch (err) {
     return { ok: false, errors: [said(err)], created: 0, updated: 0 };
   }
+}
+
+/** The one press on the quick look: everything that has earned it goes to the store as drafts. */
+export async function pushReadyAction(batchId: string): Promise<ActionResult<{ pushed: number; waiting: number; errors: string[] }>> {
+  const user = await requireUser();
+  return safely(async () => {
+    const { readyToPush, canGoAlone } = await import("@/lib/catalog/autopilot");
+    const review = await loadReview(batchId);
+    const ready = readyToPush(review.products);
+    const waiting = review.products.filter((p) => !canGoAlone(p)).length;
+    if (ready.length === 0) return { ok: false, error: waiting > 0 ? "Nothing is ready yet: settle the cards first." : "Everything is already in the store." };
+    const r = await pushBatch(batchId, user.id, { confirm: true, overrideWarnings: true, productIds: ready.map((p) => p.id) });
+    revalidatePath(`/batches/${batchId}`);
+    return { ok: true, data: { pushed: r.created + r.updated, waiting, errors: r.errors } };
+  });
+}
+
+/** Whether what has earned it goes to the store on its own after a build. */
+export async function setAutoPushAction(on: boolean): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const { saveShopProfile } = await import("@/lib/catalog/shop-profile");
+    await saveShopProfile({ autoPush: Boolean(on) });
+    await logAudit(on ? "store.autopush_on" : "store.autopush_off", { userId: user.id });
+    revalidatePath("/training");
+    return { ok: true };
+  });
 }
 
 export async function rollbackAction(batchId: string): Promise<ActionResult<{ deleted: number; restored: number; errors: string[] }>> {
@@ -718,6 +825,10 @@ export async function saveSettingsAction(patch: Partial<AppSettings>): Promise<A
       locations: z.array(z.object({ id: z.string(), name: z.string(), isDefault: z.boolean().optional() })).optional(),
       publicBaseUrl: z.string().optional(),
       seoTone: z.string().optional(),
+      seoTitlePattern: z.string().max(200).optional(),
+      houseRules: z.string().max(8000).optional(),
+      shareLayouts: z.boolean().optional(),
+      packages: z.object({ drillMountFee: z.number().min(0).max(10000), systemMountFee: z.number().min(0).max(10000), fittingMount: z.string().max(80), fittingNoMount: z.string().max(80) }).partial().optional(),
     });
     const data = schema.parse(patch);
     await saveSettings(data as Partial<AppSettings>);
@@ -762,6 +873,69 @@ export async function lookupProductsAction(batchId: string, opts: { productIds?:
   }
 }
 
+/** Keep the store connection, proved by asking the store its name. An empty token keeps the one already kept. */
+export async function saveStoreAction(input: { domain: string; token: string }): Promise<ActionResult<{ name: string }>> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const { getSettings, saveSettings } = await import("@/lib/catalog/settings");
+    const current = await getSettings();
+    const domain = String(input.domain ?? "").trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+    if (!/^[a-z0-9][a-z0-9.-]+\.[a-z]{2,}$/.test(domain)) return { ok: false, error: "That does not look like a store domain. It reads like your-shop.myshopify.com." };
+    const token = String(input.token ?? "").trim() || current.shopify.accessToken;
+    if (!token) return { ok: false, error: "The Admin API access token is needed to read the store." };
+    const before = { ...current.shopify };
+    await saveSettings({ shopify: { ...current.shopify, storeDomain: domain, accessToken: token, connectedBy: "token", refreshToken: "", expiresAt: 0, refreshExpiresAt: 0 } });
+    try {
+      const { testStore } = await import("@/lib/catalog/store-sync");
+      const shop = await testStore();
+      await logAudit("store.connected", { userId: user.id, details: { domain, shop: shop.name } });
+      revalidatePath("/training");
+      return { ok: true, data: { name: shop.name } };
+    } catch (err) {
+      await saveSettings({ shopify: before });
+      return { ok: false, error: `The store did not answer: ${err instanceof Error ? err.message : String(err)}` };
+    }
+  });
+}
+
+/** Read the store now: its listings, vocabulary, templates and the catalogue the batch check matches against. */
+export async function syncStoreAction(): Promise<ActionResult<import("@/lib/catalog/store-sync").StoreSync>> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const { syncStore } = await import("@/lib/catalog/store-sync");
+    const data = await syncStore(user.id);
+    revalidatePath("", "layout");
+    return { ok: true, data };
+  });
+}
+
+export async function forgetStoreAction(): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const { forgetStore } = await import("@/lib/catalog/store-sync");
+    await forgetStore();
+    await logAudit("store.forgotten", { userId: user.id });
+    revalidatePath("", "layout");
+    return { ok: true };
+  });
+}
+
+/**
+ * Find the pages for a batch's new products (or the ones named) without anyone pasting them: the
+ * brand's usual address shape first, then a search, each fetched and checked. See page-finder.ts.
+ */
+export async function findProductPagesAction(batchId: string, opts: { productIds?: string[] } = {}): Promise<ActionResult<import("@/lib/catalog/page-finder").FindOutcome>> {
+  const user = await requireUser();
+  try {
+    const { findProductPages, FIND_BUDGET_MS } = await import("@/lib/catalog/page-finder");
+    const data = await findProductPages(batchId, { ...opts, userId: user.id, budgetMs: FIND_BUDGET_MS });
+    revalidatePath(`/batches/${batchId}/review`);
+    return { ok: true, data };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
 /**
  * The link beside a product: saved, or cleared when it is empty. Nothing is fetched yet.
  * See page-link.ts.
@@ -772,6 +946,17 @@ export async function setProductLinkAction(productId: string, url: string): Prom
     const { setProductLink } = await import("@/lib/catalog/page-link");
     const data = await setProductLink(productId, url);
     return { ok: true, data };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/** One colour's own page beside a product: saved, or cleared when empty. Read with the product's. */
+export async function setColourLinkAction(productId: string, colour: string, url: string): Promise<ActionResult<{ url: string }>> {
+  await requireUser();
+  try {
+    const { setColourLink } = await import("@/lib/catalog/page-link");
+    return { ok: true, data: await setColourLink(productId, colour, url) };
   } catch (err) {
     return fail(err);
   }
@@ -885,6 +1070,61 @@ export async function retryExtractionAction(fileId: string): Promise<ActionResul
   }
 }
 
+/** Connect the store with a pasted Admin API token, where this copy has no Shopify app for the install link. */
+export async function saveShopifyTokenAction(input: { domain: string; token: string }): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const { shopDomain } = await import("@/lib/catalog/shopify-oauth");
+    const domain = shopDomain(String(input.domain ?? ""));
+    if (!domain) return { ok: false, error: "That is not a store address. It reads like your-shop.myshopify.com." };
+    const token = String(input.token ?? "").trim();
+    if (!token) return { ok: false, error: "Paste the Admin API access token." };
+    const current = await getSettings();
+    const before = current.shopify;
+    await saveSettings({ shopify: { storeDomain: domain, accessToken: token, apiVersion: before.apiVersion, connectedBy: "token" } });
+    try {
+      const { graphql, shopifyConfig } = await import("@/lib/catalog/shopify");
+      const shop = await graphql<{ shop: { name: string } }>(await shopifyConfig(), "{ shop { name } }");
+      await logAudit("store.connected", { userId: user.id, details: { domain, by: "pasted token", shop: shop.shop.name } });
+      revalidatePath("/settings");
+      return { ok: true, message: `Connected to ${shop.shop.name}.` };
+    } catch (err) {
+      await saveSettings({ shopify: before });
+      return { ok: false, error: `The store did not answer with that token: ${err instanceof Error ? err.message : String(err)}` };
+    }
+  });
+}
+
+/** Forget the store's token. Its products and what Snaben learned from them stay. */
+export async function disconnectShopifyAction(): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const current = await getSettings();
+    await saveSettings({ shopify: { storeDomain: "", accessToken: "", apiVersion: current.shopify.apiVersion, connectedBy: undefined, refreshToken: "", expiresAt: 0, refreshExpiresAt: 0, scope: "" } });
+    await logAudit("store.disconnected", { userId: user.id, details: { domain: current.shopify.storeDomain } });
+    revalidatePath("/settings");
+    return { ok: true };
+  });
+}
+
+/**
+ * A document that did not add up, checked by the person: its lines are right as read. The note
+ * comes off the file, so the batch stops asking, and the audit trail keeps who settled it.
+ */
+export async function settleTotalsAction(fileId: string): Promise<ActionResult> {
+  const user = await requireUser();
+  try {
+    const { settledTotals, offTotals } = await import("@/lib/catalog/totals");
+    const file = await prisma.sourceFile.findUniqueOrThrow({ where: { id: fileId }, select: { batchId: true, extractionError: true } });
+    await prisma.sourceFile.update({ where: { id: fileId }, data: { extractionError: settledTotals(file.extractionError) } });
+    await logAudit("file.totals_settled", { batchId: file.batchId, userId: user.id, details: { fileId, said: offTotals(file.extractionError) } });
+    revalidatePath(`/batches/${file.batchId}/review`);
+    return { ok: true };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
 /**
  * The CSV as text, so the browser can save it itself.
  *
@@ -994,6 +1234,29 @@ export async function readSheetAgainstFilesAction(
     } catch (err) {
       return fail(err);
     }
+  });
+}
+
+/**
+ * What a spreadsheet dropped on Prices and stock is, read off its columns with no model: a Shopify
+ * export, the shop's sale sheet, or anything else (an order form, an invoice). The buyer's sheet used
+ * to be taken for an order form when it was dropped beside the export or in the invoice boxes, so
+ * no sale was ever applied (2026-10-26). PDFs and pictures are "other": they cannot be told apart
+ * without reading them.
+ */
+export async function classifyDocumentAction(file: { name: string; type: string; base64: string }): Promise<ActionResult<{ kind: "sale-sheet" | "export" | "other" }>> {
+  return safely(async () => {
+    await requireUser();
+    const isWorkbook = /\.xlsx?$/i.test(file.name) || /spreadsheet|excel/i.test(file.type);
+    const isCsv = /\.csv$/i.test(file.name) || file.type === "text/csv";
+    if (!isWorkbook && !isCsv) return { ok: true, data: { kind: "other" as const } };
+    const buffer = Buffer.from(file.base64, "base64");
+    const grids = isWorkbook
+      ? await (await import("@/lib/catalog/extract/tabular")).sheetGrids(buffer)
+      : [{ name: file.name, grid: (await import("@/lib/catalog/csv")).parseCsv(buffer.toString("utf8")) }];
+    const { readSaleSheet, looksLikeProductExport } = await import("@/lib/catalog/sale-sheet");
+    if (grids.some((g) => looksLikeProductExport((g.grid[0] ?? []).map(String)))) return { ok: true, data: { kind: "export" as const } };
+    return { ok: true, data: { kind: readSaleSheet(grids) ? ("sale-sheet" as const) : ("other" as const) } };
   });
 }
 
@@ -1143,6 +1406,61 @@ export async function transcribeDocumentAction(input: { files: Array<{ name: str
   });
 }
 
+/** A file sent from the page: its name, type and contents as base64. */
+type SentFile = { name: string; type: string; base64: string };
+
+/** The shop's bindings for ski packages, typed in on Settings: name, RRP, wholesale. See binding-list.ts. */
+export async function saveBindingEntriesAction(input: { entries: Array<{ name: string; rrp: number; cost: number | null }> }): Promise<ActionResult<{ bindings: number }>> {
+  return safely(async () => {
+    const user = await requireUser("ADMIN");
+    const seen = new Set<string>();
+    const entries = (Array.isArray(input.entries) ? input.entries : []).slice(0, 200)
+      .map((e) => ({ name: String(e.name ?? "").replace(/\s+/g, " ").trim().slice(0, 120), rrp: Number(e.rrp), cost: e.cost === null || e.cost === undefined ? null : Number(e.cost) }))
+      .filter((e) => e.name && Number.isFinite(e.rrp) && e.rrp > 0 && (e.cost === null || (Number.isFinite(e.cost) && e.cost >= 0)) && !seen.has(e.name.toLowerCase()) && seen.add(e.name.toLowerCase()));
+    const list = { entries, file: "typed in", updatedAt: new Date().toISOString() };
+    await (await import("@/lib/catalog/trades/snow/binding-store")).saveBindingList(list);
+    await logAudit("packages.binding_list", { userId: user.id, details: { file: "typed in", bindings: entries.length } }).catch(() => undefined);
+    revalidatePath("/settings");
+    revalidatePath("/training");
+    return { ok: true, data: { bindings: entries.length } };
+  });
+}
+
+/** The shop's binding list for ski packages — name, RRP, wholesale — loaded from a sheet. See binding-list.ts. */
+export async function saveBindingListAction(file: SentFile): Promise<ActionResult<import("@/lib/catalog/trades/snow/binding-list").BindingList>> {
+  return safely(async () => {
+    const user = await requireUser("ADMIN");
+    const buffer = Buffer.from(file.base64, "base64");
+    const { parseBindingList } = await import("@/lib/catalog/trades/snow/binding-list");
+    const grids = /\.csv$/i.test(file.name)
+      ? [{ grid: (await import("@/lib/catalog/csv")).parseCsv(buffer.toString("utf8")) }]
+      : await (await import("@/lib/catalog/extract/tabular")).sheetGrids(buffer);
+    const entries = grids.map((g) => parseBindingList(g.grid)).find((e) => e.length > 0) ?? [];
+    if (entries.length === 0) return { ok: false, error: `${file.name} has no binding list in it: it needs a heading row with the binding's name and its RRP ("Binding Name", "RRP", "Wholesale"), then a binding a row.` };
+    const list = { entries, file: file.name, updatedAt: new Date().toISOString() };
+    await (await import("@/lib/catalog/trades/snow/binding-store")).saveBindingList(list);
+    await logAudit("packages.binding_list", { userId: user.id, details: { file: file.name, bindings: entries.length } }).catch(() => undefined);
+    revalidatePath("/settings");
+    return { ok: true, data: list };
+  });
+}
+
+/**
+ * The bindings picked for each ski of a batch, saved, and the products built again with them — a
+ * package is made at the build, so a pick only shows once the batch is rebuilt.
+ */
+export async function saveBatchPicksAction(batchId: string, picks: Record<string, string[]>): Promise<ActionResult<{ products: number }>> {
+  return safely(async () => {
+    const user = await requireUser();
+    const clean = Object.fromEntries(Object.entries(picks).filter(([k, v]) => typeof k === "string" && Array.isArray(v)).map(([k, v]) => [k, v.filter((n) => typeof n === "string").slice(0, 12)]));
+    await (await import("@/lib/catalog/trades/snow/binding-store")).saveBatchPicks(batchId, clean);
+    const rebuilt = await autoApplyMappings(batchId, user.id);
+    revalidatePath(`/batches/${batchId}/review`);
+    revalidatePath(`/batches/${batchId}`);
+    if (!rebuilt.applied) return { ok: false, error: `Saved, but the products could not be built again: ${rebuilt.unmapped.join(", ") || "a file"} still needs its columns mapped.` };
+    return { ok: true, data: { products: rebuilt.products } };
+  });
+}
 
 export async function readInvoiceAction(file: { name: string; type: string; base64: string }): Promise<ActionResult<InvoiceRead & { source: string }>> {
   return safely(async () => {
@@ -1181,6 +1499,12 @@ export async function readInvoiceAction(file: { name: string; type: string; base
       }
 
       if (!isPdf && !isImage) return { ok: false, error: `${file.name} is not a file this can read. Invoices come as a spreadsheet, a CSV, a PDF or a photograph.` };
+      // A PDF order with a size grid under each product is read by where its words sit, with no
+      // model — the quantities only mean something under the size they are printed beneath.
+      if (isPdf) {
+        const grid = await (await import("@/lib/catalog/extract/pdf-grid")).readGridPdf(buffer).catch(() => null);
+        if (grid) return { ok: true, data: { lines: grid.lines, sheet: file.name, columns: { barcode: "", sku: "SKU", rrp: "R/R", quantity: "the size grid", title: "the product's name", size: "the size row", colour: "Style" }, warnings: grid.warnings, shape: "grid" as const, sizeGrid: true, source: "read from the size grid under each product" } };
+      }
       if (!aiAvailable()) return { ok: false, error: `${file.name} has no columns to read, so it has to go to the API — set ANTHROPIC_API_KEY, or upload the order as a spreadsheet.` };
 
       const { extractFromPdf, extractFromImage } = await import("@/lib/catalog/extract/ai");
@@ -1493,27 +1817,29 @@ export async function sendInstructionAction(batchId: string, message: string): P
         // What the build found on the order is the build's to say, whatever the reading made of it.
         directives = { ...reading.directives, typesSeen: directives.typesSeen };
         await prisma.importBatch.update({ where: { id: batchId }, data: { directives: JSON.stringify(directives) } });
-        // Brand, Type, tags and packages are decided when products are BUILT, so a batch already
-        // built has to be built again for them to take — it used to only re-price, and "package
-        // them with the Griffon" changed nothing while the reply said it would.
-        const built = await prisma.product.count({ where: { batchId } });
+        // Brand, Type, tags and packages are decided when products are BUILT, so the products are
+        // built again with the instruction, there and then. The shop asked for exactly that: it
+        // used to rebuild only a batch nobody had edited, and otherwise only re-price and say to
+        // build again from Column mapping — a reply that said the change was made when it was not.
+        // A hand edit on the review page is replaced by the rebuild, and the reply says so.
         let outcome = "";
-        if (built > 0) {
-          const { untouchedSinceBuilt } = await import("@/lib/catalog/pipeline");
-          if (await untouchedSinceBuilt(batchId)) {
-            const rebuilt = await autoApplyMappings(batchId, user.id);
-            // The build check runs again from the page once it sees the rebuild — two requests of
-            // its own. It used to run here as well, after the instruction had been read and the
-            // products rebuilt: four model calls in one request, which the host cut off at its
-            // minute, and the page went down with it.
-            outcome = rebuilt.products > 0 ? ` Rebuilt the ${rebuilt.products} products with this; the build check runs again now.` : "";
-          } else {
-            await repriceBatch(batchId);
-            outcome = " The products have been edited by hand, so they were only re-priced: open Column mapping and build again to apply the rest (that replaces the edits).";
-          }
+        const { untouchedSinceBuilt } = await import("@/lib/catalog/pipeline");
+        const built = await prisma.product.count({ where: { batchId } });
+        const edited = built > 0 && !(await untouchedSinceBuilt(batchId));
+        const rebuilt = await autoApplyMappings(batchId, user.id);
+        if (rebuilt.products > 0) {
+          outcome = ` Rebuilt the ${rebuilt.products} product${rebuilt.products === 1 ? "" : "s"} with this now${edited ? " — the edits made by hand on the review page were replaced by the rebuild" : ""}.`;
+        } else if (built > 0) {
+          await repriceBatch(batchId);
+          outcome = " The products could not be rebuilt automatically (a file's columns need mapping first), so they were re-priced; open Column mapping to build them with this.";
+        } else if (rebuilt.unmapped.length > 0) {
+          outcome = ` It applies as soon as the products are built: ${rebuilt.unmapped.join(", ")} need${rebuilt.unmapped.length === 1 ? "s" : ""} its columns mapped first.`;
         }
         await prisma.batchInstruction.create({ data: { batchId, role: "ASSISTANT", body: `${reading.reply}${outcome}` } });
         await logAudit("batch.instruction", { batchId, userId: user.id, details: directives });
+      } else {
+        // Said plainly rather than nothing at all: the instruction is kept, but nothing acted on it.
+        await prisma.batchInstruction.create({ data: { batchId, role: "ASSISTANT", body: "I could not make sense of that one, so nothing was changed. Say it again, perhaps in other words." } });
       }
     }
 
@@ -1573,7 +1899,7 @@ export async function setSkippedProductsAction(batchId: string, skip: string[]):
 }
 
 /**
- * Which kinds of product this batch works with.
+ * Which product types this batch works with.
  *
  * A Burton order carries boards, bindings, boots, outerwear and gloves at once, and the person
  * wants to do the boards today. Ticking kinds here keeps the directive; products of other kinds
@@ -1656,7 +1982,7 @@ export async function clearInstructionsAction(batchId: string): Promise<ActionRe
 
 
 // ---------------------------------------------------------------------------
-// Setup: the shop, what it sells, what it has taught Flöda, how documents are read
+// Setup: the shop, what it sells, what it has taught Snaben, how documents are read
 // ---------------------------------------------------------------------------
 
 const shopSchema = z.object({
@@ -1666,7 +1992,7 @@ const shopSchema = z.object({
   currency: z.string().trim().regex(/^[A-Z]{3}$/, "A three-letter currency code"),
   taxName: z.string().trim().max(24),
   taxRate: z.coerce.number().min(0).max(1),
-  pack: z.enum(["snow-outdoor", "general"]),
+  pack: z.string().refine((p) => isPackSet(p), "Pick the trades to start from again."),
   marker: z.string().trim().toLowerCase().regex(/^[a-z0-9]{0,12}$/, "Letters and digits only, up to twelve"),
 });
 
@@ -1682,8 +2008,11 @@ export async function saveShopAction(_prev: ActionResult | null, formData: FormD
     const { getShopProfile, saveShopProfile } = await import("@/lib/catalog/shop-profile");
     const before = await getShopProfile();
     await saveShopProfile(data);
-    if (data.pack === "snow-outdoor" && before.pack !== "snow-outdoor") await seedDefaults();
-    if (data.pack !== "snow-outdoor" && before.pack === "snow-outdoor") await (await import("@/lib/catalog/seed")).unseedDefaults();
+    // A pack that brings starting rules seeds them once when switched on, and takes the seeded ones
+    // back out when switched off, leaving anything a person wrote.
+    const { packFor } = await import("@/lib/catalog/trades");
+    if (packFor(data.pack).seeds && !packFor(before.pack).seeds) await seedDefaults();
+    if (!packFor(data.pack).seeds && packFor(before.pack).seeds) await (await import("@/lib/catalog/seed")).unseedDefaults();
     await saveSettings({ gstRate: data.taxRate });
     await logAudit("shop.saved", { userId: user.id, details: { pack: data.pack, country: data.country, currency: data.currency } });
     revalidatePath("", "layout");
@@ -1710,6 +2039,7 @@ export async function learnVocabularyAction(learned: import("@/lib/catalog/taxon
       products: Number(learned.products) || 0,
       file: String(learned.file ?? "").slice(0, 200),
       learnedAt: new Date().toISOString(),
+      ...(Array.isArray(learned.optionTags) && learned.optionTags.length ? { optionTags: learned.optionTags.slice(0, 10).map((p) => ({ option: String(p.option).slice(0, 60), template: String(p.template).slice(0, 80), form: (["as-is", "lower", "slug"] as const).includes(p.form) ? p.form : "as-is", example: String(p.example).slice(0, 80) })).filter((p) => p.option && p.template.includes("{value}")) } : {}),
     };
     const before = await getLearnedVocabulary();
     const merged = before ? mergeVocabulary(before, clean) : clean;
@@ -1722,7 +2052,7 @@ export async function learnVocabularyAction(learned: import("@/lib/catalog/taxon
 }
 
 /**
- * The conventions per brand and kind of product, read out of the export in the browser and kept as
+ * The conventions per brand and product type, read out of the export in the browser and kept as
  * product templates. Templates learned from an earlier export are replaced; ones a person made by
  * hand are left.
  */
@@ -1773,8 +2103,8 @@ export async function readWebsiteAction(url: string): Promise<ActionResult<impor
   });
 }
 
-/** Keep the categories the person ticked as the shop's kinds of product. */
-export async function saveWebsiteAction(input: { url: string; source: "shopify" | "menu"; categories: Array<{ title: string; path: string }> }): Promise<ActionResult<{ kinds: number }>> {
+/** Keep the categories the person ticked as the shop's product types. */
+export async function saveWebsiteAction(input: { url: string; source: "types" | "shopify" | "menu"; categories: Array<{ title: string; path: string; count?: number }> }): Promise<ActionResult<{ kinds: number }>> {
   const user = await requireUser("ADMIN");
   return safely(async () => {
     const { saveWebsiteCategories } = await import("@/lib/catalog/shop-profile");
@@ -1783,18 +2113,18 @@ export async function saveWebsiteAction(input: { url: string; source: "shopify" 
     if (!url) throw new Error("That is not a website address.");
     const seen = new Set<string>();
     const categories = (input.categories ?? [])
-      .map((c) => ({ title: String(c.title ?? "").trim().slice(0, 120), path: String(c.path ?? "").trim().slice(0, 300) }))
+      .map((c) => ({ title: String(c.title ?? "").trim().slice(0, 120), path: String(c.path ?? "").trim().slice(0, 300), ...(Number.isFinite(c.count) ? { count: Number(c.count) } : {}) }))
       .filter((c) => c.title && !seen.has(c.title.toLowerCase()) && seen.add(c.title.toLowerCase()))
       .slice(0, 1500);
     if (categories.length === 0) throw new Error("Tick at least one category to keep.");
-    await saveWebsiteCategories({ url, source: input.source === "menu" ? "menu" : "shopify", categories, readAt: new Date().toISOString() });
+    await saveWebsiteCategories({ url, source: input.source === "menu" || input.source === "types" ? input.source : "shopify", categories, readAt: new Date().toISOString() });
     await logAudit("shop.website", { userId: user.id, details: { url, kinds: categories.length } });
     revalidatePath("", "layout");
     return { ok: true, data: { kinds: categories.length } };
   });
 }
 
-/** Forget the website's categories; the kinds of product come from the export alone again. */
+/** Forget the website's categories; the product types come from the export alone again. */
 export async function forgetWebsiteAction(): Promise<ActionResult> {
   const user = await requireUser("ADMIN");
   return safely(async () => {
@@ -1833,7 +2163,7 @@ export async function saveApiKeyAction(_prev: ActionResult | null, formData: For
 }
 
 /** A step of setup put off until later. It stays on the Home checklist. */
-export async function skipSetupStepAction(step: "learn" | "house" | "ai" | "suppliers"): Promise<ActionResult> {
+export async function skipSetupStepAction(step: "store" | "learn" | "house" | "menu" | "ai" | "suppliers" | "first"): Promise<ActionResult> {
   await requireUser("ADMIN");
   return safely(async () => {
     const { saveShopProfile } = await import("@/lib/catalog/shop-profile");
@@ -1853,7 +2183,7 @@ export async function finishSetupAction(): Promise<void> {
 
 
 // ---------------------------------------------------------------------------
-// Clients of Flöda (the vendor's own deployment) and this copy's licence
+// Clients of Snaben (the vendor's own deployment) and this copy's licence
 // ---------------------------------------------------------------------------
 
 async function requireVendorAdmin() {
@@ -1871,7 +2201,7 @@ const clientSchema = z.object({
   status: z.enum(["TRIAL", "ACTIVE", "PAUSED", "ENDED"]).default("TRIAL"),
   expiresAt: z.string().trim().default(""),
   notes: z.string().trim().max(2000).default(""),
-  /** Dollars a fortnight their reading through Flöda may cost; empty for the plan's own allowance, 0 for no limit. */
+  /** Dollars a fortnight their reading through Snaben may cost; empty for the plan's own allowance, 0 for no limit. */
   aiCap: z.string().trim().regex(/^(\d{0,5}(\.\d{1,2})?)?$/, "The reading allowance is dollars a fortnight, like 60, or empty for the plan's own").default(""),
 });
 
@@ -1970,24 +2300,24 @@ export async function dismissLeadAction(at: string): Promise<ActionResult> {
   });
 }
 
-/** This copy's licence key, entered by the shop and tried against Flöda now. */
+/** This copy's licence key, entered by the shop and tried against Snaben now. */
 export async function activateLicenceAction(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
   return safely(async () => {
     const user = await requireUser("ADMIN");
     const { normaliseKey, licenceServer } = await import("@/lib/catalog/licence");
     if (!licenceServer()) return { ok: false, error: "This copy is not set up to check a licence." };
     const key = normaliseKey(String(formData.get("licence") ?? ""));
-    if (!key) return { ok: false, error: "That is not a Flöda licence key. It looks like FL-XXXX-XXXX-XXXX-XXXX." };
+    if (!key) return { ok: false, error: "That is not a Snaben licence key. It looks like FL-XXXX-XXXX-XXXX-XXXX." };
     const { activate } = await import("@/lib/catalog/licence-store");
     let licence;
     try {
       licence = await activate(key);
     } catch (err) {
-      return { ok: false, error: `Flöda could not be reached to check the key: ${said(err)}` };
+      return { ok: false, error: `Snaben could not be reached to check the key: ${said(err)}` };
     }
     await logAudit("licence.entered", { userId: user.id, details: { status: licence.status, client: licence.client } });
     revalidatePath("", "layout");
-    if (licence.why) return { ok: false, error: `Flöda says: ${licence.why} The key has been kept; contact ${SUPPORT_EMAIL}.` };
+    if (licence.why) return { ok: false, error: `Snaben says: ${licence.why} The key has been kept; contact ${SUPPORT_EMAIL}.` };
     return { ok: true, message: `Licensed to ${licence.client}${licence.expiresAt ? ` until ${new Date(licence.expiresAt).toLocaleDateString("en-AU")}` : ""}.` };
   });
 }
@@ -2002,7 +2332,7 @@ export async function billingLinkAction(what: "checkout" | "portal", plan?: stri
     try {
       out = await billingLink(what, plan);
     } catch (err) {
-      return { ok: false, error: `Flöda could not be reached: ${said(err)}` };
+      return { ok: false, error: `Snaben could not be reached: ${said(err)}` };
     }
     if ("refused" in out) return { ok: false, error: out.refused };
     await logAudit(what === "checkout" ? "licence.checkout_opened" : "licence.portal_opened", { userId: user.id, details: { plan } });
@@ -2011,7 +2341,7 @@ export async function billingLinkAction(what: "checkout" | "portal", plan?: stri
 }
 
 // ---------------------------------------------------------------------------
-// How the shop writes a listing, and feedback to the people who make Flöda
+// How the shop writes a listing, and feedback to the people who make Snaben
 // ---------------------------------------------------------------------------
 
 /** The tag rules the "How you list" form writes are named so it can find and replace its own. */
@@ -2026,7 +2356,7 @@ export async function houseTagRules(): Promise<import("@/lib/catalog/house").Tag
 const KIND_RULE_PREFIX = "kind: ";
 
 /**
- * The kinds the shop told Flöda about, as tag rules the build applies: every product of the kind
+ * The kinds the shop told Snaben about, as tag rules the build applies: every product of the kind
  * gets its tags, and its Type is written as what the shop calls it. The kind rules replace the
  * kind rules; rules made anywhere else are left alone.
  */
@@ -2043,7 +2373,7 @@ async function materialiseKindRules(kinds: import("@/lib/catalog/house").KindRul
 }
 
 /**
- * What the shop says about the kinds of product in an export: what each is called, the tags every
+ * What the shop says about the product types in an export: what each is called, the tags every
  * one gets, how its titles read. Merged by Type into what was said before, so an export a
  * category at a time builds the list up. A kind called something new is added to the vocabulary
  * so the name is a Type the shop has.
@@ -2077,7 +2407,7 @@ export async function saveKindsAction(input: { kinds: import("@/lib/catalog/hous
 }
 
 /** How the shop writes a listing, and the tag rules it told us, from the "How you list" form. */
-export async function saveHouseAction(input: { house: import("@/lib/catalog/house").HouseConventions; tagRules: import("@/lib/catalog/house").TagRuleInput[] }): Promise<ActionResult> {
+export async function saveHouseAction(input: { house: import("@/lib/catalog/house").HouseConventions; tagRules: import("@/lib/catalog/house").TagRuleInput[]; priceEnding?: string }): Promise<ActionResult> {
   const user = await requireUser("ADMIN");
   return safely(async () => {
     const { cleanHouse, TAG_RULE_FIELDS } = await import("@/lib/catalog/house");
@@ -2085,7 +2415,9 @@ export async function saveHouseAction(input: { house: import("@/lib/catalog/hous
     const { getHouseConventions } = await import("@/lib/catalog/shop-profile");
     const kept = await getHouseConventions();
     // The form has no say over the kinds; they are told on the catalogue step and kept here.
-    const house = { ...cleanHouse({ ...input.house, kinds: kept.kinds }), savedAt: new Date().toISOString() };
+    const house = { ...cleanHouse({ ...input.house, kinds: kept.kinds }, kept), savedAt: new Date().toISOString() };
+    // The price ending is a pricing setting; it is asked here because it is a habit like the rest.
+    if (input.priceEnding && ["NONE", "0.99", "0.95", "1.00", "5.00", "10.00"].includes(input.priceEnding)) await saveSettings({ defaultRoundTo: input.priceEnding });
     await saveHouseConventions(house);
     await materialiseKindRules(house.kinds);
     const fields = new Set(TAG_RULE_FIELDS.map((f) => f.key));
@@ -2105,11 +2437,11 @@ export async function saveHouseAction(input: { house: import("@/lib/catalog/hous
 }
 
 /**
- * A word from someone using Flöda to the people who make it. On the vendor's own deployment it
+ * A word from someone using Snaben to the people who make it. On the vendor's own deployment it
  * is kept there; an installed copy sends it to the vendor with the shop, page and version on it,
  * and keeps it here as well if the vendor cannot be reached.
  */
-export async function sendNoteToFlodaAction(input: { message: string; email?: string; page?: string }): Promise<ActionResult> {
+export async function sendNoteToSnabenAction(input: { message: string; email?: string; page?: string }): Promise<ActionResult> {
   const user = await requireUser();
   return safely(async () => {
     const message = String(input.message ?? "").trim().slice(0, 4000);
@@ -2153,7 +2485,7 @@ export async function sendNoteToFlodaAction(input: { message: string; email?: st
       return { ok: true, message: "Sent. Thank you — a person reads every one." };
     } catch {
       await keepHere();
-      return { ok: true, message: `Flöda could not be reached just now, so it is kept with this copy. Write to ${SUPPORT_EMAIL} if it is urgent.` };
+      return { ok: true, message: `Snaben could not be reached just now, so it is kept with this copy. Write to ${SUPPORT_EMAIL} if it is urgent.` };
     }
   });
 }
@@ -2185,11 +2517,11 @@ export async function setLicenceServerAction(_prev: ActionResult | null, formDat
     await logAudit("licence.server", { userId: user.id, details: { server: url.trim() } });
     revalidatePath("", "layout");
     const list = await servers();
-    return { ok: true, message: url.trim() ? `Flöda is asked at ${list[0]} from now on.` : `Back to the built-in address${list[0] ? ` (${list[0]})` : ""}.` };
+    return { ok: true, message: url.trim() ? `Snaben is asked at ${list[0]} from now on.` : `Back to the built-in address${list[0] ? ` (${list[0]})` : ""}.` };
   });
 }
 
-/** Sign this copy in with the shop's Flöda account: the vendor hands over the key and it is kept. */
+/** Sign this copy in with the shop's Snaben account: the vendor hands over the key and it is kept. */
 export async function signInLicenceAction(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
   return safely(async () => {
     const user = await requireUser("ADMIN");
@@ -2203,7 +2535,7 @@ export async function signInLicenceAction(_prev: ActionResult | null, formData: 
     try {
       outcome = await signInWithAccount(parsed.data);
     } catch (err) {
-      return { ok: false, error: `Flöda could not be reached to sign in: ${said(err)}` };
+      return { ok: false, error: `Snaben could not be reached to sign in: ${said(err)}` };
     }
     if ("refused" in outcome) return { ok: false, error: outcome.refused };
     const { saveShopProfile, getShopProfile } = await import("@/lib/catalog/shop-profile");
@@ -2317,5 +2649,644 @@ export async function ruleReachAction(id: string): Promise<ActionResult<RuleReac
     const live = { ...rule, active: true };
     const hits = products.filter((p) => ruleMatches(live, { title: p.title, vendor: p.vendor, category: p.category, productType: p.productType, skus: p.variants.map((v) => v.sku), tags: p.tags.split(",").map((t) => t.trim()).filter(Boolean), collections: p.collections.split(",").map((t) => t.trim()).filter(Boolean), metafields: parseJson<Record<string, string>>(p.metafields, {}) }));
     return { ok: true, data: { batch: batch.name, matched: hits.length, of: products.length, examples: hits.slice(0, 5).map((p) => p.title) } };
+  });
+}
+
+// ---------------------------------------------------------------------------------------------
+// Tags proposed by a build: approved they are the shop's, rejected they are never proposed again
+// ---------------------------------------------------------------------------------------------
+
+export async function decideTagProposalAction(id: string, approve: boolean): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const proposal = await prisma.tagProposal.findUnique({ where: { id } });
+    if (!proposal) return { ok: false, error: "That proposal is gone." };
+    await prisma.tagProposal.update({ where: { id }, data: { status: approve ? "APPROVED" : "REJECTED", decidedAt: new Date() } });
+    await logAudit(approve ? "tag.approved" : "tag.rejected", { userId: user.id, details: { tag: proposal.tag } });
+    revalidatePath("/training");
+    return { ok: true };
+  });
+}
+// ---------------------------------------------------------------------------
+// History of Prices and stock and of Bills
+// ---------------------------------------------------------------------------
+
+const runInput = z.object({
+  kind: z.enum(["PRICES", "BILLS"]),
+  title: z.string().max(2000),
+  summary: z.object({ lines: z.array(z.string()), documents: z.array(z.string()), counts: z.record(z.string(), z.number()) }),
+  files: z.array(z.object({ filename: z.string().min(1).max(500), gzipBase64: z.string(), sizeBytes: z.number().nonnegative() })).max(20),
+  tooLarge: z.boolean().optional(),
+});
+
+export async function saveRunAction(input: z.infer<typeof runInput>): Promise<ActionResult<{ id: string; keptFiles: boolean }>> {
+  const user = await requireUser();
+  try {
+    const parsed = runInput.parse(input);
+    const saved = await saveRun({ ...parsed, userId: user.id });
+    revalidatePath("/bulk");
+    return { ok: true, data: saved };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Shops on this computer (the desktop app; see shops.ts)
+// ---------------------------------------------------------------------------
+
+export async function addShopAction(input: { name: string }): Promise<ActionResult<{ id: string; name: string }>> {
+  return safely(async () => {
+    const user = await requireUser("ADMIN");
+    const entry = await (await import("@/lib/catalog/shops")).addShop(String(input.name ?? ""));
+    await logAudit("shops.add", { userId: user.id, details: entry }).catch(() => undefined);
+    revalidatePath("/settings");
+    return { ok: true, data: entry };
+  });
+}
+
+export async function renameShopAction(input: { id: string; name: string }): Promise<ActionResult> {
+  return safely(async () => {
+    const user = await requireUser("ADMIN");
+    await (await import("@/lib/catalog/shops")).renameShop(String(input.id ?? ""), String(input.name ?? ""));
+    await logAudit("shops.rename", { userId: user.id, details: input }).catch(() => undefined);
+    revalidatePath("/settings");
+    return { ok: true };
+  });
+}
+
+/** Open another shop. The desktop app restarts on it, and its own sign-in page opens. */
+export async function openShopAction(input: { id: string }): Promise<ActionResult> {
+  return safely(async () => {
+    const user = await requireUser();
+    await logAudit("shops.open", { userId: user.id, details: input }).catch(() => undefined);
+    await (await import("@/lib/catalog/shops")).openShop(String(input.id ?? ""));
+    return { ok: true };
+  });
+}
+
+// ---------------------------------------------------------------------------------------------
+// Teach Snaben: one belief changed in place, one rule added
+// ---------------------------------------------------------------------------------------------
+
+type HousePatch = {
+  naming?: Partial<import("@/lib/catalog/house").HouseConventions["naming"]>;
+  identifiers?: Partial<import("@/lib/catalog/house").HouseConventions["identifiers"]>;
+  weights?: Partial<import("@/lib/catalog/house").HouseConventions["weights"]>;
+  descriptions?: Partial<import("@/lib/catalog/house").HouseConventions["descriptions"]>;
+  notes?: string;
+};
+
+/** One of the shop's listing habits changed on the Teach page: the rest of them, and the kinds, stay as they were. */
+export async function patchHouseAction(patch: HousePatch): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const { cleanHouse } = await import("@/lib/catalog/house");
+    const { getHouseConventions, saveHouseConventions, saveShopProfile } = await import("@/lib/catalog/shop-profile");
+    const kept = await getHouseConventions();
+    const merged = {
+      ...kept,
+      naming: { ...kept.naming, ...(patch.naming ?? {}) },
+      identifiers: { ...kept.identifiers, ...(patch.identifiers ?? {}) },
+      weights: { ...kept.weights, ...(patch.weights ?? {}) },
+      descriptions: { ...kept.descriptions, ...(patch.descriptions ?? {}) },
+      notes: patch.notes === undefined ? kept.notes : String(patch.notes),
+    };
+    // The year goes on nothing when "chosen" is left behind, so the old choices do not come back with it.
+    if (patch.naming?.season && patch.naming.season !== "chosen") delete merged.naming.yearOn;
+    const house = { ...cleanHouse({ ...merged, kinds: kept.kinds }, kept), savedAt: new Date().toISOString() };
+    await saveHouseConventions(house);
+    await saveShopProfile({ skipped: { house: false } });
+    await logAudit("shop.house", { userId: user.id, details: { patched: Object.keys(patch) } });
+    revalidatePath("", "layout");
+    return { ok: true };
+  });
+}
+
+/** One thing said about one product type: its tags, the tags that vary, how its titles read, or what it is filed as. */
+export async function saveKindAction(input: { type: string; patch: Partial<Pick<import("@/lib/catalog/house").KindRule, "calledAs" | "tags" | "variesTags" | "titleFormat">> }): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const { cleanKinds } = await import("@/lib/catalog/house");
+    const { getHouseConventions, saveHouseConventions } = await import("@/lib/catalog/shop-profile");
+    const type = String(input.type ?? "").trim();
+    if (!type) return { ok: false, error: "Which product type?" };
+    const house = await getHouseConventions();
+    const was = house.kinds.find((k) => k.type.toLowerCase() === type.toLowerCase()) ?? { type, calledAs: type, tags: [], variesTags: [], titleFormat: "", count: 0 };
+    const next = cleanKinds([{ ...was, ...input.patch, type: was.type }])[0];
+    if (!next) return { ok: false, error: "That could not be kept." };
+    const kinds = house.kinds.some((k) => k.type.toLowerCase() === type.toLowerCase()) ? house.kinds.map((k) => (k.type.toLowerCase() === type.toLowerCase() ? next : k)) : [...house.kinds, next];
+    await saveHouseConventions({ ...house, kinds });
+    await materialiseKindRules(kinds);
+    await logAudit("shop.kinds", { userId: user.id, details: { type, patched: Object.keys(input.patch) } });
+    revalidatePath("", "layout");
+    return { ok: true };
+  });
+}
+
+/** A tag rule written or changed on the Teach page: when a field says this, add these tags and, if asked, file it as a type. */
+export async function saveTagRuleAction(input: { id?: string; matchField: string; pattern: string; addTags: string; setProductType?: string }): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const field = ["any", "title", "brand", "productType", "category", "sku"].includes(input.matchField) ? input.matchField : "any";
+    const pattern = String(input.pattern ?? "").trim().slice(0, 200);
+    const addTags = String(input.addTags ?? "").split(",").map((t) => t.trim()).filter(Boolean).slice(0, 40).join(", ");
+    const setProductType = String(input.setProductType ?? "").trim().slice(0, 120);
+    if (!pattern) return { ok: false, error: "Say what the rule looks for." };
+    if (!addTags && !setProductType) return { ok: false, error: "Say what the rule does: tags to add, a type to file it as, or both." };
+    const data = { matchField: field, pattern, addTags, setProductType };
+    if (input.id) {
+      const was = await prisma.tagRule.findUnique({ where: { id: input.id } });
+      if (!was) return { ok: false, error: "That rule is gone." };
+      // A rule the kinds or the old form wrote becomes the shop's own once it is edited here, so neither writes over it again.
+      const name = was.name.startsWith(KIND_RULE_PREFIX) || was.name.startsWith(HOUSE_RULE_PREFIX) ? `${field} ~ ${pattern}`.slice(0, 160) : was.name;
+      await prisma.tagRule.update({ where: { id: input.id }, data: { ...data, name } });
+    } else {
+      await prisma.tagRule.create({ data: { ...data, name: `${field} ~ ${pattern}`.slice(0, 160) } });
+    }
+    await logAudit(input.id ? "rule.updated" : "rule.created", { userId: user.id, details: data });
+    revalidatePath("/training");
+    return { ok: true };
+  });
+}
+
+/** A pricing rule written or changed on the Teach page, without the form. */
+export async function savePricingRuleJsonAction(input: { id?: string; name?: string; scope: string; matchValue?: string; mode: string; percent: number; roundTo: string }): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const scope = ["DEFAULT", "CATEGORY", "BRAND", "PRODUCT"].includes(input.scope) ? input.scope : "DEFAULT";
+    const mode = input.mode === "MARKUP" ? "MARKUP" : "MARGIN";
+    const percent = Number(input.percent);
+    const roundTo = ["NONE", "0.99", "0.95", "1.00", "5.00", "10.00"].includes(input.roundTo) ? input.roundTo : "0.99";
+    const matchValue = String(input.matchValue ?? "").trim().slice(0, 160);
+    if (!Number.isFinite(percent) || percent < 0 || percent > 999) return { ok: false, error: "The percentage needs to be a number." };
+    if (mode === "MARGIN" && percent >= 100) return { ok: false, error: "A margin must be below 100%." };
+    if (scope !== "DEFAULT" && !matchValue) return { ok: false, error: scope === "BRAND" ? "Which brand?" : scope === "CATEGORY" ? "Which product type?" : "Which SKU or model code?" };
+    const who = scope === "DEFAULT" ? "everything else" : matchValue;
+    const name = String(input.name ?? "").trim().slice(0, 160) || `${who}: ${percent}% ${mode === "MARGIN" ? "margin" : "markup"}`;
+    const data = { name, scope, matchValue, mode, percent, roundTo, priority: scope === "DEFAULT" ? 0 : scope === "PRODUCT" ? 30 : scope === "BRAND" ? 20 : 10 };
+    if (input.id) await prisma.pricingRule.update({ where: { id: input.id }, data: { ...data, name: input.name === undefined ? undefined : name } });
+    else await prisma.pricingRule.create({ data: { ...data, active: true } });
+    await logAudit(input.id ? "pricing.updated" : "pricing.created", { userId: user.id, details: data });
+    revalidatePath("/training");
+    revalidatePath("/pricing");
+    return { ok: true };
+  });
+}
+
+export async function setPricingRuleActiveAction(id: string, active: boolean): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    await prisma.pricingRule.update({ where: { id }, data: { active } });
+    await logAudit("pricing.toggled", { userId: user.id, details: { id, active } });
+    revalidatePath("/training");
+    revalidatePath("/pricing");
+    return { ok: true };
+  });
+}
+
+/**
+ * What every product of a brand or type gets, written or changed on the Teach page: the options it
+ * is sold by, the tags it always carries, the type it is filed as, and a note for the writer.
+ */
+export async function saveTemplateAction(input: { id?: string; scope: string; matchValue: string; matchProductType?: string; optionNames?: string[]; addTags?: string[]; setProductType?: string; notes?: string }): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const scope = ["BRAND", "PRODUCT_TYPE", "CATEGORY"].includes(input.scope) ? input.scope : "PRODUCT_TYPE";
+    const matchValue = String(input.matchValue ?? "").trim().slice(0, 120);
+    if (!matchValue) return { ok: false, error: scope === "BRAND" ? "Which brand?" : "Which product type?" };
+    const list = (xs: unknown, n: number) => [...new Set((Array.isArray(xs) ? xs : []).map((x) => String(x).trim().slice(0, 80)).filter(Boolean))].slice(0, n);
+    const data = {
+      scope,
+      matchValue,
+      matchProductType: String(input.matchProductType ?? "").trim().slice(0, 120),
+      optionNames: list(input.optionNames, 3).join(", "),
+      addTags: list(input.addTags, 40).join(", "),
+      setProductType: String(input.setProductType ?? "").trim().slice(0, 120),
+      notes: String(input.notes ?? "").trim().slice(0, 4000),
+    };
+    if (!data.optionNames && !data.addTags && !data.setProductType && !data.notes) return { ok: false, error: "Say at least one thing every one of them gets." };
+    if (input.id) {
+      await prisma.productTemplate.update({ where: { id: input.id }, data });
+    } else {
+      // The same brand or type said twice is one template, so a second saying replaces the first.
+      const same = await prisma.productTemplate.findFirst({ where: { scope, matchValue, matchProductType: data.matchProductType } });
+      if (same) await prisma.productTemplate.update({ where: { id: same.id }, data: { ...data, active: true } });
+      else await prisma.productTemplate.create({ data: { ...data, name: [scope === "BRAND" ? matchValue : "", scope === "BRAND" ? data.matchProductType : matchValue].filter(Boolean).join(" · ").slice(0, 160) || matchValue, sourceFileName: "you", priority: 500, active: true } });
+    }
+    await logAudit(input.id ? "template.updated" : "template.created", { userId: user.id, details: { scope, matchValue } });
+    revalidatePath("/training");
+    return { ok: true };
+  });
+}
+
+export async function deleteTemplateAction(id: string): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    await prisma.productTemplate.delete({ where: { id } });
+    await logAudit("template.deleted", { userId: user.id, details: { id } });
+    revalidatePath("/training");
+    return { ok: true };
+  });
+}
+
+export async function setTemplateActiveAction(id: string, active: boolean): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    await prisma.productTemplate.update({ where: { id }, data: { active } });
+    await logAudit("template.toggled", { userId: user.id, details: { id, active } });
+    revalidatePath("/training");
+    return { ok: true };
+  });
+}
+
+/** What a supplier's paperwork is taken to mean unless the file says otherwise: its currency, its tax, its brand. */
+export async function saveSupplierDefaultsAction(input: { id: string; defaultCurrency: string; defaultGstTreatment: string; defaultBrand: string }): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const currency = String(input.defaultCurrency ?? "").trim().toUpperCase().slice(0, 3);
+    if (!/^[A-Z]{3}$/.test(currency)) return { ok: false, error: "The currency is a three-letter code: AUD, USD, EUR." };
+    const gst = ["INCLUSIVE", "EXCLUSIVE", "NONE"].includes(input.defaultGstTreatment) ? input.defaultGstTreatment : "EXCLUSIVE";
+    await prisma.supplier.update({ where: { id: input.id }, data: { defaultCurrency: currency, defaultGstTreatment: gst, defaultBrand: String(input.defaultBrand ?? "").trim().slice(0, 120) || null } });
+    await logAudit("supplier.defaults", { userId: user.id, details: { id: input.id, currency, gst } });
+    revalidatePath("/training");
+    return { ok: true };
+  });
+}
+
+/**
+ * The patterns an export shows beyond its types and tags, worked out in the browser and kept here:
+ * the shape of the SEO titles, where the shop has not set one, and each brand's margin, as a pricing
+ * rule where the brand has none. Both are named as the export's, so the shop can see where they came
+ * from and change them.
+ */
+export async function learnMoreAction(input: { seoTitlePattern?: string; margins?: Array<{ brand: string; marginPct: number; products: number }> }): Promise<ActionResult<{ seoTitlePattern: string; margins: number }>> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const { EXPORT_RULE_PREFIX } = await import("@/lib/catalog/teaching");
+    const settings = await getSettings();
+    let pattern = "";
+    const offered = String(input.seoTitlePattern ?? "").trim().slice(0, 200);
+    if (offered && /\{title\}|\{brand\}/.test(offered) && !settings.seoTitlePattern.trim()) {
+      await saveSettings({ seoTitlePattern: offered });
+      pattern = offered;
+    }
+    let made = 0;
+    const have = await prisma.pricingRule.findMany({ where: { scope: "BRAND" }, select: { matchValue: true } });
+    const taken = new Set(have.map((r) => r.matchValue.toLowerCase()));
+    for (const m of (input.margins ?? []).slice(0, 200)) {
+      const brand = String(m.brand ?? "").trim().slice(0, 120);
+      const pct = Math.round(Number(m.marginPct));
+      if (!brand || taken.has(brand.toLowerCase()) || !Number.isFinite(pct) || pct < 5 || pct >= 95) continue;
+      taken.add(brand.toLowerCase());
+      await prisma.pricingRule.create({ data: { name: `${EXPORT_RULE_PREFIX}${brand}`.slice(0, 160), scope: "BRAND", matchValue: brand, mode: "MARGIN", percent: pct, roundTo: settings.defaultRoundTo || "0.99", priority: 20, active: true } });
+      made++;
+    }
+    await logAudit("shop.learned_more", { userId: user.id, details: { pattern, margins: made } });
+    revalidatePath("", "layout");
+    return { ok: true, data: { seoTitlePattern: pattern, margins: made } };
+  });
+}
+
+/**
+ * How the shop's descriptions are written, read off a handful of its own: the layout in a sentence
+ * or two, the heading over the details, and any further sections. Kept as the shop's description
+ * style where it has set none, so the writer matches it from the first product; the shop can change
+ * every word of it on the Teach page.
+ */
+export async function describeStyleAction(input: { samples: string[] }): Promise<ActionResult<{ learned: boolean; format: string }>> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const { getHouseConventions, saveHouseConventions } = await import("@/lib/catalog/shop-profile");
+    const house = await getHouseConventions();
+    if (house.descriptions.format.trim() || house.descriptions.sections?.length) return { ok: true, data: { learned: false, format: house.descriptions.format } };
+    const samples = (input.samples ?? []).map((s) => String(s).slice(0, 6000)).filter((s) => s.trim().length >= 200).slice(0, 6);
+    if (!aiAvailable() || samples.length < 2) return { ok: true, data: { learned: false, format: "" } };
+    const { anthropicClient, LIGHT_MODEL } = await import("@/lib/catalog/anthropic");
+    const { zodOutputFormat } = await import("@anthropic-ai/sdk/helpers/zod");
+    const Style = z.object({
+      format: z.string().describe("How these descriptions are laid out and written, as instructions to a writer in two to four plain sentences: what comes first, roughly how long, the voice, what is never said. Only what the samples show."),
+      specsHeading: z.string().describe("The heading used over the list of specifications or details, exactly as written; empty if there is no such list or heading."),
+      sections: z.array(z.object({ heading: z.string(), holds: z.string() })).describe("Headed sections that come after the main text, in order, each with what it holds, in a few words. Empty when the descriptions have no headed sections."),
+    });
+    const { asTraining } = await import("@/lib/catalog/training-mark");
+    const response = await asTraining(() => anthropicClient(1).messages.parse({
+      model: LIGHT_MODEL,
+      max_tokens: 2000,
+      system: "You are shown a few product descriptions from one online shop, as HTML or text. Describe the house style they share so another writer can match it. Say only what the samples show; name no product.",
+      output_config: { format: zodOutputFormat(Style), effort: "low" },
+      messages: [{ role: "user", content: samples.map((s, i) => `Description ${i + 1}:\n${s}`).join("\n\n---\n\n") }],
+    }, { timeout: 40_000, maxRetries: 1, signal: AbortSignal.timeout(40_000) }));
+    const style = response.parsed_output;
+    if (!style || !style.format.trim()) return { ok: true, data: { learned: false, format: "" } };
+    const { cleanHouse } = await import("@/lib/catalog/house");
+    const descriptions = { ...house.descriptions, format: style.format.trim(), specsHeading: style.specsHeading.trim() || house.descriptions.specsHeading, sections: style.sections.filter((s) => s.heading.trim()).slice(0, 8) };
+    await saveHouseConventions({ ...cleanHouse({ ...house, descriptions }, house), savedAt: new Date().toISOString() });
+    await logAudit("shop.description_style", { userId: user.id, details: { samples: samples.length } });
+    revalidatePath("", "layout");
+    return { ok: true, data: { learned: true, format: style.format.trim() } };
+  });
+}
+
+// ---------------------------------------------------------------------------------------------
+// Snaben support: a backup sent up, a rules file down
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * The shop's database, backed up now and sent to Snaben support, with a note. The file goes
+ * straight into the vendor's file store under a token the vendor issues for it, since it is far
+ * bigger than the vendor's own request limit; the vendor is told when it has arrived. Only the
+ * database goes: pictures stay here.
+ */
+export async function sendBackupToSupportAction(input: { note: string; email?: string }): Promise<ActionResult<{ bytes: number }>> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const { vendorMode, licenceServer } = await import("@/lib/catalog/licence");
+    if (vendorMode() || !licenceServer()) return { ok: false, error: "This copy has no Snaben to send to. Download the latest backup and email it instead." };
+    const { getLicence, installId } = await import("@/lib/catalog/licence-store");
+    const [licence, install] = await Promise.all([getLicence(), installId()]);
+    if (!licence?.key) return { ok: false, error: "This copy has no licence key, so Snaben cannot tell whose backup it is. Download the backup and email it instead." };
+    const backup = await backupNow("manual");
+    const { backupPath } = await import("@/lib/catalog/backup");
+    const file = backupPath(backup.name);
+    if (!file) return { ok: false, error: "The backup could not be found after it was made." };
+    const { readFile } = await import("node:fs/promises");
+    const bytes = await readFile(file);
+    const { shopName } = await import("@/lib/catalog/shop-profile");
+    const headers = { authorization: `Bearer ${licence.key}`, "content-type": "application/json" };
+    const begin = await fetch(`${licenceServer()}/api/support`, { method: "POST", headers, body: JSON.stringify({ step: "begin", name: backup.name, bytes: bytes.length }), signal: AbortSignal.timeout(15_000) });
+    const opened = (await begin.json().catch(() => null)) as { ok?: boolean; why?: string; pathname?: string; token?: string; access?: "public" | "private" } | null;
+    if (!begin.ok || !opened?.ok || !opened.pathname || !opened.token) return { ok: false, error: opened?.why || `Snaben answered ${begin.status} and took no backup.` };
+    const { put } = await import("@vercel/blob/client");
+    let access: "public" | "private" = opened.access === "private" ? "private" : "public";
+    let stored: { url: string; pathname: string };
+    try {
+      stored = await put(opened.pathname, bytes, { access, token: opened.token, multipart: true, contentType: "application/octet-stream" });
+    } catch (err) {
+      // A store of the other kind refuses the first try and says so; the file goes the other way.
+      if (!/private|public/i.test(err instanceof Error ? err.message : String(err))) throw err;
+      access = access === "private" ? "public" : "private";
+      stored = await put(opened.pathname, bytes, { access, token: opened.token, multipart: true, contentType: "application/octet-stream" });
+    }
+    const done = await fetch(`${licenceServer()}/api/support`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ step: "done", pathname: stored.pathname, url: access === "public" ? stored.url : "", access, name: backup.name, bytes: bytes.length, shop: shopName(), email: String(input.email ?? "").trim().slice(0, 200), note: String(input.note ?? "").trim().slice(0, 2000), version: process.env.FLODA_VERSION ?? "", install }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    const told = (await done.json().catch(() => null)) as { ok?: boolean; why?: string } | null;
+    if (!done.ok || !told?.ok) return { ok: false, error: told?.why || `The backup went up but Snaben did not record it (HTTP ${done.status}). Say so when you write.` };
+    await logAudit("backup.sent_to_support", { userId: user.id, details: { name: backup.name, bytes: bytes.length } });
+    return { ok: true, data: { bytes: bytes.length } };
+  });
+}
+
+export async function dismissSupportBackupAction(at: string): Promise<ActionResult> {
+  return safely(async () => {
+    await requireVendorAdmin();
+    const { SUPPORT_KEY } = await import("@/lib/catalog/support-box");
+    const row = await prisma.appSetting.findUnique({ where: { key: SUPPORT_KEY } });
+    const rows = parseJson<Array<{ at: string }>>(row?.value, []);
+    await prisma.appSetting.upsert({ where: { key: SUPPORT_KEY }, create: { key: SUPPORT_KEY, value: "[]" }, update: { value: JSON.stringify(rows.filter((r) => r.at !== at)) } });
+    revalidatePath("/clients");
+    return { ok: true };
+  });
+}
+
+/** Everything the shop has taught Snaben, as one file to keep or to send. See rules-file.ts. */
+export async function exportRulesAction(): Promise<ActionResult<{ json: string; filename: string }>> {
+  await requireUser("ADMIN");
+  return safely(async () => {
+    const { RULES_FILE_KIND, RULES_FILE_VERSION } = await import("@/lib/catalog/rules-file");
+    const { getHouseConventions, getLearnedVocabulary, getWebsiteCategories, shopName } = await import("@/lib/catalog/shop-profile");
+    const { getBindingList } = await import("@/lib/catalog/trades/snow/binding-store");
+    const { getVoice } = await import("@/lib/catalog/shop-profile");
+    const [house, learned, website, settings, tagRules, pricingRules, templates, bindings, voice] = await Promise.all([
+      getHouseConventions(), getLearnedVocabulary(), getWebsiteCategories(), getSettings(),
+      prisma.tagRule.findMany({ orderBy: { priority: "desc" } }),
+      prisma.pricingRule.findMany({ orderBy: { priority: "desc" } }),
+      prisma.productTemplate.findMany({ orderBy: { priority: "asc" } }),
+      getBindingList().catch(() => null),
+      getVoice(),
+    ]);
+    const file = {
+      kind: RULES_FILE_KIND,
+      version: RULES_FILE_VERSION,
+      shop: shopName(),
+      exportedAt: new Date().toISOString(),
+      house,
+      tagRules: tagRules.map(({ name, matchField, pattern, addTags, addCollections, setProductType, setMetafields, priority, active }) => ({ name, matchField, pattern, addTags, addCollections, setProductType, setMetafields, priority, active })),
+      pricingRules: pricingRules.map(({ name, scope, matchValue, mode, percent, roundTo, priority, active }) => ({ name, scope, matchValue, mode, percent, roundTo, priority, active })),
+      templates: templates.map(({ name, scope, matchValue, matchProductType, notes, sourceFileName, productCount, setProductType, addTags, addCollections, optionNames, setMetafields, priority, active }) => ({ name, scope, matchValue, matchProductType, notes, sourceFileName, productCount, setProductType, addTags, addCollections, optionNames, setMetafields, priority, active })),
+      learned,
+      website,
+      settings: { seoTone: settings.seoTone, seoTitlePattern: settings.seoTitlePattern, houseRules: settings.houseRules, defaultRoundTo: settings.defaultRoundTo, minMarginPct: settings.minMarginPct, packages: settings.packages },
+      packageParts: bindings?.entries ?? [],
+      voice,
+    };
+    const stamp = new Date().toISOString().slice(0, 10);
+    return { ok: true, data: { json: JSON.stringify(file, null, 2), filename: `${shopName().replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "floda"}-rules-${stamp}.json` } };
+  });
+}
+
+/**
+ * A rules file loaded: each section it carries replaces what is here, the rest stays. The
+ * database is backed up first where this copy keeps one, so a wrong file is never the end of
+ * anything.
+ */
+export async function importRulesAction(input: { json: string }): Promise<ActionResult<{ loaded: string }>> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const { cleanRulesFile, describeRulesFile } = await import("@/lib/catalog/rules-file");
+    let parsed: unknown;
+    try { parsed = JSON.parse(String(input.json ?? "")); } catch { return { ok: false, error: "That is not a rules file: it could not be read as one." }; }
+    const file = cleanRulesFile(parsed);
+    if (!file) return { ok: false, error: "That is not a Snaben rules file." };
+    const { sqliteFile } = await import("@/lib/catalog/backup");
+    if (sqliteFile()) await backupNow("restore").catch(() => undefined);
+    const { getHouseConventions, saveHouseConventions, saveLearnedVocabulary, saveWebsiteCategories, refreshConventions } = await import("@/lib/catalog/shop-profile");
+    if (file.house) {
+      const kept = await getHouseConventions();
+      const { cleanHouse } = await import("@/lib/catalog/house");
+      const house = { ...cleanHouse(file.house, kept), savedAt: new Date().toISOString() };
+      await saveHouseConventions(house);
+      await materialiseKindRules(house.kinds);
+    }
+    if (file.tagRules) {
+      // The kinds' own rules were just rewritten from the house above; every other rule is the file's.
+      await prisma.tagRule.deleteMany({ where: { NOT: { name: { startsWith: KIND_RULE_PREFIX } } } });
+      for (const r of file.tagRules.filter((r) => !r.name.startsWith(KIND_RULE_PREFIX))) await prisma.tagRule.create({ data: r });
+    }
+    if (file.pricingRules) {
+      await prisma.pricingRule.deleteMany({});
+      for (const r of file.pricingRules) await prisma.pricingRule.create({ data: r });
+    }
+    if (file.templates) {
+      await prisma.productTemplate.deleteMany({});
+      for (const t of file.templates) await prisma.productTemplate.create({ data: { ...t, analysis: "{}" } });
+    }
+    if (file.learned !== undefined) await saveLearnedVocabulary(file.learned);
+    if (file.website !== undefined) await saveWebsiteCategories(file.website);
+    if (file.settings) await saveSettings(file.settings as Partial<AppSettings>);
+    if (file.packageParts) await (await import("@/lib/catalog/trades/snow/binding-store")).saveBindingList({ entries: file.packageParts, file: `a rules file from ${file.shop || "support"}`, updatedAt: new Date().toISOString() });
+    if (file.voice) await (await import("@/lib/catalog/shop-profile")).saveVoice(file.voice);
+    await refreshConventions();
+    await logAudit("rules.imported", { userId: user.id, details: { from: file.shop, exportedAt: file.exportedAt } });
+    revalidatePath("", "layout");
+    return { ok: true, data: { loaded: describeRulesFile(file) } };
+  });
+}
+
+/** A shop added to this computer from a backup file: support's way of opening a customer's copy. */
+export async function importShopAction(input: { name: string; base64: string }): Promise<ActionResult<{ id: string; name: string }>> {
+  return safely(async () => {
+    const user = await requireUser("ADMIN");
+    const bytes = Buffer.from(String(input.base64 ?? ""), "base64");
+    const entry = await (await import("@/lib/catalog/shops")).importShop(String(input.name ?? ""), bytes);
+    await logAudit("shops.import", { userId: user.id, details: { ...entry, bytes: bytes.length } }).catch(() => undefined);
+    revalidatePath("/settings");
+    return { ok: true, data: entry };
+  });
+}
+
+// ---------------------------------------------------------------------------------------------
+// Teaching by talking, by correcting, and by example. See teach-chat.ts, lessons.ts, voice.ts.
+// ---------------------------------------------------------------------------------------------
+
+/** What the shop said, read into the rules it amounts to: a reply and proposals, each with Accept beside it on the page. */
+export async function teachChatAction(turns: Array<{ role: "user" | "assistant"; content: string }>): Promise<ActionResult<import("@/lib/catalog/teach-chat").TeachAnswer>> {
+  await requireUser("ADMIN");
+  return safely(async () => {
+    const clean = z.array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().min(1).max(6000) })).min(1).max(40).parse(turns);
+    const { proposeTeaching } = await import("@/lib/catalog/teach-chat");
+    const { getHouseConventions, getLearnedVocabulary, getVoice, shopName, taxName } = await import("@/lib/catalog/shop-profile");
+    const { houseGuidance } = await import("@/lib/catalog/house");
+    const { describeVoice } = await import("@/lib/catalog/voice");
+    const { describePricingRule } = await import("@/lib/catalog/rulebook");
+    const { productTypes } = await import("@/lib/catalog/taxonomy");
+    const [house, learned, voice, tagRules, pricingRules, suppliers] = await Promise.all([
+      getHouseConventions(), getLearnedVocabulary(), getVoice(),
+      prisma.tagRule.findMany({ where: { active: true }, orderBy: { priority: "desc" } }),
+      prisma.pricingRule.findMany({ where: { active: true }, orderBy: { priority: "desc" } }),
+      prisma.supplier.findMany({ select: { name: true, defaultBrand: true } }),
+    ]);
+    const beliefs = [
+      ...houseGuidance(house).split("\n").filter(Boolean),
+      ...describeVoice(voice).filter((v) => v.taught).map((v) => v.sentence),
+      ...tagRules.map((r) => `Tag rule "${r.name}": where ${r.matchField} includes "${r.pattern}", ${[r.addTags && `tag ${r.addTags}`, r.setProductType && `type ${r.setProductType}`].filter(Boolean).join(", ")}.`),
+      ...pricingRules.map((r) => describePricingRule(r, taxName())),
+      ...suppliers.map((s) => `Supplier ${s.name}${s.defaultBrand ? ` (brand ${s.defaultBrand})` : ""}.`),
+    ];
+    const tags = [...new Set([...(learned?.sections ?? []), ...house.kinds.flatMap((k) => [...k.tags, ...(k.variesTags ?? [])]), ...tagRules.flatMap((r) => r.addTags.split(",").map((t) => t.trim()).filter(Boolean))])];
+    const brands = [...new Set([...(learned?.vendors ?? []).map((v) => v.name), ...suppliers.map((s) => s.defaultBrand ?? "").filter(Boolean)])];
+    const answer = await proposeTeaching(clean, { shop: shopName(), types: productTypes(), brands, tags, beliefs });
+    if (!answer) return { ok: false, error: "Snaben has no reading key, so it cannot read what you wrote. Add one on Settings, or type the rule with Add a rule below." };
+    return { ok: true, data: answer };
+  });
+}
+
+/** A proposal accepted: written through the same save each belief's editor uses. */
+export async function acceptChangeAction(input: unknown): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const { Change, describeChange } = await import("@/lib/catalog/teach-chat");
+    const c = Change.parse(input);
+    const list = (s: string) => s.split(",").map((t) => t.trim()).filter(Boolean);
+    let r: ActionResult;
+    switch (c.kind) {
+      case "tag-rule": r = await saveTagRuleAction({ matchField: c.matchField, pattern: c.pattern, addTags: c.addTags, setProductType: c.setProductType }); break;
+      case "pricing": r = await savePricingRuleJsonAction({ scope: c.scope, matchValue: c.matchValue, mode: c.mode, percent: c.percent, roundTo: c.roundTo }); break;
+      case "house": {
+        const [group, field] = c.path.split(".");
+        r = await patchHouseAction(c.path === "notes" ? { notes: c.value } : ({ [group]: { [field]: c.value } } as Parameters<typeof patchHouseAction>[0]));
+        break;
+      }
+      case "kind": r = await saveKindAction({ type: c.type, patch: c.field === "tags" || c.field === "variesTags" ? { [c.field]: list(c.value) } : { [c.field]: c.value } }); break;
+      case "template-notes": r = await saveTemplateAction({ scope: c.scope, matchValue: c.matchValue, notes: c.notes }); break;
+      case "setting": r = await saveSettingsAction(c.key === "minMarginPct" ? { minMarginPct: Number(c.value) } : { [c.key]: c.value }); break;
+      case "voice":
+      case "section":
+      case "brand-note": {
+        const { getVoice, saveVoice } = await import("@/lib/catalog/shop-profile");
+        const v = await getVoice();
+        const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+        if (c.kind === "voice") {
+          await saveVoice({
+            ...v,
+            audience: c.audience?.trim() || v.audience,
+            use: [...v.use, ...(c.use ?? [])],
+            avoid: [...v.avoid, ...(c.avoid ?? [])],
+            spellings: [...v.spellings.filter((s) => !(c.spellings ?? []).some((n) => same(n.from, s.from) && same(n.brand, s.brand))), ...(c.spellings ?? [])],
+            neverTags: [...v.neverTags, ...(c.neverTags ?? [])],
+          });
+        } else if (c.kind === "section") {
+          await saveVoice({ ...v, sections: [...v.sections.filter((s) => !same(s.heading, c.heading)), { heading: c.heading, text: c.text, types: c.types, brands: c.brands }] });
+        } else {
+          const had = v.brandNotes.find((b) => same(b.brand, c.brand));
+          await saveVoice({ ...v, brandNotes: [...v.brandNotes.filter((b) => !same(b.brand, c.brand)), { brand: c.brand, fit: c.fit || had?.fit || "", care: c.care || had?.care || "", origin: c.origin || had?.origin || "" }] });
+        }
+        r = { ok: true };
+        break;
+      }
+    }
+    if (!r.ok) return r;
+    await logAudit("teach.accepted", { userId: user.id, details: { kind: c.kind, sentence: describeChange(c) } });
+    revalidatePath("/training");
+    return { ok: true };
+  });
+}
+
+/** The shop's voice, saved whole or in part: each key given replaces what was there. */
+export async function saveVoiceAction(patch: unknown): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const { cleanVoice } = await import("@/lib/catalog/voice");
+    const { getVoice, saveVoice } = await import("@/lib/catalog/shop-profile");
+    const given = (patch && typeof patch === "object" ? patch : {}) as Record<string, unknown>;
+    const had = await getVoice();
+    const next = cleanVoice({ ...had, ...given });
+    await saveVoice(next);
+    await logAudit("voice.saved", { userId: user.id, details: { keys: Object.keys(given) } });
+    revalidatePath("/training");
+    return { ok: true };
+  });
+}
+
+/** A supplier's paragraph in the shop's voice, for correcting. */
+export async function rewriteInVoiceAction(text: string, target: { vendor?: string; productType?: string }): Promise<ActionResult<{ text: string }>> {
+  await requireUser();
+  return safely(async () => {
+    const clean = z.string().min(1).max(6000).parse(text);
+    const { rewriteInVoice } = await import("@/lib/catalog/rewrite");
+    const settings = await getSettings();
+    const out = await rewriteInVoice(clean, { vendor: target.vendor?.slice(0, 120), productType: target.productType?.slice(0, 120) }, settings.houseRules);
+    if (!out) return { ok: false, error: "Snaben has no reading key, so it cannot rewrite. Add one on Settings." };
+    return { ok: true, data: { text: out } };
+  });
+}
+
+/** A lesson answered: yes makes it a rule, no puts it away for good. */
+export async function decideLessonAction(key: string, accept: boolean): Promise<ActionResult<{ did: string }>> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const { decideLesson, lessonKey, lessonOutcome } = await import("@/lib/catalog/lessons");
+    const { getLessons, saveLessons, getVoice, saveVoice } = await import("@/lib/catalog/shop-profile");
+    const list = await getLessons();
+    const lesson = list.find((l) => lessonKey(l) === key);
+    if (!lesson) return { ok: false, error: "That lesson is no longer here." };
+    if (accept) {
+      if (lesson.kind === "tag-added") {
+        const r = lesson.brand ? await saveTagRuleAction({ matchField: "brand", pattern: lesson.brand, addTags: lesson.to }) : await saveTagRuleAction({ matchField: "any", pattern: ".", addTags: lesson.to });
+        if (!r.ok) return r;
+      } else {
+        const v = await getVoice();
+        if (lesson.kind === "title-word") await saveVoice({ ...v, spellings: [...v.spellings.filter((s) => !(s.from.toLowerCase() === lesson.from.toLowerCase() && s.brand.toLowerCase() === lesson.brand.toLowerCase())), { from: lesson.from, to: lesson.to, brand: lesson.brand }] });
+        else await saveVoice({ ...v, neverTags: [...v.neverTags, { tag: lesson.from, brand: lesson.brand }] });
+      }
+    }
+    await saveLessons(decideLesson(list, key, accept ? "accepted" : "dismissed"));
+    await logAudit(accept ? "lesson.accepted" : "lesson.dismissed", { userId: user.id, details: { key } });
+    revalidatePath("/training");
+    return { ok: true, data: { did: accept ? lessonOutcome(lesson) : "Put away; it will not be asked again." } };
   });
 }

@@ -3,7 +3,7 @@
  * signed in.
  *
  * The account is the `Client` row itself, with a password on it. Making one starts the trial
- * and mints the licence key; the shop then signs in to its copy of Flöda with the same email
+ * and mints the licence key; the shop then signs in to its copy of Snaben with the same email
  * and password (`/api/licence/signin`), which hands the copy the key. The account page shows
  * the plan, the key, the fortnight's reading against its allowance, and the billing buttons.
  * Sessions live in `ClientSession`, named by an httpOnly cookie of their own, so a shop's
@@ -63,7 +63,7 @@ export async function signUpAccount(input: { shop: string; email: string; passwo
   if (input.password.length < MIN_PASSWORD) return { ok: false, why: `The password needs at least ${MIN_PASSWORD} characters.` };
   const plan = planOf(input.plan);
   const had = await prisma.client.findFirst({ where: { email } });
-  if (had && had.passwordHash) return { ok: false, why: "That email address already has a Flöda account. Sign in instead." };
+  if (had && had.passwordHash) return { ok: false, why: "That email address already has a Snaben account. Sign in instead." };
   if (had) {
     const client = await prisma.client.update({ where: { id: had.id }, data: { passwordHash: hashPassword(input.password), ...(had.name.trim() ? {} : { name: shop }) } });
     await openSession(client.id);

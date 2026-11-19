@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { transcribeDocumentAction } from "@/app/(catalog)/actions";
 import { Alert, Button, Card, INPUT, cx } from "@/app/(catalog)/ui";
 import { fitsUpload, shrinkImage, tooBig } from "@/app/(catalog)/shrink";
-import { CSV_COLUMNS, brandOf, csvNameFor, transcriptToCsv, unitCostOf, type Transcript, type TranscriptRow } from "@/lib/catalog/extract/transcribe";
+import { CSV_COLUMNS, brandOf, csvNameFor, transcriptToCsv, unitCostOf, type Transcript, type TranscriptRow } from "@/lib/catalog/extract/transcript";
 
 /**
  * The table a scribbled-on page becomes, for checking before it goes anywhere.

@@ -166,18 +166,15 @@ function sentence(cell: (key: string) => string): { text: string; skip: string }
   const category = cell("category");
   if (!category) return null;
 
+  // A blank year is every year, as "all" is (2026-10-26): the shop's sheet leaves it blank on the
+  // shelves whose products carry no year — socks, poles, apres, midlayers — and those rows were
+  // being skipped, so their sale never went on.
   const years = list(cell("year"));
-  const everyYear = years.length === 1 && /^all$/i.test(years[0]);
-  if (years.length === 0) {
-    // The sub-type goes in the reason as well. Their sheet has two midlayer rows with no year on
-    // them, and named by shelf alone both read "snow clothing 30% off", which is one line twice.
-    const part = cell("subtype") ? ` ${cell("subtype").trim()}` : "";
-    return { text: "", skip: `${category}${part}${cell("percent") ? ` ${cell("percent")}% off` : ""} — no year tag, so it was left alone` };
-  }
+  const everyYear = years.length === 0 || (years.length === 1 && /^all$/i.test(years[0]));
 
   const action = norm(cell("action"));
   if (action === "leave alone" || norm(cell("percent")) === "as is") {
-    return { text: "", skip: `${category} tagged ${years.join(", ")} — the sheet says leave alone` };
+    return { text: "", skip: `${category}${years.length ? ` tagged ${years.join(", ")}` : ""} — the sheet says leave alone` };
   }
 
   const who: string[] = [category];

@@ -284,3 +284,44 @@ describe("the mounting charge, described", () => {
     expect(withPackages({ fitting: "flat" }, [{ kind: "discount", percent: 10 }])).toEqual({ fitting: "flat" });
   });
 });
+
+describe("a buyer's category found among the tags (asked 2026-10-26)", () => {
+  // The shop's export keeps most shelves in tags: gloves are Type "Ski Accessories", tag "ski-gloves".
+  const SHOP = {
+    types: ["Ski Accessories", "Snow Clothing", "Footwear", "Snowboard Accessories", "Packs and Bags", "Snow Skis"],
+    tags: ["2025", "2026", "2999", "gloves", "ski-gloves", "headwear", "apres-boots", "ski poles", "socks", "midlayers",
+      "ski-and-boot-bags", "ski-and-snowboard-bags", "snow-bags", "other-ski-accessories", "kids", "mens", "snow", "ski"],
+  };
+
+  it("reads the sheet's shelf names as the shop's tags", async () => {
+    const { categoryIn } = await import("./adjust-plan");
+    const tagOf = (w: string) => categoryIn(w, SHOP)?.tags.join(" + ");
+    expect(tagOf("gloves")).toBe("ski-gloves");              // the ski shelf, not the 17 tagged "gloves"
+    expect(tagOf("Headwear")).toBe("headwear");
+    expect(tagOf("apres")).toBe("apres-boots");
+    expect(tagOf("ski poles")).toBe("ski poles");
+    expect(tagOf("snow socks")).toBe("socks");
+    expect(tagOf("ski and board bags")).toBe("ski-and-snowboard-bags");
+    expect(tagOf("boot bags")).toBe("ski-and-boot-bags");
+    expect(tagOf("OTHER ski acces")).toBe("other-ski-accessories");
+    expect(categoryIn("snow clothing midlayer", SHOP)).toMatchObject({ type: "Snow Clothing", tags: ["midlayers"] });
+    expect(categoryIn("KIDS SNOW Cloth", SHOP)).toMatchObject({ type: "Snow Clothing", tags: ["kids"] });
+    expect(categoryIn("snow skis", SHOP)).toMatchObject({ type: "Snow Skis", tags: [] });
+  });
+
+  it("still finds nothing for a shelf the file does not have, rather than something near it", async () => {
+    const { categoryIn } = await import("./adjust-plan");
+    expect(categoryIn("snowboard boots", SHOP)).toBeNull();
+    expect(categoryIn("helmets", SHOP)).toBeNull();
+    expect(categoryIn("snow goggles", SHOP)).toBeNull();
+    expect(categoryIn("skis", { types: [], tags: SHOP.tags })).toBeNull();   // not the ski-gloves
+  });
+
+  it("grounds a sheet row's category through it, on the type or among the tags", () => {
+    const g = groundScope(scopeOf({ types: ["gloves"], tags: ["2026"] }), { vendors: [], ...SHOP });
+    expect(g.blocked).toEqual([]);
+    expect(g.scope.tags).toEqual(expect.arrayContaining(["2026", "ski-gloves"]));
+    const t = groundScope(scopeOf({ tags: ["apres"] }), { vendors: [], ...SHOP });
+    expect(t.scope.tags).toEqual(["apres-boots"]);
+  });
+});

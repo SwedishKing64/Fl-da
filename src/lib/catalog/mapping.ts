@@ -2,8 +2,10 @@
 // fingerprint header rows so a saved template is auto-detected next time, and apply a
 // mapping to raw rows to produce CanonicalLineItems.
 
+import { deduceColumns, notNames } from "./columns";
 import { createHash } from "node:crypto";
-import { CANONICAL_FIELDS, FEATURE_COLUMN, emptyLineItem, type CanonicalLineItem } from "./types";
+import { FEATURE_COLUMN, emptyLineItem, type CanonicalLineItem } from "./types";
+import { fieldsInForce, snowTrade } from "./taxonomy";
 export { FEATURE_COLUMN };
 import { parseIntSafe, parseMoney } from "./money";
 import { seasonFrom } from "./season";
@@ -76,8 +78,8 @@ const NEEDS_CODE_VALUES = /^(material|style|model)( description| desc| name| tex
 /**
  * A column that names a party to the order — who is buying, who is paying, who is selling it —
  * which is never what was bought. Burton's SAP export has Payer Name, Customer Name and a Super Rep
- * on every line, all reading "Alpsport" or a code, and "Payer Name" was taken as the product's name:
- * four hundred lines, all called Alpsport, built as one product.
+ * on every line, all reading the shop's own name or a code, and "Payer Name" was taken as the product's name:
+ * four hundred lines, all called by the shop's name, built as one product.
  */
 export const PARTY = /\b(payer|customer|buyer|account|sold to|ship to|bill to|dealer|retailer|client|rep|sales ?person|agent|consignee|store|warehouse)\b/;
 
@@ -87,6 +89,16 @@ export const PARTY = /\b(payer|customer|buyer|account|sold to|ship to|bill to|de
  * "gender" was too small a part of "gender description" to be read.
  */
 const core = (n: string): string => n.replace(/\s(description|desc|text|name|value)$/, "");
+
+/**
+ * A heading without the tax words that qualify it: "Cost Ex GST" is the cost, "RRP Inc GST" the
+ * retail. Left on, they made "cost" too small a part of the heading to count, and the column was
+ * never read.
+ */
+const untaxed = (n: string): string => n.replace(/\b(ex|excl|excluding|inc|incl|including|plus|less)\s*(gst|vat|tax|sales tax)\b/g, " ").replace(/\b(gst|vat|tax)\s*(ex|excl|inc|incl)\b/g, " ").replace(/\s+/g, " ").trim();
+
+/** A party heading that is really a price: "Dealer Price", "Retailer Cost". */
+const PRICED = /\b(price|cost|net|wholesale|nett)\b/;
 
 /** Who an order line is for, written as a word on its own: Burton's "MENS", "WOMENS", "KIDS". */
 const AUDIENCE = /^(mens?|womens?|ladies|kids?|youth|junior|jr|boys?|girls?|unisex|adult)$/i;
@@ -121,7 +133,7 @@ export function suggestMapping(headers: string[], rows: Array<Record<string, str
   const used = new Set<string>();
   // Checked before anything claims a field, so a twin can never take the AUD column's place.
   const skip = new Set(headers.filter((h) => isOtherCurrencyTwin(h, headers)));
-  const party = new Set(headers.filter((h) => PARTY.test(norm(h))));
+  const party = new Set(headers.filter((h) => PARTY.test(norm(h)) && !PRICED.test(norm(h))));
   /**
    * Whether what is under a heading rules out what the heading says.
    *
@@ -134,7 +146,10 @@ export function suggestMapping(headers: string[], rows: Array<Record<string, str
     if (key === "modelCode") return NEEDS_CODE_VALUES.test(norm(header)) && !valuesLookLikeCodes(header, rows);
     if (key === "title" || key === "brand" || key === "description") {
       if (party.has(header)) return true;
-      if (key !== "title" || rows.length < 5) return false;
+      if (key !== "title") return false;
+      // A "Description" full of barcodes or codes is not naming anything, however it is headed.
+      if (notNames(rows.map((r) => (r[header] ?? "").toString()))) return true;
+      if (rows.length < 5) return false;
       const { values, share: numeric } = share(header, rows, (v) => /^\d+$/.test(v));
       return values.length > 0 && (new Set(values.map((v) => v.toLowerCase())).size < 2 || numeric >= 0.8);
     }
@@ -144,8 +159,10 @@ export function suggestMapping(headers: string[], rows: Array<Record<string, str
     }
     return false;
   };
-  const canonicalKeys = new Set(CANONICAL_FIELDS.map((f) => f.key as string));
-  const codeField = CANONICAL_FIELDS.find((f) => f.key === "modelCode")!;
+  // A ski's own fields only where the shop sells skis; elsewhere those columns are kept as traits.
+  const fields = fieldsInForce();
+  const canonicalKeys = new Set(fields.map((f) => f.key as string));
+  const codeField = fields.find((f) => f.key === "modelCode")!;
 
   // Pass 1: exact canonical key or exact synonym matches.
   for (const header of headers) {
@@ -160,8 +177,8 @@ export function suggestMapping(headers: string[], rows: Array<Record<string, str
       continue;
     }
     if (skip.has(header) || party.has(header)) continue;
-    const names = [...new Set([n, core(n)])];
-    const exact = CANONICAL_FIELDS.find((f) => !used.has(f.key) && names.some((x) => f.synonyms.includes(x)) && !refused(header, f.key));
+    const names = [...new Set([n, core(n), untaxed(n), core(untaxed(n))])];
+    const exact = fields.find((f) => !used.has(f.key) && names.some((x) => f.synonyms.includes(x)) && !refused(header, f.key));
     if (exact) {
       mapping[header] = exact.key;
       used.add(exact.key);
@@ -192,7 +209,7 @@ export function suggestMapping(headers: string[], rows: Array<Record<string, str
     if (skip.has(header) || party.has(header)) { mapping[header] = ""; continue; }
     const n = norm(header);
     let best: { key: keyof CanonicalLineItem; len: number } | null = null;
-    for (const f of CANONICAL_FIELDS) {
+    for (const f of fields) {
       if (used.has(f.key) || refused(header, f.key)) continue;
       for (const s of f.synonyms) {
         if (s.length < 3) continue;
@@ -212,7 +229,7 @@ export function suggestMapping(headers: string[], rows: Array<Record<string, str
   // Pass 3: the riding style, by what is written under it. Burton heads it "PH3" and Volkl
   // "category"; under both are the words that name a shelf — ALL MOUNTAIN, Freeride, Freestyle —
   // and that is what files a new model on the shop's riding-style shelves.
-  if (!used.has("terrain") && rows.length > 0) {
+  if (snowTrade() && !used.has("terrain") && rows.length > 0) {
     const styled = terrainColumn(
       headers.filter((h) => mapping[h] === "" || mapping[h] === "category"),
       (h) => rows.map((r) => (r[h] ?? "").toString()),
@@ -250,6 +267,26 @@ export function suggestMapping(headers: string[], rows: Array<Record<string, str
     claim("category", (v) => KIND_VALUE.test(v) && v.split(/\s+/).length <= 4 && !/^(hard|soft)goods$/i.test(v), 0.7);
     claim("productType", (v) => KIND_VALUE.test(v) && v.split(/\s+/).length <= 4 && !/^(hard|soft)goods$/i.test(v), 0.7);
     claim("width", (v) => FIT_VALUE.test(v), 0.8);
+
+    /**
+     * Pass 5: what no heading said, told by the contents (see columns.ts) — the product's name
+     * under a heading that names a product family, a barcode column headed "Code 2", sizes and
+     * colours under headings nobody thought to give a synonym for. Only into columns nothing has
+     * claimed, and only fields nothing has filled.
+     */
+    const grid = rows.map((r) => headers.map((h) => (r[h] ?? "").toString()));
+    const taken = headers.map((h, i) => (mapping[h] || skip.has(h) || party.has(h) ? i : -1)).filter((i) => i >= 0);
+    const roles = deduceColumns(headers, grid, taken);
+    const fill = (key: keyof CanonicalLineItem, at: number) => {
+      if (at < 0 || used.has(key) || mapping[headers[at]]) return;
+      mapping[headers[at]] = key;
+      used.add(key);
+    };
+    fill("title", roles.name);
+    fill("barcode", roles.barcode);
+    if (!used.has("length")) fill("size", roles.size);
+    fill("colour", roles.colour);
+    fill("gender", roles.gender);
   }
   return mapping;
 }
@@ -323,6 +360,27 @@ const AUDIENCE_PREFIX: Array<[RegExp, RegExp]> = [
   [/^(women'?s?|ladies)$/i, /^(W|WB|WMS|WMNS|WOMENS|WOMEN'S|LADIES)\s+/i],
   [/^(kids?|youth|junior|jr)$/i, /^(K|KB|KD|KDS|KIDS|JR|YTH|YOUTH)\s+/i],
 ];
+/**
+ * A name with its gender taken off, and the gender it said. The shop asked (2026-10-15) that no
+ * product carry a gender in its title — "Men's Exos 58", "Eja Pro 55 - Women's" are "Exos 58" and
+ * "Eja Pro 55" — while the gender still tells the two apart in the tags and the handle. Kids',
+ * Youth and Junior are an age and a size range, not a gender, and stay.
+ */
+const GENDER_WORD = "(?:men'?s|mens|men|women'?s|womens|women|ladies'?|unisex|male|female|boys'?|girls'?)";
+const GENDER_FRONT = new RegExp(`^${GENDER_WORD}\\s*[:\\-–]?\\s+(?=\\S)`, "i");
+const GENDER_BACK = new RegExp(`\\s*(?:[-–,/]\\s*|\\(\\s*)?${GENDER_WORD}\\s*\\)?$`, "i");
+export function withoutGender(title: string): { title: string; gender: string } {
+  let t = title.trim();
+  let said = "";
+  const front = GENDER_FRONT.exec(t);
+  if (front) { said = front[0]; t = t.slice(front[0].length); }
+  const back = GENDER_BACK.exec(t);
+  if (back && t.slice(0, back.index).trim()) { said ||= back[0]; t = t.slice(0, back.index); }
+  const word = said.toLowerCase();
+  const gender = /women|ladies|female|girl/.test(word) ? "Womens" : /men|male|boy/.test(word) ? "Mens" : "";
+  return { title: t.trim() || title.trim(), gender };
+}
+
 /** Who a shouted name says it is for by its prefix — "M CARTEL X" is men's — or "" when it does not say. */
 export function audienceOfPrefix(title: string): string {
   const names = ["Mens", "Womens", "Kids"];
@@ -352,6 +410,10 @@ export function withoutAudiencePrefix(title: string, gender: string): string {
 const FIT_WORD = /^(wide|extra wide|x-?wide|narrow|low bridge( fit)?|asian fit|round fit|oval fit|slim( fit)?|relaxed( fit)?|short|long|tall|petite|plus)$/i;
 export function withFit(item: CanonicalLineItem): CanonicalLineItem {
   const fit = item.width.trim();
+  // "Regular" is no fit at all, and never a Width option: a delivery's Burton boots came out with a
+  // made-up "Regular" width variant (asked 2026-10-22). Only a fit that is not the default is kept,
+  // on the name.
+  if (DEFAULT_FIT.test(fit)) return { ...item, width: "" };
   if (!FIT_WORD.test(fit)) return item;
   const title = item.title.trim();
   const already = new RegExp(`\\b${fit.replace(/[^a-z0-9 ]/gi, "")}\\b`, "i").test(title);
@@ -458,6 +520,9 @@ export function applyMapping(row: Record<string, string>, mapping: Mapping, opti
       if (NOT_A_VALUE.test(raw)) continue;
       const existing = item[key] as string;
       (item as unknown as Record<string, unknown>)[key] = existing ? `${existing} ${raw}` : raw;
+      // A column read as the free option names it — "Volume", "Capacity", "Zip Side" — unless the
+      // sheet says the name in a column of its own.
+      if (key === "variant" && !item.variantName && !Object.values(mapping).includes("variantName")) item.variantName = header.trim().replace(/\s*\(.*\)$/, "");
     }
   }
 
@@ -486,7 +551,13 @@ export function applyMapping(row: Record<string, string>, mapping: Mapping, opti
   item.imageUrls = Array.from(new Set(item.imageUrls));
   item.season = seasonFrom(item.season);
   item.colour = colourName(item.colour);
-  item.title = expandShorthand(withoutAudiencePrefix(item.title, item.gender));
+  // A half boot size printed "24X" is 24.5 (the shop's word, 2026-10-19). See pdf-grid.ts.
+  item.size = item.size.trim().replace(/^(\d{2})X$/i, "$1.5");
+  // No gender in a title; what it said is kept as the line's gender, so men's and women's of one
+  // model are still two products.
+  const ungendered = withoutGender(item.title);
+  if (!item.gender.trim() && ungendered.gender) item.gender = ungendered.gender;
+  item.title = withoutGender(expandShorthand(withoutAudiencePrefix(ungendered.title, item.gender))).title;
   // "Regular" is the absence of a fit, and would otherwise become a Width option on every variant.
   if (DEFAULT_FIT.test(item.width.trim())) item.width = "";
   Object.assign(item, withFit(item));

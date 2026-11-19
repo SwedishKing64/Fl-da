@@ -68,7 +68,7 @@ export function buildFixtures(): Fixtures {
     atomicTable,
     suggestMapping(atomicTable.headers),
     { fixed: { brand: "Atomic" } },
-    { currency: "AUD", fxRateToAud: 1, gstTreatment: "EXCLUSIVE", freightTotalAud: 0, freightMode: "PER_UNIT" },
+    { currency: "AUD", fxRateToHome: 1, gstTreatment: "EXCLUSIVE", freightTotalHome: 0, freightMode: "PER_UNIT" },
     DEFAULT_CATEGORY_RULES,
     FIXTURE_SETTINGS,
   );
@@ -81,7 +81,7 @@ export function buildFixtures(): Fixtures {
     volklTable,
     volklMapping,
     { costIsLineTotal: true, fixed: { season: "2026" } },
-    { currency: "USD", fxRateToAud: 1.52, gstTreatment: "NONE", freightTotalAud: 220, freightMode: "BY_VALUE" },
+    { currency: "USD", fxRateToHome: 1.52, gstTreatment: "NONE", freightTotalHome: 220, freightMode: "BY_VALUE" },
     DEFAULT_CATEGORY_RULES,
     FIXTURE_SETTINGS,
   );
@@ -91,7 +91,7 @@ export function buildFixtures(): Fixtures {
     burtonTable,
     suggestMapping(burtonTable.headers),
     { fixed: { brand: "Burton" } },
-    { currency: "AUD", fxRateToAud: 1, gstTreatment: "INCLUSIVE", freightTotalAud: 55, freightMode: "PER_UNIT" },
+    { currency: "AUD", fxRateToHome: 1, gstTreatment: "INCLUSIVE", freightTotalHome: 55, freightMode: "PER_UNIT" },
     DEFAULT_CATEGORY_RULES,
     FIXTURE_SETTINGS,
   );

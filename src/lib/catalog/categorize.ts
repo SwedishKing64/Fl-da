@@ -1,7 +1,8 @@
 // Category detection and enrichment rules: product type, collections, tags, which canonical
 // attributes become Shopify options vs metafields, and title clean-up.
 
-import { SKI_METAFIELDS, metafieldColumn, type CanonicalLineItem, type Category } from "./types";
+import { metafieldColumn, type CanonicalLineItem, type Category } from "./types";
+import { metafieldDefs } from "./taxonomy";
 import { isSnowboardBrand } from "./brands";
 
 export interface CategoryRuleLike {
@@ -202,12 +203,15 @@ export const OPTION_LABELS: Record<string, string> = {
   size: "Size",
   width: "Width",
   colour: "Colour",
+  variant: "Option",
 };
 
 /** Decide option names for a product group given its category rule and which attributes vary. */
 export function chooseOptions(rule: CategoryRuleLike | null, items: CanonicalLineItem[]): Array<keyof CanonicalLineItem> {
-  const preferred = ((rule ? [rule.option1, rule.option2, rule.option3] : ["size", "colour"]).filter(Boolean) as Array<keyof CanonicalLineItem>);
-  const fallback: Array<keyof CanonicalLineItem> = ["length", "size", "width", "colour"];
+  // With no rule, a length is kept even when there is only the one: a pre-cut skin for a 179cm ski
+  // is that length, and "Default Title" would lose it.
+  const preferred = ((rule ? [rule.option1, rule.option2, rule.option3] : ["length", "size", "colour"]).filter(Boolean) as Array<keyof CanonicalLineItem>);
+  const fallback: Array<keyof CanonicalLineItem> = ["length", "size", "width", "variant", "colour"];
   const present = (key: keyof CanonicalLineItem) => items.some((i) => String(i[key] ?? "").trim() !== "");
   const chosen = preferred.filter(present);
   for (const key of fallback) {
@@ -221,10 +225,59 @@ export function chooseOptions(rule: CategoryRuleLike | null, items: CanonicalLin
   return chosen.slice(0, 3);
 }
 
+/** An option: a canonical field, or a column the mapping kept as it was, as "extra:<heading>". */
+export type OptionKey = keyof CanonicalLineItem | `extra:${string}`;
+
+/** One line's value for an option. */
+export function optionValue(item: CanonicalLineItem, key: OptionKey): string {
+  const k = String(key);
+  return (k.startsWith("extra:") ? item.extras?.[k.slice(6)] ?? "" : String(item[key as keyof CanonicalLineItem] ?? "")).trim();
+}
+
+/** Columns that are never an option, whatever they hold: codes, money, counts, prose. */
+const NOT_AN_OPTION = /\b(id|no|nr|number|line|ref|code|sku|ean|upc|gtin|barcode|qty|quantity|total|price|cost|amount|value|rrp|msrp|discount|tax|gst|vat|bullet|description|desc|notes?|comment|url|image|weight|date)\b/i;
+
+/**
+ * The supplier's own columns that tell apart lines the chosen options leave the same.
+ *
+ * A sleeping bag comes in Regular and Long, each with the zip on the left or the right; a lamp in
+ * three beam colours; a rope in three lengths and two treatments. The canonical fields hold one
+ * such option ("variant"); the rest stay in the kept columns under the supplier's own heading,
+ * and become options only where two lines would otherwise be the same variant.
+ */
+export function extraOptions(items: CanonicalLineItem[], chosen: OptionKey[]): OptionKey[] {
+  const out = [...chosen];
+  const headings = Array.from(new Set(items.flatMap((i) => Object.keys(i.extras ?? {})))).filter((h) => !NOT_AN_OPTION.test(h));
+  while (out.length < 3) {
+    const comboOf = (i: CanonicalLineItem, keys: OptionKey[]) => keys.map((k) => optionValue(i, k).toLowerCase()).join("|");
+    const clashes = (keys: OptionKey[]) => {
+      const seen = new Map<string, number>();
+      for (const i of items) seen.set(comboOf(i, keys), (seen.get(comboOf(i, keys)) ?? 0) + 1);
+      return [...seen.values()].reduce((n, c) => n + c - 1, 0);
+    };
+    const now = clashes(out);
+    if (now === 0) break;
+    let best: { key: OptionKey; left: number; distinct: number } | null = null;
+    for (const h of headings) {
+      const key = `extra:${h}` as OptionKey;
+      if (out.includes(key)) continue;
+      const values = items.map((i) => optionValue(i, key));
+      // A short word or figure, on every line, and not a price.
+      if (values.some((v) => !v || v.length > 24 || /^[$€£]|\d+[.,]\d{2}$/.test(v))) continue;
+      const left = clashes([...out, key]);
+      const distinct = new Set(values.map((v) => v.toLowerCase())).size;
+      if (left < now && (!best || left < best.left || (left === best.left && distinct < best.distinct))) best = { key, left, distinct };
+    }
+    if (!best) break;
+    out.push(best.key);
+  }
+  return out;
+}
+
 /** Metafield column values for a product, from the first item carrying each attribute. */
 export function metafieldsFor(items: CanonicalLineItem[]): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const def of SKI_METAFIELDS) {
+  for (const def of metafieldDefs()) {
     const values = Array.from(new Set(items.map((i) => String(i[def.source] ?? "").trim()).filter(Boolean)));
     if (values.length === 0) continue;
     out[def.key] = def.key === "length_cm" ? values.join(", ") : values[0];
@@ -234,7 +287,7 @@ export function metafieldsFor(items: CanonicalLineItem[]): Record<string, string
 
 export function metafieldColumns(metafields: Record<string, string>): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const def of SKI_METAFIELDS) {
+  for (const def of metafieldDefs()) {
     if (metafields[def.key]) out[metafieldColumn(def)] = metafields[def.key];
   }
   return out;

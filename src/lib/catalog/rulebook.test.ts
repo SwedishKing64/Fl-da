@@ -37,7 +37,7 @@ describe("rules in words", () => {
 });
 
 describe("the rulebook", () => {
-  it("has every stage, with Flöda's own rules counted apart from the shop's", () => {
+  it("has every stage, with Snaben's own rules counted apart from the shop's", () => {
     const book = buildRulebook(input());
     expect(book.map((s) => s.key)).toEqual(STAGES.map((s) => s.key));
     for (const s of book) expect(s.rules.length).toBeGreaterThan(0);

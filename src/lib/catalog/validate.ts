@@ -45,7 +45,7 @@ export function validateReview(products: ReviewProduct[], ctx: ValidationContext
     if (!p.productType.trim()) flags.push({ code: "MISSING_TYPE", severity: "warning", message: "No product type" });
     // Once the shop has said what its kinds of product are (its website's categories, its export),
     // a Type outside that list is a place on the site that does not exist. It is never written.
-    else if (typesAreKnown() && !isValidType(p.productType)) flags.push({ code: "UNKNOWN_TYPE", severity: "error", message: `"${p.productType.trim()}" is not one of your kinds of product — pick one from the list` });
+    else if (typesAreKnown() && !isValidType(p.productType)) flags.push({ code: "UNKNOWN_TYPE", severity: "error", message: `"${p.productType.trim()}" is not one of your product types — pick one from the list` });
     const validImages = p.images.filter((i) => isPublicHttpsUrl(i.url));
     if (p.images.length === 0) flags.push({ code: "NO_IMAGE", severity: "warning", message: "No image - add one or export anyway" });
     else {
@@ -106,7 +106,7 @@ export function validateReview(products: ReviewProduct[], ctx: ValidationContext
       // A price below the landed cost is a cost that landed in the price column or a list price
       // that landed in the cost column. The number on the shop would be wrong, so it stops the
       // export rather than warns. A thin margin is only a warning.
-      if (v.profitPerUnit < 0 && v.retailPrice > 0) vf.push({ code: "NEGATIVE_PROFIT", severity: "error", message: `Selling below landed cost (${v.retailPrice.toFixed(2)} against ${v.landedCostAud.toFixed(2)}) — a cost in the price column?` });
+      if (v.profitPerUnit < 0 && v.retailPrice > 0) vf.push({ code: "NEGATIVE_PROFIT", severity: "error", message: `Selling below landed cost (${v.retailPrice.toFixed(2)} against ${v.landedCostHome.toFixed(2)}) — a cost in the price column?` });
       else if (v.retailPrice > 0 && v.costPrice > 0 && v.marginPct < ctx.minMarginPct) vf.push({ code: "LOW_MARGIN", severity: "warning", message: `Margin ${v.marginPct.toFixed(1)}% is below ${ctx.minMarginPct}%` });
       v.flags = vf.filter((f) => f.severity === "error" || !dismissed.has(f.code));
     }
@@ -127,7 +127,7 @@ export function summarise(products: ReviewProduct[]): ReviewSummary {
       totalRetailIncGst += v.retailPrice * q;
       totalGst += v.gstComponent * q;
       totalExGstRevenue += v.exGstRevenue * q;
-      totalLandedCost += v.landedCostAud * q;
+      totalLandedCost += v.landedCostHome * q;
       if (v.flags.some((f) => f.code === "LOW_MARGIN" || f.code === "NEGATIVE_PROFIT")) lowMarginVariants++;
       for (const f of v.flags) {
         if (f.severity === "error") errors++;
@@ -188,9 +188,9 @@ export function warningList(products: ReviewProduct[]): string[] {
 export function emptyVariantView(partial: Partial<ReviewVariant> & { id: string; productId: string }): ReviewVariant {
   return {
     sku: "", barcode: "", option1Value: null, option2Value: null, option3Value: null, grams: 0, quantity: 0,
-    costPrice: 0, costCurrency: "AUD", gstTreatment: "EXCLUSIVE", fxRateToAud: 1, freightPerUnitAud: 0,
+    costPrice: 0, costCurrency: "AUD", gstTreatment: "EXCLUSIVE", fxRateToHome: 1, freightPerUnitHome: 0,
     pricingRuleId: null, pricingRuleName: null, retailOverride: null, compareAtPrice: null,
-    landedCostAud: 0, retailPrice: 0, exGstRevenue: 0, gstComponent: 0, profitPerUnit: 0, marginPct: 0, markupPct: 0,
+    landedCostHome: 0, retailPrice: 0, exGstRevenue: 0, gstComponent: 0, profitPerUnit: 0, marginPct: 0, markupPct: 0,
     reconcileStatus: "UNKNOWN", shopifyVariantId: null, warningsDismissed: [], flags: [],
     ...partial,
   };

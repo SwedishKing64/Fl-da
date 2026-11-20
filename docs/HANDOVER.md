@@ -402,6 +402,16 @@ terms and the due dates worked from them, PAID stamps) live in Rubin's handover.
 
 ## Decisions and history, newest first
 
+- 2026-11-20 **Titles by example; shelves; seasons.** Under Titles, Add a rule now takes three
+  titles typed the shop's way and reads the conventions they share (`title-grammar.ts`): brand
+  in front, year at the end, gender first, capitals; Keep writes `house.naming` and, where the
+  titles are all one type, that kind's `titleFormat`. Shelves (`shelves.ts`, `shop.shelves`): a
+  tag or collection renamed or merged, placed under a parent that every product on it then
+  carries, or marked seasonal; applied in `delivery.ts` at build. Seasons (`seasons.ts`,
+  `shop.seasons`): names and MM-DD start days with a tag pattern; the current season is the
+  latest start on or before today, wrapping to last year's last season; its tag goes on the
+  products of seasonal shelves. Both are edited on the Your shelves and seasons card, shown as
+  beliefs under Types, tags and categories, carried by the rules file, kept by undo.
 - 2026-11-20 **A new product's status; the batch check's scope; preview before commit.** A new
   product starts as a draft or live (`settings.newProductStatus`, in force through
   `listing.ts`, applied in `delivery.ts` and sent on the push; publishing on a date is not

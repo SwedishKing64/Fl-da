@@ -9,6 +9,8 @@ import {
   deleteTemplateAction,
   patchHouseAction,
   ruleReachAction,
+  applyTitleGrammarAction,
+  inferTitleGrammarAction,
   saveCheckAction,
   saveKindAction,
   savePricingRuleJsonAction,
@@ -435,7 +437,7 @@ function Composer({ area, lists, onDone }: { area: Area; lists: TeachLists; onDo
       case "filing":
         return <TagRuleEditor rule={{ matchField: "brand", pattern: "", addTags: "", setProductType: "" }} pending={pending} onCancel={onDone} onKeep={(r) => save(() => saveTagRuleAction(r))} />;
       case "titles":
-        return <TypeAndText label="Titles of this product type read like" placeholder="Osprey Talon 22 2026" pending={pending} onCancel={onDone} onKeep={(type, value) => save(() => saveKindAction({ type, patch: { titleFormat: value } }))} />;
+        return <TitlesByExample pending={pending} onCancel={onDone} onKeep={(g) => save(() => applyTitleGrammarAction(g))} />;
       case "descriptions":
         return <TextEditor label="Something the writer should always do, or never do, on every description" multiline placeholder="Never say 'premium'. Mention the warranty." pending={pending} onCancel={onDone} onKeep={(v) => save(() => patchHouseAction({ notes: [lists.houseNotes, v].filter(Boolean).join("\n") }))} />;
       case "variants":
@@ -452,6 +454,44 @@ function Composer({ area, lists, onDone }: { area: Area; lists: TeachLists; onDo
     <div className="rounded-[12px] border border-[var(--line)] bg-[var(--canvas)] p-4">
       {body}
       {note && <p className="mt-2 text-[12.5px] text-[var(--danger)]">{note}</p>}
+    </div>
+  );
+}
+
+/** Three titles typed the way the shop wants them; what they share is said back as a sentence to keep. */
+function TitlesByExample({ pending, onCancel, onKeep }: { pending: boolean; onCancel: () => void; onKeep: (g: import("@/lib/catalog/title-grammar").TitleGrammar) => void }) {
+  const [rows, setRows] = useState([{ title: "", vendor: "" }, { title: "", vendor: "" }, { title: "", vendor: "" }]);
+  const [type, setType] = useState("");
+  const [grammar, setGrammar] = useState<import("@/lib/catalog/title-grammar").TitleGrammar | null>(null);
+  const [note, setNote] = useState("");
+  const [reading, startRead] = useTransition();
+  const read = () => startRead(async () => {
+    setNote(""); setGrammar(null);
+    const r = await inferTitleGrammarAction(rows.filter((x) => x.title.trim()).map((x) => ({ title: x.title, vendor: x.vendor || undefined, productType: type || undefined })));
+    if (!r.ok || !r.data) return setNote(r.ok ? "Nothing read." : r.error);
+    setGrammar(r.data);
+  });
+  return (
+    <div className="space-y-2">
+      <Label>Three titles, written the way you want them</Label>
+      {rows.map((row, i) => (
+        <div key={i} className="grid gap-2 sm:grid-cols-[minmax(0,3fr)_minmax(0,1fr)]">
+          <input className={INPUT} value={row.title} onChange={(ev) => setRows((rs) => rs.map((x, j) => (j === i ? { ...x, title: ev.target.value } : x)))} placeholder={["Osprey Talon 22 2026", "Osprey Tempest 20 2026", "Deuter Speed Lite 21 2026"][i]} />
+          <input className={INPUT} list="teach-brands" value={row.vendor} onChange={(ev) => setRows((rs) => rs.map((x, j) => (j === i ? { ...x, vendor: ev.target.value } : x)))} placeholder="brand (optional)" />
+        </div>
+      ))}
+      <label className="block"><Label>All of one product type? (optional)</Label><input className={INPUT} list="teach-types" value={type} onChange={(ev) => setType(ev.target.value)} placeholder="Backpacks" /></label>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" variant="secondary" disabled={reading || !rows.some((x) => x.title.trim())} onClick={read}>{reading ? "Reading…" : "Read them"}</Button>
+        {note && <span className="text-[12.5px] text-[var(--danger)]">{note}</span>}
+      </div>
+      {grammar && (
+        <div className="rounded-[10px] border border-[var(--line)] bg-white px-3 py-2 text-[13.5px]">
+          <p>{grammar.sentence}</p>
+          <Actions pending={pending} onCancel={onCancel} onKeep={() => onKeep(grammar)} keep="Keep these conventions" />
+        </div>
+      )}
+      {!grammar && <Actions pending={pending} disabled onCancel={onCancel} onKeep={() => undefined} keep="Keep" />}
     </div>
   );
 }

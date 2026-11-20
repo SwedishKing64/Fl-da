@@ -16,6 +16,8 @@ import { describeRecipe, type Recipes } from "./recipes";
 import { describeChecks, type CheckSettings } from "./checks";
 import { describeNewProductStatus, type NewProductStatus } from "./listing";
 import { describeAgentMay, type AgentMay } from "./agent-scope";
+import { describeShelves, type Shelf } from "./shelves";
+import { describeSeasons, type SeasonVocabulary } from "./seasons";
 import { fromGrams } from "./house";
 import type { TagRuleLike } from "./rules";
 import type { ProductTemplateLike } from "./templates";
@@ -91,6 +93,9 @@ export interface TeachingInput {
   recipes?: Recipes;
   /** Which checks stop a push, as the shop set them. */
   checks?: CheckSettings;
+  /** The shop's shelves and seasons; left out where the caller has none to show. */
+  shelves?: Shelf[];
+  seasons?: SeasonVocabulary;
 }
 
 export const SOURCE_LABELS: Record<Source, string> = { export: "from your export", website: "from your website", you: "you set this", floda: "Snaben's own", supplier: "from paperwork" };
@@ -140,6 +145,11 @@ function filing(input: TeachingInput): Belief[] {
     if (/^kind: /.test(r.name)) continue; // said above, by the type
     out.push({ id: `tag:${r.id}`, source: "you", off: !r.active, sentence: describeTagRule(r).replace(/ \(switched off\)$/, ""), edit: { kind: "tag-rule", rule: { id: r.id, matchField: r.matchField, pattern: r.pattern, addTags: r.addTags, setProductType: r.setProductType, active: r.active } } });
   }
+  if (input.shelves) {
+    if (input.shelves.length) describeShelves(input.shelves).forEach((sentence, i) => out.push({ id: `shelf:${i}`, source: "you", sentence, edit: { kind: "link", href: "#shelves", label: "Your shelves" } }));
+    else out.push({ id: "shelves.none", source: "floda", sentence: "Tags and collections are written as your export and website have them: nothing renamed, merged or nested yet.", edit: { kind: "link", href: "#shelves", label: "Your shelves" } });
+  }
+  if (input.seasons) out.push({ id: "seasons", source: input.seasons.seasons.length ? "you" : "floda", sentence: describeSeasons(input.seasons), edit: { kind: "link", href: "#shelves", label: "Your seasons" } });
   out.push({ id: "floda.tags.closed", source: "floda", sentence: "Tags are matched, never invented: a tag your shop has never used is taken off the product and proposed to you here; approved, it is one of yours." });
   return out;
 }

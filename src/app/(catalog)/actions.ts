@@ -818,7 +818,7 @@ export async function deletePricingRuleAction(id: string): Promise<ActionResult>
 export async function saveSettingsAction(patch: Partial<AppSettings>): Promise<ActionResult> {
   const user = await requireUser("ADMIN");
   try {
-    if (["seoTone", "seoTitlePattern", "houseRules", "defaultRoundTo", "minMarginPct", "packages"].some((k) => k in patch)) await snapshotRules("Before a writer or pricing setting changed");
+    if (["seoTone", "seoTitlePattern", "houseRules", "defaultRoundTo", "minMarginPct", "packages", "newProductStatus", "agentMay"].some((k) => k in patch)) await snapshotRules("Before a writer, pricing or batch setting changed");
     const schema = z.object({
       gstRate: z.number().min(0).max(1).optional(),
       pricesIncludeGst: z.boolean().optional(),
@@ -832,6 +832,8 @@ export async function saveSettingsAction(patch: Partial<AppSettings>): Promise<A
       seoTitlePattern: z.string().max(200).optional(),
       houseRules: z.string().max(8000).optional(),
       shareLayouts: z.boolean().optional(),
+      newProductStatus: z.enum(["draft", "active"]).optional(),
+      agentMay: z.object({ title: z.boolean(), productType: z.boolean(), vendor: z.boolean(), tags: z.boolean(), collections: z.boolean(), drop: z.boolean() }).partial().optional(),
       packages: z.object({ drillMountFee: z.number().min(0).max(10000), systemMountFee: z.number().min(0).max(10000), fittingMount: z.string().max(80), fittingNoMount: z.string().max(80) }).partial().optional(),
     });
     const data = schema.parse(patch);
@@ -3093,7 +3095,7 @@ async function buildRulesFile(opts: { withLearned: boolean } = { withLearned: tr
     pricingRules: pricingRules.map(({ name, scope, matchValue, mode, percent, roundTo, priority, active }) => ({ name, scope, matchValue, mode, percent, roundTo, priority, active })),
     templates: templates.map(({ name, scope, matchValue, matchProductType, notes, sourceFileName, productCount, setProductType, addTags, addCollections, optionNames, setMetafields, priority, active }) => ({ name, scope, matchValue, matchProductType, notes, sourceFileName, productCount, setProductType, addTags, addCollections, optionNames, setMetafields, priority, active })),
     ...(opts.withLearned ? { learned, website } : {}),
-    settings: { seoTone: settings.seoTone, seoTitlePattern: settings.seoTitlePattern, houseRules: settings.houseRules, defaultRoundTo: settings.defaultRoundTo, minMarginPct: settings.minMarginPct, packages: settings.packages },
+    settings: { seoTone: settings.seoTone, seoTitlePattern: settings.seoTitlePattern, houseRules: settings.houseRules, defaultRoundTo: settings.defaultRoundTo, minMarginPct: settings.minMarginPct, packages: settings.packages, newProductStatus: settings.newProductStatus, agentMay: settings.agentMay },
     packageParts: bindings?.entries ?? [],
     voice,
     recipes,
@@ -3478,5 +3480,49 @@ export async function applyBatchStepAction(batchId: string, input: unknown): Pro
     await logAudit("batch.asked", { batchId, userId: user.id, details: { kind: op.kind, products: ids.length, sentence: describeOp(op) } });
     revalidatePath(`/batches/${batchId}/review`);
     return { ok: true, data: { did: describeOp(op) } };
+  });
+}
+
+// ---------------------------------------------------------------------------------------------
+// Preview before commit. See preview.ts.
+// ---------------------------------------------------------------------------------------------
+
+/** The latest batch's products, as a change is previewed on them: the newest batch that has any, setup examples left out. */
+async function latestBatchProducts(): Promise<{ batch: string; products: import("@/lib/catalog/preview").PreviewProduct[] }> {
+  const batches = await prisma.importBatch.findMany({ where: { NOT: { name: { startsWith: "Setup: " } } }, orderBy: { updatedAt: "desc" }, take: 10, select: { id: true, name: true } });
+  for (const b of batches) {
+    const products = await prisma.product.findMany({ where: { batchId: b.id }, orderBy: { sortOrder: "asc" }, take: 400, select: { title: true, vendor: true, productType: true, category: true, tags: true, variants: { select: { sku: true } } } });
+    if (products.length) return { batch: b.name, products: products.map((p) => ({ title: p.title, vendor: p.vendor, productType: p.productType, category: p.category, tags: p.tags.split(",").map((t) => t.trim()).filter(Boolean), skus: p.variants.map((v) => v.sku).filter(Boolean) })) };
+  }
+  return { batch: "", products: [] };
+}
+
+/** What a proposed change would do on the latest batch, nothing written. */
+export async function previewChangeAction(input: unknown): Promise<ActionResult<{ batch: string } & import("@/lib/catalog/preview").Preview>> {
+  await requireUser("ADMIN");
+  return safely(async () => {
+    const { Change } = await import("@/lib/catalog/teach-chat");
+    const { previewChange } = await import("@/lib/catalog/preview");
+    const change = Change.parse(input);
+    const { batch, products } = await latestBatchProducts();
+    if (!products.length) return { ok: false, error: "No batch to preview on yet. Build one first and come back." };
+    return { ok: true, data: { batch, ...previewChange(change, products) } };
+  });
+}
+
+/** What saying yes to a lesson would do on the latest batch. */
+export async function previewLessonAction(key: string): Promise<ActionResult<{ batch: string } & import("@/lib/catalog/preview").Preview>> {
+  await requireUser("ADMIN");
+  return safely(async () => {
+    const { lessonKey } = await import("@/lib/catalog/lessons");
+    const { getLessons } = await import("@/lib/catalog/shop-profile");
+    const lesson = (await getLessons()).find((l) => lessonKey(l) === key);
+    if (!lesson) return { ok: false, error: "That lesson is no longer here." };
+    const change: import("@/lib/catalog/teach-chat").Change = lesson.kind === "title-word"
+      ? { kind: "voice", spellings: [{ from: lesson.from, to: lesson.to, brand: lesson.brand }] }
+      : lesson.kind === "tag-added"
+        ? { kind: "tag-rule", matchField: lesson.brand ? "brand" : "any", pattern: lesson.brand || ".", addTags: lesson.to, setProductType: "" }
+        : { kind: "voice", neverTags: [{ tag: lesson.from, brand: lesson.brand }] };
+    return previewChangeAction(change);
   });
 }

@@ -2,7 +2,9 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { decideLessonAction } from "@/app/(catalog)/actions";
+import { decideLessonAction, previewLessonAction } from "@/app/(catalog)/actions";
+import { PreviewLines } from "./TeachChat";
+import type { Preview } from "@/lib/catalog/preview";
 import { Button } from "@/app/(catalog)/ui";
 
 export interface LessonRow { key: string; sentence: string; outcome: string; examples: string[] }
@@ -15,6 +17,13 @@ export function Lessons({ lessons }: { lessons: LessonRow[] }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [notes, setNotes] = useState<Record<string, string>>({});
+  const [previews, setPreviews] = useState<Record<string, ({ batch: string } & Preview) | null>>({});
+  const preview = (key: string) =>
+    start(async () => {
+      const r = await previewLessonAction(key);
+      if (r.ok && r.data) setPreviews((p) => ({ ...p, [key]: r.data! }));
+      else setNotes((n) => ({ ...n, [key]: r.ok ? "No preview." : r.error }));
+    });
   const decide = (key: string, accept: boolean) =>
     start(async () => {
       const r = await decideLessonAction(key, accept);
@@ -33,9 +42,10 @@ export function Lessons({ lessons }: { lessons: LessonRow[] }) {
                 <p className="mt-0.5 text-[12.5px] text-[var(--ink-soft)]">Yes means: {l.outcome}{l.examples.length ? ` Seen on ${l.examples.join("; ")}.` : ""}</p>
               </div>
               {notes[l.key] ? <span className="text-[12.5px] text-[var(--ink-soft)]">{notes[l.key]}</span> : (
-                <span className="flex shrink-0 gap-2"><Button size="sm" variant="primary" disabled={pending} onClick={() => decide(l.key, true)}>Yes, always</Button><Button size="sm" variant="ghost" disabled={pending} onClick={() => decide(l.key, false)}>No</Button></span>
+                <span className="flex shrink-0 gap-2"><Button size="sm" variant="ghost" disabled={pending} onClick={() => preview(l.key)}>Preview</Button><Button size="sm" variant="primary" disabled={pending} onClick={() => decide(l.key, true)}>Yes, always</Button><Button size="sm" variant="ghost" disabled={pending} onClick={() => decide(l.key, false)}>No</Button></span>
               )}
             </div>
+            {previews[l.key] && <PreviewLines preview={previews[l.key]!} />}
           </li>
         ))}
       </ul>

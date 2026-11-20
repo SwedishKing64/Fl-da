@@ -39,6 +39,7 @@ import { pageProductTitle } from "./page-title";
 import { genderedTitle } from "./trades/snow/gender-title";
 import { houseBody } from "./body";
 import { applySpellings, voiceInForce, withShopSections, withoutNeverTags } from "./voice";
+import { newProductStatus } from "./listing";
 import { enrichFromSpecs } from "./specs";
 import { productTitle, seoTitle, titleYear } from "./titles";
 import { buildHandle } from "./handle";
@@ -1013,8 +1014,8 @@ function toProduct(g: GroupedProduct, vendor: string): CsvProduct {
     productType: type,
     productCategory: productCategoryFor(type, title),
     tags: withoutNeverTags([...g.tags, ...optionTagsFor(productOptions(g), optionTagPatterns()).filter((t) => !g.tags.some((x) => x.toLowerCase() === t.toLowerCase()))], voice, brand),
-    published: false,
-    status: "draft",
+    published: newProductStatus() === "active",
+    status: newProductStatus(),
     seoTitle: seoTitle(brand, title),
     seoDescription: "",
     option1Name: g.option1Name,

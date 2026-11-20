@@ -2,11 +2,12 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { acceptChangeAction, teachChatAction } from "@/app/(catalog)/actions";
+import { acceptChangeAction, previewChangeAction, teachChatAction } from "@/app/(catalog)/actions";
+import type { Preview } from "@/lib/catalog/preview";
 import { Button, cx } from "@/app/(catalog)/ui";
 import type { Proposal } from "@/lib/catalog/teach-chat";
 
-interface Turn { role: "user" | "assistant"; content: string; proposals?: Array<Proposal & { state: "open" | "accepted" | "declined" | "failed"; note?: string }> }
+interface Turn { role: "user" | "assistant"; content: string; proposals?: Array<Proposal & { state: "open" | "accepted" | "declined" | "failed"; note?: string; preview?: ({ batch: string } & Preview) | null }> }
 
 /**
  * Tell Snaben how you list, in your own words. What you say comes back as the rules it amounts
@@ -35,6 +36,14 @@ export function TeachChat({ aiEnabled }: { aiEnabled: boolean }) {
     });
   };
 
+  const preview = (ti: number, pi: number) => {
+    const p = turns[ti].proposals?.[pi];
+    if (!p) return;
+    start(async () => {
+      const r = await previewChangeAction(p.change);
+      setTurns((ts) => ts.map((t, i) => (i !== ti || !t.proposals ? t : { ...t, proposals: t.proposals.map((x, j) => (j === pi ? { ...x, preview: r.ok && r.data ? r.data : null, note: r.ok ? x.note : r.error } : x)) })));
+    });
+  };
   const decide = (ti: number, pi: number, accept: boolean) => {
     const mark = (state: "accepted" | "declined" | "failed", note?: string) => setTurns((ts) => ts.map((t, i) => (i !== ti || !t.proposals ? t : { ...t, proposals: t.proposals.map((p, j) => (j === pi ? { ...p, state, note } : p)) })));
     if (!accept) return mark("declined");
@@ -61,14 +70,18 @@ export function TeachChat({ aiEnabled }: { aiEnabled: boolean }) {
                 {t.proposals && t.proposals.length > 0 && (
                   <ul className="mt-3 divide-y divide-[var(--line-soft)] rounded-[10px] border border-[var(--line)]">
                     {t.proposals.map((p, pi) => (
-                      <li key={pi} className={cx("flex flex-wrap items-start justify-between gap-2 px-3 py-2", p.state !== "open" && "opacity-70")}>
+                      <li key={pi} className={cx("px-3 py-2", p.state !== "open" && "opacity-70")}>
+                        <div className="flex flex-wrap items-start justify-between gap-2">
                         <span className={cx("min-w-0 flex-1 text-[13.5px] leading-relaxed", p.state === "declined" && "line-through")}>{p.sentence}</span>
                         <span className="flex shrink-0 items-center gap-2 text-[12.5px]">
-                          {p.state === "open" && <><Button size="sm" variant="primary" disabled={pending} onClick={() => decide(ti, pi, true)}>Accept</Button><Button size="sm" variant="ghost" disabled={pending} onClick={() => decide(ti, pi, false)}>Not this</Button></>}
+                          {p.state === "open" && <><Button size="sm" variant="ghost" disabled={pending} onClick={() => preview(ti, pi)}>Preview</Button><Button size="sm" variant="primary" disabled={pending} onClick={() => decide(ti, pi, true)}>Accept</Button><Button size="sm" variant="ghost" disabled={pending} onClick={() => decide(ti, pi, false)}>Not this</Button></>}
                           {p.state === "accepted" && <span className="font-semibold text-[var(--promoter)]">Kept</span>}
                           {p.state === "declined" && <span className="text-[var(--ink-soft)]">Left out</span>}
                           {p.state === "failed" && <span className="text-[var(--danger)]">{p.note ?? "Could not be kept"}</span>}
                         </span>
+                        </div>
+                        {p.state === "open" && p.note && !p.preview && <p className="mt-1 text-[12.5px] text-[var(--danger)]">{p.note}</p>}
+                        {p.preview && <PreviewLines preview={p.preview} />}
                       </li>
                     ))}
                   </ul>
@@ -86,5 +99,19 @@ export function TeachChat({ aiEnabled }: { aiEnabled: boolean }) {
         </div>
       </div>
     </section>
+  );
+}
+
+/** What a change would do on the latest batch: the count, and up to three products before and after. */
+export function PreviewLines({ preview }: { preview: { batch: string } & Preview }) {
+  return (
+    <div className="mt-1.5 rounded-[8px] bg-[var(--canvas)] px-2.5 py-1.5 text-[12.5px] text-[var(--ink-2)]">
+      <p>{preview.note}{preview.batch ? ` (${preview.batch})` : ""}</p>
+      {preview.samples.length > 0 && (
+        <ul className="mt-1 space-y-0.5">
+          {preview.samples.map((s, i) => <li key={i}><strong>{s.title}</strong>: <del className="text-[var(--ink-soft)]">{s.before}</del> → <ins className="no-underline">{s.after}</ins></li>)}
+        </ul>
+      )}
+    </div>
   );
 }

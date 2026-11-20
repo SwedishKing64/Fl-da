@@ -14,6 +14,8 @@ import type { HouseConventions, KindRule } from "./house";
 import { describeVoice, type Voice } from "./voice";
 import { describeRecipe, type Recipes } from "./recipes";
 import { describeChecks, type CheckSettings } from "./checks";
+import { describeNewProductStatus, type NewProductStatus } from "./listing";
+import { describeAgentMay, type AgentMay } from "./agent-scope";
 import { fromGrams } from "./house";
 import type { TagRuleLike } from "./rules";
 import type { ProductTemplateLike } from "./templates";
@@ -40,7 +42,8 @@ export type Edit =
   | { kind: "template"; template: { id: string; scope: string; matchValue: string; optionNames: string[]; tags: string[]; productType: string; notes: string; active: boolean } }
   | { kind: "pricing"; rule: PricingRuleLike }
   | { kind: "setting-text"; key: "seoTone" | "seoTitlePattern" | "houseRules"; label: string; multiline?: boolean; placeholder?: string }
-  | { kind: "setting-choice"; key: "defaultRoundTo"; label: string; options: Choice[]; current: string }
+  | { kind: "setting-choice"; key: "defaultRoundTo" | "newProductStatus"; label: string; options: Choice[]; current: string }
+  | { kind: "agent-may"; current: AgentMay }
   | { kind: "setting-number"; key: "minMarginPct"; label: string; suffix: string }
   | { kind: "supplier"; supplier: SupplierLike }
   | { kind: "check"; code: string; current: "block" | "warn" }
@@ -75,7 +78,7 @@ export interface TeachingInput {
   suppliers: SupplierLike[];
   layouts: LayoutLike[];
   records: SupplierRecord[];
-  settings: { seoTone: string; seoTitlePattern: string; defaultRoundTo: string; minMarginPct: number; gstRate: number; pricesIncludeGst: boolean; houseRules: string; taxName: string };
+  settings: { seoTone: string; seoTitlePattern: string; defaultRoundTo: string; minMarginPct: number; gstRate: number; pricesIncludeGst: boolean; houseRules: string; taxName: string; newProductStatus?: NewProductStatus; agentMay?: AgentMay };
   fieldLabels: Record<string, string>;
   /** The options a type is sold by where the shop has said nothing: the trade pack's order. */
   optionPlan: (type: string) => string[];
@@ -239,6 +242,8 @@ function seo(input: TeachingInput): Belief[] {
 
 function checks(input: TeachingInput): Belief[] {
   const out: Belief[] = describeChecks(input.checks ?? {}).map((c) => ({ id: `check:${c.code}`, source: c.own ? "you" : "floda", sentence: c.sentence, edit: { kind: "check", code: c.code, current: c.mode } }));
+  if (input.settings.newProductStatus) out.push({ id: "setting.newProductStatus", source: input.settings.newProductStatus === "draft" ? "floda" : "you", sentence: describeNewProductStatus(input.settings.newProductStatus), edit: { kind: "setting-choice", key: "newProductStatus", label: "A new product starts as", options: [{ key: "draft", title: "A draft", text: "Published on the store by a person" }, { key: "active", title: "Live", text: "On the store the moment it is pushed" }], current: input.settings.newProductStatus } });
+  if (input.settings.agentMay) out.push({ id: "setting.agentMay", source: Object.values(input.settings.agentMay).every(Boolean) ? "floda" : "you", sentence: describeAgentMay(input.settings.agentMay), edit: { kind: "agent-may", current: input.settings.agentMay } });
   out.push({ id: "floda.checks.hard", source: "floda", sentence: "A duplicate handle, two variants with the same options, a missing title or a product that could be two in the shop always stops a push: Shopify would refuse it or the wrong product would change." });
   return out;
 }

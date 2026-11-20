@@ -588,12 +588,21 @@ the rules as they stood before each of the last ten changes are kept under `rule
 the same path a rules file loads by, keeping today's rules first so that too can be undone. The
 rules file now carries the recipes and the checks.
 
-Still to do in this phase:
+Shipped 2026-11-20, third round, which closes the phase: **a new product's status**
+(`listing.ts`, `settings.newProductStatus`, a belief under Before a push): a draft or live,
+applied at build and sent on the push; **what the batch check may change** (`agent-scope.ts`,
+`settings.agentMay`, a belief under Before a push with a tick per field): a field the shop
+keeps for a person is skipped by the check with a reason and the check is told to ask instead;
+**preview before commit** (`preview.ts`, Preview beside Accept in the chat and beside Yes on a
+lesson): the change run over the latest batch's products without writing, saying how many it
+touches and showing three before and after. Publishing on a date is not built: Shopify's
+product-set input takes a status, not a date, and the scheduling route needs the third agent
+prompt below answered first.
 
-- **Default status and publish timing**; **what the batch agent may touch** (widen or narrow
-  the fixed set).
-- **Preview before commit**: every accepted rule shows three real products before and after,
-  from the latest batch.
+What was planned for this phase and is now done: Ask the batch, supplier recipes and trust,
+staff notes, blocks versus warnings, default status, the batch check's scope, preview before
+commit, undo.
+
 
 ### Phase 3: naming, filing and merchandising (about two weeks)
 

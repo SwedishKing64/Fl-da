@@ -24,6 +24,7 @@ import {
 } from "@/app/(catalog)/actions";
 import { Badge, Button, INPUT, cx } from "@/app/(catalog)/ui";
 import { fromGrams, toGrams, type HouseConventions } from "@/lib/catalog/house";
+import { AGENT_FIELD_LABELS, AGENT_FIELDS, type AgentMay } from "@/lib/catalog/agent-scope";
 import { ENDINGS, SOURCE_LABELS, type Area, type Belief, type Choice, type Edit, type Source } from "@/lib/catalog/teaching";
 
 /**
@@ -183,6 +184,7 @@ function Editor({ edit: e, lists, pending, onSave, onCancel }: { edit: Exclude<E
     case "tag-rule": return <TagRuleEditor rule={e.rule} pending={pending} onCancel={onCancel} onKeep={(r) => onSave(() => saveTagRuleAction({ id: e.rule.id, ...r }))} />;
     case "template": return <TemplateEditor template={e.template} lists={lists} pending={pending} onCancel={onCancel} onKeep={(t) => onSave(() => saveTemplateAction({ id: e.template.id || undefined, scope: e.template.scope, matchValue: e.template.matchValue, ...t }))} />;
     case "pricing": return <PricingEditor rule={e.rule} taxName={lists.taxName} pending={pending} onCancel={onCancel} onKeep={(r) => onSave(() => savePricingRuleJsonAction({ id: e.rule.id, ...r }))} />;
+    case "agent-may": return <AgentMayEditor current={e.current} pending={pending} onCancel={onCancel} onKeep={(may) => onSave(() => saveSettingsAction({ agentMay: may }))} />;
     case "check": return <ChoiceEditor label="Before a push, this check" options={[{ key: "block", title: "Stops the push", text: "Must be fixed first" }, { key: "warn", title: "Only warns", text: "Shown; pushed over with the override" }]} current={e.current} pending={pending} onCancel={onCancel} onKeep={(key) => onSave(() => saveCheckAction(e.code, key as "block" | "warn"))} />;
     case "supplier": return <SupplierEditor supplier={e.supplier} taxName={lists.taxName} pending={pending} onCancel={onCancel} onKeep={(s) => onSave(() => saveSupplierDefaultsAction({ id: e.supplier.id, ...s }))} />;
   }
@@ -366,6 +368,22 @@ function TemplateEditor({ template, lists, pending, onCancel, onKeep }: { templa
       <label className="block"><Label>Filed as</Label><input className={INPUT} list="teach-types" value={type} onChange={(ev) => setType(ev.target.value)} placeholder={template.scope === "BRAND" ? "leave empty to keep each product's own type" : template.matchValue} /></label>
       <label className="block sm:col-span-2"><Label>A note for the writer about these</Label><textarea className={cx(INPUT, "min-h-[4rem]")} value={notes} onChange={(ev) => setNotes(ev.target.value)} placeholder="Always name the capacity in litres." /></label>
       <div className="sm:col-span-2"><Actions pending={pending} onCancel={onCancel} onKeep={() => onKeep({ optionNames: splitList(options).slice(0, 3), addTags: splitList(tags), setProductType: type.trim(), notes: notes.trim() })} /></div>
+    </div>
+  );
+}
+
+function AgentMayEditor({ current, pending, onCancel, onKeep }: { current: AgentMay; pending: boolean; onCancel: () => void; onKeep: (may: AgentMay) => void }) {
+  const [may, setMay] = useState<AgentMay>(current);
+  return (
+    <div>
+      <Label>After a build, the batch check may on its own</Label>
+      <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-[13.5px]">
+        {AGENT_FIELDS.map((f) => (
+          <label key={f} className="inline-flex items-center gap-1.5"><input type="checkbox" checked={may[f]} onChange={(e) => setMay({ ...may, [f]: e.target.checked })} /> {f === "drop" ? AGENT_FIELD_LABELS[f] : `change ${AGENT_FIELD_LABELS[f]}`}</label>
+        ))}
+      </div>
+      <p className="mt-1 text-[12.5px] text-[var(--ink-soft)]">Anything unticked is asked about in the batch chat instead, never changed.</p>
+      <Actions pending={pending} onCancel={onCancel} onKeep={() => onKeep(may)} />
     </div>
   );
 }

@@ -323,7 +323,8 @@ export function buildProductSetInput(p: ReviewProduct, opts: { publish: boolean;
     vendor: p.vendor,
     productType: p.productType,
     tags: p.tags.split(",").map((t) => t.trim()).filter(Boolean),
-    status: opts.publish ? "ACTIVE" : "DRAFT",
+    // Live where the shop builds its products live (see listing.ts), or where the push says so.
+    status: opts.publish || p.status === "active" ? "ACTIVE" : "DRAFT",
     seo: { title: p.seoTitle, description: p.seoDescription },
     variants: p.variants.map((v) => {
       const perLocation = opts.locationQuantities?.[v.id];

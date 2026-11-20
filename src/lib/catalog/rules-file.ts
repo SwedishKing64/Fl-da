@@ -14,6 +14,7 @@ import type { PackageTerms } from "./types";
 import { cleanVoice, voiceTaught, type Voice } from "./voice";
 import { cleanRecipes, type Recipes } from "./recipes";
 import { cleanChecks, type CheckSettings } from "./checks";
+import { cleanAgentMay } from "./agent-scope";
 
 export const RULES_FILE_KIND = "floda-rules";
 export const RULES_FILE_VERSION = 1;
@@ -29,7 +30,7 @@ export interface RulesFile {
   templates?: Array<{ name: string; scope: string; matchValue: string; matchProductType: string; notes: string; sourceFileName: string; productCount: number; setProductType: string; addTags: string; addCollections: string; optionNames: string; setMetafields: string; priority: number; active: boolean }>;
   learned?: LearnedVocabulary | null;
   website?: WebsiteCategories | null;
-  settings?: Partial<{ seoTone: string; seoTitlePattern: string; houseRules: string; defaultRoundTo: string; minMarginPct: number; packages: PackageTerms }>;
+  settings?: Partial<{ seoTone: string; seoTitlePattern: string; houseRules: string; defaultRoundTo: string; minMarginPct: number; packages: PackageTerms; newProductStatus: "draft" | "active"; agentMay: import("./agent-scope").AgentMay }>;
   /** The parts a product can be packaged with (the list on Settings), each with its retail and wholesale. */
   packageParts?: Array<{ name: string; rrp: number; cost: number | null }>;
   /** The shop's voice: its words, examples, sections and brand notes. */
@@ -91,6 +92,8 @@ export function cleanRulesFile(input: unknown): RulesFile | null {
     if (typeof s.houseRules === "string") settings.houseRules = s.houseRules.slice(0, 8000);
     if (typeof s.defaultRoundTo === "string" && ["NONE", "0.99", "0.95", "1.00", "5.00", "10.00"].includes(s.defaultRoundTo)) settings.defaultRoundTo = s.defaultRoundTo;
     if (Number.isFinite(Number(s.minMarginPct))) settings.minMarginPct = Math.min(100, Math.max(0, Number(s.minMarginPct)));
+    if (s.newProductStatus === "draft" || s.newProductStatus === "active") settings.newProductStatus = s.newProductStatus;
+    if (s.agentMay && typeof s.agentMay === "object") settings.agentMay = cleanAgentMay(s.agentMay);
     if (s.packages && typeof s.packages === "object") {
       const p = s.packages as Record<string, unknown>;
       settings.packages = { drillMountFee: Math.max(0, num(p.drillMountFee)), systemMountFee: Math.max(0, num(p.systemMountFee)), fittingMount: str(p.fittingMount, 80), fittingNoMount: str(p.fittingNoMount, 80) };

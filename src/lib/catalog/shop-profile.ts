@@ -31,6 +31,8 @@ import { cleanVoice, setVoice, VOICE_KEY, type Voice } from "./voice";
 import { LESSONS_KEY, type Lesson } from "./lessons";
 import { cleanRecipes, RECIPES_KEY, type Recipes } from "./recipes";
 import { setNewProductStatus } from "./listing";
+import { cleanShelves, setShelves, SHELVES_KEY, type Shelf } from "./shelves";
+import { cleanSeasons, setSeasons, SEASONS_KEY, type SeasonVocabulary } from "./seasons";
 
 export { COUNTRIES, DEFAULT_PROFILE, type ShopProfile } from "./shop";
 
@@ -126,6 +128,32 @@ export async function saveRecipes(recipes: Recipes): Promise<void> {
   await prisma.appSetting.upsert({ where: { key: RECIPES_KEY }, create: { key: RECIPES_KEY, value }, update: { value } });
 }
 
+/** The shop's shelves: tags and collections renamed, merged, nested or seasonal. See shelves.ts. */
+export async function getShelves(): Promise<Shelf[]> {
+  const row = await prisma.appSetting.findUnique({ where: { key: SHELVES_KEY } }).catch(() => null);
+  return cleanShelves(parseJson<unknown>(row?.value, null));
+}
+
+export async function saveShelves(shelves: Shelf[]): Promise<void> {
+  const clean = cleanShelves(shelves);
+  const value = JSON.stringify(clean);
+  await prisma.appSetting.upsert({ where: { key: SHELVES_KEY }, create: { key: SHELVES_KEY, value }, update: { value } });
+  setShelves(clean);
+}
+
+/** The shop's seasons and when each starts. See seasons.ts. */
+export async function getSeasons(): Promise<SeasonVocabulary> {
+  const row = await prisma.appSetting.findUnique({ where: { key: SEASONS_KEY } }).catch(() => null);
+  return cleanSeasons(parseJson<unknown>(row?.value, null));
+}
+
+export async function saveSeasons(vocab: SeasonVocabulary): Promise<void> {
+  const clean = cleanSeasons(vocab);
+  const value = JSON.stringify(clean);
+  await prisma.appSetting.upsert({ where: { key: SEASONS_KEY }, create: { key: SEASONS_KEY, value }, update: { value } });
+  setSeasons(clean);
+}
+
 export async function getWebsiteCategories(): Promise<WebsiteCategories | null> {
   const row = await prisma.appSetting.findUnique({ where: { key: WEBSITE_KEY } });
   const parsed = parseJson<WebsiteCategories | null>(row?.value, null);
@@ -161,17 +189,21 @@ let loading: Promise<void> | null = null;
 const TRUST_MS = 30_000;
 
 async function load(): Promise<void> {
-  const [profile, learned, key, house, website, licenceRow, corrections, settings, voice] = await Promise.all([
+  const [profile, learned, key, house, website, licenceRow, corrections, settings, voice, shelves, seasons] = await Promise.all([
     getShopProfile(), getLearnedVocabulary(), getStoredApiKey(), getHouseConventions(), getWebsiteCategories(),
     prisma.appSetting.findUnique({ where: { key: LICENCE_KEY_SETTING } }),
     getCorrections(),
     getSettings(),
     getVoice(),
+    getShelves(),
+    getSeasons(),
   ]);
   activeProfile = profile;
   activateConventions({ pack: profile.pack, learned, marker: profile.marker, house, website });
   activateCorrections(corrections);
   setVoice(voice);
+  setShelves(shelves);
+  setSeasons(seasons);
   setStoredApiKey(key);
   // A copy in good standing with its vendor reads through Snaben when it has no key of its own.
   const standing = licenceState(parseJson<Licence | null>(licenceRow?.value, null));

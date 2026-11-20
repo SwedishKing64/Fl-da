@@ -40,6 +40,8 @@ import { genderedTitle } from "./trades/snow/gender-title";
 import { houseBody } from "./body";
 import { applySpellings, voiceInForce, withShopSections, withoutNeverTags } from "./voice";
 import { newProductStatus } from "./listing";
+import { applyShelves, shelvesInForce } from "./shelves";
+import { seasonsInForce, seasonTag } from "./seasons";
 import { enrichFromSpecs } from "./specs";
 import { productTitle, seoTitle, titleYear } from "./titles";
 import { buildHandle } from "./handle";
@@ -1004,7 +1006,9 @@ function toProduct(g: GroupedProduct, vendor: string): CsvProduct {
   const brand = g.brand || vendor;
   const voice = voiceInForce();
   const title = applySpellings(productTitle(g.title, titleYear(g.tags, g.productType)), voice, brand);
-  const type = csvType(g.productType, g.collections);
+  // The shop's shelves: a tag renamed or merged, its parent added, the season's tag on a seasonal shelf.
+  const shelved = applyShelves(g.tags, g.collections, shelvesInForce(), seasonTag(seasonsInForce()));
+  const type = csvType(g.productType, shelved.collections);
   return {
     handle: g.handle,
     title,
@@ -1013,7 +1017,7 @@ function toProduct(g: GroupedProduct, vendor: string): CsvProduct {
     vendor: brand,
     productType: type,
     productCategory: productCategoryFor(type, title),
-    tags: withoutNeverTags([...g.tags, ...optionTagsFor(productOptions(g), optionTagPatterns()).filter((t) => !g.tags.some((x) => x.toLowerCase() === t.toLowerCase()))], voice, brand),
+    tags: withoutNeverTags([...shelved.tags, ...optionTagsFor(productOptions(g), optionTagPatterns()).filter((t) => !shelved.tags.some((x) => x.toLowerCase() === t.toLowerCase()))], voice, brand),
     published: newProductStatus() === "active",
     status: newProductStatus(),
     seoTitle: seoTitle(brand, title),

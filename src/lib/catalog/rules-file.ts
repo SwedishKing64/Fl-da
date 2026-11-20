@@ -15,6 +15,8 @@ import { cleanVoice, voiceTaught, type Voice } from "./voice";
 import { cleanRecipes, type Recipes } from "./recipes";
 import { cleanChecks, type CheckSettings } from "./checks";
 import { cleanAgentMay } from "./agent-scope";
+import { cleanShelves, type Shelf } from "./shelves";
+import { cleanSeasons, type SeasonVocabulary } from "./seasons";
 
 export const RULES_FILE_KIND = "floda-rules";
 export const RULES_FILE_VERSION = 1;
@@ -39,6 +41,10 @@ export interface RulesFile {
   recipes?: Recipes;
   /** Which checks stop a push. */
   checks?: CheckSettings;
+  /** Tags and collections renamed, merged, nested or seasonal. */
+  shelves?: Shelf[];
+  /** The shop's seasons. */
+  seasons?: SeasonVocabulary;
 }
 
 const str = (v: unknown, max: number) => String(v ?? "").slice(0, max);
@@ -110,6 +116,8 @@ export function cleanRulesFile(input: unknown): RulesFile | null {
   if (f.voice && typeof f.voice === "object") out.voice = cleanVoice(f.voice);
   if (f.recipes && typeof f.recipes === "object") out.recipes = cleanRecipes(f.recipes);
   if (f.checks && typeof f.checks === "object") out.checks = cleanChecks(f.checks);
+  if (Array.isArray(f.shelves)) out.shelves = cleanShelves(f.shelves);
+  if (f.seasons && typeof f.seasons === "object") out.seasons = cleanSeasons(f.seasons);
   return out;
 }
 
@@ -127,5 +135,7 @@ export function describeRulesFile(f: RulesFile): string {
   if (f.voice && voiceTaught(f.voice)) parts.push("the shop's voice");
   if (f.recipes && Object.keys(f.recipes).length) parts.push(`${Object.keys(f.recipes).length} supplier recipe${Object.keys(f.recipes).length === 1 ? "" : "s"}`);
   if (f.checks && Object.keys(f.checks).length) parts.push("which checks stop a push");
+  if (f.shelves?.length) parts.push(`${f.shelves.length} shel${f.shelves.length === 1 ? "f" : "ves"}`);
+  if (f.seasons?.seasons.length) parts.push("the seasons");
   return parts.length ? parts.join(", ") : "nothing";
 }

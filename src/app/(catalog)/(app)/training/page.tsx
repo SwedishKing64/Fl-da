@@ -2,7 +2,7 @@ import Link from "next/link";
 import { prisma, parseJson } from "@/lib/catalog/db";
 import { requireUser } from "@/lib/catalog/auth";
 import { Card, Details, PageHeader, fmtDate } from "@/app/(catalog)/ui";
-import { getHouseConventions, getLearnedVocabulary, getLessons, getRecipes, getVoice, getWebsiteCategories, shopName, taxName } from "@/lib/catalog/shop-profile";
+import { getHouseConventions, getLearnedVocabulary, getLessons, getRecipes, getSeasons, getShelves, getVoice, getWebsiteCategories, shopName, taxName } from "@/lib/catalog/shop-profile";
 import { fieldsInForce, productTypes, snowTrade } from "@/lib/catalog/taxonomy";
 import { packagesForTeaching } from "@/lib/catalog/trades/snow/teach";
 import { optionPlanFor } from "@/lib/catalog/options";
@@ -24,6 +24,7 @@ import { VoiceCard } from "./VoiceCard";
 import { Rewriter } from "./Rewriter";
 import { Lessons } from "./Lessons";
 import { RecipesCard } from "./RecipesCard";
+import { ShelvesCard } from "./ShelvesCard";
 import { lessonKey, lessonOutcome, lessonSentence, ripeLessons } from "@/lib/catalog/lessons";
 import { aiAvailable, apiKeySource } from "@/lib/catalog/anthropic";
 import { buildAreas, countBeliefs } from "@/lib/catalog/teaching";
@@ -45,7 +46,7 @@ const plural = (x: number, one: string, many = `${one}s`) => `${n(x)} ${x === 1 
  */
 export default async function TrainingPage() {
   await requireUser("ADMIN");
-  const [website, learned, house, layouts, tagRules, templates, pricingRules, suppliers, records, settings, store, proposals, voice, lessons, recipes] = await Promise.all([
+  const [website, learned, house, layouts, tagRules, templates, pricingRules, suppliers, records, settings, store, proposals, voice, lessons, recipes, shelves, seasons] = await Promise.all([
     getWebsiteCategories(),
     getLearnedVocabulary(),
     getHouseConventions(),
@@ -61,6 +62,8 @@ export default async function TrainingPage() {
     getVoice(),
     getLessons(),
     getRecipes(),
+    getShelves(),
+    getSeasons(),
   ]);
   const ripe = ripeLessons(lessons).map((l) => ({ key: lessonKey(l), sentence: lessonSentence(l), outcome: lessonOutcome(l), examples: l.examples }));
   const packages = snowTrade() ? await packagesForTeaching(settings.packages) : null;
@@ -86,6 +89,8 @@ export default async function TrainingPage() {
     voice,
     recipes,
     checks: settings.checks,
+    shelves,
+    seasons,
   });
   const counts = countBeliefs(areas);
   const tags = [...new Set([...(learned?.sections ?? []), ...house.kinds.flatMap((k) => [...k.tags, ...(k.variesTags ?? [])]), ...templateRows.flatMap((t) => t.tags), ...tagRules.flatMap((r) => list(r.addTags))])].sort((a, b) => a.localeCompare(b));
@@ -188,6 +193,12 @@ export default async function TrainingPage() {
           <Details summary="Teach by correcting: a supplier's paragraph in your voice" hint="reading here is free" className="mt-4 !shadow-none">
             <Rewriter aiEnabled={aiAvailable()} types={types} brands={brands} />
           </Details>
+        </Card>
+      </div>
+
+      <div id="shelves" className="mb-6 scroll-mt-6">
+        <Card title="Your shelves and seasons">
+          <ShelvesCard shelves={shelves} seasons={seasons} known={tags} />
         </Card>
       </div>
 

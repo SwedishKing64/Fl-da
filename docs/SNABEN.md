@@ -606,13 +606,23 @@ commit, undo.
 
 ### Phase 3: naming, filing and merchandising (about two weeks)
 
-- **Title grammar by example**: three titles typed the way the shop wants them; the pattern is
-  inferred and said back as a sentence to confirm.
-- **Shelves, their words**: an editor to rename, merge and nest collections, tags and types,
-  and mark which are seasonal. **Shop-specific shelves** no supplier knows (Rental fleet,
-  Ex-demo, Staff favourites, Gift under $100, Last season) by price, age, tag or hand-pick.
-- **Hemisphere and season vocabulary**: the shop's season names and when they turn over;
-  titles and tags follow.
+Shipped 2026-11-20: **titles by example** (`title-grammar.ts`, Add a rule under Titles): three
+titles typed as the shop wants them are read for the conventions they share (brand in front,
+year at the end, Men's or Women's first, the supplier's capitals) and said back as a sentence;
+Keep writes the naming conventions, the example title and, where all are one type, that type's
+title shape. **Shelves** (`shelves.ts`, kept under `shop.shelves`, the Your shelves and seasons
+card): each tag or collection as the export has it, with what it is now called or merged into,
+what it sits under (carried by every product on it, all the way up) and whether it is seasonal;
+applied at build to every product's tags and collections. **Seasons** (`seasons.ts`, kept under
+`shop.seasons`, the same card): the shop's season names and start days, with a tag pattern
+({season} {year} or {yy}); the current season follows the calendar, wrapping into the previous
+year's last season, and its tag goes on every product filed on a seasonal shelf. Each shows as
+beliefs under Types, tags and categories, travels in the rules file, and is kept by undo.
+
+Still to do in this phase:
+
+- **Shop-specific shelves** no supplier knows (Rental fleet, Ex-demo, Staff favourites, Gift
+  under $100, Last season) by price, age, tag or hand-pick.
 - **Metafields the shop defines**: custom fields per type with a source each (supplier, page,
   rule, typed once), written to the export and the push.
 - **Export shape**: extra CSV columns, the metafields the theme needs, per-channel variants.

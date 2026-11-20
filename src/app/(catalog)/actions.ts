@@ -3074,9 +3074,9 @@ export async function dismissSupportBackupAction(at: string): Promise<ActionResu
 /** Everything the shop has taught, as one rules file. See rules-file.ts. */
 async function buildRulesFile(opts: { withLearned: boolean } = { withLearned: true }): Promise<import("@/lib/catalog/rules-file").RulesFile> {
   const { RULES_FILE_KIND, RULES_FILE_VERSION } = await import("@/lib/catalog/rules-file");
-  const { getHouseConventions, getLearnedVocabulary, getWebsiteCategories, shopName, getVoice, getRecipes } = await import("@/lib/catalog/shop-profile");
+  const { getHouseConventions, getLearnedVocabulary, getWebsiteCategories, shopName, getVoice, getRecipes, getShelves, getSeasons } = await import("@/lib/catalog/shop-profile");
   const { getBindingList } = await import("@/lib/catalog/trades/snow/binding-store");
-  const [house, learned, website, settings, tagRules, pricingRules, templates, bindings, voice, recipes] = await Promise.all([
+  const [house, learned, website, settings, tagRules, pricingRules, templates, bindings, voice, recipes, shelves, seasons] = await Promise.all([
     getHouseConventions(), opts.withLearned ? getLearnedVocabulary() : Promise.resolve(undefined), opts.withLearned ? getWebsiteCategories() : Promise.resolve(undefined), getSettings(),
     prisma.tagRule.findMany({ orderBy: { priority: "desc" } }),
     prisma.pricingRule.findMany({ orderBy: { priority: "desc" } }),
@@ -3084,6 +3084,8 @@ async function buildRulesFile(opts: { withLearned: boolean } = { withLearned: tr
     getBindingList().catch(() => null),
     getVoice(),
     getRecipes(),
+    getShelves(),
+    getSeasons(),
   ]);
   return {
     kind: RULES_FILE_KIND,
@@ -3100,12 +3102,14 @@ async function buildRulesFile(opts: { withLearned: boolean } = { withLearned: tr
     voice,
     recipes,
     checks: settings.checks,
+    shelves,
+    seasons,
   };
 }
 
 /** A rules file put in place: each section it carries replaces what is here, the rest stays. */
 async function applyRulesFile(file: import("@/lib/catalog/rules-file").RulesFile): Promise<void> {
-  const { getHouseConventions, saveHouseConventions, saveLearnedVocabulary, saveWebsiteCategories, refreshConventions, saveVoice, saveRecipes } = await import("@/lib/catalog/shop-profile");
+  const { getHouseConventions, saveHouseConventions, saveLearnedVocabulary, saveWebsiteCategories, refreshConventions, saveVoice, saveRecipes, saveShelves, saveSeasons } = await import("@/lib/catalog/shop-profile");
   if (file.house) {
     const kept = await getHouseConventions();
     const { cleanHouse } = await import("@/lib/catalog/house");
@@ -3132,6 +3136,8 @@ async function applyRulesFile(file: import("@/lib/catalog/rules-file").RulesFile
   if (file.packageParts) await (await import("@/lib/catalog/trades/snow/binding-store")).saveBindingList({ entries: file.packageParts, file: `a rules file from ${file.shop || "support"}`, updatedAt: new Date().toISOString() });
   if (file.voice) await saveVoice(file.voice);
   if (file.recipes) await saveRecipes(file.recipes);
+  if (file.shelves) await saveShelves(file.shelves);
+  if (file.seasons) await saveSeasons(file.seasons);
   await refreshConventions();
 }
 
@@ -3524,5 +3530,70 @@ export async function previewLessonAction(key: string): Promise<ActionResult<{ b
         ? { kind: "tag-rule", matchField: lesson.brand ? "brand" : "any", pattern: lesson.brand || ".", addTags: lesson.to, setProductType: "" }
         : { kind: "voice", neverTags: [{ tag: lesson.from, brand: lesson.brand }] };
     return previewChangeAction(change);
+  });
+}
+
+// ---------------------------------------------------------------------------------------------
+// Titles by example, shelves and seasons. See title-grammar.ts, shelves.ts, seasons.ts.
+// ---------------------------------------------------------------------------------------------
+
+/** Titles typed the way the shop wants them, read for the conventions they share. */
+export async function inferTitleGrammarAction(examples: Array<{ title: string; vendor?: string; productType?: string }>): Promise<ActionResult<import("@/lib/catalog/title-grammar").TitleGrammar>> {
+  await requireUser("ADMIN");
+  return safely(async () => {
+    const clean = z.array(z.object({ title: z.string().max(200), vendor: z.string().max(120).optional(), productType: z.string().max(120).optional() })).max(10).parse(examples);
+    const { inferTitleGrammar } = await import("@/lib/catalog/title-grammar");
+    const { getLearnedVocabulary } = await import("@/lib/catalog/shop-profile");
+    const learned = await getLearnedVocabulary();
+    const suppliers = await prisma.supplier.findMany({ select: { defaultBrand: true } });
+    const brands = [...new Set([...(learned?.vendors ?? []).map((v) => v.name), ...suppliers.map((s) => s.defaultBrand ?? "").filter(Boolean)])];
+    const grammar = inferTitleGrammar(clean, brands);
+    if (!grammar) return { ok: false, error: "Type at least one title first." };
+    return { ok: true, data: grammar };
+  });
+}
+
+/** The conventions read off the examples, kept: the naming, the example, and the type's shape where there is one. */
+export async function applyTitleGrammarAction(grammar: { naming: { brandInTitle: string; season: string; audience: string; casing: string; example: string }; typeFormat?: { type: string; format: string } }): Promise<ActionResult> {
+  await requireUser("ADMIN");
+  return safely(async () => {
+    const n = grammar.naming;
+    const r = await patchHouseAction({ naming: { brandInTitle: n.brandInTitle === "always" ? "always" : "never", season: (["seasonal", "always", "never", "chosen"] as const).find((x) => x === n.season) ?? "seasonal", audience: n.audience === "front" ? "front" : "none", casing: n.casing === "supplier" ? "supplier" : "shop", example: String(n.example ?? "").slice(0, 200) } });
+    if (!r.ok) return r;
+    if (grammar.typeFormat?.type && grammar.typeFormat.format) {
+      const k = await saveKindAction({ type: grammar.typeFormat.type.slice(0, 120), patch: { titleFormat: grammar.typeFormat.format.slice(0, 200) } });
+      if (!k.ok) return k;
+    }
+    return { ok: true };
+  });
+}
+
+/** The shop's shelves, saved whole. */
+export async function saveShelvesAction(input: unknown): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    await snapshotRules("Before the shelves changed");
+    const { cleanShelves } = await import("@/lib/catalog/shelves");
+    const { saveShelves } = await import("@/lib/catalog/shop-profile");
+    const shelves = cleanShelves(input);
+    await saveShelves(shelves);
+    await logAudit("shelves.saved", { userId: user.id, details: { shelves: shelves.length } });
+    revalidatePath("/training");
+    return { ok: true };
+  });
+}
+
+/** The shop's seasons, saved whole. */
+export async function saveSeasonsAction(input: unknown): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    await snapshotRules("Before the seasons changed");
+    const { cleanSeasons } = await import("@/lib/catalog/seasons");
+    const { saveSeasons } = await import("@/lib/catalog/shop-profile");
+    const vocab = cleanSeasons(input);
+    await saveSeasons(vocab);
+    await logAudit("seasons.saved", { userId: user.id, details: { seasons: vocab.seasons.map((s) => s.name), tag: vocab.tag } });
+    revalidatePath("/training");
+    return { ok: true };
   });
 }

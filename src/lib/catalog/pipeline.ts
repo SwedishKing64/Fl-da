@@ -20,6 +20,7 @@ import { writeOutColour } from "./colour";
 import { audienceByModel, brandIn, isBrand } from "./brands";
 import { askToJoin } from "./reference-ai";
 import { aiAvailable } from "./anthropic";
+import { recipeChecks } from "./recipes";
 import { asTraining } from "./training-mark";
 import { aiMapping, fillMapping } from "./mapping-ai";
 import { fieldsInForce } from "./taxonomy";
@@ -1454,7 +1455,8 @@ export async function loadReview(batchId: string): Promise<ReviewData> {
   }));
 
   const catalog = await shopifyLookups(view);
-  validateReview(view, { minMarginPct: settings.minMarginPct, shopifySkus: catalog.skus, shopifyHandles: catalog.handles });
+  const recipe = batch.supplierId ? (await (await import("./shop-profile")).getRecipes())[batch.supplierId] : undefined;
+  validateReview(view, { minMarginPct: settings.minMarginPct, shopifySkus: catalog.skus, shopifyHandles: catalog.handles, supplierChecks: recipeChecks(recipe, batch.supplier?.name ?? "") });
   const summary = { ...summarise(view), ...tallyConfidence(view) };
   await prisma.importBatch.update({ where: { id: batchId }, data: { summary: JSON.stringify(summary) } });
 

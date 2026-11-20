@@ -23,6 +23,8 @@ export interface ValidationContext {
   shopifySkus?: Map<string, string>;
   /** Handles that already exist in the live Shopify catalog. */
   shopifyHandles?: Set<string>;
+  /** What the shop asked to always check on this supplier's products. See recipes.ts. */
+  supplierChecks?: Array<{ code: "SUPPLIER_CHECK"; message: string }>;
 }
 
 export function validateReview(products: ReviewProduct[], ctx: ValidationContext): void {
@@ -38,6 +40,7 @@ export function validateReview(products: ReviewProduct[], ctx: ValidationContext
 
   for (const p of products) {
     const flags: RowFlag[] = [];
+    for (const c of ctx.supplierChecks ?? []) flags.push({ code: c.code, severity: "warning", message: c.message });
     if (!p.title.trim()) flags.push({ code: "MISSING_TITLE", severity: "error", message: "Product has no title" });
     if (!p.handle || !isValidHandle(p.handle)) flags.push({ code: "INVALID_HANDLE", severity: "error", message: "Handle must be lowercase letters, numbers and hyphens" });
     else if ((handleCounts.get(p.handle) ?? 0) > 1) flags.push({ code: "DUPLICATE_HANDLE", severity: "error", message: "Another product in this batch uses the same handle" });

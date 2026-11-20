@@ -107,6 +107,7 @@ function writeView(v: "look" | "table") {
 }
 
 const FLAG_LABELS: Record<string, string> = {
+  SUPPLIER_CHECK: "Supplier: always check",
   MISSING_TITLE: "Missing title", MISSING_PRICE: "Missing price", MISSING_COST: "Missing cost", MISSING_SKU: "Missing SKU", MISSING_BARCODE: "Missing barcode",
   DUPLICATE_SKU_BATCH: "Duplicate SKU (batch)", DUPLICATE_SKU_SHOPIFY: "SKU exists in Shopify", DUPLICATE_HANDLE: "Duplicate handle",
   INVALID_HANDLE: "Invalid handle", DUPLICATE_OPTIONS: "Duplicate option values", MISSING_OPTION_VALUE: "Missing option value",
@@ -178,6 +179,13 @@ export function ReviewGrid({ initial, batchId, kinds = [], categories = [] }: { 
     const fresh = await getReviewAction(batchId);
     setData(fresh);
   }, [batchId]);
+
+  // A change made outside the grid (Ask about this batch) is read in without a reload.
+  useEffect(() => {
+    const onChanged = () => { void refresh(); };
+    window.addEventListener("snaben:review-changed", onChanged);
+    return () => window.removeEventListener("snaben:review-changed", onChanged);
+  }, [refresh]);
 
 
   // The shop's own categories, from its rules, and any this batch already uses: not a fixed ski list.

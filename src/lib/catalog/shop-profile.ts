@@ -29,6 +29,7 @@ import { cleanHouse, defaultHouseFor, type HouseConventions } from "./house";
 import { activateCorrections, CORRECTIONS_KEY, type Correction } from "./corrections";
 import { cleanVoice, setVoice, VOICE_KEY, type Voice } from "./voice";
 import { LESSONS_KEY, type Lesson } from "./lessons";
+import { cleanRecipes, RECIPES_KEY, type Recipes } from "./recipes";
 
 export { COUNTRIES, DEFAULT_PROFILE, type ShopProfile } from "./shop";
 
@@ -111,6 +112,17 @@ export async function getLessons(): Promise<Lesson[]> {
 export async function saveLessons(list: Lesson[]): Promise<void> {
   const value = JSON.stringify(list);
   await prisma.appSetting.upsert({ where: { key: LESSONS_KEY }, create: { key: LESSONS_KEY, value }, update: { value } });
+}
+
+/** How each supplier's documents are to be read, and what in them to trust. See recipes.ts. */
+export async function getRecipes(): Promise<Recipes> {
+  const row = await prisma.appSetting.findUnique({ where: { key: RECIPES_KEY } }).catch(() => null);
+  return cleanRecipes(parseJson<unknown>(row?.value, null));
+}
+
+export async function saveRecipes(recipes: Recipes): Promise<void> {
+  const value = JSON.stringify(cleanRecipes(recipes));
+  await prisma.appSetting.upsert({ where: { key: RECIPES_KEY }, create: { key: RECIPES_KEY, value }, update: { value } });
 }
 
 export async function getWebsiteCategories(): Promise<WebsiteCategories | null> {

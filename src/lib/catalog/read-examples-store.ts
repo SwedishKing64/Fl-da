@@ -4,20 +4,22 @@
 
 import { parseJson, prisma } from "./db";
 import { answerOptions, printedLine, type ReadExample } from "./read-examples";
+import { cleanRecipes, RECIPES_KEY } from "./recipes";
 
 const FINISHED = ["EXPORTED", "PUSHED"];
 
 /** How a batch's supplier's lines were read before, newest batches first. Empty for a new supplier. */
-export async function supplierHistory(batchId: string): Promise<{ examples: ReadExample[]; layouts: string[] }> {
+export async function supplierHistory(batchId: string): Promise<{ examples: ReadExample[]; layouts: string[]; recipe?: string }> {
   const batch = await prisma.importBatch.findUnique({ where: { id: batchId }, select: { supplierId: true } });
   if (!batch?.supplierId) return { examples: [], layouts: [] };
+  const recipe = await recipeFor(batch.supplierId);
   const batches = await prisma.importBatch.findMany({
     where: { supplierId: batch.supplierId, id: { not: batchId } },
     orderBy: { updatedAt: "desc" },
     take: 8,
     select: { id: true, status: true },
   });
-  if (batches.length === 0) return { examples: [], layouts: [] };
+  if (batches.length === 0) return { examples: [], layouts: [], ...(recipe ? { recipe } : {}) };
   // A finished batch was settled as a whole. One still in review counts only where a person has
   // already corrected or confirmed the line: fixed once is a lesson from that moment, not from export.
   const settled = await settledLines(batches.filter((b) => !FINISHED.includes(b.status)).map((b) => b.id));
@@ -50,7 +52,13 @@ export async function supplierHistory(batchId: string): Promise<{ examples: Read
       if (printed) examples.push({ printed, read, layout: file.layout });
     }
   }
-  return { examples, layouts };
+  return { examples, layouts, ...(recipe ? { recipe } : {}) };
+}
+
+/** The shop's instructions for reading this supplier's documents, where it has given any. */
+export async function recipeFor(supplierId: string): Promise<string> {
+  const row = await prisma.appSetting.findUnique({ where: { key: RECIPES_KEY } }).catch(() => null);
+  return cleanRecipes(parseJson<unknown>(row?.value, null))[supplierId]?.recipe ?? "";
 }
 
 /** The lines of unfinished batches a person has corrected or confirmed, by variant and by product. */

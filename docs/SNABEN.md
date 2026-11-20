@@ -561,14 +561,22 @@ built. Phase 1 shipped on 2026-11-19; the rest is the plan.
 
 ### Phase 2: the review page, suppliers, and safety (about two weeks)
 
-- **Ask the batch**: a chat on the review page over the batch, with tools for what a person
-  does there (filter, retag, set draft or live, drop a product, find a page). The model
-  proposes a plan of writes; the page shows each before it happens; the audit log records it.
-- **Supplier recipes and trust**: plain-word procedures per supplier or brand ("the size is
-  the last two characters of the SKU", "ignore the second tab") handed to the reader for that
-  supplier; per-supplier trust (which columns to believe, which to always check, whose
-  descriptions to keep). A recipe is tried on the supplier's last file before it takes effect,
-  and the diff of line items shown.
+Shipped 2026-11-20: **Ask about this batch** (`batch-chat.ts`, the panel above the review
+grid): the batch goes to the model one product per line; a question comes back as the products
+it is about, a request as steps in a closed set of shapes (retag, file as, set brand, set
+status, rename, drop, find pages), each a sentence with Apply beside it and the products it
+touches named. Apply goes through the same actions the grid uses and is logged as
+`batch.asked`; the grid reads the change in without a reload. **Supplier recipes and trust**
+(`recipes.ts`, kept under `supplier.recipes` by supplier id, the section at the foot of the
+supplier tile on Teach Snaben): the shop's instructions for reading a supplier's documents go
+to the reader ahead of every document from that supplier, marked as the shop's and with the
+document itself never an instruction; fields to always check become a `SUPPLIER_CHECK` warning
+on every product of that supplier; descriptions kept as written are not rewritten. "Try it on
+the last document" reads the supplier's latest document again with and without the recipe,
+writes nothing, and shows what changed. Each recipe is a belief under Suppliers.
+
+Still to do in this phase:
+
 - **Staff picks and notes** in review: a one-line field that becomes a quoted line in the
   copy, with the first name where the shop wants it.
 - **What blocks and what warns**: each hard check becomes the shop's choice (barcodes required

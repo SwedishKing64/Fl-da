@@ -252,6 +252,10 @@ export interface AppSettings {
   shareLayouts: boolean;
   /** Which checks stop a push and which only warn, where the shop has said. See checks.ts. */
   checks: import("./checks").CheckSettings;
+  /** How a new product starts: a draft, or live. See listing.ts. */
+  newProductStatus: import("./listing").NewProductStatus;
+  /** What the batch check may change on its own. See agent-scope.ts. */
+  agentMay: import("./agent-scope").AgentMay;
   /** For a shop that packages skis with bindings: its mounting charges and the wording of the two fittings. */
   packages: PackageTerms;
 }
@@ -284,6 +288,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   houseRules: "",
   shareLayouts: true,
   checks: {},
+  newProductStatus: "draft",
+  agentMay: { title: true, productType: true, vendor: true, tags: true, collections: true, drop: true },
   packages: DEFAULT_PACKAGE_TERMS,
 };
 

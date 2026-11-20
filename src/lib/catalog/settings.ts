@@ -1,5 +1,7 @@
 import { prisma, parseJson } from "./db";
 import { cleanChecks } from "./checks";
+import { cleanNewProductStatus } from "./listing";
+import { cleanAgentMay } from "./agent-scope";
 import { DEFAULT_SETTINGS, type AppSettings } from "./types";
 
 const KEY = "app";
@@ -15,6 +17,8 @@ export async function getSettings(): Promise<AppSettings> {
     locations: stored.locations ?? [],
     packages: { ...DEFAULT_SETTINGS.packages, ...(stored.packages ?? {}) },
     checks: cleanChecks(stored.checks),
+    newProductStatus: cleanNewProductStatus(stored.newProductStatus),
+    agentMay: cleanAgentMay(stored.agentMay),
   };
 }
 
@@ -28,6 +32,8 @@ export async function saveSettings(patch: Partial<AppSettings>): Promise<AppSett
     packages: { ...current.packages, ...(patch.packages ?? {}) },
     // The checks are saved whole, so a rules file or an undo can take one back to its default.
     checks: patch.checks ? cleanChecks(patch.checks) : current.checks,
+    newProductStatus: cleanNewProductStatus(patch.newProductStatus ?? current.newProductStatus),
+    agentMay: patch.agentMay ? cleanAgentMay(patch.agentMay) : current.agentMay,
   };
   await prisma.appSetting.upsert({
     where: { key: KEY },

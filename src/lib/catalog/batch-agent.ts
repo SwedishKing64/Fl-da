@@ -35,6 +35,8 @@ import { readFile } from "./storage";
 import { sheetGrids } from "./extract/tabular";
 import { applyMappings, mappingState, untouchedSinceBuilt } from "./pipeline";
 import { parseJson } from "./db";
+import { agentScopePrompt, mayFix } from "./agent-scope";
+import { getSettings } from "./settings";
 
 const Fix = z.object({
   handle: z.string().describe("The product's handle, exactly as listed."),
@@ -311,7 +313,8 @@ export async function reviewBatch(batchId: string, userId: string | null, ask: A
   // review without the audit once the audit has been run.
   const audit = options.audit === false ? null : await auditReading(batchId, userId, ask).catch(() => null);
   const content = await describeBatch(batchId);
-  const text = await ask(forThisShop(SYSTEM), content);
+  const may = (await getSettings()).agentMay;
+  const text = await ask([forThisShop(SYSTEM), agentScopePrompt(may)].filter(Boolean).join("\n\n"), content);
   if (!text) return null;
   const parsed = Review.safeParse(JSON.parse(text));
   if (!parsed.success) return null;
@@ -327,6 +330,8 @@ export async function reviewBatch(batchId: string, userId: string | null, ask: A
   for (const fix of review.fixes) {
     const p = byHandle.get(fix.handle.trim());
     if (!p) { skipped.push({ ...fix, reason: "no such product in the batch" }); continue; }
+    // What the shop keeps for a person is said, never done. See agent-scope.ts.
+    if (!mayFix(may, fix.field)) { skipped.push({ ...fix, reason: "the shop keeps this for a person" }); continue; }
     const value = fix.value.trim();
     if (fix.field === "drop") {
       await prisma.product.delete({ where: { id: p.id } });

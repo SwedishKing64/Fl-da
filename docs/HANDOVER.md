@@ -402,6 +402,16 @@ terms and the due dates worked from them, PAID stamps) live in Rubin's handover.
 
 ## Decisions and history, newest first
 
+- 2026-11-20 **A new product's status; the batch check's scope; preview before commit.** A new
+  product starts as a draft or live (`settings.newProductStatus`, in force through
+  `listing.ts`, applied in `delivery.ts` and sent on the push; publishing on a date is not
+  built, since the product-set input has no date). The batch check may change only the fields
+  the shop allows (`settings.agentMay`, `agent-scope.ts`): anything else it would have fixed is
+  skipped as "the shop keeps this for a person" and the check is told to ask instead. Preview on
+  a chat proposal or a lesson runs the change over the latest batch's products without writing
+  (`preview.ts`), saying how many it touches and showing three before and after; a setting for
+  the writer has no preview and says so. Both settings show as beliefs under Before a push and
+  travel in the rules file.
 - 2026-11-20 **Staff notes; what blocks and what warns; undo.** A staff note (one line and a
   first name) on the review page's product details is kept on the product and quoted after the
   copy at export and at push (`staff-note.ts`), never written into the description itself. Ten

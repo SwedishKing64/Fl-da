@@ -30,6 +30,7 @@ import { activateCorrections, CORRECTIONS_KEY, type Correction } from "./correct
 import { cleanVoice, setVoice, VOICE_KEY, type Voice } from "./voice";
 import { LESSONS_KEY, type Lesson } from "./lessons";
 import { cleanRecipes, RECIPES_KEY, type Recipes } from "./recipes";
+import { setNewProductStatus } from "./listing";
 
 export { COUNTRIES, DEFAULT_PROFILE, type ShopProfile } from "./shop";
 
@@ -182,6 +183,7 @@ async function load(): Promise<void> {
   // Better still, a shop that has connected its store keeps them in its own Shopify Files.
   setShopifyPictures(!usingBlob() && Boolean(settings.shopify.storeDomain && settings.shopify.accessToken));
   setPackageTerms(settings.packages);
+  setNewProductStatus(settings.newProductStatus);
   loadedAt = Date.now();
 }
 

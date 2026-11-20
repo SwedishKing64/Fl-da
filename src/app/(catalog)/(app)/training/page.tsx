@@ -78,7 +78,7 @@ export default async function TrainingPage() {
     suppliers,
     layouts: layouts.map((t) => ({ id: t.id, supplier: t.supplier.name, name: t.name, mappings: parseJson<Record<string, string>>(t.mappings, {}), options: parseJson(t.options, {}) })),
     records,
-    settings: { seoTone: settings.seoTone, seoTitlePattern: settings.seoTitlePattern, defaultRoundTo: settings.defaultRoundTo, minMarginPct: settings.minMarginPct, gstRate: settings.gstRate, pricesIncludeGst: settings.pricesIncludeGst, houseRules: settings.houseRules, taxName: taxName() },
+    settings: { seoTone: settings.seoTone, seoTitlePattern: settings.seoTitlePattern, defaultRoundTo: settings.defaultRoundTo, minMarginPct: settings.minMarginPct, gstRate: settings.gstRate, pricesIncludeGst: settings.pricesIncludeGst, houseRules: settings.houseRules, taxName: taxName(), newProductStatus: settings.newProductStatus, agentMay: settings.agentMay },
     fieldLabels: Object.fromEntries(CANONICAL_FIELDS.map((f) => [f.key, f.label])),
     optionPlan: (type) => optionPlanFor(type),
     shopName: shopName(),

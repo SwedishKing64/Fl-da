@@ -19,6 +19,8 @@ import { packageSkisOf } from "@/lib/catalog/trades/snow/package-skis";
 import { lookupEnabled } from "@/lib/catalog/enrich";
 import { guarded } from "@/app/(catalog)/page-failed";
 import { SupplierNote } from "./SupplierNote";
+import { AskBatch } from "./AskBatch";
+import { aiAvailable } from "@/lib/catalog/anthropic";
 import { supplierRecordFor } from "@/lib/catalog/supplier-score";
 import { getShopProfile, homeCurrency } from "@/lib/catalog/shop-profile";
 import { SUPPORT_MAILTO } from "@/lib/catalog/support";
@@ -107,6 +109,7 @@ async function renderReviewPage(props: PageProps<"/batches/[id]/review">) {
           />
           <PackagesPanel batchId={id} locked={["EXPORTED", "PUSHED"].includes(batch.status)} skis={skis} bindings={bindings} />
           <LookupPanel batchId={id} outstanding={outstanding} enabled={lookupEnabled()} states={states} />
+          <AskBatch batchId={id} titles={Object.fromEntries(review.products.map((p) => [p.id, p.title]))} aiEnabled={aiAvailable()} locked={["EXPORTED", "PUSHED"].includes(batch.status)} />
           <ReviewGrid initial={review} batchId={id} kinds={typesAreKnown() ? productTypes() : []} categories={categories} />
         </>
       )}

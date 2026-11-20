@@ -3290,3 +3290,106 @@ export async function decideLessonAction(key: string, accept: boolean): Promise<
     return { ok: true, data: { did: accept ? lessonOutcome(lesson) : "Put away; it will not be asked again." } };
   });
 }
+
+// ---------------------------------------------------------------------------------------------
+// Supplier recipes, and asking the batch. See recipes.ts and batch-chat.ts.
+// ---------------------------------------------------------------------------------------------
+
+/** A supplier's recipe and trust, saved whole; everything empty removes it. */
+export async function saveSupplierRecipeAction(supplierId: string, input: { recipe: string; checkFields: string[]; keepDescriptions: boolean }): Promise<ActionResult> {
+  const user = await requireUser("ADMIN");
+  return safely(async () => {
+    const supplier = await prisma.supplier.findUnique({ where: { id: supplierId }, select: { id: true, name: true } });
+    if (!supplier) return { ok: false, error: "That supplier is no longer here." };
+    const { cleanRecipe } = await import("@/lib/catalog/recipes");
+    const { getRecipes, saveRecipes } = await import("@/lib/catalog/shop-profile");
+    const all = await getRecipes();
+    const clean = cleanRecipe({ ...input, updatedAt: new Date().toISOString() });
+    if (clean) all[supplier.id] = clean;
+    else delete all[supplier.id];
+    await saveRecipes(all);
+    await logAudit("supplier.recipe", { userId: user.id, details: { supplier: supplier.name, recipe: clean?.recipe ?? "", checkFields: clean?.checkFields ?? [], keepDescriptions: clean?.keepDescriptions ?? false } });
+    revalidatePath("/training");
+    return { ok: true };
+  });
+}
+
+/**
+ * A recipe tried on the supplier's last document before it takes effect: the document is read
+ * again with and without the recipe, nothing is written, and the two readings are compared.
+ * Reading here teaches the shop's copy, so it is marked as training.
+ */
+export async function trySupplierRecipeAction(supplierId: string, recipe: string): Promise<ActionResult<{ filename: string } & import("@/lib/catalog/recipes").ReadComparison>> {
+  await requireUser("ADMIN");
+  return safely(async () => {
+    const text = String(recipe ?? "").trim().slice(0, 4000);
+    if (!text) return { ok: false, error: "Write the recipe first, then try it." };
+    if (!aiAvailable()) return { ok: false, error: "Snaben has no reading key, so it cannot read the document again. The recipe can still be saved." };
+    const file = await prisma.sourceFile.findFirst({ where: { batch: { supplierId }, extractionStatus: "DONE", detectedKind: { in: ["INVOICE", "PRICE_LIST"] } }, orderBy: { createdAt: "desc" }, select: { id: true, filename: true, mimeType: true, storagePath: true, kind: true, batchId: true } });
+    if (!file) return { ok: false, error: "This supplier has no document read yet. Drop one in on a batch first, then try the recipe on it." };
+    const { readFile } = await import("@/lib/catalog/storage");
+    const { extractFile } = await import("@/lib/catalog/extract");
+    const { supplierHistory } = await import("@/lib/catalog/read-examples-store");
+    const { compareReads } = await import("@/lib/catalog/recipes");
+    const { asTraining } = await import("@/lib/catalog/training-mark");
+    const buffer = await readFile(file.storagePath);
+    const history = await supplierHistory(file.batchId).catch(() => ({ examples: [], layouts: [] }));
+    const kind = file.kind as import("@/lib/catalog/extract").UploadKind;
+    const [before, after] = await asTraining(() => Promise.all([
+      extractFile(buffer, file.filename, file.mimeType, kind, {}, { ...history, recipe: "" }),
+      extractFile(buffer, file.filename, file.mimeType, kind, {}, { ...history, recipe: text }),
+    ]));
+    return { ok: true, data: { filename: file.filename, ...compareReads(before.table.rows, after.table.rows) } };
+  });
+}
+
+/** What was asked about a batch, read into a reply and steps; each step waits for Apply. */
+export async function askBatchAction(batchId: string, turns: Array<{ role: "user" | "assistant"; content: string }>): Promise<ActionResult<import("@/lib/catalog/batch-chat").BatchAnswer>> {
+  await requireUser();
+  return safely(async () => {
+    const clean = z.array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().min(1).max(4000) })).min(1).max(30).parse(turns);
+    const batch = await prisma.importBatch.findUnique({ where: { id: batchId }, select: { name: true } });
+    if (!batch) return { ok: false, error: "That batch is no longer here." };
+    const { askBatch } = await import("@/lib/catalog/batch-chat");
+    const review = await loadReview(batchId);
+    const answer = await askBatch(clean, review.products, batch.name);
+    if (!answer) return { ok: false, error: "Snaben has no reading key, so it cannot read what you asked. Add one on Settings." };
+    return { ok: true, data: answer };
+  });
+}
+
+/** A step applied, through the same actions the grid uses. */
+export async function applyBatchStepAction(batchId: string, input: unknown): Promise<ActionResult<{ did: string }>> {
+  const user = await requireUser();
+  return safely(async () => {
+    const { Op, describeOp } = await import("@/lib/catalog/batch-chat");
+    const op = Op.parse(input);
+    const known = new Set((await prisma.product.findMany({ where: { batchId }, select: { id: true } })).map((p) => p.id));
+    const ids = (op.kind === "retitle" ? [op.productId] : op.productIds).filter((id) => known.has(id));
+    if (!ids.length) return { ok: false, error: "None of those products are in this batch any more." };
+    const list = (s: string) => s.split(",").map((t) => t.trim()).filter(Boolean);
+    switch (op.kind) {
+      case "show": return { ok: true, data: { did: "Shown." } };
+      case "retag": {
+        const products = await prisma.product.findMany({ where: { id: { in: ids } }, select: { id: true, tags: true } });
+        for (const p of products) {
+          const had = list(p.tags);
+          const kept = had.filter((t) => !op.remove.some((r) => r.toLowerCase() === t.toLowerCase()));
+          const next = [...kept, ...op.add.filter((a) => !kept.some((t) => t.toLowerCase() === a.toLowerCase()))];
+          const r = await updateProductAction(p.id, { tags: next.join(", ") });
+          if (!r.ok) return r;
+        }
+        break;
+      }
+      case "set-type": { const r = await bulkUpdateAction(batchId, ids, { productType: op.productType }); if (!r.ok) return r; break; }
+      case "set-vendor": { const r = await bulkUpdateAction(batchId, ids, { vendor: op.vendor }); if (!r.ok) return r; break; }
+      case "set-status": { const r = await bulkUpdateAction(batchId, ids, { status: op.status }); if (!r.ok) return r; break; }
+      case "retitle": { const r = await updateProductAction(ids[0], { title: op.title }); if (!r.ok) return r; break; }
+      case "drop": { for (const id of ids) { const r = await deleteProductAction(id); if (!r.ok) return r; } break; }
+      case "find-pages": { const r = await findProductPagesAction(batchId, { productIds: ids }); if (!r.ok) return r; break; }
+    }
+    await logAudit("batch.asked", { batchId, userId: user.id, details: { kind: op.kind, products: ids.length, sentence: describeOp(op) } });
+    revalidatePath(`/batches/${batchId}/review`);
+    return { ok: true, data: { did: describeOp(op) } };
+  });
+}

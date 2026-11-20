@@ -12,6 +12,7 @@
 
 import type { HouseConventions, KindRule } from "./house";
 import { describeVoice, type Voice } from "./voice";
+import { describeRecipe, type Recipes } from "./recipes";
 import { fromGrams } from "./house";
 import type { TagRuleLike } from "./rules";
 import type { ProductTemplateLike } from "./templates";
@@ -81,6 +82,8 @@ export interface TeachingInput {
   packages?: PackageTeaching | null;
   /** The shop's voice; left out where the caller has none to show. */
   voice?: Voice;
+  /** How each supplier's documents are read, by supplier id. */
+  recipes?: Recipes;
 }
 
 export const SOURCE_LABELS: Record<Source, string> = { export: "from your export", website: "from your website", you: "you set this", floda: "Snaben's own", supplier: "from paperwork" };
@@ -236,6 +239,8 @@ function suppliers(input: TeachingInput): Belief[] {
     const bits = [`costs in ${s.defaultCurrency}`, s.defaultGstTreatment === "INCLUSIVE" ? `inclusive of ${input.settings.taxName}` : s.defaultGstTreatment === "NONE" ? `with no ${input.settings.taxName}` : `exclusive of ${input.settings.taxName}`];
     if (s.defaultBrand?.trim()) bits.push(`the brand is ${s.defaultBrand.trim()} unless the file says otherwise`);
     out.push({ id: `supplier:${s.id}`, source: "you", sentence: `${s.name}: ${bits.join(", ")}.`, edit: { kind: "supplier", supplier: s } });
+    const recipe = input.recipes?.[s.id];
+    if (recipe) describeRecipe(recipe, s.name).forEach((sentence, i) => out.push({ id: `recipe:${s.id}:${i}`, source: "you", sentence, edit: { kind: "link", href: "#recipes", label: "Change" } }));
     for (const l of input.layouts.filter((x) => x.supplier === s.name)) out.push({ id: `layout:${l.id}`, source: "supplier", sentence: describeLayout(l, input.fieldLabels) });
     const r = input.records.find((x) => x.supplierId === s.id);
     if (r && r.share !== null) out.push({ id: `record:${s.id}`, source: "supplier", sentence: describeRecord(r) });

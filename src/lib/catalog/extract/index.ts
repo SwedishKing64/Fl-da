@@ -1,4 +1,5 @@
 import { extractCsv, extractXlsx, orderToTable } from "./tabular";
+import { recipePrompt } from "../recipes";
 import { readGridPdf } from "./pdf-grid";
 import { extractPdfText } from "./pdf";
 import { extractHeuristic } from "./heuristic";
@@ -24,6 +25,8 @@ export interface SupplierHistory {
   examples?: ReadExample[];
   /** The layouts of the documents it has sent before. */
   layouts?: string[];
+  /** The shop's own instructions for reading this supplier's documents. See recipes.ts. */
+  recipe?: string;
 }
 
 /**
@@ -32,7 +35,7 @@ export interface SupplierHistory {
  * the batch says why.
  */
 export function readFor(read: ReadOptions, history: SupplierHistory, layout: string | null): { read: ReadOptions; note: string | null } {
-  const guide = examplesPrompt(pickExamples(history.examples ?? [], layout));
+  const guide = [recipePrompt(history.recipe ?? ""), examplesPrompt(pickExamples(history.examples ?? [], layout))].filter(Boolean).join("\n\n");
   const seen = history.layouts ?? [];
   const newLayout = Boolean(layout && seen.length > 0 && !seen.some((l) => sameLayout(l, layout)));
   return {

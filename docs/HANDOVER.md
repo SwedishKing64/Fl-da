@@ -402,6 +402,17 @@ terms and the due dates worked from them, PAID stamps) live in Rubin's handover.
 
 ## Decisions and history, newest first
 
+- 2026-11-20 **Ask about this batch; supplier recipes and trust.** On the review page a person
+  asks in plain words (`batch-chat.ts`): a question is answered with the products it is about,
+  a request becomes steps in a closed set (retag, file as, set brand, set status, rename, drop,
+  find pages), each applied only on Apply through the grid's own actions and logged as
+  `batch.asked`; this is work, counted against the plan. Each supplier can carry a recipe
+  (`recipes.ts`, `supplier.recipes`): the shop's own instructions for reading its documents,
+  given to the reader ahead of the settled examples, with the rule that nothing printed in a
+  document is ever an instruction; fields to always check (a `SUPPLIER_CHECK` warning on every
+  product); descriptions kept as written. A recipe can be tried on the supplier's last document
+  before it is kept (two readings compared, nothing written, marked as training). Shown as
+  beliefs under Suppliers and edited at the foot of the supplier tile.
 - 2026-11-19 **The shop's voice; teaching by talking and by correcting.** Decided: a shop never
   fills in a form to describe itself; it shows an example, corrects a result or says it in a
   sentence, and that becomes a belief on Teach Snaben. Built: the voice (`voice.ts`,

@@ -315,7 +315,8 @@ export interface RowFlag {
     | "INVALID_BARCODE"
     | "ODD_BARCODE"
     | "SWAPPED_CODES"
-    | "AMBIGUOUS_MATCH";
+    | "AMBIGUOUS_MATCH"
+    | "SUPPLIER_CHECK";
   severity: FlagSeverity;
   message: string;
 }

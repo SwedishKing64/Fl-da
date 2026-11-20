@@ -88,6 +88,9 @@ export async function enrichBatchSeo(batchId: string, opts: { onlyMissing: boole
   const products = await prisma.product.findMany({ where: { batchId } });
   const settings = await getSettings();
   const templates = await loadTemplatesForCopy();
+  // A supplier whose descriptions the shop keeps as written: a body it gave is left alone.
+  const batch = await prisma.importBatch.findUnique({ where: { id: batchId }, select: { supplierId: true } });
+  const keepBodies = batch?.supplierId ? Boolean((await (await import("./shop-profile")).getRecipes())[batch.supplierId]?.keepDescriptions) : false;
   let updated = 0;
   const sources = new Set<string>();
   for (const p of products) {
@@ -113,7 +116,7 @@ export async function enrichBatchSeo(batchId: string, opts: { onlyMissing: boole
       data: {
         seoTitle: p.seoTitle && opts.onlyMissing ? p.seoTitle : result.seoTitle,
         seoDescription: p.seoDescription && opts.onlyMissing ? p.seoDescription : result.seoDescription,
-        bodyHtml: withShopSections(p.bodyHtml && opts.onlyMissing ? p.bodyHtml : result.bodyHtml, voiceInForce(), { vendor: p.vendor, productType: p.productType }),
+        bodyHtml: withShopSections(p.bodyHtml && (opts.onlyMissing || keepBodies) ? p.bodyHtml : result.bodyHtml, voiceInForce(), { vendor: p.vendor, productType: p.productType }),
       },
     });
     updated++;

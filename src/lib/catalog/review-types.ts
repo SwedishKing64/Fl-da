@@ -59,6 +59,9 @@ export interface ReviewProduct {
   published: boolean;
   seoTitle: string;
   seoDescription: string;
+  /** A line from the shop floor, quoted in the copy at export, and who said it. See staff-note.ts. */
+  staffNote?: string;
+  staffName?: string;
   /** What the web lookup did about the columns the invoice left empty. */
   lookupStatus: string;
   lookupSource: string;

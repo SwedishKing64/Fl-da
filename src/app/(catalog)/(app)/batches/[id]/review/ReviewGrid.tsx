@@ -141,7 +141,7 @@ function worst(flags: RowFlag[]): "error" | "warning" | null {
   return null;
 }
 
-export function ReviewGrid({ initial, batchId, kinds = [], categories = [] }: { initial: ReviewData; batchId: string; kinds?: string[]; categories?: string[] }) {
+export function ReviewGrid({ initial, batchId, kinds = [], categories = [], signedAs = "" }: { initial: ReviewData; batchId: string; kinds?: string[]; categories?: string[]; signedAs?: string }) {
   const [data, setData] = useState<ReviewData>(initial);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(initial.products.map((p) => p.id)));
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -626,7 +626,7 @@ export function ReviewGrid({ initial, batchId, kinds = [], categories = [] }: { 
       </div>
       </>}
 
-      {drawerProduct && <ProductDrawer key={drawerProduct.id} batchId={batchId} product={drawerProduct} unassigned={data.unassignedImages} locked={locked} publicBaseUrl={data.settings.publicBaseUrl} onClose={() => setDrawer(null)} refresh={refresh} setMessage={setMessage} metafieldColumns={data.metafieldColumns} />}
+      {drawerProduct && <ProductDrawer signedAs={signedAs} key={drawerProduct.id} batchId={batchId} product={drawerProduct} unassigned={data.unassignedImages} locked={locked} publicBaseUrl={data.settings.publicBaseUrl} onClose={() => setDrawer(null)} refresh={refresh} setMessage={setMessage} metafieldColumns={data.metafieldColumns} />}
     </div>
   );
 }
@@ -685,7 +685,7 @@ function lookupMessage(d: { attempted: number; found: number; descriptions: numb
   return { tone: "success", text: `Searched ${d.attempted}, filled in ${got.join(", ")}.${capped}` };
 }
 
-function ProductDrawer({ batchId, product, unassigned, locked, publicBaseUrl, onClose, refresh, setMessage, metafieldColumns = [] }: { metafieldColumns?: string[]; batchId: string; product: ReviewProduct; unassigned: Array<{ id: string; filename: string; url: string; hint: string }>; locked: boolean; publicBaseUrl: string; onClose: () => void; refresh: () => Promise<void>; setMessage: (m: { tone: "info" | "success" | "warning" | "danger"; text: string } | null) => void }) {
+function ProductDrawer({ batchId, product, unassigned, locked, publicBaseUrl, onClose, refresh, setMessage, metafieldColumns = [], signedAs = "" }: { metafieldColumns?: string[]; signedAs?: string; batchId: string; product: ReviewProduct; unassigned: Array<{ id: string; filename: string; url: string; hint: string }>; locked: boolean; publicBaseUrl: string; onClose: () => void; refresh: () => Promise<void>; setMessage: (m: { tone: "info" | "success" | "warning" | "danger"; text: string } | null) => void }) {
   const [tab, setTab] = useState<"images" | "details">("images");
   const [url, setUrl] = useState("");
   const [variantForUrl, setVariantForUrl] = useState("");
@@ -693,7 +693,7 @@ function ProductDrawer({ batchId, product, unassigned, locked, publicBaseUrl, on
   const [pending, start] = useTransition();
   // Which of the shop's products this one was settled as, when that was settled.
   const [match, setMatch] = useState<string>(() => (product.matchDecided ? (product.reconcileStatus === "NEW" ? "new" : product.matchCandidates.find((c) => c.handle === product.handle)?.id ?? "") : ""));
-  const [details, setDetails] = useState({ seoTitle: product.seoTitle, seoDescription: product.seoDescription, bodyHtml: product.bodyHtml, option1Name: product.option1Name ?? "", option2Name: product.option2Name ?? "", option3Name: product.option3Name ?? "", metafields: { ...product.metafields } });
+  const [details, setDetails] = useState({ seoTitle: product.seoTitle, seoDescription: product.seoDescription, bodyHtml: product.bodyHtml, staffNote: product.staffNote ?? "", staffName: product.staffName ?? (product.staffNote ? "" : signedAs), option1Name: product.option1Name ?? "", option2Name: product.option2Name ?? "", option3Name: product.option3Name ?? "", metafields: { ...product.metafields } });
   const inputRef = useRef<HTMLInputElement>(null);
 
   const upload = (files: FileList | File[]) => {
@@ -793,6 +793,10 @@ function ProductDrawer({ batchId, product, unassigned, locked, publicBaseUrl, on
             <label className="block"><span className="text-xs font-medium text-[var(--ink-2)]">SEO title <span className="text-[var(--ink-soft)]">({details.seoTitle.length}/60)</span></span><input value={details.seoTitle} disabled={locked} onChange={(e) => setDetails({ ...details, seoTitle: e.target.value })} className={INPUT} /></label>
             <label className="block"><span className="text-xs font-medium text-[var(--ink-2)]">SEO description <span className="text-[var(--ink-soft)]">({details.seoDescription.length}/155)</span></span><textarea rows={3} value={details.seoDescription} disabled={locked} onChange={(e) => setDetails({ ...details, seoDescription: e.target.value })} className={INPUT} /></label>
             <label className="block"><span className="text-xs font-medium text-[var(--ink-2)]">Description (HTML)</span><textarea rows={6} value={details.bodyHtml} disabled={locked} onChange={(e) => setDetails({ ...details, bodyHtml: e.target.value })} className={`${INPUT} font-mono text-xs`} /></label>
+            <div className="grid gap-2 sm:grid-cols-[minmax(0,3fr)_minmax(0,1fr)]">
+              <label className="block"><span className="text-xs font-medium text-[var(--ink-2)]">Staff note <span className="text-[var(--ink-soft)]">(one line, quoted after the copy at export)</span></span><input value={details.staffNote} maxLength={280} disabled={locked} onChange={(e) => setDetails({ ...details, staffNote: e.target.value })} className={INPUT} placeholder="Runs small, but worth it for the hood." /></label>
+              <label className="block"><span className="text-xs font-medium text-[var(--ink-2)]">Signed <span className="text-[var(--ink-soft)]">(blank for none)</span></span><input value={details.staffName} maxLength={40} disabled={locked} onChange={(e) => setDetails({ ...details, staffName: e.target.value })} className={INPUT} placeholder="Emma" /></label>
+            </div>
             <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--ink-soft)]">
               <span>{LOOKUP_SAID[product.lookupStatus] ?? "Not looked up yet."}</span>
               {product.lookupSource && <a href={product.lookupSource} target="_blank" rel="noreferrer" className="underline">source</a>}
@@ -810,7 +814,7 @@ function ProductDrawer({ batchId, product, unassigned, locked, publicBaseUrl, on
                 ))}
               </div>
             </div>
-            {!locked && <Button variant="primary" icon="💾" disabled={pending} onClick={() => start(async () => { const r = await updateProductAction(product.id, { seoTitle: details.seoTitle, seoDescription: details.seoDescription, bodyHtml: details.bodyHtml, option1Name: details.option1Name || null, option2Name: details.option2Name || null, option3Name: details.option3Name || null, metafields: details.metafields }); setMessage(r.ok ? { tone: "success", text: "Product details saved." } : { tone: "danger", text: r.error }); await refresh(); })}>Save details</Button>}
+            {!locked && <Button variant="primary" icon="💾" disabled={pending} onClick={() => start(async () => { const r = await updateProductAction(product.id, { seoTitle: details.seoTitle, seoDescription: details.seoDescription, bodyHtml: details.bodyHtml, staffNote: details.staffNote, staffName: details.staffNote.trim() ? details.staffName : "", option1Name: details.option1Name || null, option2Name: details.option2Name || null, option3Name: details.option3Name || null, metafields: details.metafields }); setMessage(r.ok ? { tone: "success", text: "Product details saved." } : { tone: "danger", text: r.error }); await refresh(); })}>Save details</Button>}
           </div>
         )}
       </div>

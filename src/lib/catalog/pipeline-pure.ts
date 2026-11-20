@@ -1,6 +1,7 @@
 // Pure helpers shared by the DB pipeline and the offline/regression pipeline.
 
 import { metafieldColumns } from "./categorize";
+import { withStaffNote } from "./staff-note";
 import { categoryForKind, fillsCategory, headingsFor } from "./taxonomy";
 import { categoryById, type TaxonomyCategory } from "./shopify-taxonomy";
 import type { CsvProduct } from "./csv";
@@ -77,7 +78,7 @@ export function toCsvProducts(products: ReviewProduct[]): CsvProduct[] {
     return {
       handle: p.handle,
       title: p.title,
-      bodyHtml: p.bodyHtml,
+      bodyHtml: withStaffNote(p.bodyHtml, p.staffNote ?? "", p.staffName ?? ""),
       vendor: p.vendor,
       productType: csvType(p.productType, p.collections.split(",")),
       productCategory: productCategoryFor(csvType(p.productType, p.collections.split(",")), p.title),

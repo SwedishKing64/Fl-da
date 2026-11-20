@@ -3,6 +3,7 @@
 // with a custom-app access token configured in Settings.
 
 import { prisma, parseJson } from "./db";
+import { withStaffNote } from "./staff-note";
 import { getSettings, saveSettings } from "./settings";
 import { logAudit } from "./audit";
 import { loadReview, toCsvProducts } from "./pipeline";
@@ -318,7 +319,7 @@ export function buildProductSetInput(p: ReviewProduct, opts: { publish: boolean;
   const input: ProductSetInput = {
     handle: p.handle,
     title: p.title,
-    descriptionHtml: p.bodyHtml,
+    descriptionHtml: withStaffNote(p.bodyHtml, p.staffNote ?? "", p.staffName ?? ""),
     vendor: p.vendor,
     productType: p.productType,
     tags: p.tags.split(",").map((t) => t.trim()).filter(Boolean),

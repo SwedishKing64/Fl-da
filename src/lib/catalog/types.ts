@@ -250,6 +250,8 @@ export interface AppSettings {
   houseRules: string; // free text: how this shop builds products, fed to the AI on every product
   /** Offer confirmed supplier layouts (headings only) to other shops, and start from theirs. */
   shareLayouts: boolean;
+  /** Which checks stop a push and which only warn, where the shop has said. See checks.ts. */
+  checks: import("./checks").CheckSettings;
   /** For a shop that packages skis with bindings: its mounting charges and the wording of the two fittings. */
   packages: PackageTerms;
 }
@@ -281,6 +283,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   seoTitlePattern: "",
   houseRules: "",
   shareLayouts: true,
+  checks: {},
   packages: DEFAULT_PACKAGE_TERMS,
 };
 

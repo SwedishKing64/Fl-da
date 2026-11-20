@@ -9,6 +9,7 @@ import {
   deleteTemplateAction,
   patchHouseAction,
   ruleReachAction,
+  saveCheckAction,
   saveKindAction,
   savePricingRuleJsonAction,
   saveSettingsAction,
@@ -182,6 +183,7 @@ function Editor({ edit: e, lists, pending, onSave, onCancel }: { edit: Exclude<E
     case "tag-rule": return <TagRuleEditor rule={e.rule} pending={pending} onCancel={onCancel} onKeep={(r) => onSave(() => saveTagRuleAction({ id: e.rule.id, ...r }))} />;
     case "template": return <TemplateEditor template={e.template} lists={lists} pending={pending} onCancel={onCancel} onKeep={(t) => onSave(() => saveTemplateAction({ id: e.template.id || undefined, scope: e.template.scope, matchValue: e.template.matchValue, ...t }))} />;
     case "pricing": return <PricingEditor rule={e.rule} taxName={lists.taxName} pending={pending} onCancel={onCancel} onKeep={(r) => onSave(() => savePricingRuleJsonAction({ id: e.rule.id, ...r }))} />;
+    case "check": return <ChoiceEditor label="Before a push, this check" options={[{ key: "block", title: "Stops the push", text: "Must be fixed first" }, { key: "warn", title: "Only warns", text: "Shown; pushed over with the override" }]} current={e.current} pending={pending} onCancel={onCancel} onKeep={(key) => onSave(() => saveCheckAction(e.code, key as "block" | "warn"))} />;
     case "supplier": return <SupplierEditor supplier={e.supplier} taxName={lists.taxName} pending={pending} onCancel={onCancel} onKeep={(s) => onSave(() => saveSupplierDefaultsAction({ id: e.supplier.id, ...s }))} />;
   }
 }

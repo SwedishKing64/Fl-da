@@ -13,6 +13,7 @@
 import type { HouseConventions, KindRule } from "./house";
 import { describeVoice, type Voice } from "./voice";
 import { describeRecipe, type Recipes } from "./recipes";
+import { describeChecks, type CheckSettings } from "./checks";
 import { fromGrams } from "./house";
 import type { TagRuleLike } from "./rules";
 import type { ProductTemplateLike } from "./templates";
@@ -23,7 +24,7 @@ import { describeLayout, describePricingRule, describeTagRule, type LayoutLike, 
 import { describeOffered, describeTerms, type PackageTeaching } from "./trades/snow/package-words";
 import { describeOptionTags } from "./option-tags";
 
-export type AreaKey = "filing" | "titles" | "descriptions" | "variants" | "pricing" | "seo" | "suppliers";
+export type AreaKey = "filing" | "titles" | "descriptions" | "variants" | "pricing" | "seo" | "suppliers" | "checks";
 export type Source = "export" | "website" | "you" | "floda" | "supplier";
 
 export interface Choice { key: string; title: string; text: string }
@@ -42,6 +43,7 @@ export type Edit =
   | { kind: "setting-choice"; key: "defaultRoundTo"; label: string; options: Choice[]; current: string }
   | { kind: "setting-number"; key: "minMarginPct"; label: string; suffix: string }
   | { kind: "supplier"; supplier: SupplierLike }
+  | { kind: "check"; code: string; current: "block" | "warn" }
   | { kind: "link"; href: string; label: string };
 
 export interface Belief {
@@ -84,6 +86,8 @@ export interface TeachingInput {
   voice?: Voice;
   /** How each supplier's documents are read, by supplier id. */
   recipes?: Recipes;
+  /** Which checks stop a push, as the shop set them. */
+  checks?: CheckSettings;
 }
 
 export const SOURCE_LABELS: Record<Source, string> = { export: "from your export", website: "from your website", you: "you set this", floda: "Snaben's own", supplier: "from paperwork" };
@@ -233,6 +237,12 @@ function seo(input: TeachingInput): Belief[] {
   ];
 }
 
+function checks(input: TeachingInput): Belief[] {
+  const out: Belief[] = describeChecks(input.checks ?? {}).map((c) => ({ id: `check:${c.code}`, source: c.own ? "you" : "floda", sentence: c.sentence, edit: { kind: "check", code: c.code, current: c.mode } }));
+  out.push({ id: "floda.checks.hard", source: "floda", sentence: "A duplicate handle, two variants with the same options, a missing title or a product that could be two in the shop always stops a push: Shopify would refuse it or the wrong product would change." });
+  return out;
+}
+
 function suppliers(input: TeachingInput): Belief[] {
   const out: Belief[] = [];
   for (const s of input.suppliers) {
@@ -258,10 +268,11 @@ export const AREAS: Array<{ key: AreaKey; title: string; blurb: string }> = [
   { key: "pricing", title: "Pricing", blurb: "How a retail price is set from the cost." },
   { key: "seo", title: "SEO titles and descriptions", blurb: "The search text written on every product." },
   { key: "suppliers", title: "Suppliers' invoices", blurb: "How each supplier's paperwork reads." },
+  { key: "checks", title: "Before a push", blurb: "Which checks stop a push to Shopify, and which only warn. The CSV export never stops." },
 ];
 
 export function buildAreas(input: TeachingInput): Area[] {
-  const by: Record<AreaKey, Belief[]> = { filing: filing(input), titles: titles(input), descriptions: descriptions(input), variants: variants(input), pricing: pricing(input), seo: seo(input), suppliers: suppliers(input) };
+  const by: Record<AreaKey, Belief[]> = { filing: filing(input), titles: titles(input), descriptions: descriptions(input), variants: variants(input), pricing: pricing(input), seo: seo(input), suppliers: suppliers(input), checks: checks(input) };
   return AREAS.map((a) => ({ ...a, beliefs: by[a.key] }));
 }
 

@@ -8,6 +8,7 @@ import { houseConventions, isValidType, typesAreKnown } from "./taxonomy";
 import { isValidHandle } from "./handle";
 import type { ReviewProduct, ReviewSummary, ReviewVariant } from "./review-types";
 import { HARD_CODES, type RowFlag } from "./types";
+import { modeFor, severityFor, type CheckSettings } from "./checks";
 
 /**
  * How many photographs a product should carry. The shop's own catalogue is mostly short of this —
@@ -25,6 +26,8 @@ export interface ValidationContext {
   shopifyHandles?: Set<string>;
   /** What the shop asked to always check on this supplier's products. See recipes.ts. */
   supplierChecks?: Array<{ code: "SUPPLIER_CHECK"; message: string }>;
+  /** Which checks stop a push and which only warn, as the shop set them. See checks.ts. */
+  checks?: CheckSettings;
 }
 
 export function validateReview(products: ReviewProduct[], ctx: ValidationContext): void {
@@ -71,7 +74,7 @@ export function validateReview(products: ReviewProduct[], ctx: ValidationContext
     } else if (ctx.shopifyHandles?.has(p.handle) && p.reconcileStatus === "UNKNOWN") {
       flags.push({ code: "UPDATE_EXISTING", severity: "warning", message: "A product with this handle already exists in Shopify" });
     }
-    p.flags = flags;
+    p.flags = flags.map((f) => ({ ...f, severity: severityFor(f.code, f.severity, ctx.checks) }));
 
     const combos = new Map<string, number>();
     for (const v of p.variants) {
@@ -88,7 +91,7 @@ export function validateReview(products: ReviewProduct[], ctx: ValidationContext
       if (!(v.costPrice > 0)) vf.push({ code: "MISSING_COST", severity: "warning", message: "No cost price - profit cannot be calculated" });
       const sku = v.sku.trim().toLowerCase();
       if (!sku && houseConventions().identifiers.sku !== "none") vf.push({ code: "MISSING_SKU", severity: "warning", message: "No SKU" });
-      if (!v.barcode.trim() && houseConventions().identifiers.barcode === "required") vf.push({ code: "MISSING_BARCODE", severity: "warning", message: "No barcode, and the shop puts one on every variant" });
+      if (!v.barcode.trim() && (houseConventions().identifiers.barcode === "required" || modeFor("MISSING_BARCODE", ctx.checks) === "block")) vf.push({ code: "MISSING_BARCODE", severity: "warning", message: "No barcode, and the shop puts one on every variant" });
       if (sku && (skuCounts.get(sku) ?? 0) > 1) vf.push({ code: "DUPLICATE_SKU_BATCH", severity: "error", message: "SKU appears more than once in this batch" });
       const liveHandle = sku ? ctx.shopifySkus?.get(sku) : undefined;
       if (liveHandle && v.reconcileStatus !== "UPDATE") vf.push({ code: "DUPLICATE_SKU_SHOPIFY", severity: "warning", message: `SKU already exists in Shopify (${liveHandle})` });
@@ -111,7 +114,7 @@ export function validateReview(products: ReviewProduct[], ctx: ValidationContext
       // export rather than warns. A thin margin is only a warning.
       if (v.profitPerUnit < 0 && v.retailPrice > 0) vf.push({ code: "NEGATIVE_PROFIT", severity: "error", message: `Selling below landed cost (${v.retailPrice.toFixed(2)} against ${v.landedCostHome.toFixed(2)}) — a cost in the price column?` });
       else if (v.retailPrice > 0 && v.costPrice > 0 && v.marginPct < ctx.minMarginPct) vf.push({ code: "LOW_MARGIN", severity: "warning", message: `Margin ${v.marginPct.toFixed(1)}% is below ${ctx.minMarginPct}%` });
-      v.flags = vf.filter((f) => f.severity === "error" || !dismissed.has(f.code));
+      v.flags = vf.map((f) => ({ ...f, severity: severityFor(f.code, f.severity, ctx.checks) })).filter((f) => f.severity === "error" || !dismissed.has(f.code));
     }
   }
 }
@@ -173,8 +176,9 @@ export function hardErrors(products: ReviewProduct[]): string[] {
   const hard = new Set<string>(HARD_CODES);
   const out: string[] = [];
   for (const p of products) {
-    for (const f of p.flags) if (hard.has(f.code)) out.push(`${p.title || p.handle}: ${f.message}`);
-    for (const v of p.variants) for (const f of v.flags) if (hard.has(f.code)) out.push(`${p.title || p.handle} / ${v.sku || v.option1Value || "(no sku)"}: ${f.message}`);
+    // A hard check the shop has turned into a warning is a warning here too.
+    for (const f of p.flags) if (hard.has(f.code) && f.severity === "error") out.push(`${p.title || p.handle}: ${f.message}`);
+    for (const v of p.variants) for (const f of v.flags) if (hard.has(f.code) && f.severity === "error") out.push(`${p.title || p.handle} / ${v.sku || v.option1Value || "(no sku)"}: ${f.message}`);
   }
   return out;
 }

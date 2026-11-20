@@ -12,6 +12,8 @@ import type { LearnedVocabulary } from "./taxonomy";
 import type { WebsiteCategories } from "./website";
 import type { PackageTerms } from "./types";
 import { cleanVoice, voiceTaught, type Voice } from "./voice";
+import { cleanRecipes, type Recipes } from "./recipes";
+import { cleanChecks, type CheckSettings } from "./checks";
 
 export const RULES_FILE_KIND = "floda-rules";
 export const RULES_FILE_VERSION = 1;
@@ -32,6 +34,10 @@ export interface RulesFile {
   packageParts?: Array<{ name: string; rrp: number; cost: number | null }>;
   /** The shop's voice: its words, examples, sections and brand notes. */
   voice?: Voice;
+  /** How each supplier's documents are read, by supplier id. */
+  recipes?: Recipes;
+  /** Which checks stop a push. */
+  checks?: CheckSettings;
 }
 
 const str = (v: unknown, max: number) => String(v ?? "").slice(0, max);
@@ -99,6 +105,8 @@ export function cleanRulesFile(input: unknown): RulesFile | null {
   });
   if (packageParts) out.packageParts = packageParts;
   if (f.voice && typeof f.voice === "object") out.voice = cleanVoice(f.voice);
+  if (f.recipes && typeof f.recipes === "object") out.recipes = cleanRecipes(f.recipes);
+  if (f.checks && typeof f.checks === "object") out.checks = cleanChecks(f.checks);
   return out;
 }
 
@@ -114,5 +122,7 @@ export function describeRulesFile(f: RulesFile): string {
   if (f.settings) parts.push("writer settings");
   if (f.packageParts) parts.push(`${f.packageParts.length} package part${f.packageParts.length === 1 ? "" : "s"}`);
   if (f.voice && voiceTaught(f.voice)) parts.push("the shop's voice");
+  if (f.recipes && Object.keys(f.recipes).length) parts.push(`${Object.keys(f.recipes).length} supplier recipe${Object.keys(f.recipes).length === 1 ? "" : "s"}`);
+  if (f.checks && Object.keys(f.checks).length) parts.push("which checks stop a push");
   return parts.length ? parts.join(", ") : "nothing";
 }

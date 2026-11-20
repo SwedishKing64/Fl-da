@@ -575,17 +575,25 @@ on every product of that supplier; descriptions kept as written are not rewritte
 the last document" reads the supplier's latest document again with and without the recipe,
 writes nothing, and shows what changed. Each recipe is a belief under Suppliers.
 
+Shipped 2026-11-20, second round: **staff notes** (`staff-note.ts`, two fields in the product
+details on the review page; kept on the product and quoted after the copy at export and at
+push, signed with the first name where one is given); **what blocks and what warns**
+(`checks.ts`, `settings.checks`, the Before a push area on Teach Snaben): ten checks each set
+to stop a push or only warn, with Snaben's defaults until the shop says otherwise, applied as
+the flags' severity in `validate.ts` (a check made a warning can be pushed over; one made a
+block cannot be dismissed), while a duplicate handle, duplicate options, a missing title and an
+ambiguous match always block; **undo** (`rules-history.ts`, Undo a change on Teach Snaben):
+the rules as they stood before each of the last ten changes are kept under `rules.history`
+(every rule-changing action calls `snapshotRules` first), and Back to this restores one through
+the same path a rules file loads by, keeping today's rules first so that too can be undone. The
+rules file now carries the recipes and the checks.
+
 Still to do in this phase:
 
-- **Staff picks and notes** in review: a one-line field that becomes a quoted line in the
-  copy, with the first name where the shop wants it.
-- **What blocks and what warns**: each hard check becomes the shop's choice (barcodes required
-  or not, margin floor as a block or a warning).
 - **Default status and publish timing**; **what the batch agent may touch** (widen or narrow
   the fixed set).
 - **Preview before commit**: every accepted rule shows three real products before and after,
-  from the latest batch. **Undo everywhere**: the rules file is snapshotted before each accept,
-  and Teach Snaben offers "Back to before" for the last ten changes.
+  from the latest batch.
 
 ### Phase 3: naming, filing and merchandising (about two weeks)
 

@@ -402,6 +402,18 @@ terms and the due dates worked from them, PAID stamps) live in Rubin's handover.
 
 ## Decisions and history, newest first
 
+- 2026-11-20 **Staff notes; what blocks and what warns; undo.** A staff note (one line and a
+  first name) on the review page's product details is kept on the product and quoted after the
+  copy at export and at push (`staff-note.ts`), never written into the description itself. Ten
+  checks are each the shop's choice between stopping a push and only warning (`checks.ts`,
+  `settings.checks`, the Before a push area on Teach Snaben), with defaults as before; the
+  severity is applied in `validate.ts`, so a hard check made a warning no longer blocks a push
+  and a warning made a block cannot be dismissed; a duplicate handle, duplicate options, a
+  missing title and an ambiguous match always block; the CSV export still never stops. Every
+  rule-changing action keeps the rules as they stood first (`rules-history.ts`, `rules.history`,
+  ten kept, without the export and the website), and Undo a change on Teach Snaben goes back to
+  any of them through the same path a rules file loads by. The rules file carries recipes and
+  checks now.
 - 2026-11-20 **Ask about this batch; supplier recipes and trust.** On the review page a person
   asks in plain words (`batch-chat.ts`): a question is answered with the products it is about,
   a request becomes steps in a closed set (retag, file as, set brand, set status, rename, drop,

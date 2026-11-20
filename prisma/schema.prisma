@@ -188,6 +188,9 @@ model Product {
   status          String   @default("draft") // draft | active
   seoTitle        String   @default("")
   seoDescription  String   @default("")
+  // A line from the shop floor, quoted in the copy at export: "Runs small but worth it." and who said it.
+  staffNote       String   @default("")
+  staffName       String   @default("")
   option1Name     String?
   option2Name     String?
   option3Name     String?

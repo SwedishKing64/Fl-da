@@ -17,6 +17,7 @@ import { TagProposals } from "./TagProposals";
 import { Teach } from "./Teach";
 import { Sources, type SourceTile } from "./Sources";
 import { RulesFile } from "./RulesFile";
+import { RulesHistory } from "./RulesHistory";
 import { TeachGuide } from "./TeachGuide";
 import { TeachChat } from "./TeachChat";
 import { VoiceCard } from "./VoiceCard";
@@ -84,6 +85,7 @@ export default async function TrainingPage() {
     packages,
     voice,
     recipes,
+    checks: settings.checks,
   });
   const counts = countBeliefs(areas);
   const tags = [...new Set([...(learned?.sections ?? []), ...house.kinds.flatMap((k) => [...k.tags, ...(k.variesTags ?? [])]), ...templateRows.flatMap((t) => t.tags), ...tagRules.flatMap((r) => list(r.addTags))])].sort((a, b) => a.localeCompare(b));
@@ -163,7 +165,7 @@ export default async function TrainingPage() {
       <PageHeader
         title="Teach Snaben"
         subtitle={<>What Snaben believes about how you list, in plain sentences, and where to teach it more. <strong>{n(counts.taught)}</strong> of these it learned from your shop; <strong>{n(counts.floda)}</strong> are its own defaults until you change them.</>}
-        actions={<RulesFile />}
+        actions={<><RulesHistory /><RulesFile /></>}
       />
 
       <TeachGuide state={{ exportTaught: Boolean(learned) || store.configured, websiteRead: Boolean(website), rulesTouched: Boolean(house.savedAt) || tagRules.length > 0 || pricingRules.length > 0, supplierTaught: layouts.length > 0, readingIncluded: apiKeySource() === "floda" }} />

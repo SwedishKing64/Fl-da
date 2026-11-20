@@ -21,6 +21,8 @@ import { guarded } from "@/app/(catalog)/page-failed";
 import { SupplierNote } from "./SupplierNote";
 import { AskBatch } from "./AskBatch";
 import { aiAvailable } from "@/lib/catalog/anthropic";
+import { getCurrentUser } from "@/lib/catalog/auth";
+import { firstName } from "@/lib/catalog/staff-note";
 import { supplierRecordFor } from "@/lib/catalog/supplier-score";
 import { getShopProfile, homeCurrency } from "@/lib/catalog/shop-profile";
 import { SUPPORT_MAILTO } from "@/lib/catalog/support";
@@ -66,6 +68,7 @@ async function renderReviewPage(props: PageProps<"/batches/[id]/review">) {
     .map((f) => ({ id: f.id, filename: f.filename, said: offTotals(f.extractionError) ?? "" }))
     .filter((f) => f.said);
   const profile = await getShopProfile();
+  const signedAs = firstName((await getCurrentUser())?.name ?? "");
   const askHref = `${SUPPORT_MAILTO}?subject=${encodeURIComponent(`${profile.name || "A shop"} · batch "${batch.name}"`)}&body=${encodeURIComponent(`Hello,\n\nI'm looking at the batch "${batch.name}"${batch.supplierId ? ` from ${record?.name ?? "a supplier"}` : ""} and\n\n(say what looks wrong, or what you are unsure about)\n\n`)}`;
   const inShop = parseDirectives(batch.directives).allNew
     ? new Set<string>()
@@ -110,7 +113,7 @@ async function renderReviewPage(props: PageProps<"/batches/[id]/review">) {
           <PackagesPanel batchId={id} locked={["EXPORTED", "PUSHED"].includes(batch.status)} skis={skis} bindings={bindings} />
           <LookupPanel batchId={id} outstanding={outstanding} enabled={lookupEnabled()} states={states} />
           <AskBatch batchId={id} titles={Object.fromEntries(review.products.map((p) => [p.id, p.title]))} aiEnabled={aiAvailable()} locked={["EXPORTED", "PUSHED"].includes(batch.status)} />
-          <ReviewGrid initial={review} batchId={id} kinds={typesAreKnown() ? productTypes() : []} categories={categories} />
+          <ReviewGrid initial={review} batchId={id} kinds={typesAreKnown() ? productTypes() : []} categories={categories} signedAs={signedAs} />
         </>
       )}
     </>

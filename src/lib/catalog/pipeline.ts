@@ -1384,6 +1384,8 @@ export async function loadReview(batchId: string): Promise<ReviewData> {
     published: p.published,
     seoTitle: p.seoTitle,
     seoDescription: p.seoDescription,
+    staffNote: p.staffNote,
+    staffName: p.staffName,
     lookupStatus: p.lookupStatus,
     lookupSource: p.lookupSource,
     colourLinks: p.colourLinks,
@@ -1456,7 +1458,7 @@ export async function loadReview(batchId: string): Promise<ReviewData> {
 
   const catalog = await shopifyLookups(view);
   const recipe = batch.supplierId ? (await (await import("./shop-profile")).getRecipes())[batch.supplierId] : undefined;
-  validateReview(view, { minMarginPct: settings.minMarginPct, shopifySkus: catalog.skus, shopifyHandles: catalog.handles, supplierChecks: recipeChecks(recipe, batch.supplier?.name ?? "") });
+  validateReview(view, { minMarginPct: settings.minMarginPct, shopifySkus: catalog.skus, shopifyHandles: catalog.handles, supplierChecks: recipeChecks(recipe, batch.supplier?.name ?? ""), checks: settings.checks });
   const summary = { ...summarise(view), ...tallyConfidence(view) };
   await prisma.importBatch.update({ where: { id: batchId }, data: { summary: JSON.stringify(summary) } });
 
